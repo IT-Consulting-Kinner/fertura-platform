@@ -1,0 +1,22 @@
+# Dependencies
+/vendor/
+/node_modules/
+
+# CakePHP runtime / local config (Secrets niemals committen!)
+/tmp/
+/logs/
+config/app_local.php
+config/.env
+.env
+
+# Build / Cache
+/webroot/cache_*
+*.cache
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+Thumbs.db
