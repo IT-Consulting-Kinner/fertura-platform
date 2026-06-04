@@ -1,6 +1,6 @@
 # Plattform-Anforderungsdokument: Modulare Anwendungsplattform
 
-Version 6.25
+Version 6.27
 
 Stand: 03. Juni 2026
 
@@ -13,7 +13,7 @@ Status: In Überarbeitung
 Dieses Dokument beschreibt die Anforderungen an die modulare
 Anwendungsplattform (nachfolgend "die Plattform"), die als technische
 Basis für fachliche Anwendungsmodule dient. Die Plattform wird auf
-Basis von CakePHP 5 und MySQL entwickelt.
+Basis von CakePHP 5 und PostgreSQL entwickelt.
 
 Die Plattform ist kein Fachsystem, sondern stellt die technische
 Infrastruktur bereit, auf der Main-Module (z.B. Ticketing,
@@ -38,7 +38,7 @@ Dieses Dokument richtet sich an:
 | **Komponente** | **Technologie** |
 | --- | --- |
 | Framework | CakePHP 5.x (neueste stabile Version) |
-| Datenbank | MySQL (InnoDB) |
+| Datenbank | PostgreSQL |
 | Sprache | PHP 8.3+ |
 | Mail-Empfang | IMAP (via Cronjob / CLI-Command) |
 | Mail-Versand | SMTP (pro Mailbox konfigurierbar) |
@@ -247,10 +247,18 @@ dürfen bestehende Daten nicht zerstören. Neue Pflichtfelder erhalten
 Defaultwerte. Umbenennungen und das Entfernen von Strukturen erfolgen
 nach dem expand/contract-Muster (neue Struktur anlegen, Daten
 übernehmen, Altstruktur erst in einem späteren, getrennten Schritt
-entfernen), nicht als In-Place-destruktive Änderung. Jede Migration
-muss eine umkehrende down-Operation mitliefern; der Update-Mechanismus
-sichert den Stand zusätzlich über einen Wiederherstellungspunkt ab
-(siehe Kapitel 28.14.2).
+entfernen), nicht als In-Place-destruktive Änderung. Schema- und
+Datenmigrationen laufen innerhalb einer Datenbanktransaktion und werden
+bei einem Fehler atomar zurückgerollt (PostgreSQL unterstützt
+transaktionales DDL). Jede Migration muss zusätzlich eine umkehrende
+down-Operation mitliefern; der Update-Mechanismus sichert den Stand
+ergänzend über einen Wiederherstellungspunkt ab (siehe Kapitel 28.14.2).
+
+**Integrität wird in der Datenbank durchgesetzt, nicht nur in der
+Anwendung.** Integritäts- und Zugriffsregeln, die sich in der Datenbank
+ausdrücken lassen (Fremdschlüssel, partielle Unique-, Check- und
+Exclusion-Constraints, Row-Level Security), werden dort erzwungen.
+Anwendungslogik ergänzt sie, ersetzt sie aber nicht (siehe Kapitel 30).
 
 
 # 23. Modulare Plattformarchitektur
@@ -762,6 +770,9 @@ Leitregeln:
     Gruppenrechte.
 -   Lifecycle-verändernde Operationen sind serialisiert; höchstens eine
     ist gleichzeitig aktiv (siehe Kapitel 24.18).
+-   Integrität und Zugriffsschutz werden auch in der Datenbank
+    durchgesetzt (Constraint-First, RLS für scoped Modultabellen, siehe
+    Kapitel 30).
 
 ## 23.15 Beispiel: Ticketing
 
@@ -1197,7 +1208,7 @@ Bei der Deaktivierung eines Moduls dürfen keine Daten gelöscht werden.
 
 Der Update-Mechanismus gilt für den Core und für Module. Ein Update
 bezieht sich ausschließlich auf die Anwendung selbst, nicht auf die
-darunterliegende Basisinfrastruktur wie PHP, MySQL oder das
+darunterliegende Basisinfrastruktur wie PHP, PostgreSQL oder das
 Betriebssystem. Kapitel 28 spezifiziert die Update-Mechanismen im
 Detail (Core-Update, Modul-Update, Sicherheitsupdates, Wartungsmodus,
 Marketplace-Kommunikation, atomarer Abschluss).
@@ -1327,7 +1338,9 @@ Lifecycle-verändernde Operationen (Installation, Aktivierung,
 Deaktivierung, Update, Löschung von Core oder Modulen) verändern
 Registry-, Migrations- und Paketzustand und dürfen niemals nebenläufig
 zueinander laufen. Die Plattform serialisiert sie über einen exklusiven
-Lifecycle-Lock pro Plattforminstanz.
+Lifecycle-Lock, der als PostgreSQL-Advisory-Lock realisiert wird und
+damit auch über mehrere Anwendungsknoten an derselben Datenbank hinweg
+wirkt (mehrknotenfähig, siehe Kapitel 30.7).
 
 -   Solange eine Lifecycle-Operation läuft, wird eine konkurrierende
     Lifecycle-Operation abgewiesen, mit klarem Hinweis auf die laufende
@@ -1509,7 +1522,10 @@ Da das Modell keine Deny-Regeln kennt (Kapitel 25.6.1), werden
 Ausschlüsse nicht durch ein Entzugsrecht ausgedrückt, sondern durch den
 Schnitt der Ressourcen. Soll eine Teilmenge von Objekten nur für
 bestimmte Gruppen sichtbar sein, wird diese Teilmenge als eigene
-Ressource modelliert und nur den berechtigten Gruppen zugeordnet.
+Ressource modelliert und nur den berechtigten Gruppen zugeordnet. Für
+zeilenbezogene Sichtbarkeit und als Defense-in-Depth setzt die Plattform
+zusätzlich Row-Level Security ein (Kapitel 30.3); RLS ist zugleich der
+designierte Mechanismus für künftiges feingranulares Row-Scoping.
 
 Beispiel: Sollen sensible Tickets nicht für alle Mitglieder einer Queue
 sichtbar sein, werden sie in eine eigene Queue (eigene Ressource)
@@ -2000,6 +2016,8 @@ Resolver-Slot ist ein eindeutiger, registrierbarer Erweiterungspunkt.
 -   Wenn ein anderes Modul denselben Slot belegen soll, muss das
     bisherige Modul deaktiviert werden
 -   Ohne aktiven Provider greift das definierte Default-Verhalten
+-   Die Slot-Exklusivität wird zusätzlich durch ein partielles
+    Unique-Constraint in der Datenbank erzwungen (Kapitel 30.2)
 
 ### 26.7.2 Grundregel
 
@@ -2079,7 +2097,9 @@ verarbeitet.
 -   **Asynchrone Verarbeitung.** Ein Worker (CLI-Command per Cronjob,
     analog zu process_email_queue) liest den Outbox und stellt die Events
     an die registrierten Listener zu. Der auslösende Prozess endet, ohne
-    auf die Listener zu warten.
+    auf die Listener zu warten. Zur latenzarmen Zustellung wird der Worker
+    zusätzlich über PostgreSQL LISTEN/NOTIFY benachrichtigt; der
+    periodische Cron-Lauf bleibt Fallback (Kapitel 30.6).
 -   **Mindestens-einmal-Zustellung.** Ein Event kann einem Listener mehr
     als einmal zugestellt werden. Listener müssen idempotent sein.
 -   **Isolierte Fehler und Retry.** Der Fehler eines Listeners blockiert
@@ -2848,7 +2868,7 @@ folgende Ziele:
 Der in diesem Kapitel beschriebene Update-Mechanismus gilt
 ausschließlich für: den Core, Main-Module und Extension-Module.
 
-Er gilt ausdrücklich nicht für: PHP, MySQL, Webserver,
+Er gilt ausdrücklich nicht für: PHP, PostgreSQL, Webserver,
 Betriebssystem, Composer-Abhängigkeiten außerhalb der von der
 Plattform ausgelieferten Anwendung und sonstige
 Infrastrukturkomponenten.
@@ -3174,7 +3194,10 @@ Schritte vollständig und konsistent abgeschlossen wurden.
 ### 28.14.2 Wiederherstellungspunkt und Rollback
 
 **Reversible Migrationen.** Jede Schema- oder Datenmigration (Core wie
-Modul) muss eine umkehrende down-Operation mitliefern. Destruktive
+Modul) muss eine umkehrende down-Operation mitliefern. Migrationen laufen
+innerhalb einer Datenbanktransaktion; PostgreSQL unterstützt
+transaktionales DDL, sodass Schemaänderungen bei einem Fehler atomar
+zurückgerollt werden. Destruktive
 Schemaänderungen (Entfernen oder Umbenennen von Spalten oder Tabellen)
 erfolgen ausschließlich nach dem expand/contract-Muster: zunächst
 additive Änderung (neue Struktur anlegen, Daten übernehmen), erst in
@@ -3183,7 +3206,8 @@ In-Place-destruktive Änderungen sind unzulässig.
 
 **Wiederherstellungspunkt.** Vor dem Einspielen eines Updates, das
 Migrationen enthält, erstellt der Update-Mechanismus verpflichtend einen
-Wiederherstellungspunkt in Form eines vollständigen Datenbank-Dumps. Die
+Wiederherstellungspunkt in Form eines vollständigen Datenbank-Dumps
+(pg_dump). Die
 erfolgreiche Erstellung ist Voraussetzung für die Fortsetzung; gelingt
 sie nicht (z.B. fehlender Speicherplatz oder fehlende Rechte), wird das
 Update vor dem Einspielen abgebrochen. Diese Regel gilt einheitlich für
@@ -3191,12 +3215,14 @@ Core- und Modul-Updates. Es gibt keine Unterscheidung nach Update-Art,
 Modultyp oder Risikoeinschätzung; einziger Anknüpfungspunkt ist, ob das
 Update Migrationen enthält.
 
-**Rollback bei Fehlschlag.** Schlägt eine Migration fehl, rollt der
-Mechanismus die bereits ausgeführten Migrationen in umgekehrter
-Reihenfolge über ihre down-Operationen zurück. Ist ein vollständiger
-down-Rollback nicht möglich, wird der Stand aus dem
-Wiederherstellungspunkt zurückgespielt. Der Vorgang wird als
-fehlgeschlagen markiert (konsistent mit Kapitel 28.14.1).
+**Rollback bei Fehlschlag.** Schlägt eine Migration fehl, wird die
+laufende Migrationstransaktion atomar zurückgerollt (transaktionales
+DDL). Erstreckt sich ein Update über mehrere Transaktionen oder sind
+bereits committete Schritte betroffen, rollt der Mechanismus die
+ausgeführten Migrationen über ihre down-Operationen zurück; ist auch das
+nicht vollständig möglich, wird der Stand aus dem Wiederherstellungspunkt
+zurückgespielt. Der Vorgang wird als fehlgeschlagen markiert (konsistent
+mit Kapitel 28.14.1).
 
 **Grundregel.** Kein migrationsbehaftetes Update ohne zuvor erfolgreich
 erstellten Wiederherstellungspunkt. Der Wiederherstellungspunkt ist ein
@@ -3266,7 +3292,7 @@ Marketplace-Kommunikation gelten folgende verbindliche Leitregeln:
 
 -   Die Plattform aktualisiert ausschließlich sich selbst und ihre
     Module.
--   Infrastrukturkomponenten wie PHP, MySQL oder Betriebssystem werden
+-   Infrastrukturkomponenten wie PHP, PostgreSQL oder Betriebssystem werden
     nicht durch die Plattform aktualisiert.
 -   Jedes Paket muss signiert sein.
 -   Ohne gültige Signatur darf keine Installation und kein Update
@@ -3716,6 +3742,153 @@ gelten folgende verbindliche Leitregeln:
 -   Alle relevanten Integrationsbeziehungen sind auditierbar.
 
 
+# 30. Datenbankfundament (PostgreSQL)
+
+## 30.1 Zielsetzung
+
+Die Plattform nutzt PostgreSQL nicht nur als Persistenz, sondern als
+aktiven Bestandteil der Architektur: Integrität, Nebenläufigkeit,
+Zugriffsschutz und asynchrone Verarbeitung werden – wo sinnvoll – in der
+Datenbank durchgesetzt, nicht allein in der Anwendung. Leitgedanke ist
+Defense-in-Depth: Die Anwendung bleibt die primäre Schicht, die Datenbank
+ist das verlässliche Sicherheitsnetz.
+
+### 30.1.1 Grundregel (Constraint-First)
+
+Integritäts- und Zugriffsregeln, die sich in der Datenbank ausdrücken
+lassen, werden dort erzwungen (Fremdschlüssel, Unique-/Partial-Unique-,
+Check- und Exclusion-Constraints, Row-Level Security). Anwendungslogik
+ergänzt diese Regeln, ersetzt sie aber nicht.
+
+## 30.2 Integrität über Datenbank-Constraints
+
+-   **Fremdschlüssel** sichern referenzielle Integrität.
+-   **Partielle Unique-Constraints** erzwingen "genau ein aktiver
+    X"-Regeln direkt in der Datenbank, insbesondere: genau ein aktiver
+    Provider pro Resolver-Slot (Kapitel 26.7, `UNIQUE (slot) WHERE
+    active`); genau ein als Standard markierter Wert pro
+    Konfigurationsentität; eindeutige Zuordnungen mit Aktiv-Bedingung
+    (z.B. eine aktive Eingangs-Mailbox pro Queue im Ticketing-Modul).
+-   **Check-Constraints** sichern Wertebereiche und Statusinvarianten.
+-   **Exclusion-Constraints (GiST)** erzwingen Überlappungsfreiheit von
+    Bereichen (z.B. nicht überlappende Geschäftszeit-Fenster).
+
+### 30.2.1 Grundregel
+
+"Genau ein aktiver"-Invarianten und Überlappungsfreiheit werden über
+partielle Unique- bzw. Exclusion-Constraints in der Datenbank
+durchgesetzt, nicht nur über Anwendungsprüfungen.
+
+## 30.3 Row-Level Security (verpflichtend für scoped Modultabellen)
+
+Module, deren Daten gruppen- oder bereichsbezogen geschützt sind (z.B.
+queue-bezogene Tickets), müssen ihre betroffenen Tabellen mit
+Row-Level-Security-Policies (RLS) absichern. RLS ist ein verpflichtendes
+Defense-in-Depth-Netz unter dem BREAD-Modell (Kapitel 25): Die Anwendung
+prüft Rechte weiterhin primär; die DB-Policy stellt zusätzlich sicher,
+dass keine Query Zeilen außerhalb des erlaubten Scopes liefert – auch
+nicht bei einem fehlenden Filter in GUI, API, CLI, Reporting oder Export.
+
+### 30.3.1 Anforderungen
+
+-   Jede gruppen-/bereichs-scoped Modultabelle aktiviert RLS
+    (`ENABLE ROW LEVEL SECURITY`, `FORCE ROW LEVEL SECURITY`).
+-   Das Modul liefert seine RLS-Policies als Bestandteil seiner
+    Migrationen mit (analog zu Tabellen und Indizes).
+-   Der Zugriffskontext (aktueller Benutzer und seine effektiven Gruppen)
+    wird pro Transaktion über eine Session-Variable gesetzt
+    (`SET LOCAL`), kompatibel mit Connection-Pooling.
+-   Die Policy-Prädikate sind indexnah formuliert (z.B. über eine
+    Hilfsfunktion oder eine zwischengespeicherte Mitgliedschafts-Sicht).
+
+### 30.3.2 Definierte Bypass-Pfade
+
+Legitime Vollzugriffe (Wartung, Migrationen, bestimmte Hintergrund-Jobs,
+DSGVO-/Hard-Delete-Vorgänge) erfolgen über eine ausdrücklich definierte
+Rolle bzw. einen `BYPASSRLS`-Pfad. Solche Zugriffe sind dokumentiert und
+auditierbar; ein unkontrolliertes Umgehen der Policies ist unzulässig.
+
+### 30.3.3 Verhältnis zu BREAD und Row-Scoping
+
+RLS ersetzt nicht das BREAD-Modell: BREAD regelt Aktionsrechte
+(Browse/Read/Add/Edit/Delete und Zusatzaktionen), RLS regelt
+Zeilen-Sichtbarkeit. RLS ist zugleich der designierte Mechanismus für
+künftiges feingranulares Row-Scoping (z.B. "nur eigene
+Queues/Organisation", vgl. Kapitel 25.6.3) und für eine etwaige spätere
+Mandantenfähigkeit.
+
+### 30.3.4 Grundregel
+
+Gruppen-/bereichs-scoped Modultabellen sind über RLS abgesichert. Die
+DB-Policy ist ein verpflichtendes Sicherheitsnetz unter der
+serverseitigen Rechteprüfung, kein Ersatz dafür.
+
+## 30.4 Transaktionale Migrationen
+
+PostgreSQL unterstützt transaktionales DDL. Schema- und Datenmigrationen
+laufen in einer Transaktion und werden bei Fehlern atomar zurückgerollt
+(Kapitel 1.8 und 28.14.2). Der Wiederherstellungspunkt (pg_dump) bleibt
+ergänzendes Sicherheitsnetz.
+
+## 30.5 JSONB für semi-strukturierte Daten
+
+Semi-strukturierte, schemaschwache Daten werden in JSONB-Spalten
+gespeichert und – wo abgefragt – über GIN-Indizes erschlossen.
+Anwendungsfälle: Audit-Log (alter/neuer Wert und Änderungsdetails als
+Payload, Kapitel 1.6), Event-Outbox (Event-Payload, Kapitel 26.9.2),
+Contract-/Registry-/Manifest-Metadaten (Kapitel 23.8, 26.10),
+Konfigurationsspeicher (strukturierte Konfigurationswerte).
+
+Strikt relationale, häufig gefilterte Fachdaten bleiben in
+normalisierten Spalten; JSONB ersetzt nicht das relationale Modell,
+sondern ergänzt es für offene/variable Strukturen.
+
+## 30.6 Asynchrone Verarbeitung: Outbox mit LISTEN/NOTIFY
+
+Der transaktionale Outbox (Kapitel 26.9.2) wird um PostgreSQL
+LISTEN/NOTIFY ergänzt: Nach dem Commit eines Outbox-Eintrags
+benachrichtigt die Datenbank den Worker (`NOTIFY`), der das Event
+latenzarm verarbeitet. Der periodische Cron-Lauf bleibt als Fallback
+bestehen (Robustheit bei verpasster Benachrichtigung oder
+Worker-Neustart). Die Zustellgarantie (mindestens einmal, idempotente
+Listener) bleibt unverändert.
+
+## 30.7 Nebenläufigkeit: Advisory Locks
+
+Der exklusive Lifecycle-Lock (Kapitel 24.18) wird über einen
+PostgreSQL-Advisory-Lock realisiert. Dadurch wirkt die Serialisierung
+lifecycle-verändernder Operationen nicht nur prozesslokal, sondern über
+alle Anwendungsknoten hinweg, die dieselbe Datenbank nutzen. Das
+beseitigt die Single-Instance-Annahme für diesen Mechanismus und macht
+ihn mehrknotenfähig.
+
+## 30.8 Partitionierung großer Tabellen
+
+Kontinuierlich wachsende Tabellen werden über deklarative
+Zeitbereichs-Partitionierung beherrschbar gehalten, insbesondere das
+Audit-Log (Kapitel 20.6) und der Event-Outbox. Alte Partitionen können
+effizient archiviert oder (wo zulässig) abgetrennt werden. Module mit
+sehr großen Tabellen (z.B. Ticketing-Einträge) können dasselbe Muster
+anwenden.
+
+## 30.9 Architekturprinzipien
+
+Für das Datenbankfundament gelten folgende verbindliche Leitregeln:
+
+-   Integrität wird in der Datenbank durchgesetzt, nicht nur in der
+    Anwendung (Constraint-First, Defense-in-Depth).
+-   "Genau ein aktiver"-Invarianten über partielle Unique-Constraints.
+-   Überlappungsfreiheit über Exclusion-Constraints.
+-   Gruppen-/bereichs-scoped Modultabellen sind über RLS abgesichert
+    (verpflichtend), mit definierten Bypass-Pfaden.
+-   Migrationen sind transaktional und atomar rückrollbar.
+-   Semi-strukturierte Daten in JSONB, relationale Fachdaten
+    normalisiert.
+-   Asynchrone Verarbeitung über transaktionalen Outbox + LISTEN/NOTIFY,
+    Cron als Fallback.
+-   Knotenübergreifende Serialisierung über Advisory Locks.
+-   Große, wachsende Tabellen werden partitioniert.
+
 # 20. Betrieb und Betreiberperspektive
 
 Hinweis: Die Abschnitte 20.3 (Cronjob-Überwachung) und 20.4
@@ -3734,9 +3907,9 @@ Das System speichert Daten in zwei Bereichen, die beide gesichert
 werden müssen. Das Backup selbst ist **keine Systemfunktion**, sondern
 liegt in der Verantwortung des Betreibers:
 
--   **Datenbank (MySQL):** Alle Tickets, Einträge, Konfigurationen,
-    Benutzer, Audit-Log. Standard-MySQL-Backup-Verfahren (mysqldump,
-    Replikation) sind anwendbar.
+-   **Datenbank (PostgreSQL):** Alle Tickets, Einträge, Konfigurationen,
+    Benutzer, Audit-Log. Standard-PostgreSQL-Backup-Verfahren (pg_dump,
+    Streaming-Replikation / Point-in-Time-Recovery) sind anwendbar.
 
 -   **Datei-Storage:** Anhänge und Inline-Bilder (lokal oder S3).
     Der Speicherpfad ist in config/app.php konfiguriert.
@@ -3799,7 +3972,7 @@ selbst ist Betreibersache:
 | Mailbox-Erreichbarkeit | IMAP-Verbindungstest pro aktiver Mailbox (Admin-GUI oder automatisiert) | Alle 15 Minuten |
 | E-Mail-Versand-Queue | Anzahl fehlgeschlagener E-Mails in email_queue (Status: fehlgeschlagen) | Alle 5 Minuten |
 | Cronjob-Ausführung | Prüfung, ob CLI-Commands (fetch_mails, check_escalations, process_email_queue) regelmäßig laufen | Alle 10 Minuten |
-| Datenbank-Verbindung | Standard-MySQL-Health-Check | Alle 1 Minute |
+| Datenbank-Verbindung | Standard-PostgreSQL-Health-Check | Alle 1 Minute |
 | Datei-Storage | Schreib-/Lesezugriff auf konfigurierten Speicherpfad oder S3-Bucket | Alle 15 Minuten |
 | Festplattenauslastung | Verfügbarer Speicherplatz für Datenbank, Logs und Anhänge | Alle 30 Minuten |
 | Anwendungs-Logs | Überwachung auf PHP-Fehler, CakePHP-Exceptions und kritische Warnungen | Kontinuierlich |
@@ -3890,8 +4063,8 @@ bereinigt. Bei lang laufenden Installationen können folgende
 Maßnahmen notwendig werden:
 
 -   Regelmäßiger Export älterer Audit-Log-Einträge in ein Archiv
--   Datenbankpartitionierung nach Zeitraum (z.B. monatliche
-    Partitionen)
+-   Deklarative Datenbankpartitionierung nach Zeitraum (PostgreSQL,
+    z.B. monatliche Partitionen; siehe Kapitel 30.8)
 -   Gezielte Indizierung für häufige Abfragen (nach Benutzer,
     Zeitraum, Entitätstyp)
 
@@ -3918,7 +4091,7 @@ in der Verantwortung des Betreibers oder externer Werkzeuge:
 | Hochverfügbarkeit | Standard-Webserver-Setup (Apache/Nginx + PHP-FPM) | Redundanz, Load-Balancing, Failover |
 | Queue-Worker | CLI-Commands per Cronjob | Cronjob-Konfiguration und -Überwachung |
 | E-Mail-Infrastruktur | IMAP-Abruf und SMTP-Versand | Mailserver-Betrieb, DNS (MX, SPF, DKIM), TLS-Zertifikate |
-| Sicherheitsupdates | CakePHP und PHP-Abhängigkeiten | Betriebssystem, Webserver, MySQL, PHP-Runtime |
+| Sicherheitsupdates | CakePHP und PHP-Abhängigkeiten | Betriebssystem, Webserver, PostgreSQL, PHP-Runtime |
 | Log-Rotation | Schreiben in konfiguriertes Log-Verzeichnis | Log-Rotation, Archivierung, Speicherplatz |
 | SIEM/Security-Audit | Audit-Log mit allen relevanten Aktionen | Integration in SIEM-Systeme |
 | SSL/TLS-Terminierung | Keine (Anwendung liefert HTTP) | HTTPS-Terminierung über Reverse-Proxy |
@@ -3962,6 +4135,8 @@ in der Verantwortung des Betreibers oder externer Werkzeuge:
 | 6.23 | 03.06.2026 | Architektur-Review Punkt 6 (Observability als Core-Funktion): Kapitel 20.2 umgestellt von "System stellt keine Monitoring-Endpunkte bereit" auf Core-Funktion — Health-Endpoint /health (Muss, minimaler öffentlicher Liveness + authgeschützter Detailstatus, 20.2.1), Modul-Health über Health-Collector-Contract (20.2.2), strukturierte Logs (Soll, 20.2.3), Admin-Statusfläche (Soll, 20.2.4); betreiberseitige Überwachung als Empfehlung (20.2.5). 20.7 Betriebsgrenzen-Zeile Infrastruktur-Monitoring angepasst. Entscheidung 169 ergänzt |
 | 6.24 | 03.06.2026 | Architektur-Review Punkt 7 (Pluggable SSO + Admin-Zwischenstufe): (A) Authentifizierung als Resolver-Slot (Default lokal, optional OIDC/SAML via Extension) — neues Kapitel 27.2.2, Tech-Tabelle 1.3 angepasst, Entscheidung 171. (B) Scoped-Admin-Modell: Core-Administrationsbereiche mit Volladministrator (alle) und delegiertem Administrator (Teilmenge) statt binärem Admin — Kapitel 27.3 neu gefasst (27.3.1 Administrationsbereiche), Ripple in 23.3.1, 25.2.1, 27.2 (Benutzer-Eigenschaft), 27.6, 27.7.2, 27.16.1, 27.20; Entscheidungen 108/122/134/135 aktualisiert, Entscheidung 170 ergänzt |
 | 6.25 | 03.06.2026 | Architektur-Review Punkt 8 (Ausschluss-Muster): Kapitel 25.6.3 ergänzt (25.6.3.1 Grundregel) — Ausschlüsse werden über Ressourcen-Schnitt modelliert (sensible Teilmenge als eigene Ressource, nur berechtigten Gruppen zugeordnet), nicht über Deny-Regeln; additives Aggregationsmodell unverändert. ABAC-Erweiterung bewusst nicht aufgenommen (Variante b). Entscheidung 172 ergänzt |
+| 6.26 | 03.06.2026 | Datenbank von MySQL/InnoDB auf PostgreSQL umgestellt: Technologiebasis (1.1, 1.3), Update-Scope und Betriebsgrenzen (24.13, 28.2, 28.18, 20.7), Backup (20.1: pg_dump / PITR), Health-Check (20.2.5), Entscheidungen 121/138 angepasst. Migrations-Atomarität über transaktionales DDL geschärft (1.8, 28.14.2: Rollback primär per Transaktion, Wiederherstellungspunkt als pg_dump-Fallback); Entscheidung 155 aktualisiert. Entscheidung 173 (DB-Wahl PostgreSQL) ergänzt |
+| 6.27 | 03.06.2026 | PostgreSQL-Leverage (P2–P10): neues Kapitel 30 Datenbankfundament — Constraint-First/DB-Integrität (partielle Unique-/Check-/Exclusion-Constraints), verpflichtende Row-Level Security für scoped Modultabellen (Defense-in-Depth + Row-Scoping-Hook), JSONB, Outbox + LISTEN/NOTIFY, Advisory-Lock-Lifecycle (mehrknotenfähig), deklarative Partitionierung. Bestandsschärfungen: 1.8 (Constraint-First-Prinzip), 23.14 (Leitregel), 26.7.1 (partielles Unique für Resolver-Slot), 26.9.2 (LISTEN/NOTIFY), 24.18 (Advisory Lock), 25.6.3 (RLS-Verweis), 20.6 (deklarative Partitionierung). Entscheidungen 174–179 ergänzt. P8/P9 folgen im Ticketing-Modul |
 
 ## Anhang B: Entscheidungsprotokoll
 
@@ -3984,7 +4159,7 @@ getroffen.
 | 118 | Installationsfluss | 14-Schritte-Prozess mit vollständiger Prüfkette (Signatur → Manifest → Kompatibilität → Abhängigkeiten → Konflikte → Lizenz) vor Entpacken |
 | 119 | Resolver-Konfliktregel | Bei belegtem Resolver-Slot darf kein zweites Modul parallel aktiviert werden. Bestehendes Modul muss zuerst deaktiviert werden |
 | 120 | Contract-Deklaration | Nur im Manifest deklarierte Contracts sind öffentlich und dürfen von anderen Modulen genutzt werden. Nicht deklarierte Erweiterungspunkte gelten als intern |
-| 121 | Update-Scope | Updates beziehen sich ausschließlich auf die Anwendung (Core und Module), nicht auf Basisinfrastruktur (PHP, MySQL, Betriebssystem) |
+| 121 | Update-Scope | Updates beziehen sich ausschließlich auf die Anwendung (Core und Module), nicht auf Basisinfrastruktur (PHP, PostgreSQL, Betriebssystem) |
 | 122 | BREAD-Geltungsbereich | BREAD gilt ausschließlich für Anwendungsmodule. Core verwendet kein BREAD. Core-Administration über Administrationsbereiche (siehe Entscheidung 170) |
 | 123 | Ressourcenmodell | Drei Typen: Objektklasse, Einzelobjekt, Bereichsressource. Jede Ressource eindeutig durch Modul-ID + Ressourcenname + Typ identifiziert |
 | 124 | Rechteaggregation | Rein additiv. Keine Deny-Regeln, keine Prioritäten, keine Konfliktlogik zwischen Gruppen. Vereinigung aller Gruppenrechte |
@@ -4001,7 +4176,7 @@ getroffen.
 | 135 | Zwei-Ebenen-Berechtigungen | Ebene 1: Core-Berechtigungen (bereichsbasiert über Administrationsbereiche). Ebene 2: Modulberechtigungen (gruppenbasiert über BREAD + Zusatzaktionen). Klare Trennung |
 | 136 | Gruppen-Deaktivierung | Deaktivierung setzt Wirkung temporär außer Kraft, löscht keine Zuordnungen. Reaktivierung stellt alle Zuordnungen wieder her |
 | 137 | Benutzer-Deaktivierung | Deaktivierter Benutzer: keine Anmeldung, keine Rechte, aber Gruppenmitgliedschaften und historische Referenzen bleiben erhalten. Reaktivierung stellt alles wieder her |
-| 138 | Update-Scope Plattform | Plattform aktualisiert ausschließlich sich selbst (Core + Module). PHP, MySQL, Webserver, Betriebssystem sind Betreiberverantwortung |
+| 138 | Update-Scope Plattform | Plattform aktualisiert ausschließlich sich selbst (Core + Module). PHP, PostgreSQL, Webserver, Betriebssystem sind Betreiberverantwortung |
 | 139 | Marketplace als autoritative Quelle | Pakete und Updates nur aus definiertem Marketplace oder gleichwertig signierten Paketquellen. Metadatenabruf bewirkt keine Systemänderung |
 | 140 | Signaturprüfung vor Entpacken | Unsignierte oder ungültig signierte Pakete werden abgelehnt. Prüfung erfolgt vor dem Entpacken. Ergebnis wird protokolliert |
 | 141 | Atomarer Update-Abschluss | Update gilt nur als erfolgreich wenn Paketstand, Migrationsstand und Registrierungsstand konsistent sind. Kein bewusst inkonsistenter Zustand |
@@ -4018,7 +4193,7 @@ getroffen.
 | 152 | Kontrollierte Abweisungsbehandlung | Aufrufendes Modul ist verpflichtet, abgewiesene Aufrufe fachlich kontrolliert zu behandeln. Kein unkontrollierter Fehlerzustand. Konkrete Reaktion (Default, leeres Ergebnis, Fehler, Ausblenden) ist moduldefiniert |
 | 153 | Main-Module nutzen keine fremden Contracts/Interfaces | Main-Module dürfen Contracts und öffentliche Interfaces bereitstellen, aber nicht von anderen Modulen konsumieren. Nur Extension-Module dürfen fremde Contracts und Interfaces nutzen |
 | 154 | Versionsschema und Kompatibilitätsregel | Alle Versionen folgen Semantic Versioning (MAJOR.MINOR.PATCH). Geforderte Versionen werden als exakte Version oder als expliziter Bereich (>=x <y) deklariert; Kurzformen (Caret/Tilde) sind unzulässig. Kompatibel = gleiche Major-Version und Anbieterversion ≥ geforderte Version. Major-Wechsel bricht Kompatibilität (siehe Kapitel 26.6.4) |
-| 155 | Migrations-Rollback und Wiederherstellungspunkt | Jede Migration (Core wie Modul) liefert eine umkehrende down-Operation. Vor jedem migrationsbehafteten Update wird verpflichtend ein Wiederherstellungspunkt (vollständiger DB-Dump) erstellt; ohne ihn wird das Update blockiert. Einheitlich für Core- und Modul-Updates, keine Unterscheidung nach Update-Art oder Modultyp. Destruktive Schemaänderungen nur per expand/contract. Rollback per down-Operationen, ersatzweise aus dem Wiederherstellungspunkt (siehe Kapitel 28.14.2) |
+| 155 | Migrations-Rollback und Wiederherstellungspunkt | Migrationen laufen in einer Datenbanktransaktion (PostgreSQL: transaktionales DDL → atomares Rollback bei Fehler). Jede Migration liefert zusätzlich eine umkehrende down-Operation. Vor jedem migrationsbehafteten Update wird ergänzend ein Wiederherstellungspunkt (vollständiger DB-Dump, pg_dump) erstellt; ohne ihn wird das Update blockiert. Einheitlich für Core- und Modul-Updates. Destruktive Schemaänderungen nur per expand/contract. Rollback primär per Transaktion, dann down-Operationen, ersatzweise Wiederherstellungspunkt (siehe Kapitel 28.14.2) |
 | 156 | Signatur-Vertrauensanker und Widerruf | Zweistufiges Trust-Modell: Marketplace-Wurzelschlüssel (mit Core ausgeliefert) signiert Herausgeber-Zertifikate; gültige Signaturkette bis zu aktivem Vertrauensanker erforderlich. Schlüsselrotation über signierten Marketplace-Kanal, installierte Module bleiben gültig. Widerruf über signierte Sperrliste, vor Installation/Update verpflichtend geprüft (Block bei widerrufenem Schlüssel). Bei nicht erreichbarer Sperrliste gecachte Liste mit Alters-Warnung. Nachträglich widerrufene Schlüssel installierter Module: Warnkennzeichnung, keine automatische Deaktivierung, keine Datenlöschung (siehe Kapitel 24.9.2) |
 | 157 | Sicherheits- und Vertrauensmodell | Module laufen als vertrauenswürdiger Code im selben Laufzeitkontext wie der Core; keine technische Sandbox. BREAD und Capability-Bindung sind Berechtigungs-/Disziplin-Mechanismen (auditierbar), keine Barriere gegen bösartigen Modulcode. Maßgebliche Sicherheitsgrenze ist die Signatur-/Vertrauenskette (24.9.2): Vertrauen wird vor Ausführung etabliert, nicht zur Laufzeit erzwungen (siehe Kapitel 23.16) |
 | 158 | Offline-first-Lizenzierung mit optionalem Online-Enforcement | Maßgeblich ist die signierte Lizenzdatei (Modulbezug, Gültigkeitszeitraum, Karenzfenster, optionales Online-Enforcement; manipulationssicher). Aktivierung, Update und Betrieb erfordern keinen Serverkontakt; online nur für Sperrlisten und optionale Erneuerung. Ablauf des Gültigkeitszeitraums → Deaktivierung ohne Datenlöschung. Optionales, in der Lizenz deklariertes Online-Enforcement (Miet-/Abo-Modelle): erfordert periodische Online-Bestätigung; bei Nichterreichbarkeit greift das lizenzdefinierte Karenzfenster (fehlt = null), bei bestätigtem Ablauf sofortige Deaktivierung. Karenz überbrückt nur Nichterreichbarkeit, nie eine bestätigt abgelaufene Lizenz (siehe Kapitel 28.7.3) |
@@ -4036,3 +4211,10 @@ getroffen.
 | 170 | Core-Administrationsbereiche (scoped admin) | Core-Administration in eine feste Menge von Administrationsbereichen gegliedert (Benutzer-/Gruppenverwaltung, Modul-/Lifecycle, Marketplace/Lizenz, Registry/Contracts, Update-Manager, Core-Konfiguration). Volladministrator = alle Bereiche; delegierter Administrator = Teilmenge. Bereichs-/rollenbasiert, kein BREAD, keine Gruppen; innerhalb eines Bereichs voller Zugriff. Auditierbar (siehe Kapitel 27.3.1) |
 | 171 | Pluggable Authentifizierung (Resolver-Slot) | Authentifizierungsmethode über Resolver-Slot austauschbar; Default = lokale Passwort-Authentifizierung. Extension-Modul kann OIDC/SAML-Provider registrieren (genau ein aktiver Provider, Resolver-Regeln Kap. 26.7). Benutzer bleiben Core-Identitäten (JIT-Provisioning/Verknüpfung möglich); Autorisierung unabhängig von der Authentifizierungsmethode (siehe Kapitel 27.2.2) |
 | 172 | Ausschlüsse über Ressourcen-Schnitt | Da das BREAD-Modell keine Deny-Regeln kennt, werden Ausschlüsse nicht über Entzug, sondern durch Modellierung gelöst: sensible Teilmengen werden als eigene Ressource (z.B. eigene Queue) geführt und nur berechtigten Gruppen zugeordnet. Additive Aggregation (25.6) bleibt unverändert (siehe Kapitel 25.6.3) |
+| 173 | Datenbank: PostgreSQL | Die Plattform verwendet PostgreSQL (statt MySQL/InnoDB). Vorteile: transaktionales DDL (atomare Migrationen, Entscheidung 155), JSONB, deklarative Partitionierung (Audit-Log) und Row-Level-Security (Option für künftiges Row-Scoping, vgl. 25.6.3). Backup via pg_dump / PITR. CakePHP-ORM ist DB-agnostisch; betroffene Doku-Stellen (1.1, 1.3, 20.1, 20.2, 20.7, 24.13, 28.2/28.18) angepasst (siehe Kapitel 1.3) |
+| 174 | Constraint-First / DB-Integrität | Integritätsregeln werden in der Datenbank durchgesetzt (Defense-in-Depth): Fremdschlüssel, partielle Unique-Constraints für "genau ein aktiver X" (u.a. Resolver-Slot-Exklusivität 26.7), Check- und Exclusion-Constraints (Überlappungsfreiheit). Anwendungslogik ergänzt, ersetzt nicht (siehe Kapitel 30.1/30.2) |
+| 175 | Row-Level Security verpflichtend | Gruppen-/bereichs-scoped Modultabellen müssen RLS-Policies führen (ENABLE/FORCE RLS) als verpflichtendes Defense-in-Depth-Netz unter BREAD. Zugriffskontext pro Transaktion via SET LOCAL (pooling-kompatibel); Policies Teil der Modulmigrationen; definierte BYPASSRLS-Pfade für Wartung/Jobs/DSGVO. RLS = designierter Mechanismus für künftiges Row-Scoping/Mandantenfähigkeit, kein BREAD-Ersatz (siehe Kapitel 30.3) |
+| 176 | JSONB für semi-strukturierte Daten | Schemaschwache Daten in JSONB mit GIN-Indizes: Audit-Payloads, Outbox-Event-Payloads, Contract-/Registry-/Manifest-Metadaten, Konfigurationsspeicher. Relationale Fachdaten bleiben normalisiert (siehe Kapitel 30.5) |
+| 177 | Outbox mit LISTEN/NOTIFY | Der transaktionale Event-Outbox (26.9.2) wird um PostgreSQL LISTEN/NOTIFY für latenzarme Zustellung ergänzt; Cron-Lauf bleibt Fallback. Zustellgarantie (mindestens einmal, idempotent) unverändert (siehe Kapitel 30.6) |
+| 178 | Lifecycle-Lock via Advisory Lock | Der exklusive Lifecycle-Lock (24.18) wird als PostgreSQL-Advisory-Lock realisiert und wirkt knotenübergreifend (mehrknotenfähig), nicht nur prozesslokal (siehe Kapitel 30.7) |
+| 179 | Partitionierung großer Tabellen | Kontinuierlich wachsende Tabellen (Audit-Log 20.6, Event-Outbox) werden über deklarative Zeitbereichs-Partitionierung beherrscht; alte Partitionen archivierbar/abtrennbar (siehe Kapitel 30.8) |

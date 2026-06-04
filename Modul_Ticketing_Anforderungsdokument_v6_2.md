@@ -1,6 +1,6 @@
 # Modul-Anforderungsdokument: Ticketing
 
-Version 6.2
+Version 6.4
 
 Stand: 04. Juni 2026
 
@@ -1836,8 +1836,10 @@ Zeitraum der SLA aktiv ist.
 
 Pro Wochentag können mehrere Fenster existieren (z.B. Montag 08:00--
 12:00 und 13:00--17:00 für eine Mittagspause). Fenster desselben
-Wochentags dürfen sich nicht überlappen. Gibt es für einen Wochentag
-kein Fenster, so ist dieser Tag nicht geschäftsaktiv (SLA ruht).
+Wochentags dürfen sich nicht überlappen; die Überlappungsfreiheit wird
+über ein Exclusion-Constraint (GiST) in der Datenbank erzwungen
+(Plattform-Dokument, Kapitel 30.2). Gibt es für einen Wochentag kein
+Fenster, so ist dieser Tag nicht geschäftsaktiv (SLA ruht).
 
 Beispielkonfiguration "Bürozeiten DE":
 
@@ -2510,11 +2512,15 @@ vorkommen (UND-Verknüpfung). Durchsuchte Felder: Ticketnummer, Betreff,
 Requester-E-Mail, Requester-Name, Kundenreferenz, Eintragstexte
 (öffentlich und intern), Anhang-Dateinamen.
 
-Technische Umsetzung: Die Freitextsuche basiert auf datenbankgestützten
-LIKE-Abfragen (Teilstring-Suche). Für Szenarien mit hohem
-Datenaufkommen oder komplexen Suchanforderungen (Relevanz-Ranking,
-unscharfe Suche, Anhang-Inhalte) ist eine Volltextsuche über einen
-dedizierten Suchindex vorgesehen (siehe Kapitel 19, Offene Punkte).
+Technische Umsetzung: Die Freitextsuche nutzt die native Volltextsuche
+von PostgreSQL (tsvector mit GIN-Index) über die durchsuchten Felder.
+Dadurch entfällt das Skalierungsrisiko führender LIKE-Wildcards auf der
+großen Tabelle ticket_comments (vgl. R2 / Kapitel 20.5). Für kurze
+Präfix- und Teilstring-Lookups (z.B. Ticketnummer) können ergänzend
+Trigram-Indizes (pg_trgm) eingesetzt werden. Eine externe Suchmaschine
+(z.B. Elasticsearch) bleibt nur für sehr große Installationen oder
+erweiterte Anforderungen (Relevanz-Ranking, unscharfe Suche,
+Anhang-Inhalte) eine Option (siehe Kapitel 19, Offene Punkte).
 
 Skalierungshinweis (Muss-Bewusstsein): Die LIKE-Suche mit führendem
 Platzhalter (%term%) kann keine Indizes nutzen und erzeugt insbesondere
@@ -3192,9 +3198,9 @@ Das System speichert Daten in zwei Bereichen, die beide gesichert
 werden müssen. Das Backup selbst ist **keine Systemfunktion**, sondern
 liegt in der Verantwortung des Betreibers:
 
--   **Datenbank (MySQL):** Alle Tickets, Einträge, Konfigurationen,
-    Benutzer, Audit-Log. Standard-MySQL-Backup-Verfahren (mysqldump,
-    Replikation) sind anwendbar.
+-   **Datenbank (PostgreSQL):** Alle Tickets, Einträge, Konfigurationen,
+    Benutzer, Audit-Log. Standard-PostgreSQL-Backup-Verfahren (pg_dump,
+    Streaming-Replikation / Point-in-Time-Recovery) sind anwendbar.
 
 -   **Datei-Storage:** Anhänge und Inline-Bilder (lokal oder S3).
     Der Speicherpfad ist in config/app.php konfiguriert.
@@ -3302,8 +3308,9 @@ System-Aktionen, benutzerdefinierte Einträge) und ist damit die größte
 und meistgelesene Tabelle des Systems. Für sie gilt zusätzlich: Indizes
 auf ticket_id, Eintragstyp und is_public; Vermeidung von
 Volltext-LIKE-Abfragen direkt auf dieser Tabelle (siehe Kapitel 12.5.1).
-Bei hohem Datenvolumen wird eine Partitionierung nach Zeitraum oder
-Ticket als Betreibermaßnahme empfohlen (Empfehlung).
+Bei hohem Datenvolumen wird eine deklarative Partitionierung nach
+Zeitraum oder Ticket empfohlen (PostgreSQL, Plattform-Dokument, Kapitel
+30.8).
 
 Betreibermaßnahmen bei wachsendem Datenvolumen (Empfehlung):
 
@@ -3344,7 +3351,7 @@ in der Verantwortung des Betreibers oder externer Werkzeuge:
 | Hochverfügbarkeit | Standard-Webserver-Setup (Apache/Nginx + PHP-FPM) | Redundanz, Load-Balancing, Failover |
 | Queue-Worker | CLI-Commands per Cronjob | Cronjob-Konfiguration und -Überwachung |
 | E-Mail-Infrastruktur | IMAP-Abruf und SMTP-Versand | Mailserver-Betrieb, DNS (MX, SPF, DKIM), TLS-Zertifikate |
-| Sicherheitsupdates | CakePHP und PHP-Abhängigkeiten | Betriebssystem, Webserver, MySQL, PHP-Runtime |
+| Sicherheitsupdates | CakePHP und PHP-Abhängigkeiten | Betriebssystem, Webserver, PostgreSQL, PHP-Runtime |
 | Log-Rotation | Schreiben in konfiguriertes Log-Verzeichnis | Log-Rotation, Archivierung, Speicherplatz |
 | SIEM/Security-Audit | Audit-Log mit allen relevanten Aktionen | Integration in SIEM-Systeme |
 | SSL/TLS-Terminierung | Keine (Anwendung liefert HTTP) | HTTPS-Terminierung über Reverse-Proxy |
@@ -3572,6 +3579,8 @@ sind. Jedes Kriterium ist eine Muss-Anforderung.
 | 6.0 | 03.04.2026 | Architektur-Review und Konsolidierung: (1) Plattform-Dokument, Kapitel 23.5 restrukturiert: zwei Extension-Modul-Typen (regulär = genau ein Main-Modul, Integration = mehrere Main-Module über öffentliche Interfaces). 23.14 Architekturprinzipien aktualisiert. (2) Kapitel 24.4.3 Manifest um public_interfaces_provided, public_interfaces_used, integration_relations ergänzt. 24.5.2 um Integrations-Extension-Modul-Typ erweitert. (3) Kapitel 28.12.1 Kompatibilitätsprüfung um öffentliche Interface-Versionen und Integrationsbeziehungen ergänzt. (4) Kapitel 29.3.4 explizite Abgrenzungsregel Contracts vs. öffentliche Modul-Interfaces ergänzt ("ergänzen, nicht ersetzen"). (5) Kapitel 29.8.1 Mehrfachnutzung präzisiert (Standard=erlaubt, Einschränkung explizit, Konsistenz beim Anbieter). (6) Kapitel 27 redaktionell entflechtet: 27.9-27.13, 27.17 und 27.19 von Duplikaten bereinigt und durch Verweise auf Plattform-Dokument, Kapitel 25 ersetzt (~80 Zeilen reduziert, keine Informationsverluste) |
 | 6.1 | 03.04.2026 | Zugriffsschutz für Contracts und öffentliche Modul-Interfaces: (1) Kapitel 24.4.3 um used_contracts ergänzt. 24.7.2 Deklaration angebotener/genutzter Contracts und Interfaces mit Pflichtangaben. 24.7.3 Regel nach Modultyp (Main-Module: used_contracts und used_public_interfaces müssen leer sein; Extension-Module: beides zulässig). (2) Kapitel 26.13.2 Registrierte Nutzung zur Laufzeit: Laufzeit-Guard prüft aufrufendes Modul, Ziel-Contract, Registrierung, Aktivstatus und Version. 26.13.3 Verhalten bei Abweisung: aufrufendes Modul verpflichtet zur kontrollierten fachlichen Behandlung. (3) Kapitel 29.8.3 Registrierte Nutzung zur Laufzeit für öffentliche Interfaces analog zu 26.13.2. 29.8.4 Verhalten bei Abweisung analog zu 26.13.3 |
 | 6.2 | 04.06.2026 | Alignment auf Plattform v6.25 (Architektur-Review): A1 Observability (20.2 als Health-Collector-Beiträge statt eigenem Endpoint, 20.3 Cron-Status an Plattform-Statusfläche), A2 Scoped-Admin (2.1/2.5/12.9 Administrationsbereiche), A3 DSGVO-Anonymisierung auf Plattform 27.15.3 verwiesen (17.2), A4 Benachrichtigungen als Event-Listener über Plattform-Outbox (Kap. 8), A5 email_queue als Spezialisierung des Plattform-Jobsystems (3.11), A6 Rechte-Granularität BREAD/Zusatzaktionen (2.4.1), A7 SSO und A9 2FA als Plattform-Auth-Resolver (1.3.3, 19.3/19.6), A8 API-Auth-Abgrenzung (3.14.2), A10 Wissensdatenbank als Integrations-Extension (19.4). R1 Volltextsuche-Skalierungshinweis (12.5.1), R2 ticket_comments-Strategie (20.5). Modul-Entscheidungen 107–118 ergänzt. Cleanup Anhang A (doppelte Versionszeilen 5.0/5.1/5.1.1 entfernt) und Anhang B (16 fälschlich hineinkopierte Fremdzeilen vor Entscheidung 1 entfernt – Konfig-Fragmente, duplizierte Offene-Punkte- und Versionshistorie-Zeilen) |
+| 6.3 | 04.06.2026 | DB-Umstellung auf PostgreSQL (Plattform-Entscheidung 173): Backup (20.1: pg_dump / PITR) und Betriebsgrenzen (20.7) angepasst. Keine fachliche Änderung am Datenmodell. Modul-Entscheidung 119 ergänzt |
+| 6.4 | 04.06.2026 | PostgreSQL-Leverage im Modul (P8/P9): Freitextsuche auf native PostgreSQL-Volltextsuche (tsvector/GIN) umgestellt (12.5.1, löst R1-Skalierungsrisiko), Exclusion-Constraint für überlappungsfreie SLA-Geschäftszeitfenster (7.7.2). R2-Hinweis um deklarative Partitionierung (Plattform 30.8) ergänzt. Modul-Entscheidungen 120/121 ergänzt |
 
 ## Anhang B: Entscheidungsprotokoll
 
@@ -3702,3 +3711,6 @@ Entscheidung wider.
 | 116 | Wissensdatenbank-Integration | Anbindung über Integrations-Extension-Modul; das Ticketing-Main-Modul stellt Contracts/UI-Erweiterungspunkte bereit (Plattform 26.3.4/29). Verknüpfung lebt im Integrationsmodul, nicht im Ticket-Datenmodell (19.4, A10) |
 | 117 | Volltextsuche-Skalierung | LIKE-Suche mit führendem Platzhalter erzeugt Full-Scans auf ticket_comments; v1-Suchumfang bewusst begrenzen oder dedizierten Suchindex früh einplanen. NFR-Ziel gilt für Pagination, nicht für Eintrags-Volltextsuche (12.5.1, R1) |
 | 118 | ticket_comments-Strategie | Größte/meistgelesene Tabelle: Indizes auf ticket_id, Eintragstyp, is_public; keine Volltext-LIKE direkt darauf; Partitionierung nach Zeitraum/Ticket als Betreibermaßnahme empfohlen (20.5, R2) |
+| 119 | Datenbank PostgreSQL | Das Modul folgt der Plattform-Entscheidung 173: PostgreSQL statt MySQL. Backup via pg_dump/PITR (20.1), Betriebsgrenzen (20.7) angepasst. Keine fachliche Änderung am Datenmodell (CakePHP-ORM DB-agnostisch) |
+| 120 | Volltextsuche via PostgreSQL FTS | Freitextsuche über native PostgreSQL-Volltextsuche (tsvector/GIN) statt LIKE; löst das R1-Skalierungsrisiko auf ticket_comments ohne externe Suchmaschine. pg_trgm für Präfix-/Teilstring-Lookups; Elasticsearch nur für sehr große/erweiterte Fälle (12.5.1, P8) |
+| 121 | Überlappungsfreie SLA-Fenster via Exclusion-Constraint | Nicht-überlappende Geschäftszeit-Fenster pro Wochentag werden über ein GiST-Exclusion-Constraint in der DB erzwungen (7.7.2; Plattform-Dokument 30.2, P9) |

@@ -1,6 +1,6 @@
 # Fertura – Modulare Anwendungsplattform
 
-Modulare Anwendungsplattform auf Basis von **CakePHP 5 / PHP 8.3+ / MySQL**.
+Modulare Anwendungsplattform auf Basis von **CakePHP 5 / PHP 8.3+ / PostgreSQL**.
 Der Core ist die technische Plattform; Fachlogik liegt in installierbaren
 Main-Modulen und Extension-Modulen.
 
@@ -16,3 +16,12 @@ Main-Modulen und Extension-Modulen.
 ## Status
 
 In Aufbau (Anforderungen finalisiert, Implementierung beginnend).
+
+## Lizenz
+
+**AGPL-3.0 ausschließlich für den Core** (siehe `LICENSE`). **Alles
+außerhalb des Core** — Main-Module und Extension-Module jeder Art — ist
+über eine **Section-7-Zusatzerlaubnis** ausgenommen und darf eigene (auch
+proprietäre) Lizenzen tragen, solange es nur über die definierten
+Erweiterungsschnittstellen interagiert. Details in `LICENSING.md`.
+Hinweis: Lizenz-Entwurf, juristische Prüfung vor Release ausstehend.
