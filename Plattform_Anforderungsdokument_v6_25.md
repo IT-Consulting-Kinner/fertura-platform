@@ -1,6 +1,6 @@
 # Plattform-Anforderungsdokument: Modulare Anwendungsplattform
 
-Version 6.27
+Version 6.28
 
 Stand: 03. Juni 2026
 
@@ -4097,6 +4097,46 @@ in der Verantwortung des Betreibers oder externer Werkzeuge:
 | SSL/TLS-Terminierung | Keine (Anwendung liefert HTTP) | HTTPS-Terminierung über Reverse-Proxy |
 
 
+## 20.8 Deployment- und Distributionsmodell
+
+Der Core wird als eigenständiges Container-Image bereitgestellt (PHP-FPM
++ Core-Code). Die Laufzeitumgebung wird aus getrennten Diensten
+komponiert; einzelne Anliegen laufen in eigenen Containern.
+
+### 20.8.1 Trennung von Core und Datenbank
+
+PostgreSQL ist nicht Bestandteil des Core-Images, sondern ein
+eigenständiger Dienst (eigener Container oder extern/Managed). Das ist
+konsistent mit der Update-Scope-Grenze (Kapitel 28.2): Ein Core-Update
+ersetzt nicht die Datenbank. Daten-Lebenszyklus, Backup/PITR (Kapitel
+20.1, 28.14.2) und Skalierung/HA (mehrere Core-Knoten an einer DB,
+Advisory-Lock Kapitel 30.7) bleiben dadurch sauber trennbar.
+
+### 20.8.2 Sofort lauffähig per Compose
+
+Für den schnellen Start wird eine Container-Compose-Konfiguration
+bereitgestellt, die Core, Reverse Proxy, PostgreSQL und den Worker als
+getrennte Dienste verdrahtet. Damit ist der Core nach dem Download mit
+einem Befehl lauffähig ("clone & up"), ohne mehrere Anliegen in einem
+Container zu vermengen.
+
+### 20.8.3 Dev/Demo versus Produktion
+
+-   Dev/Eval: Compose mit Wegwerf-PostgreSQL und Mail-Catcher. Ein
+    optionales All-in-One-Image ist ausschließlich für Demo-/
+    Evaluationszwecke zulässig und ausdrücklich als nicht
+    produktionstauglich zu kennzeichnen.
+-   Produktion: Core-Image + extern verwaltetes PostgreSQL + Reverse
+    Proxy + skalierbarer Worker; Backup, Monitoring und DB-Betrieb gemäß
+    Kapitel 20.
+
+### 20.8.4 Grundregel
+
+Der Core wird getrennt von der Datenbank ausgeliefert. PostgreSQL wird
+nie in das produktive Core-Image eingebettet (Ausnahme: klar
+gekennzeichnete Demo-Images). Die Laufzeitumgebung wird aus getrennten
+Diensten komponiert.
+
 ## Anhang A: Versionshistorie
 
 | **Version** | **Datum** | **Änderung** |
@@ -4137,6 +4177,7 @@ in der Verantwortung des Betreibers oder externer Werkzeuge:
 | 6.25 | 03.06.2026 | Architektur-Review Punkt 8 (Ausschluss-Muster): Kapitel 25.6.3 ergänzt (25.6.3.1 Grundregel) — Ausschlüsse werden über Ressourcen-Schnitt modelliert (sensible Teilmenge als eigene Ressource, nur berechtigten Gruppen zugeordnet), nicht über Deny-Regeln; additives Aggregationsmodell unverändert. ABAC-Erweiterung bewusst nicht aufgenommen (Variante b). Entscheidung 172 ergänzt |
 | 6.26 | 03.06.2026 | Datenbank von MySQL/InnoDB auf PostgreSQL umgestellt: Technologiebasis (1.1, 1.3), Update-Scope und Betriebsgrenzen (24.13, 28.2, 28.18, 20.7), Backup (20.1: pg_dump / PITR), Health-Check (20.2.5), Entscheidungen 121/138 angepasst. Migrations-Atomarität über transaktionales DDL geschärft (1.8, 28.14.2: Rollback primär per Transaktion, Wiederherstellungspunkt als pg_dump-Fallback); Entscheidung 155 aktualisiert. Entscheidung 173 (DB-Wahl PostgreSQL) ergänzt |
 | 6.27 | 03.06.2026 | PostgreSQL-Leverage (P2–P10): neues Kapitel 30 Datenbankfundament — Constraint-First/DB-Integrität (partielle Unique-/Check-/Exclusion-Constraints), verpflichtende Row-Level Security für scoped Modultabellen (Defense-in-Depth + Row-Scoping-Hook), JSONB, Outbox + LISTEN/NOTIFY, Advisory-Lock-Lifecycle (mehrknotenfähig), deklarative Partitionierung. Bestandsschärfungen: 1.8 (Constraint-First-Prinzip), 23.14 (Leitregel), 26.7.1 (partielles Unique für Resolver-Slot), 26.9.2 (LISTEN/NOTIFY), 24.18 (Advisory Lock), 25.6.3 (RLS-Verweis), 20.6 (deklarative Partitionierung). Entscheidungen 174–179 ergänzt. P8/P9 folgen im Ticketing-Modul |
+| 6.28 | 04.06.2026 | Kapitel 20.8 Deployment- und Distributionsmodell ergänzt: Core als eigenständiges Container-Image getrennt von PostgreSQL (eigener Dienst), Sofort-Start per docker compose (Core/Web/DB/Worker/Mail), All-in-One nur für Demo/Eval. Konsistent mit Update-Scope (28.2), Backup (20.1), HA/Advisory-Lock (30.7). Entscheidung 180 ergänzt |
 
 ## Anhang B: Entscheidungsprotokoll
 
@@ -4218,3 +4259,4 @@ getroffen.
 | 177 | Outbox mit LISTEN/NOTIFY | Der transaktionale Event-Outbox (26.9.2) wird um PostgreSQL LISTEN/NOTIFY für latenzarme Zustellung ergänzt; Cron-Lauf bleibt Fallback. Zustellgarantie (mindestens einmal, idempotent) unverändert (siehe Kapitel 30.6) |
 | 178 | Lifecycle-Lock via Advisory Lock | Der exklusive Lifecycle-Lock (24.18) wird als PostgreSQL-Advisory-Lock realisiert und wirkt knotenübergreifend (mehrknotenfähig), nicht nur prozesslokal (siehe Kapitel 30.7) |
 | 179 | Partitionierung großer Tabellen | Kontinuierlich wachsende Tabellen (Audit-Log 20.6, Event-Outbox) werden über deklarative Zeitbereichs-Partitionierung beherrscht; alte Partitionen archivierbar/abtrennbar (siehe Kapitel 30.8) |
+| 180 | Deployment-/Distributionsmodell | Der Core wird als eigenständiges Container-Image (PHP-FPM + Core) ausgeliefert; PostgreSQL ist kein Bestandteil des Images, sondern eigener Dienst (Container/Managed). Sofort-Start über Compose (Core/Web/DB/Worker/Mail, "clone & up"). All-in-One-Image nur für Demo/Eval, nicht produktionstauglich. Konsistent mit Update-Scope (28.2), Backup/PITR (20.1) und HA/Advisory-Lock (30.7) (siehe Kapitel 20.8) |
