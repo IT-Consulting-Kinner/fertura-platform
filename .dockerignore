@@ -1,0 +1,6 @@
+.git
+*.md
+docs
+core/vendor
+core/tmp
+core/logs

@@ -1,0 +1,72 @@
+# Fertura – Dev-Umgebung ("clone & up")
+# Getrennte Dienste gemäß Plattform-Dokument Kapitel 20.8:
+# core (PHP-FPM) / web (Nginx) / db (PostgreSQL) / worker / mail (Mailpit)
+name: fertura
+
+services:
+  db:
+    image: postgres:17-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-fertura}
+      POSTGRES_USER: ${POSTGRES_USER:-fertura}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fertura}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-fertura}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  core:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    restart: unless-stopped
+    volumes:
+      - ./core:/var/www/html
+    environment:
+      DATABASE_URL: "postgres://${POSTGRES_USER:-fertura}:${POSTGRES_PASSWORD:-fertura}@db/${POSTGRES_DB:-fertura}?encoding=utf8"
+      DEBUG: "true"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    volumes:
+      - ./core:/var/www/html
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "8080:80"
+    depends_on:
+      - core
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    restart: unless-stopped
+    # Platzhalter – die echten CLI-Worker (Outbox/Cron) folgen mit dem Core.
+    command: ["sh", "-c", "echo '[worker] Platzhalter aktiv'; sleep infinity"]
+    volumes:
+      - ./core:/var/www/html
+    environment:
+      DATABASE_URL: "postgres://${POSTGRES_USER:-fertura}:${POSTGRES_PASSWORD:-fertura}@db/${POSTGRES_DB:-fertura}?encoding=utf8"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  mail:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - "8025:8025"   # Web-UI
+      - "1025:1025"   # SMTP
+
+volumes:
+  db_data:

@@ -23,3 +23,13 @@ Thumbs.db
 
 # Interne Projektnotizen (nicht öffentlich)
 NOTES.md
+
+# CakePHP-App (core/)
+core/vendor/
+core/tmp/
+core/logs/
+core/config/app_local.php
+core/config/.env
+
+# Compose-Env
+.env
