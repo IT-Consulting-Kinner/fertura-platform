@@ -79,6 +79,79 @@ für Verifikation ist das **Plattform-Anforderungsdokument v6.28**
 - `[x]` **Schlüsselrotation-CLI** (`secret rotate`, Re-Encryption verschlüsselter
   Settings, Entscheidung 164). *(erledigt, E31)*
 
+## Merkliste / offene Punkte (Verifikation 2026-06-05)
+
+Ergebnis einer systematischen Re-Verifikation des Codes gegen Kap. 1, 20, 23–30.
+Die zentralen Muss-Mechanismen (Signatur/Vertrauenskette, Lifecycle, BREAD,
+Registry/Contracts, Outbox, RLS-Wirksamkeit, Health, Audit-Unveränderlichkeit,
+Container-Deployment) sind erfüllt. Offen sind v. a. Rand-/Transparenz- und
+GUI-Funktionen:
+
+### A. Echte Muss-Lücken (vor Release zu schließen)
+
+1. **Lizenz: Online-Enforcement + Karenzfenster nicht ausgewertet** (28.7.3.1).
+   Felder `online_enforcement`/`grace_window_days`/`last_online_check` werden
+   gespeichert, aber `LicenseService::evaluate()` prüft nur Widerruf + `valid_to`.
+   Offline-Default korrekt; Online-/Miet-Lizenzen werden nicht durchgesetzt.
+2. **Widerrufene Signatur installierter Module** (24.9.2). Nach Schlüssel-Widerruf
+   wird ein installiertes Modul nicht als „Signatur widerrufen" gekennzeichnet;
+   `MarketplaceClient::sync()` gleicht die CRL nicht gegen installierte Module ab.
+3. **CRL-Cache-Alter / Stale-Warnung** (24.9.2). Kein Abruf-Zeitstempel, stiller
+   Fetch-Fehler, keine Alters-/Schwellenwarnung vor Install/Update.
+4. **Sicherheitsupdate-Kennzeichnung** (28.10). Kein `is_security`/`severity` in
+   Manifest, Update-Historie oder Marketplace-Metadaten.
+5. **Migrationsvorschau vor Update** (24.13 Schritt 8 / 28.8.1). Update führt
+   `runUp` direkt aus; keine Vorschau/Ergebnisdarstellung.
+6. **Session-Timeout nicht verdrahtet** (27). `session.timeout_minutes` existiert
+   im Katalog, wird aber nirgends auf die Session angewandt.
+7. **Einladungs-/Passwort-Setz-Flow fehlt** (27.2/27.15). GUI legt `invited`-
+   Benutzer ohne Passwort an; es gibt keine Aktion zum Passwort-Setzen → über die
+   GUI angelegte Benutzer können nie aktiv werden. (E-Mail-Versand = Modul-Scope;
+   ein Core-„Initialpasswort/Reset-Token" schließt die Lücke.)
+8. **BREAD-Admin-UI unvollständig** (25.11/25.12). `GroupsController::setPermission`
+   setzt nur Klassenrechte (`resource_key=null` hartcodiert), keine Zusatzaktionen,
+   keine Einzelobjekt-Auswahl; kein „gruppenfähig"-Flag an `resources`. Die
+   Service-Schicht (`PermissionService::grant`) kann all das bereits.
+
+### B. Soll / Robustheit
+
+- **Selbst-Aussperr-Schutz** (letzter Volladministrator): keine Prüfung bei
+  Selbst-Deaktivierung / Bereich-Entzug / Austritt aus letzter Admin-Gruppe.
+- **Anker-Gültigkeitsdauer** (`valid_from/valid_to` in `trust_anchors`) wird nicht
+  geprüft (Soll, 24.9.2).
+- **API-/Token-Authentifizierung**: `api_tokens`-Tabelle vorhanden, aber kein
+  Authenticator/Route/Management → zu klären, ob eine externe API v1-Core-Scope
+  ist (Kap. 29 = in-process Modul-Interfaces; externe REST-API evtl. später).
+- **Cron-Status-Widget** (20.3 Soll): keine Lauf-Dauer, keine „>2×-Intervall"-
+  Warnung (nur Heartbeat-Alter).
+- **Strukturierte Logs** (20.2.3 Soll): `component/module/correlation_id` nur,
+  „sofern am Aufrufort mitgegeben" — kein erzwingender Processor.
+- **Dead-Letter-Admin-Sicht/Retry** (26.9.2): nur Zähler im Health/Dashboard +
+  CLI `outbox_status`; keine dedizierte GUI-Retry-Sicht.
+- **Grafische Abhängigkeits-/Slot-Darstellung** (23.13.1/24.15.1, Soll): nur Liste.
+- **RLS-Verpflichtung nicht erzwungen** (30.3): Core stellt Helfer/Kontext bereit,
+  validiert aber beim Install nicht, dass `is_scoped`-Ressourcen RLS-Policies
+  mitbringen (Durchsetzung liegt beim Modul).
+- **Manifest-Pflichtfelder** `entrypoint`/`description` werden nicht validiert
+  (formal, geringes Risiko).
+
+### C. Bewusst Modul-/Betreiber-Scope bzw. „spätere Version" (keine Abnahme-Lücke)
+
+- Out-of-Process-Sandbox / Drittanbieter-Isolation (23.16, spätere Version).
+- E-Mail-Betrieb 20.4, `fetch_mails`/`check_escalations`/… (Ticketing-Modul).
+- Matrix-Konfiguration 1.5, fachliche Entitäten 1.6 (Ticketing-Modul).
+- Backup/Restore 20.1, Betreiber-Alerting/Dashboards 20.2.5 (Betreiber).
+- Integrations-Extension-Module + deren Datenhaltung 29.9/29.10 (Modul).
+- Konkrete RLS-Policies je Modultabelle (Modul liefert via Migrationen).
+- Gleitende Zero-Downtime-Schlüsselrotation mit Key-ID (1.4, spätere Version).
+
+### D. Bekannte Dev-/Betriebsbeobachtungen (dokumentiert)
+
+- Cold-Start-504 beim allerersten Request (9p-Mount, Dev).
+- Langlaufende Worker brauchen Neustart nach Code-Änderung.
+- Worker-Heartbeat liegt in `core.worker_heartbeats` statt `system_settings`
+  (sachlich gleichwertig; Abweichung dokumentiert).
+
 ## Verifikationsbericht je Schritt
 
 > Wird je Schritt befüllt: geprüfte Kapitel, Soll/Ist, Container-Lauf,
