@@ -2,7 +2,7 @@
 
 use Cake\Cache\Engine\FileEngine;
 use Cake\Database\Connection;
-use Cake\Database\Driver\Mysql;
+use Cake\Database\Driver\Postgres;
 use Cake\Log\Engine\FileLog;
 use Cake\Mailer\Transport\MailTransport;
 use function Cake\Core\env;
@@ -287,20 +287,15 @@ return [
          */
         'default' => [
             'className' => Connection::class,
-            'driver' => Mysql::class,
+            'driver' => Postgres::class,
             'persistent' => false,
             'timezone' => 'UTC',
 
             /*
-             * For MariaDB/MySQL the internal default changed from utf8 to utf8mb4, aka full utf-8 support
+             * Fertura nutzt PostgreSQL (Entscheidung 173); client_encoding = utf8.
              */
-            'encoding' => 'utf8mb4',
+            'encoding' => 'utf8',
 
-            /*
-             * If your MySQL server is configured with `skip-character-set-client-handshake`
-             * then you MUST use the `flags` config to set your charset encoding.
-             * For e.g. `'flags' => [\PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4']`
-             */
             'flags' => [],
             'cacheMetadata' => true,
             'log' => false,
@@ -322,7 +317,9 @@ return [
              * mysql configuration directive 'innodb_stats_on_metadata = 0'
              * which is the recommended value in production environments
              */
-            //'init' => ['SET GLOBAL innodb_stats_on_metadata = 0'],
+            // Schema-Trennung (DB_CONVENTIONS.md): Core-Tabellen liegen im
+            // Schema "core", public bleibt fuer Extensions/uebergreifende Objekte.
+            'init' => ['SET search_path TO core, public'],
         ],
 
         /*
@@ -330,15 +327,17 @@ return [
          */
         'test' => [
             'className' => Connection::class,
-            'driver' => Mysql::class,
+            'driver' => Postgres::class,
             'persistent' => false,
             'timezone' => 'UTC',
-            'encoding' => 'utf8mb4',
+            'encoding' => 'utf8',
             'flags' => [],
             'cacheMetadata' => true,
             'quoteIdentifiers' => false,
             'log' => false,
-            //'init' => ['SET GLOBAL innodb_stats_on_metadata = 0'],
+            // Schema-Trennung (DB_CONVENTIONS.md): Core-Tabellen liegen im
+            // Schema "core", public bleibt fuer Extensions/uebergreifende Objekte.
+            'init' => ['SET search_path TO core, public'],
         ],
     ],
 
