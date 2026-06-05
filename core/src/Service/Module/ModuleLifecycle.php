@@ -214,8 +214,8 @@ class ModuleLifecycle
             // Deklarierte BREAD-Ressourcen registrieren (Step 9, Kap. 25.11).
             foreach ($manifest->permissions() as $p) {
                 $conn->execute(
-                    'INSERT INTO resources (module_key, resource_type, resource_name, description, is_scoped, extra_actions) '
-                    . 'VALUES (:m, :t, :n, :d, :s, CAST(:e AS jsonb)) '
+                    'INSERT INTO resources (module_key, resource_type, resource_name, description, is_scoped, group_capable, extra_actions) '
+                    . 'VALUES (:m, :t, :n, :d, :s, :gc, CAST(:e AS jsonb)) '
                     . 'ON CONFLICT (module_key, resource_name) DO NOTHING',
                     [
                         'm' => $key,
@@ -223,6 +223,8 @@ class ModuleLifecycle
                         'n' => (string)($p['name'] ?? ''),
                         'd' => $p['description'] ?? null,
                         's' => !empty($p['is_scoped']) ? 'true' : 'false',
+                        // Gruppenfähig per Default; Modul kann es per Manifest abschalten (Kap. 25.11).
+                        'gc' => (!array_key_exists('group_capable', $p) || !empty($p['group_capable'])) ? 'true' : 'false',
                         'e' => isset($p['extra_actions']) ? json_encode($p['extra_actions']) : null,
                     ],
                 );

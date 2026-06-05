@@ -67,12 +67,14 @@ class GroupsController extends AdminController
             ['id' => $id],
         )->fetchAll('assoc');
         $permissions = $conn->execute(
-            'SELECT module_key, resource_type, resource_key, can_browse, can_read, can_add, can_edit, can_delete '
-            . 'FROM group_resource_permissions WHERE group_id = :id ORDER BY module_key, resource_type',
+            'SELECT module_key, resource_type, resource_key, can_browse, can_read, can_add, can_edit, can_delete, extra_actions '
+            . 'FROM group_resource_permissions WHERE group_id = :id ORDER BY module_key, resource_type, coalesce(resource_key, \'*\')',
             ['id' => $id],
         )->fetchAll('assoc');
+        // Nur gruppenfähige Ressourcen sind im Gruppen-Rechte-Editor vergebbar (Kap. 25.11).
         $resources = $conn->execute(
-            'SELECT module_key, resource_type, resource_name, is_scoped FROM resources ORDER BY module_key, resource_name',
+            'SELECT module_key, resource_type, resource_name, is_scoped, extra_actions '
+            . 'FROM resources WHERE group_capable = true ORDER BY module_key, resource_name',
         )->fetchAll('assoc');
         $this->set(compact('group', 'members', 'candidates', 'permissions', 'resources'));
 
@@ -126,12 +128,15 @@ class GroupsController extends AdminController
     {
         $this->request->allowMethod('post');
         $data = $this->request->getData();
-        [$moduleKey, $resourceType] = array_pad(explode('::', (string)$data['resource'], 2), 2, '');
+        [$moduleKey, $resourceType] = array_pad(explode('::', (string)($data['resource'] ?? ''), 2), 2, '');
         if ($moduleKey === '' || $resourceType === '') {
             $this->Flash->error('Ungültige Ressource.');
 
             return $this->redirect(['action' => 'view', $id]);
         }
+        // Objektklasse (leer) oder konkretes Einzelobjekt (Kap. 25.4 / 25.11).
+        $resourceKey = trim((string)($data['resource_key'] ?? '')) ?: null;
+
         $bread = [
             'browse' => !empty($data['can_browse']),
             'read' => !empty($data['can_read']),
@@ -139,12 +144,20 @@ class GroupsController extends AdminController
             'edit' => !empty($data['can_edit']),
             'delete' => !empty($data['can_delete']),
         ];
+        // Zusatzaktionen (Kap. 25.7): nur als true markierte übernehmen.
+        $extra = [];
+        foreach ((array)($data['extra'] ?? []) as $name => $on) {
+            if (!empty($on)) {
+                $extra[(string)$name] = true;
+            }
+        }
+
         $service = new PermissionService();
-        if (!in_array(true, $bread, true)) {
-            $service->revoke($id, $moduleKey, $resourceType, null);
+        if (!in_array(true, $bread, true) && $extra === []) {
+            $service->revoke($id, $moduleKey, $resourceType, $resourceKey);
             $this->Flash->success('Rechte entzogen.');
         } else {
-            $service->grant($id, $moduleKey, $resourceType, null, $bread);
+            $service->grant($id, $moduleKey, $resourceType, $resourceKey, $bread, $extra);
             $this->Flash->success('Rechte gesetzt.');
         }
 

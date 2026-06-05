@@ -65,6 +65,14 @@
             "description": "Ping-Ressource",
             "is_scoped": true,
             "extra_actions": ["trigger"]
+        },
+        {
+            "resource_type": "report",
+            "name": "sample_module.report",
+            "description": "Report (nicht gruppenfaehig)",
+            "is_scoped": false,
+            "group_capable": false,
+            "extra_actions": ["export"]
         }
     ]
 }
