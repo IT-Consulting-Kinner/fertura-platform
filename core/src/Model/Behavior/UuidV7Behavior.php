@@ -20,7 +20,13 @@ class UuidV7Behavior extends Behavior
     public function beforeSave(EventInterface $event, EntityInterface $entity, ArrayObject $options): void
     {
         $primaryKey = $this->_table->getPrimaryKey();
+        // Nur einspaltige uuid-Primärschlüssel: Text-/zusammengesetzte PKs
+        // (z. B. admin_areas.area_key) bleiben unangetastet. Macht das Behavior
+        // universell anwendbar (siehe AppTable).
         if (!is_string($primaryKey)) {
+            return;
+        }
+        if ($this->_table->getSchema()->getColumnType($primaryKey) !== 'uuid') {
             return;
         }
         if ($entity->isNew() && $entity->get($primaryKey) === null) {

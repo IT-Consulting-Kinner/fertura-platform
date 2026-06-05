@@ -5,7 +5,6 @@ namespace App\Model\Table;
 
 use App\Model\Entity\User;
 use Cake\ORM\Query\SelectQuery;
-use Cake\ORM\Table;
 use Cake\Validation\Validator;
 
 /**
@@ -17,18 +16,18 @@ use Cake\Validation\Validator;
  * @method \App\Model\Entity\User newEntity(array $data, array $options = [])
  * @method \App\Model\Entity\User get($primaryKey, array $options = [])
  */
-class UsersTable extends Table
+class UsersTable extends AppTable
 {
     public function initialize(array $config): void
     {
+        // AppTable aktiviert das UuidV7-Behavior (universelle UUIDv7-Erzeugung).
         parent::initialize($config);
 
         $this->setTable('users');
         $this->setDisplayField('username');
         $this->setPrimaryKey('id');
 
-        // UUIDv7-PK (E6) + Akteur-Spalten created_by/updated_by (E8).
-        $this->addBehavior('UuidV7');
+        // Akteur-Spalten created_by/updated_by (E8) – nur Fachtabellen.
         $this->addBehavior('Footprint');
 
         // Assoziationen (Groups, UserAdminAreas, ApiTokens) folgen mit ihren

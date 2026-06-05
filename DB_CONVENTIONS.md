@@ -28,7 +28,11 @@ hier **autonom entschieden** (siehe Entscheidungs-Log E5–E12 in
 - **UUIDv7** = zeitgeordnet → nicht erratbar/enumerierbar **und** gute Index-
   Lokalität. Damit entfällt eine separate `public_id`.
 - **Erzeugung zweigleisig:**
-  - App-seitig über das `UuidV7Behavior` (CakePHP) → das ORM kennt die ID sofort.
+  - App-seitig über das `UuidV7Behavior` → das ORM kennt die ID sofort.
+    **Universell**: die Basisklasse `App\Model\Table\AppTable` aktiviert das
+    Behavior für *jede* Core-Tabelle; das Behavior wirkt nur auf einspaltige
+    `uuid`-PKs (Text-/zusammengesetzte PKs wie `admin_areas` bleiben unberührt).
+    Alle Core-Table-Klassen erben von `AppTable`.
   - DB-seitig über `core.uuid_generate_v7()` als Spalten-DEFAULT → Netz für
     Raw-SQL-/Modul-/Migrationsinserts.
 - Join-Tabellen erhalten ebenfalls einen `uuid`-Surrogat-PK (Konsistenz).
