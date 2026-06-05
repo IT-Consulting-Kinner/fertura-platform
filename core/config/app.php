@@ -308,7 +308,7 @@ return [
              * decreases performance because each query needs to be traversed and
              * manipulated before being executed.
              */
-            'quoteIdentifiers' => false,
+            'quoteIdentifiers' => true,
 
             /*
              * During development, if using MySQL < 5.6, uncommenting the
@@ -333,7 +333,7 @@ return [
             'encoding' => 'utf8',
             'flags' => [],
             'cacheMetadata' => true,
-            'quoteIdentifiers' => false,
+            'quoteIdentifiers' => true,
             'log' => false,
             // Schema-Trennung (DB_CONVENTIONS.md): Core-Tabellen liegen im
             // Schema "core", public bleibt fuer Extensions/uebergreifende Objekte.
