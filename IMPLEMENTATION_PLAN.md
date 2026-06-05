@@ -48,7 +48,7 @@ für Verifikation ist das **Plattform-Anforderungsdokument v6.28**
   Install/Aktivieren/Deaktivieren/Update/Löschen, Abhängigkeits-/
   Kompatibilitätsprüfung, Signatur/Vertrauensanker, Advisory-Lock.
   *(Kap. 24, 23.10, 24.18)* — Update + Signatur/Lizenz = Step 8.
-- `[ ]` **8. Marketplace / Lizenz / Update-Manager** — Marketplace-Komm.,
+- `[x]` **8. Marketplace / Lizenz / Update-Manager** — Marketplace-Komm.,
   Signaturprüfung, Offline-first-Lizenz, Core-/Modul-Update,
   Wiederherstellungspunkt. *(Kap. 28, 24.9.2)*
 - `[ ]` **9. BREAD + RLS-Infrastruktur** — BREAD-Ressourcen/Aggregation
@@ -349,6 +349,48 @@ Cleanup; Manifest-Validierung greift; HTTP 200.
 - Admin-GUI für Modulverwaltung/Abhängigkeitsgraph → **Step 10**.
 - Installation aus lokalem Verzeichnis; Paket-Upload/ZIP-Entpacken → Step 8/10.
 
+### Schritt 8 — abgeschlossen & verifiziert (2026-06-05)
+
+**Geprüfte Kapitel:** 24.9 (Signatur/Vertrauensanker/Sperrliste), 28.4–28.7
+(Marketplace, Lizenz offline-first, Entscheidung 158), 28.8–28.13 (Update),
+28.14.2 (Wiederherstellungspunkt/Rollback, Entscheidung 155), 28.11 (Wartung).
+
+**Soll → Ist:**
+- **Signatur (Ed25519):** `Signer`, `PackageVerifier` (Paket-Digest über ALLE
+  Dateien → Manipulation erkannt), `TrustStore` (Anker + Sperrliste). Prüfung
+  VOR Entpacken; unsigniert/manipuliert/widerrufen → blockiert. In den Step-7-
+  Lifecycle eingeklinkt. ✔
+- **Lizenz offline-first:** `LicenseService` (signierte Lizenzdatei, Modulbezug,
+  Gültigkeit; Aktivierungs-Gate bei `requires_license`). Ablauf → Aktivierung
+  blockiert, kein Datenverlust. ✔
+- **Update-Manager:** `UpdateManager.updateModule` + `updateCore` mit Signatur-/
+  Kompatibilitätsprüfung, **verpflichtendem pg_dump-Wiederherstellungspunkt** bei
+  Migrationen, Migration, Registry-Revalidierung, `update_history` + Audit. ✔
+- **Rollback (sicher):** Down-Migrationen → Datei-/Stammdaten-/Registry-
+  Rücksetzung; der pg_dump-Recovery-Point bleibt als **manuelle** letzte Zuflucht
+  (kein gefährlicher Auto-Restore — der hatte bei Teilfehler die DB korrumpiert). ✔
+- **Marketplace-Client gegen Test-Server** (nginx-Service): signierte CRL/Anker
+  abrufen + verifizieren + anwenden. Wartungsmodus (503). ✔
+- `postgresql-client-17` im Image (pg_dump passend zum PG17-Server).
+
+**Container-Lauf / Test:** signiertes Modul installiert; unsigniert/manipuliert/
+widerrufener-Schlüssel abgelehnt; Lizenz-Gate (gültig/abgelaufen/fehlt);
+Modul-Update v1.0.1 (Migration+Recovery-Point) → success; Update v1.0.2 (kaputte
+Migration) → **rolled_back** (Version/Dateien zurück, keine Korruption);
+Core-Update 1.0.1 success, 2.0.0 inkompatibel→blockiert; Marketplace-Sync widerruft
+Schlüssel; Wartungsmodus 503↔200; HTTP 200.
+
+**Offene Punkte / Beobachtungen / autonome Entscheidungen:**
+- **Ed25519** als Signaturalgorithmus (doku-offen → autonom, vom Nutzer bestätigt).
+- **Vertrauenskette** vereinfacht (aktiver, nicht-widerrufener Anker + Publisher-
+  Bindung); vollständige X.509-Kette = spätere Version.
+- **Auto-Restore aus pg_dump bewusst NICHT** (Korruptionsgefahr bei Teilfehler);
+  Rollback primär über Down-Migrationen (Doku-Kaskade), Dump als manuelle Zuflucht.
+- **Online-Enforcement** (periodische Online-Bestätigung): Datenmodell/Felder
+  vorhanden, voller Server-Confirm-Zyklus skizziert; Schlüsselrotation-CLI
+  (Entscheidung 164, Soll) zurückgestellt.
+- Admin-GUI (Marketplace/Update/Lizenz/Recovery) → **Step 10**.
+
 ## Entscheidungs-Log (autonome Entscheidungen)
 
 | Nr. | Schritt | Entscheidung | Begründung (Anforderungskontext) |
@@ -370,6 +412,10 @@ Cleanup; Manifest-Validierung greift; HTTP 200.
 | E15 | 2 | Anmeldeschutz-Defaults: 10 Fehlversuche / 15-min-Fenster, dann temporäre Sperre (`LoginThrottle`, persistiert in `auth_failures`). | Entscheidung 162 fordert „sicheren Vorgabewert ohne Konfiguration". Konkrete Schwellen doku-offen → autonom; ab Step 4 DB-konfigurierbar. |
 | E16 | 3 | Audit-Log-Design: (a) **Personen per auflösbarer UUID** (kein denormalisierter Klartext-Name/E-Mail) → Anonymisierung wirkt ohne Log-Mutation; **textuelle Schnappschüsse nur für nicht-personenbezogene** Entitäten (Module/Config) = referenzrobust. (b) **Unveränderlichkeit per Trigger** (UPDATE/DELETE blockiert; Bypass nur via `SET LOCAL app.allow_audit_mutation`). (c) **Monats-RANGE-Partitionierung** + DEFAULT-Partition; `audit_partition`-Command stellt Monatspartitionen im Entrypoint sicher. (d) `AuditLogger`-Service schreibt transaktional. | Vereint Referenzrobustheit (24.16.1) und DSGVO-Anonymisierung (27.15.3) ohne Konflikt mit der Unveränderlichkeit (20.6). Partitionierung gem. 30.8/Entscheidung 179. Konkrete Felder/Platzhalter doku-offen → autonom. |
 | E17 | 3 | nginx löst den Upstream `core` zur Laufzeit über den Docker-Resolver (`127.0.0.11`) + Variable im `fastcgi_pass` auf, statt die IP beim Start zu cachen. | Behebt 502 „Connection refused" nach `docker compose up -d --force-recreate core` (neue Container-IP). Robustheit für Recreate/Autostart. Verifiziert. |
+| E22 | 8 | **Ed25519** (libsodium) für Paket-/Lizenz-/CRL-/Anker-Signaturen. Paket-Digest über **alle Dateien** (außer signature.json) → jede Manipulation (Manifest oder Code) wird erkannt. | Modern/schnell, nativ verfügbar. Doku-offen → autonom, vom Nutzer bestätigt. |
+| E23 | 8 | Lizenz = signierte JSON-Lizenzdatei (`payload`+`signature`+`key_id`), offline gegen Vertrauensanker geprüft; Felder Modulbezug/Gültigkeit/Karenzfenster/Online-Enforcement. Ablauf → Aktivierung blockiert, kein Datenverlust. | Setzt Entscheidung 158/Kap. 28.7 um. Format doku-offen → autonom. |
+| E24 | 8 | Wiederherstellungspunkt = `pg_dump` (verpflichtend bei Migrationen; `postgresql-client-17` im Image). **Rollback primär über Down-Migrationen** + Datei-/Stammdaten-Rücksetzung; pg_dump-Auto-Restore **bewusst nicht** (korrumpierte die DB bei Teilfehler), nur manuelle letzte Zuflucht. | Kap. 28.14.2-Kaskade (Transaktion→down→Dump). Sicherheit vor Bequemlichkeit; per Test nachgewiesen. |
+| E25 | 8 | Marketplace-Server-Anbindung als eigener nginx-Test-Service (`marketplace`), der signierte Metadaten/CRL/Anker statisch serviert; `MarketplaceClient` ruft sie ab + verifiziert. | Nutzer wollte echten Test-Server. Produktiver Marketplace ist nicht Teil des Core. |
 | E21 | 7 | Module = lokales **Verzeichnis** (Install kopiert nach `core/modules/<key>`, gitignored); Modul-Tabellen in eigenem Schema **`mod_<key>`** (über E5 hinaus, sauberer als „public for now"); **Modul-Migrationen als versionierte SQL-Dateien** (Core-gesteuert, transaktional, getrackt) statt per-Modul-Phinx; **eigener PSR-4-Autoloader** für Modul-Code; Lifecycle-Lock via `pg_try_advisory_lock` (klarer Fehler bei Belegung). Update/Signatur/Lizenz = Step 8. | Doku ließ Datenmodell/Paketdetails/Schema-Trennung offen → autonom. SQL-Migrationen umgehen die fragile per-Modul-Phinx-Pfadauflösung; Schema-Trennung passt zu E5/RLS (Entscheidung 175). Vom Nutzer bestätigt: echtes Laden + Update→Step 8. |
 | E20 | 6 | Outbox: `pg_notify` **innerhalb der Transaktion** (Zustellung auf COMMIT, kein After-Commit-Hook nötig). Worker-Defaults: max_attempts=5, exponentielles Backoff (Basis 5 s, cap 1 h), Reclaim 5 min, Poll-Fallback 5 s, Batch 50, Channel `core_event_outbox`. Claim per `FOR UPDATE SKIP LOCKED`. `pcntl`-Graceful-Shutdown. | Kap. 26.9.2/30.6, Entscheidung 168/177. Konkrete Retry-/Backoff-Werte doku-offen → autonom. NOTIFY-in-Transaktion ist PostgreSQL-Standardverhalten und vermeidet Race/Verlust. |
 | E19 | 5 | Registry referenziert Module per **`module_key` (Text, kein FK)**; **Capability-Bindings persistiert** + Laufzeit-Handle (Guard). Contract-Namen Konvention `modul.typ.name` (unique). Slot-Exklusivität per partiellem Unique-Index. Versions-Matching nur exakt/expliziter Bereich (26.6.4). | Entkoppelt Step 5 von der modules-Tabelle (Step 7); Bindings auditierbar/debugbar. Vom Nutzer bestätigt. Konkretes Datenmodell doku-offen → autonom. |

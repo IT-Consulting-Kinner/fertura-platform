@@ -25,6 +25,11 @@ class SettingsCatalog
             'session.timeout_minutes' => ['type' => 'int', 'default' => 120, 'min' => 1, 'max' => 43200],
             // Beispiel für ein verschlüsseltes Geheimnis.
             'smtp.password' => ['type' => 'string', 'default' => null, 'secret' => true],
+            // Marketplace / Signatur / Wartung (Step 8).
+            'require_module_signature' => ['type' => 'bool', 'default' => true],
+            'crl_max_age_days' => ['type' => 'int', 'default' => 7, 'min' => 0, 'max' => 365],
+            'marketplace.base_url' => ['type' => 'string', 'default' => null],
+            'maintenance_mode' => ['type' => 'bool', 'default' => false],
         ],
     ];
 

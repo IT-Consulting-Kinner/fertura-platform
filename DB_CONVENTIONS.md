@@ -202,3 +202,18 @@ Integritäts-/Zugriffsregeln werden, wo möglich, **in der DB** erzwungen:
   `contracts_used`. Modul-Code wird per PSR-4 (`php_namespace` → `src/`) geladen.
 - Lifecycle-verändernde Operationen laufen unter **PostgreSQL-Advisory-Lock**
   (knotenübergreifend serialisiert).
+
+## 17. Marketplace / Signatur / Lizenz / Update (Step 8, Kap. 28/24.9; E22–E25)
+
+- **Signatur (Ed25519):** Pakete/Lizenzen/CRL/Anker werden signiert; geprüft VOR
+  dem Entpacken gegen aktive, nicht-widerrufene Vertrauensanker
+  (`core.trust_anchors`, `core.revoked_keys`). Paket-Digest deckt **alle** Dateien
+  ab. Setting `core.require_module_signature` (Default true).
+- **Lizenz** (`core.licenses`): signierte Lizenzdatei, **offline** geprüft;
+  Aktivierungs-Gate bei `requires_license`; Ablauf → deaktivieren (kein Datenverlust).
+- **Update** (`UpdateManager`, `core.update_history`): Signatur-/Kompatibilitäts-
+  prüfung; **verpflichtender `pg_dump`-Wiederherstellungspunkt** bei Migrationen;
+  Rollback über Down-Migrationen (Dump = manuelle letzte Zuflucht).
+- **Marketplace** (`MarketplaceClient`, Setting `core.marketplace.base_url`):
+  signierte CRL/Anker abrufen + verifizieren; reiner Metadatenabruf ohne Systemwirkung.
+- **Wartungsmodus** (`core.maintenance_mode`): MaintenanceMiddleware liefert 503.

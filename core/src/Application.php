@@ -18,6 +18,7 @@ namespace App;
 
 use App\Middleware\FootprintMiddleware;
 use App\Middleware\HostHeaderMiddleware;
+use App\Middleware\MaintenanceMiddleware;
 use App\Service\Module\ModuleAutoloader;
 use Authentication\AuthenticationService;
 use Authentication\AuthenticationServiceInterface;
@@ -87,6 +88,9 @@ class Application extends BaseApplication implements AuthenticationServiceProvid
             // In production, ensures App.fullBaseUrl is configured and validates
             // the incoming Host header against it.
             ->add(new HostHeaderMiddleware())
+
+            // Wartungsmodus (Step 8): 503, wenn core.maintenance_mode aktiv.
+            ->add(new MaintenanceMiddleware())
 
             // Handle plugin/theme assets like CakePHP normally does.
             ->add(new AssetMiddleware([

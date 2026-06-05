@@ -34,6 +34,8 @@ core/config/.env
 core/config/Migrations/schema-dump-*.lock
 # Zur Laufzeit installierte Module (Runtime-Artefakt, wie vendor/)
 core/modules/
+# Test-Marketplace-Daten (signierte Fixtures, Laufzeit/Test)
+marketplace-data/
 
 # Compose-Env
 .env

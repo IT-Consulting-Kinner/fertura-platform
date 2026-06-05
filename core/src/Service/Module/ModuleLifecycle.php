@@ -9,7 +9,11 @@ use App\Model\Entity\ContractRegistration;
 use App\Service\Registry\ContractRegistry;
 use App\Service\Registry\RegistryException;
 use App\Service\Registry\SemVer;
+use App\Service\License\LicenseService;
 use App\Service\Registry\VersionConstraint;
+use App\Service\Security\PackageVerificationException;
+use App\Service\Security\PackageVerifier;
+use App\Service\Settings\SettingsManager;
 use Cake\Datasource\ConnectionManager;
 use Throwable;
 
@@ -28,18 +32,32 @@ class ModuleLifecycle
     private ContractRegistry $registry;
     private AuditLogger $audit;
     private ModuleMigrationRunner $migrations;
+    private SettingsManager $settings;
+    private PackageVerifier $verifier;
+    private LicenseService $license;
     private string $coreVersion;
 
     public function __construct(
         ?ContractRegistry $registry = null,
         ?AuditLogger $audit = null,
         ?ModuleMigrationRunner $migrations = null,
+        ?SettingsManager $settings = null,
+        ?PackageVerifier $verifier = null,
+        ?LicenseService $license = null,
         ?string $coreVersion = null,
     ) {
         $this->registry = $registry ?? new ContractRegistry();
         $this->audit = $audit ?? new AuditLogger();
         $this->migrations = $migrations ?? new ModuleMigrationRunner();
+        $this->settings = $settings ?? new SettingsManager();
+        $this->verifier = $verifier ?? new PackageVerifier();
+        $this->license = $license ?? new LicenseService();
         $this->coreVersion = $coreVersion ?? Application::CORE_VERSION;
+    }
+
+    public function license(): LicenseService
+    {
+        return $this->license;
     }
 
     private function conn()
@@ -186,6 +204,19 @@ class ModuleLifecycle
                 if ($depMod === null || $depMod['status'] !== 'active') {
                     throw new LifecycleException("Abhängigkeit nicht aktiv: $depKey");
                 }
+            }
+
+            // Lizenz-Gate (Kap. 28.7.2): kostenpflichtige Module ohne gültige
+            // Lizenz dürfen nicht aktiviert werden.
+            if ($manifest->requiresLicense() && !$this->license->isValid($key)) {
+                $ev = $this->license->evaluate($key);
+                $this->audit->log('module.license_error', 'module', $key, [
+                    'newValue' => ['status' => $ev['status'], 'reason' => $ev['reason'] ?? null],
+                    'moduleKey' => $key,
+                    'moduleName' => $manifest->name(),
+                    'moduleVersion' => (string)$mod['version'],
+                ]);
+                throw new LifecycleException('Aktivierung blockiert (Lizenz): ' . ($ev['reason'] ?? 'ungültig'));
             }
 
             if ($manifest->phpNamespace() !== null && $mod['source_path'] !== null) {
@@ -370,8 +401,20 @@ class ModuleLifecycle
 
     private function verifySignature(string $sourcePath, ModuleManifest $manifest): void
     {
-        // Step 8: echte Signatur-/Vertrauensanker-/Sperrlistenprüfung.
-        // Step 7: Hook (akzeptiert lokale Verzeichnisse).
+        if (!(bool)$this->settings->get('core', 'require_module_signature', true)) {
+            return; // Dev-Bypass (Setting)
+        }
+        try {
+            $this->verifier->verify($sourcePath, $manifest->publisher());
+        } catch (PackageVerificationException $e) {
+            $this->audit->log('module.signature_invalid', 'module', $manifest->key(), [
+                'newValue' => ['error' => $e->getMessage()],
+                'moduleKey' => $manifest->key(),
+                'moduleName' => $manifest->name(),
+                'moduleVersion' => $manifest->version(),
+            ]);
+            throw new LifecycleException('Signaturprüfung fehlgeschlagen: ' . $e->getMessage());
+        }
     }
 
     private function withLock(callable $fn): mixed

@@ -58,11 +58,8 @@ class ModuleMigrationRunner
                 });
                 $executed[] = $name;
             } catch (Throwable $e) {
-                $connection->execute(
-                    "INSERT INTO core.module_migrations_log (module_id, migration_name, status, error_message) "
-                    . "VALUES (:m, :n, 'failed', :e)",
-                    ['m' => $moduleId, 'n' => $name, 'e' => $e->getMessage()],
-                );
+                // Kein 'failed'-Log (sonst Unique-Konflikt beim Retry); die
+                // fehlgeschlagene Migrationstransaktion ist bereits zurückgerollt.
                 throw new RuntimeException("Modul-Migration $name fehlgeschlagen: " . $e->getMessage(), 0, $e);
             }
         }
@@ -70,11 +67,52 @@ class ModuleMigrationRunner
         return $executed;
     }
 
+    /**
+     * Führt die down-Operation einer bereits angewendeten Modul-Migration aus
+     * (Rollback). Liest den @DOWN-Teil aus der Paketdatei, führt ihn im
+     * Modul-Schema aus und entfernt den Log-Eintrag.
+     */
+    public function runDown(string $moduleId, string $schema, string $migrationsDir, string $name): void
+    {
+        $file = rtrim($migrationsDir, '/') . '/' . $name;
+        if (!is_file($file)) {
+            return;
+        }
+        $down = $this->downPart((string)file_get_contents($file));
+
+        $connection = ConnectionManager::get('default');
+        $connection->transactional(function () use ($connection, $schema, $down, $moduleId, $name): void {
+            $connection->execute("SET LOCAL search_path TO $schema, core, public");
+            foreach ($this->statements($down) as $stmt) {
+                $connection->execute($stmt);
+            }
+            $connection->execute(
+                'DELETE FROM core.module_migrations_log WHERE module_id = :m AND migration_name = :n',
+                ['m' => $moduleId, 'n' => $name],
+            );
+        });
+    }
+
+    public function isApplied(string $moduleId, string $name): bool
+    {
+        return ConnectionManager::get('default')->execute(
+            'SELECT 1 FROM core.module_migrations_log WHERE module_id = :m AND migration_name = :n',
+            ['m' => $moduleId, 'n' => $name],
+        )->fetch() !== false;
+    }
+
     private function upPart(string $sql): string
     {
         $parts = preg_split('/^\s*--\s*@DOWN\s*$/mi', $sql, 2);
 
         return $parts[0] ?? $sql;
+    }
+
+    private function downPart(string $sql): string
+    {
+        $parts = preg_split('/^\s*--\s*@DOWN\s*$/mi', $sql, 2);
+
+        return $parts[1] ?? '';
     }
 
     /** @return list<string> */

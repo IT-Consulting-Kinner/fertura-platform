@@ -31,6 +31,8 @@ services:
       # vendor liegt auf einem Named Volume (ext4 in der VM), NICHT auf dem
       # 9p-Windows-Bind-Mount -> verhindert p9_client_rpc-Haenger beim Autoload.
       - core_vendor:/var/www/html/vendor
+      # Geteilt mit dem Test-Marketplace-Server (signierte Fixtures schreiben).
+      - ./marketplace-data:/var/www/html/marketplace-data
     environment:
       DATABASE_URL: "postgres://${POSTGRES_USER:-fertura}:${POSTGRES_PASSWORD:-fertura}@db/${POSTGRES_DB:-fertura}?encoding=utf8"
       DEBUG: "true"
@@ -77,6 +79,15 @@ services:
     ports:
       - "8025:8025"   # Web-UI
       - "1025:1025"   # SMTP
+
+  # Test-Marketplace: serviert signierte Metadaten/CRL/Anker statisch (Step 8).
+  marketplace:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    volumes:
+      - ./marketplace-data:/usr/share/nginx/html:ro
+    ports:
+      - "8090:80"
 
 volumes:
   db_data:
