@@ -217,3 +217,20 @@ Integritäts-/Zugriffsregeln werden, wo möglich, **in der DB** erzwungen:
 - **Marketplace** (`MarketplaceClient`, Setting `core.marketplace.base_url`):
   signierte CRL/Anker abrufen + verifizieren; reiner Metadatenabruf ohne Systemwirkung.
 - **Wartungsmodus** (`core.maintenance_mode`): MaintenanceMiddleware liefert 503.
+
+## 18. BREAD & Row-Level Security (Step 9, Kap. 25/30.3; E26)
+
+- **BREAD** (`group_resource_permissions`): Gruppe → Ressource → can_browse/read/
+  add/edit/delete + `extra_actions` (jsonb). `resource_key` NULL = Objektklasse.
+  Prüfung über `App\Service\Permission\PermissionService::canPerform()` — **rein
+  additiv** über aktive Gruppen (keine Deny-Regeln, Entscheidung 124); immer
+  serverseitig. Ressourcen (`resources`) deklarieren Module im Manifest.
+- **RLS (Entscheidung 175):** gruppen-/bereichs-scoped **Modul**tabellen MÜSSEN
+  `ENABLE` + `FORCE ROW LEVEL SECURITY` + Policy. Empfohlenes Muster:
+  `USING (group_id = ANY(core.current_group_ids()))`.
+- **Zugriffskontext** via **SET LOCAL** (pro Transaktion, pooling-sicher):
+  `app.current_user_id`, `app.current_group_ids` (CSV uuids). Gesetzt von
+  `RlsContext` / `TransactionRlsMiddleware` (Request = eine Transaktion).
+- **Bypass** = **privilegierte DB-Rolle** (Migrationen/Wartung/Worker/DSGVO), NICHT
+  die settbare GUC. **Wichtig:** Die App-Connection muss als **NOBYPASSRLS-Rolle**
+  laufen, damit RLS greift (Superuser umgeht RLS).

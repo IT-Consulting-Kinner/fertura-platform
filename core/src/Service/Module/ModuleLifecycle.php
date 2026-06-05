@@ -173,6 +173,23 @@ class ModuleLifecycle
                 );
             }
 
+            // Deklarierte BREAD-Ressourcen registrieren (Step 9, Kap. 25.11).
+            foreach ($manifest->permissions() as $p) {
+                $conn->execute(
+                    'INSERT INTO resources (module_key, resource_type, resource_name, description, is_scoped, extra_actions) '
+                    . 'VALUES (:m, :t, :n, :d, :s, CAST(:e AS jsonb)) '
+                    . 'ON CONFLICT (module_key, resource_name) DO NOTHING',
+                    [
+                        'm' => $key,
+                        't' => (string)($p['resource_type'] ?? ''),
+                        'n' => (string)($p['name'] ?? ''),
+                        'd' => $p['description'] ?? null,
+                        's' => !empty($p['is_scoped']) ? 'true' : 'false',
+                        'e' => isset($p['extra_actions']) ? json_encode($p['extra_actions']) : null,
+                    ],
+                );
+            }
+
             $this->audit->log('module.install', 'module', $key, [
                 'newValue' => ['version' => $manifest->version(), 'type' => $manifest->type()],
                 'moduleKey' => $key,
@@ -325,6 +342,9 @@ class ModuleLifecycle
             $conn->execute('DELETE FROM contracts WHERE owner_module_key = :k', ['k' => $key]);
             // Capability-Bindings dieses Moduls.
             $conn->execute('DELETE FROM capability_bindings WHERE module_key = :k', ['k' => $key]);
+            // BREAD-Ressourcen + Rechtezuordnungen dieses Moduls.
+            $conn->execute('DELETE FROM group_resource_permissions WHERE module_key = :k', ['k' => $key]);
+            $conn->execute('DELETE FROM resources WHERE module_key = :k', ['k' => $key]);
             // Modul-Schema mit allen Modultabellen.
             $schema = 'mod_' . $key;
             $conn->execute("DROP SCHEMA IF EXISTS $schema CASCADE");

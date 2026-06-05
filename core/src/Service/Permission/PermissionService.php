@@ -1,0 +1,181 @@
+<?php
+declare(strict_types=1);
+
+namespace App\Service\Permission;
+
+use App\Audit\AuditLogger;
+use Cake\Datasource\ConnectionManager;
+
+/**
+ * BREAD-Rechteprüfung (Kap. 25 / 27.16). Rein additive Aggregation über die
+ * aktiven Gruppen eines aktiven Benutzers (keine Deny-Regeln, Entscheidung 124).
+ * Immer serverseitig; gleich für GUI/API/CLI.
+ */
+class PermissionService
+{
+    private const BREAD = [
+        'browse' => 'can_browse',
+        'read' => 'can_read',
+        'add' => 'can_add',
+        'edit' => 'can_edit',
+        'delete' => 'can_delete',
+    ];
+
+    private AuditLogger $audit;
+
+    public function __construct(?AuditLogger $audit = null)
+    {
+        $this->audit = $audit ?? new AuditLogger();
+    }
+
+    private function conn()
+    {
+        return ConnectionManager::get('default');
+    }
+
+    /**
+     * Aktive Gruppen-IDs eines AKTIVEN Benutzers (für Aggregation + RLS-Kontext).
+     *
+     * @return list<string>
+     */
+    public function activeGroupIds(string $userId): array
+    {
+        $user = $this->conn()->execute(
+            'SELECT status FROM users WHERE id = :id',
+            ['id' => $userId],
+        )->fetch('assoc');
+        if ($user === false || $user['status'] !== 'active') {
+            return [];
+        }
+
+        $rows = $this->conn()->execute(
+            'SELECT g.id FROM "groups" g JOIN groups_users gu ON gu.group_id = g.id '
+            . 'WHERE gu.user_id = :id AND g.active',
+            ['id' => $userId],
+        )->fetchAll('assoc');
+
+        return array_map(static fn ($r) => (string)$r['id'], $rows);
+    }
+
+    /**
+     * Darf der Benutzer die BREAD-Aktion oder Zusatzaktion auf der Ressource?
+     * resourceKey = null prüft die Objektklasse; gesetzt prüft Klasse UND Objekt.
+     */
+    public function canPerform(
+        string $userId,
+        string $moduleKey,
+        string $resourceType,
+        ?string $resourceKey,
+        string $action,
+    ): bool {
+        $groups = $this->activeGroupIds($userId);
+        if ($groups === []) {
+            return false;
+        }
+
+        $placeholders = [];
+        $params = ['m' => $moduleKey, 't' => $resourceType, 'k' => $resourceKey];
+        foreach ($groups as $i => $gid) {
+            $placeholders[] = ":g$i";
+            $params["g$i"] = $gid;
+        }
+
+        $rows = $this->conn()->execute(
+            'SELECT can_browse, can_read, can_add, can_edit, can_delete, extra_actions '
+            . 'FROM group_resource_permissions WHERE group_id IN (' . implode(',', $placeholders) . ') '
+            . 'AND module_key = :m AND resource_type = :t AND (resource_key IS NULL OR resource_key = :k)',
+            $params,
+        )->fetchAll('assoc');
+
+        $action = strtolower($action);
+        foreach ($rows as $row) {
+            if (isset(self::BREAD[$action])) {
+                if ($this->truthy($row[self::BREAD[$action]])) {
+                    return true;
+                }
+            } else {
+                $extra = $row['extra_actions'] ? json_decode((string)$row['extra_actions'], true) : [];
+                if (is_array($extra) && !empty($extra[$action])) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Effektive Rechte (Vereinigung) eines Benutzers auf eine Ressource.
+     *
+     * @return array{bread: array<string,bool>, extra_actions: array<string,bool>}
+     */
+    public function getEffectivePermissions(
+        string $userId,
+        string $moduleKey,
+        string $resourceType,
+        ?string $resourceKey = null,
+    ): array {
+        $bread = ['browse' => false, 'read' => false, 'add' => false, 'edit' => false, 'delete' => false];
+        $extra = [];
+        foreach (array_keys($bread) as $a) {
+            $bread[$a] = $this->canPerform($userId, $moduleKey, $resourceType, $resourceKey, $a);
+        }
+
+        return ['bread' => $bread, 'extra_actions' => $extra];
+    }
+
+    /**
+     * Vergibt/aktualisiert Rechte einer Gruppe auf eine Ressource (additiv).
+     *
+     * @param array<string,bool> $bread
+     * @param array<string,bool> $extraActions
+     */
+    public function grant(
+        string $groupId,
+        string $moduleKey,
+        string $resourceType,
+        ?string $resourceKey,
+        array $bread,
+        array $extraActions = [],
+    ): void {
+        $this->conn()->execute(
+            'INSERT INTO group_resource_permissions '
+            . '(group_id, module_key, resource_type, resource_key, can_browse, can_read, can_add, can_edit, can_delete, extra_actions) '
+            . 'VALUES (:g, :m, :t, :k, :b, :r, :a, :e, :d, CAST(:x AS jsonb)) '
+            . "ON CONFLICT (group_id, module_key, resource_type, coalesce(resource_key, '*')) DO UPDATE SET "
+            . 'can_browse = EXCLUDED.can_browse, can_read = EXCLUDED.can_read, can_add = EXCLUDED.can_add, '
+            . 'can_edit = EXCLUDED.can_edit, can_delete = EXCLUDED.can_delete, extra_actions = EXCLUDED.extra_actions',
+            [
+                'g' => $groupId, 'm' => $moduleKey, 't' => $resourceType, 'k' => $resourceKey,
+                'b' => !empty($bread['browse']) ? 'true' : 'false',
+                'r' => !empty($bread['read']) ? 'true' : 'false',
+                'a' => !empty($bread['add']) ? 'true' : 'false',
+                'e' => !empty($bread['edit']) ? 'true' : 'false',
+                'd' => !empty($bread['delete']) ? 'true' : 'false',
+                'x' => $extraActions === [] ? null : json_encode($extraActions),
+            ],
+        );
+        $this->audit->log('bread_rights.update', 'resource', "$moduleKey.$resourceType", [
+            'newValue' => ['group' => $groupId, 'bread' => $bread, 'extra' => $extraActions, 'key' => $resourceKey],
+            'moduleKey' => $moduleKey,
+        ]);
+    }
+
+    public function revoke(string $groupId, string $moduleKey, string $resourceType, ?string $resourceKey): void
+    {
+        $this->conn()->execute(
+            'DELETE FROM group_resource_permissions WHERE group_id = :g AND module_key = :m '
+            . "AND resource_type = :t AND coalesce(resource_key, '*') = coalesce(:k, '*')",
+            ['g' => $groupId, 'm' => $moduleKey, 't' => $resourceType, 'k' => $resourceKey],
+        );
+        $this->audit->log('group_resource_mapping.remove', 'resource', "$moduleKey.$resourceType", [
+            'oldValue' => ['group' => $groupId, 'key' => $resourceKey],
+            'moduleKey' => $moduleKey,
+        ]);
+    }
+
+    private function truthy(mixed $value): bool
+    {
+        return $value === true || $value === 't' || $value === '1' || $value === 1;
+    }
+}

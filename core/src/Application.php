@@ -19,6 +19,7 @@ namespace App;
 use App\Middleware\FootprintMiddleware;
 use App\Middleware\HostHeaderMiddleware;
 use App\Middleware\MaintenanceMiddleware;
+use App\Middleware\TransactionRlsMiddleware;
 use App\Service\Module\ModuleAutoloader;
 use Authentication\AuthenticationService;
 use Authentication\AuthenticationServiceInterface;
@@ -120,7 +121,11 @@ class Application extends BaseApplication implements AuthenticationServiceProvid
 
             // Footprint: uebernimmt die Identitaet in den ActorContext fuer
             // created_by/updated_by (muss NACH der AuthenticationMiddleware laufen).
-            ->add(new FootprintMiddleware());
+            ->add(new FootprintMiddleware())
+
+            // RLS: Request in Transaktion huellen + Zugriffskontext via SET LOCAL
+            // (Step 9, Entscheidung 175). Nach der AuthenticationMiddleware.
+            ->add(new TransactionRlsMiddleware());
 
         return $middlewareQueue;
     }

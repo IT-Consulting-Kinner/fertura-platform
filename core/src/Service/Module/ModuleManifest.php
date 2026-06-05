@@ -114,6 +114,12 @@ class ModuleManifest
         return array_values($this->data['events_registered'] ?? []);
     }
 
+    /** @return list<array<string, mixed>> Deklarierte BREAD-Ressourcen. */
+    public function permissions(): array
+    {
+        return array_values($this->data['permissions'] ?? []);
+    }
+
     /**
      * Validiert das Manifest. Gibt eine Liste der Fehler zurück (leer = gültig).
      *

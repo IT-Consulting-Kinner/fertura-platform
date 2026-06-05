@@ -51,7 +51,7 @@ für Verifikation ist das **Plattform-Anforderungsdokument v6.28**
 - `[x]` **8. Marketplace / Lizenz / Update-Manager** — Marketplace-Komm.,
   Signaturprüfung, Offline-first-Lizenz, Core-/Modul-Update,
   Wiederherstellungspunkt. *(Kap. 28, 24.9.2)*
-- `[ ]` **9. BREAD + RLS-Infrastruktur** — BREAD-Ressourcen/Aggregation
+- `[x]` **9. BREAD + RLS-Infrastruktur** — BREAD-Ressourcen/Aggregation
   (Core-Seite), RLS-Konventionen + Session-Kontext, Bypass-Pfade.
   *(Kap. 25, 30.3)*
 - `[ ]` **10. Admin-Bereich (GUI)** — SSR/Bootstrap: Benutzer/Gruppen/
@@ -62,6 +62,23 @@ für Verifikation ist das **Plattform-Anforderungsdokument v6.28**
   *(Kap. 29)*
 - `[ ]` **12. Observability** — `/health` (Liveness + Detail), Health-
   Collector, strukturierte Logs, Admin-Statusfläche. *(Kap. 20.2)*
+
+## Spätere/offene projektweite Aufgaben
+
+- **App-DB-Rolle ohne Superuser (für RLS-Wirksamkeit):** Damit Row-Level-Security
+  zur Laufzeit greift, MUSS die App-Connection als **NOBYPASSRLS-Rolle** laufen
+  (Superuser/`fertura` umgeht RLS immer). Privilegierte Pfade (Migrationen,
+  Wartung, Worker, DSGVO) nutzen weiterhin die privilegierte Rolle (Bypass). Die
+  duale Connection-/Rollen-Einrichtung ist noch zu verdrahten (Datenmodell +
+  Helfer + Middleware sind fertig). *(offen, Step 9)*
+- **Lizenz- & Signaturerstellungs-Verfahren (Betreiber-/Marketplace-Seite):** Ein
+  echtes Verfahren für Schlüsselverwaltung (Root-/Publisher-Schlüssel,
+  Aufbewahrung/HSM), **Lizenzausstellung** und den **Signier-Workflow** für
+  Pakete/CRL/Anker muss noch definiert und implementiert werden. Aktuell existiert
+  nur das Entwickler-/Test-Werkzeug `mp_tool` (keygen/sign/license). *(offen, vom
+  Nutzer angemerkt 2026-06-05)*
+- **Schlüsselrotation-CLI** (Re-Encryption verschlüsselter Settings, Entscheidung
+  164 = Soll) — zurückgestellt.
 
 ## Verifikationsbericht je Schritt
 
@@ -391,6 +408,38 @@ Schlüssel; Wartungsmodus 503↔200; HTTP 200.
   (Entscheidung 164, Soll) zurückgestellt.
 - Admin-GUI (Marketplace/Update/Lizenz/Recovery) → **Step 10**.
 
+### Schritt 9 — abgeschlossen & verifiziert (2026-06-05)
+
+**Geprüfte Kapitel:** 25 (BREAD), 27.6–27.9/27.16 (Rechtemodell/Prüfung,
+Entscheidung 124/135/172), 30.3 (RLS, Entscheidung 175).
+
+**Soll → Ist:**
+- Datenmodell `resources` + `group_resource_permissions` (BREAD-Spalten +
+  Zusatzaktionen jsonb). Ressourcen werden beim Modul-Install aus dem Manifest
+  (`permissions`) befüllt (Step-7-Hook), bei Delete entfernt. ✔
+- **`PermissionService`**: serverseitige, **rein additive** Aggregation über die
+  aktiven Gruppen eines aktiven Benutzers (keine Deny-Regeln); Klassen- + Objekt-
+  Rechte vereint; deaktivierte Gruppen/Benutzer → keine Rechte. ✔
+- **RLS-Infrastruktur:** Core-Helfer `core.current_user_id/current_group_ids/
+  rls_bypass`; `RlsContext` setzt Kontext via **SET LOCAL**; **TransactionRls-
+  Middleware** hüllt jeden Request in eine Transaktion (Entscheidung 175,
+  pooling-sicher). ✔
+- **`permission`-CLI** (check/grant/revoke/resources); Audit der Rechteänderungen.
+
+**Container-Lauf / Test:** BREAD-Union (browse/edit/approve vereint, add/reject
+deny; inaktive Gruppe/Benutzer ausgeschlossen); RLS-Isolation mit non-superuser-
+Rolle (G1→2, G2→1, ohne Kontext→0, Superuser-Bypass→3); Resource-Hook; HTTP 200.
+
+**Offene Punkte / Beobachtungen / autonome Entscheidungen:**
+- **RLS greift nur mit NOBYPASSRLS-App-Rolle** — Superuser umgeht RLS. Duale
+  Rollen-/Connection-Einrichtung als Deployment-Aufgabe notiert (s. o.). Maschinerie
+  per Testrolle nachgewiesen.
+- **Bypass-Pfad = privilegierte Rolle** (sicher), nicht die settbare GUC
+  `app.bypass_rls` (Footgun, nur für vertrauenswürdige Kontexte; Helfer bleibt
+  verfügbar, aber empfohlenes Policy-Muster nutzt nur `current_group_ids`).
+- **Konkrete Modul-Policies + Ressourcen** liefern die Module; Admin-GUI für
+  Gruppen-Ressourcen-Zuordnung → **Step 10**.
+
 ## Entscheidungs-Log (autonome Entscheidungen)
 
 | Nr. | Schritt | Entscheidung | Begründung (Anforderungskontext) |
@@ -412,6 +461,7 @@ Schlüssel; Wartungsmodus 503↔200; HTTP 200.
 | E15 | 2 | Anmeldeschutz-Defaults: 10 Fehlversuche / 15-min-Fenster, dann temporäre Sperre (`LoginThrottle`, persistiert in `auth_failures`). | Entscheidung 162 fordert „sicheren Vorgabewert ohne Konfiguration". Konkrete Schwellen doku-offen → autonom; ab Step 4 DB-konfigurierbar. |
 | E16 | 3 | Audit-Log-Design: (a) **Personen per auflösbarer UUID** (kein denormalisierter Klartext-Name/E-Mail) → Anonymisierung wirkt ohne Log-Mutation; **textuelle Schnappschüsse nur für nicht-personenbezogene** Entitäten (Module/Config) = referenzrobust. (b) **Unveränderlichkeit per Trigger** (UPDATE/DELETE blockiert; Bypass nur via `SET LOCAL app.allow_audit_mutation`). (c) **Monats-RANGE-Partitionierung** + DEFAULT-Partition; `audit_partition`-Command stellt Monatspartitionen im Entrypoint sicher. (d) `AuditLogger`-Service schreibt transaktional. | Vereint Referenzrobustheit (24.16.1) und DSGVO-Anonymisierung (27.15.3) ohne Konflikt mit der Unveränderlichkeit (20.6). Partitionierung gem. 30.8/Entscheidung 179. Konkrete Felder/Platzhalter doku-offen → autonom. |
 | E17 | 3 | nginx löst den Upstream `core` zur Laufzeit über den Docker-Resolver (`127.0.0.11`) + Variable im `fastcgi_pass` auf, statt die IP beim Start zu cachen. | Behebt 502 „Connection refused" nach `docker compose up -d --force-recreate core` (neue Container-IP). Robustheit für Recreate/Autostart. Verifiziert. |
+| E26 | 9 | BREAD additiv (Spalten can_browse/read/add/edit/delete + extra_actions jsonb); RLS-Kontext via **SET LOCAL + Transaktion-pro-Request** (vom Nutzer bestätigt); Core-Helfer-Funktionen für Policies; **Bypass über privilegierte DB-Rolle** (nicht über settbare GUC). App muss als NOBYPASSRLS-Rolle laufen (Deployment-Aufgabe). | Kap. 25/30.3, Entscheidung 124/175. SET-LOCAL-Variante = doku-konform/pooling-sicher. Rolle statt GUC = sicher (kein Self-Bypass). |
 | E22 | 8 | **Ed25519** (libsodium) für Paket-/Lizenz-/CRL-/Anker-Signaturen. Paket-Digest über **alle Dateien** (außer signature.json) → jede Manipulation (Manifest oder Code) wird erkannt. | Modern/schnell, nativ verfügbar. Doku-offen → autonom, vom Nutzer bestätigt. |
 | E23 | 8 | Lizenz = signierte JSON-Lizenzdatei (`payload`+`signature`+`key_id`), offline gegen Vertrauensanker geprüft; Felder Modulbezug/Gültigkeit/Karenzfenster/Online-Enforcement. Ablauf → Aktivierung blockiert, kein Datenverlust. | Setzt Entscheidung 158/Kap. 28.7 um. Format doku-offen → autonom. |
 | E24 | 8 | Wiederherstellungspunkt = `pg_dump` (verpflichtend bei Migrationen; `postgresql-client-17` im Image). **Rollback primär über Down-Migrationen** + Datei-/Stammdaten-Rücksetzung; pg_dump-Auto-Restore **bewusst nicht** (korrumpierte die DB bei Teilfehler), nur manuelle letzte Zuflucht. | Kap. 28.14.2-Kaskade (Transaktion→down→Dump). Sicherheit vor Bequemlichkeit; per Test nachgewiesen. |

@@ -25,5 +25,14 @@
             "version": ">=1.0.0 <2.0.0",
             "class": "SampleModule\\Listener\\PingListener"
         }
+    ],
+    "permissions": [
+        {
+            "resource_type": "ping",
+            "name": "sample_module.ping",
+            "description": "Ping-Ressource",
+            "is_scoped": true,
+            "extra_actions": ["trigger"]
+        }
     ]
 }
