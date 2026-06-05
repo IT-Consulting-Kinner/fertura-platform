@@ -40,7 +40,8 @@ $activeArea = $activeArea ?? null;
                         <li class="nav-item"><a class="nav-link py-1<?= rtrim($this->request->getRequestTarget(), '/') === $item[1] ? ' active' : '' ?>" href="<?= h($item[1]) ?>"><?= h($item[0]) ?></a></li>
                     <?php endforeach; ?>
                 <?php endforeach; ?>
-                <li class="nav-item mt-3"><a class="nav-link" href="/admin/audit">Audit-Log</a></li>
+                <li class="nav-item mt-3"><a class="nav-link" href="/admin/health">Systemstatus</a></li>
+                <li class="nav-item"><a class="nav-link" href="/admin/audit">Audit-Log</a></li>
             </ul>
         </aside>
         <main class="col-md-9 col-lg-10 p-4">

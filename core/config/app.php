@@ -354,6 +354,9 @@ return [
      * Configures logging options
      */
     'Log' => [
+        // Strukturierte, maschinenlesbare Logs (JSON-Zeilen) für Auswertung/SIEM
+        // (Kap. 20.2.3): Zeitstempel, Ebene, Nachricht und Kontext (z. B.
+        // component/module/correlation_id, sofern am Aufrufort mitgegeben).
         'debug' => [
             'className' => FileLog::class,
             'path' => LOGS,
@@ -361,6 +364,7 @@ return [
             'url' => env('LOG_DEBUG_URL', null),
             'scopes' => null,
             'levels' => ['notice', 'info', 'debug'],
+            'formatter' => ['className' => \Cake\Log\Formatter\JsonFormatter::class],
         ],
         'error' => [
             'className' => FileLog::class,
@@ -369,6 +373,7 @@ return [
             'url' => env('LOG_ERROR_URL', null),
             'scopes' => null,
             'levels' => ['warning', 'error', 'critical', 'alert', 'emergency'],
+            'formatter' => ['className' => \Cake\Log\Formatter\JsonFormatter::class],
         ],
         // To enable this dedicated query log, you need to set your datasource's log flag to true
         'queries' => [

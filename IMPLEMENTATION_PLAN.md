@@ -60,7 +60,7 @@ für Verifikation ist das **Plattform-Anforderungsdokument v6.28**
 - `[x]` **11. Öffentliche Modul-Interfaces / Integrations-Infra** —
   Service-Contracts, Interface-Registry, registrierte Nutzung.
   *(Kap. 29)*
-- `[ ]` **12. Observability** — `/health` (Liveness + Detail), Health-
+- `[x]` **12. Observability** — `/health` (Liveness + Detail), Health-
   Collector, strukturierte Logs, Admin-Statusfläche. *(Kap. 20.2)*
 
 ## Spätere/offene projektweite Aufgaben
@@ -539,6 +539,52 @@ Contracts), insb. 29.3 (Einordnung Contract-Modell), 29.5/29.6 (Spezifikation),
 - `invoke()` wird bewusst **nicht** je Aufruf auditiert (29.16 fordert es nicht;
   Definition/Nutzung/De-/Aktivierung/Inkompatibilität sind auditiert).
 
+### Schritt 12 — abgeschlossen & verifiziert (2026-06-05)
+
+**Geprüfte Kapitel:** 20.2.1 (Health-Endpoint, Muss), 20.2.2 (Health-Collector),
+20.2.3 (strukturierte Logs, Soll), 20.2.4 (Admin-Statusfläche, Soll), 20.3
+(Worker-Aktualität/Heartbeat, Muss-Protokollierung).
+
+**Soll → Ist:**
+- **`/health`-Endpoint:** öffentlicher **Liveness** (`GET /health` → `{"status":"up"}`
+  / 503) ohne Auth; **Detail** (`GET /health/detail`) auth-/token-geschützt
+  (Admin-Session **oder** `core.health_token` via `X-Health-Token`/`?token=`,
+  Nutzerwahl). ✔
+- **`HealthService`** aggregiert (Kap. 20.2.1): Datenbank, Datei-Storage
+  (Schreib-/Lesetest), Worker-Aktualität, Registry (inkl. Orphan-Bindings),
+  Modul-Zustände, Outbox-Pending + **Dead-Letter-Zähler**, Lizenzstatus, plus
+  Modul-Collector-Beiträge → Gesamtstatus `up|degraded|down`. ✔
+- **Health-Collector** (Kap. 20.2.2): Core-Contract `core.collector.health` per
+  Migration geseedet; `HealthCheckInterface` als Beitrags-Vertrag; ohne Beiträge
+  Leerergebnis. ✔
+- **Worker-Heartbeat** (Kap. 20.3): dedizierte Tabelle `core.worker_heartbeats`
+  (Nutzerwahl); `OutboxWorker` schreibt je Zyklus `WorkerHeartbeat::beat('outbox')`. ✔
+- **Admin-Statusfläche** `/admin/health` (Kap. 20.2.4, jeder Admin): Subsystem-
+  Tabelle + Worker-Aktualität. ✔
+- **Strukturierte JSON-Logs** (Kap. 20.2.3): `JsonFormatter` an den File-Log-
+  Engines (debug/error). ✔
+- Neue Settings: `core.health_token` (secret), `core.health.worker_max_age_seconds`,
+  `core.storage.path`.
+
+**Container-Lauf / Test (`step12test.sh`):**
+- Migration `CoreHealth` ✔; `worker_heartbeats` + Collector-Contract vorhanden.
+- Liveness `/health` → **200** `{"status":"up"}`.
+- `/health/detail` ohne Auth → **401**; falscher Token → **401**.
+- `/health/detail?token=…` → **200**, Gesamtstatus „up", alle 8 Subsysteme.
+- `/health/detail` mit Admin-Session → **200**.
+- Worker-Heartbeat geschrieben (`outbox status=ok age=5s` nach Worker-Neustart).
+- Admin `/admin/health` → **200**.
+
+**Offene Punkte / Beobachtungen / autonome Entscheidungen:**
+- Detail-Schutz = Session ODER Token (E30); Worker-Frische in dedizierter Tabelle
+  statt katalog-gegateter `core.settings` (E30).
+- Ticketing-spezifische CLI-Cronjobs (fetch_mails, check_escalations …) aus Kap.
+  20.3/20.5 sind **Modul**-Belange; der Core liefert generisch Heartbeat-Tabelle +
+  Health-Aggregation, an die Module andocken.
+- **Langlaufende Worker müssen nach Code-Änderungen neu gestartet werden** (PHP-
+  Prozess hält die geladenen Klassen) — im Dev über `docker compose restart worker`;
+  im Betrieb über Deployment/Reload. Notiert als Betriebsbeobachtung.
+
 ## Entscheidungs-Log (autonome Entscheidungen)
 
 | Nr. | Schritt | Entscheidung | Begründung (Anforderungskontext) |
@@ -560,6 +606,7 @@ Contracts), insb. 29.3 (Einordnung Contract-Modell), 29.5/29.6 (Spezifikation),
 | E15 | 2 | Anmeldeschutz-Defaults: 10 Fehlversuche / 15-min-Fenster, dann temporäre Sperre (`LoginThrottle`, persistiert in `auth_failures`). | Entscheidung 162 fordert „sicheren Vorgabewert ohne Konfiguration". Konkrete Schwellen doku-offen → autonom; ab Step 4 DB-konfigurierbar. |
 | E16 | 3 | Audit-Log-Design: (a) **Personen per auflösbarer UUID** (kein denormalisierter Klartext-Name/E-Mail) → Anonymisierung wirkt ohne Log-Mutation; **textuelle Schnappschüsse nur für nicht-personenbezogene** Entitäten (Module/Config) = referenzrobust. (b) **Unveränderlichkeit per Trigger** (UPDATE/DELETE blockiert; Bypass nur via `SET LOCAL app.allow_audit_mutation`). (c) **Monats-RANGE-Partitionierung** + DEFAULT-Partition; `audit_partition`-Command stellt Monatspartitionen im Entrypoint sicher. (d) `AuditLogger`-Service schreibt transaktional. | Vereint Referenzrobustheit (24.16.1) und DSGVO-Anonymisierung (27.15.3) ohne Konflikt mit der Unveränderlichkeit (20.6). Partitionierung gem. 30.8/Entscheidung 179. Konkrete Felder/Platzhalter doku-offen → autonom. |
 | E17 | 3 | nginx löst den Upstream `core` zur Laufzeit über den Docker-Resolver (`127.0.0.11`) + Variable im `fastcgi_pass` auf, statt die IP beim Start zu cachen. | Behebt 502 „Connection refused" nach `docker compose up -d --force-recreate core` (neue Container-IP). Robustheit für Recreate/Autostart. Verifiziert. |
+| E30 | 12 | Observability: `/health` öffentlicher Liveness + auth-/token-geschützter Detail (Session **oder** `core.health_token`). `HealthService` aggregiert DB/Storage/Worker/Registry/Module/Outbox+Dead-Letter/Lizenz + Modul-Collector (`core.collector.health`, `HealthCheckInterface`). Worker-Frische in **dedizierter Tabelle** `core.worker_heartbeats` (nicht in katalog-gegateter `core.settings`). Strukturierte JSON-Logs via `JsonFormatter`. Admin-Statusfläche `/admin/health`. | Kap. 20.2/20.3. Token-Pfad bedient externes Monitoring ohne Login (20.2.5); Heartbeat-Tabelle trennt Laufzeitzustand sauber von validierter Konfiguration. Alle drei Punkte vom Nutzer bestätigt (Session-oder-Token, dedizierte Tabelle, beide Soll). |
 | E29 | 11 | Öffentliches Modul-Interface = **Service-Contract** (nutzt Step-5-Registry, keine Parallelarchitektur). Aufruf **in-process** über `ServiceInterface::handle(array):array` + `CapabilityHandle::invoke()` (Guard → `CapabilityRejectedException` als Abweisung, Kap. 29.8.4). Provider via neuer Manifest-Sektion `services_registered` (PROVIDER). Mehrfachnutzung (multi_use=false) = ein aktiver CONSUMER (Slot-Prüfung). Interface-Registry = auf Service-Contracts gefilterte Admin-Sicht. CLI `service list/call`. `invoke()` nicht je Aufruf auditiert. | Kap. 29.3/29.8/29.12. In-Process passt zum PSR-4-Modul-Loading (E21), kein HTTP/Serialisierungs-Overhead. Vom Nutzer bestätigt (In-Process + echtes Consumer-Fixture/CLI-E2E). |
 | E27 | 10 | Admin-GUI: **SSR mit gebündeltem Bootstrap 5** (offline/vendored, Nutzerwahl); **alle 6 Administrationsbereiche voll ausgebaut** (Nutzerwahl). Scoped-Enforcement serverseitig in `Admin\AdminController::beforeFilter` (Bereichsbesitz). Modul-/Core-**Installation** bleibt CLI (signierte Pakete); GUI steuert Lebenszyklus/Update aus Paketpfad. Lizenz-Upload (Datei oder JSON) in der GUI. Audit-Sicht für jeden Admin (kein fester Bereich). | Kap. 23.8/27.3.1/27.16.2, Entscheidung 170. Offline-Bündelung = keine CDN-Abhängigkeit im Betrieb. CLI-Install = sichere Paketherkunft. Vom Nutzer bestätigt (Bootstrap gebündelt, alle 6 Bereiche voll). |
 | E28 | 10 | Login/Logout im HTTP-Pfad nachgezogen: `unauthenticatedRedirect`/Form-`loginUrl` auf `/login`, `LoginThrottle` an POST `/login` gekoppelt. `SettingsCatalog::all()` als Enumerator für den Settings-Editor ergänzt. | Schließt die in Step 2 vermerkte „Login-Formular → Step 10"-Lücke. Editor braucht Katalog-Enumeration; Werte werden weiter gegen den Katalog validiert. |

@@ -30,6 +30,10 @@ class SettingsCatalog
             'crl_max_age_days' => ['type' => 'int', 'default' => 7, 'min' => 0, 'max' => 365],
             'marketplace.base_url' => ['type' => 'string', 'default' => null],
             'maintenance_mode' => ['type' => 'bool', 'default' => false],
+            // Observability (Step 12, Kap. 20.2).
+            'storage.path' => ['type' => 'string', 'default' => null],
+            'health.worker_max_age_seconds' => ['type' => 'int', 'default' => 120, 'min' => 10, 'max' => 86400],
+            'health_token' => ['type' => 'string', 'default' => null, 'secret' => true],
         ],
     ];
 

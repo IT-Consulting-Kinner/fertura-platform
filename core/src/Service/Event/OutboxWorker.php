@@ -192,6 +192,8 @@ class OutboxWorker
 
         while ($this->running) {
             try {
+                // Heartbeat (Kap. 20.3): jeder Zyklus protokolliert seinen Lauf.
+                \App\Service\Health\WorkerHeartbeat::beat('outbox', 'ok');
                 // Neu aktivierte Modul-Listener nachladbar machen (Step 7).
                 ModuleAutoloader::registerActiveModules();
                 $reclaimed = $this->reclaimStuck();

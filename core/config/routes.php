@@ -56,6 +56,10 @@ return function (RouteBuilder $routes): void {
         $builder->connect('/login', ['controller' => 'Auth', 'action' => 'login']);
         $builder->connect('/logout', ['controller' => 'Auth', 'action' => 'logout']);
 
+        // Health-Endpoint (Step 12, Kap. 20.2.1): öffentlicher Liveness + geschützter Detailstatus.
+        $builder->connect('/health', ['controller' => 'Health', 'action' => 'index']);
+        $builder->connect('/health/detail', ['controller' => 'Health', 'action' => 'detail']);
+
         // Admin-Bereich (scoped admin, Kap. 27.3.1).
         $builder->prefix('Admin', function (RouteBuilder $admin): void {
             $admin->connect('/', ['controller' => 'Dashboard', 'action' => 'index']);
