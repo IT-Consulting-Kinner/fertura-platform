@@ -45,12 +45,20 @@ hier **autonom entschieden** (siehe Entscheidungs-Log E5–E12 in
   - `updated_at timestamptz NOT NULL DEFAULT now()`
 - `updated_at` wird per **BEFORE UPDATE-Trigger** über die gemeinsame Funktion
   `core.set_updated_at()` gepflegt (Defense-in-Depth, unabhängig von der App).
-- **Akteur-Spalten (E8):** Fachliche/benutzer-editierbare Tabellen erhalten
-  `created_by` und `updated_by` (`uuid` NULL, FK auf `core.users`, `ON DELETE
-  SET NULL`), gepflegt durch das `FootprintBehavior` aus dem `ActorContext`
-  (HTTP-Identität). In CLI-/Systemkontexten bleibt der Akteur NULL.
-  **Nicht** auf Infrastruktur-Tabellen (Outbox, Audit-Log, `auth_failures`,
-  `admin_areas`). Ergänzt – ersetzt nicht – das Audit-Log (Step 3).
+- **Akteur-Spalten (E8):** `uuid` NULL, FK auf `core.users`, `ON DELETE SET NULL`,
+  gepflegt durch das `FootprintBehavior` aus dem `ActorContext` (HTTP-Identität;
+  CLI/System = NULL). Das Behavior ist spalten-tolerant (setzt nur vorhandene
+  Spalten). Trennscharfe Regel:
+  - **`created_by` = „durch wen entstanden"** — auf **allen** Tabellen, deren
+    Zeilen durch einen Akteur entstehen, **inkl. Verknüpfungstabellen**
+    (`groups_users` = wer hat zugeordnet; `user_admin_areas` = wer hat Adminrechte
+    vergeben).
+  - **`updated_by` = „durch wen zuletzt geändert"** — nur auf **in-place
+    editierbaren** Sätzen (`users`, `groups`); **nicht** auf Append-only-/Join-
+    Tabellen (keine Update-Semantik).
+  - **Keine** Akteur-Spalten auf reiner Infrastruktur (Outbox, Audit-Log,
+    `auth_failures`) oder statischen Stammdaten (`admin_areas`).
+  Ergänzt – ersetzt nicht – das Audit-Log (Step 3).
 
 ## 5. „Deaktivieren statt löschen" (E8)
 

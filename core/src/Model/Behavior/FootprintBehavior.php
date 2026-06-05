@@ -29,12 +29,18 @@ class FootprintBehavior extends Behavior
             return;
         }
 
+        $schema = $this->_table->getSchema();
         $createdField = (string)$this->getConfig('createdBy');
         $updatedField = (string)$this->getConfig('updatedBy');
 
-        if ($entity->isNew() && $entity->get($createdField) === null) {
+        // Spalten-tolerant: nur setzen, wenn die Tabelle die Spalte besitzt.
+        // created_by = "durch wen entstanden" (auch Append-only-Joins),
+        // updated_by = "durch wen zuletzt geaendert" (nur editierbare Saetze).
+        if ($schema->hasColumn($createdField) && $entity->isNew() && $entity->get($createdField) === null) {
             $entity->set($createdField, $actorId);
         }
-        $entity->set($updatedField, $actorId);
+        if ($schema->hasColumn($updatedField)) {
+            $entity->set($updatedField, $actorId);
+        }
     }
 }

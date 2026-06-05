@@ -78,11 +78,14 @@ class CoreIdentity extends BaseMigration
                 id         uuid        NOT NULL DEFAULT core.uuid_generate_v7() PRIMARY KEY,
                 group_id   uuid        NOT NULL,
                 user_id    uuid        NOT NULL,
+                created_by uuid        NULL,
                 created_at timestamptz NOT NULL DEFAULT now(),
                 CONSTRAINT fk_groups_users_group
                     FOREIGN KEY (group_id) REFERENCES core."groups"(id) ON DELETE CASCADE,
                 CONSTRAINT fk_groups_users_user
                     FOREIGN KEY (user_id) REFERENCES core.users(id) ON DELETE CASCADE,
+                CONSTRAINT fk_groups_users_created_by
+                    FOREIGN KEY (created_by) REFERENCES core.users(id) ON DELETE SET NULL,
                 CONSTRAINT uq_groups_users_group_user UNIQUE (group_id, user_id)
             )
             SQL);
@@ -111,11 +114,14 @@ class CoreIdentity extends BaseMigration
                 id             uuid        NOT NULL DEFAULT core.uuid_generate_v7() PRIMARY KEY,
                 user_id        uuid        NOT NULL,
                 admin_area_key text        NOT NULL,
+                created_by     uuid        NULL,
                 created_at     timestamptz NOT NULL DEFAULT now(),
                 CONSTRAINT fk_user_admin_areas_user
                     FOREIGN KEY (user_id) REFERENCES core.users(id) ON DELETE CASCADE,
                 CONSTRAINT fk_user_admin_areas_area
                     FOREIGN KEY (admin_area_key) REFERENCES core.admin_areas(area_key) ON DELETE RESTRICT,
+                CONSTRAINT fk_user_admin_areas_created_by
+                    FOREIGN KEY (created_by) REFERENCES core.users(id) ON DELETE SET NULL,
                 CONSTRAINT uq_user_admin_areas UNIQUE (user_id, admin_area_key)
             )
             SQL);
