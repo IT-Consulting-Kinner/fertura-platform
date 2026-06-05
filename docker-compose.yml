@@ -34,7 +34,12 @@ services:
       # Geteilt mit dem Test-Marketplace-Server (signierte Fixtures schreiben).
       - ./marketplace-data:/var/www/html/marketplace-data
     environment:
+      # Privilegierte Connection (Superuser): DDL/Migrationen/Bootstrap/Recovery.
       DATABASE_URL: "postgres://${POSTGRES_USER:-fertura}:${POSTGRES_PASSWORD:-fertura}@db/${POSTGRES_DB:-fertura}?encoding=utf8"
+      # Default-Connection im Request-Pfad: NOBYPASSRLS-App-Rolle (RLS greift).
+      APP_DB_USER: "${APP_DB_USER:-fertura_app}"
+      APP_DB_PASSWORD: "${APP_DB_PASSWORD:-fertura_app}"
+      APP_DATABASE_URL: "postgres://${APP_DB_USER:-fertura_app}:${APP_DB_PASSWORD:-fertura_app}@db/${POSTGRES_DB:-fertura}?encoding=utf8"
       DEBUG: "true"
       ROLE: core
       SECURITY_SALT: "${SECURITY_SALT:-dev-salt-change-me-0123456789abcdef0123456789abcdef}"

@@ -79,9 +79,19 @@ class HealthService
     private function checkDatabase(): array
     {
         try {
-            ConnectionManager::get('default')->execute('SELECT 1')->fetch();
+            $row = ConnectionManager::get('default')->execute(
+                'SELECT current_user, (SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user) AS bypass_rls',
+            )->fetch('assoc');
 
-            return ['status' => 'up'];
+            return [
+                'status' => 'up',
+                // Betriebssignal (E26): zeigt, dass der Request-Pfad als
+                // NOBYPASSRLS-App-Rolle läuft (RLS greift).
+                'detail' => [
+                    'role' => $row['current_user'] ?? null,
+                    'bypass_rls' => $row['bypass_rls'] ?? null,
+                ],
+            ];
         } catch (Throwable $e) {
             return ['status' => 'down', 'detail' => $e->getMessage()];
         }

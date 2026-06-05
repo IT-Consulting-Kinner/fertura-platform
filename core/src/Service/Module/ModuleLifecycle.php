@@ -62,7 +62,33 @@ class ModuleLifecycle
 
     private function conn()
     {
-        return ConnectionManager::get('default');
+        // Modul-Lifecycle macht DDL (CREATE/DROP SCHEMA) -> privilegierte
+        // (Superuser-)Connection, die RLS umgeht (E26).
+        return \App\Infrastructure\Db::privileged();
+    }
+
+    /**
+     * Erteilt der NOBYPASSRLS-App-Rolle Rechte auf ein frisch erzeugtes
+     * Modul-Schema, damit der Request-Pfad (App-Rolle) darauf zugreifen kann.
+     * No-op, wenn keine getrennte App-Rolle konfiguriert ist.
+     */
+    private function grantSchemaToAppRole(string $schema): void
+    {
+        $role = (string)(env('APP_DB_USER') ?: '');
+        if ($role === '' || !preg_match('/^[a-z_][a-z0-9_]{0,62}$/', $schema) || !preg_match('/^[a-z_][a-z0-9_]{0,62}$/', $role)) {
+            return;
+        }
+        // Nur wenn die Rolle existiert (getrennter Rollenbetrieb aktiv).
+        $exists = $this->conn()->execute('SELECT 1 FROM pg_roles WHERE rolname = :r', ['r' => $role])->fetch();
+        if ($exists === false) {
+            return;
+        }
+        $c = $this->conn();
+        $c->execute("GRANT USAGE ON SCHEMA $schema TO $role");
+        $c->execute("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA $schema TO $role");
+        $c->execute("GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA $schema TO $role");
+        $c->execute("ALTER DEFAULT PRIVILEGES IN SCHEMA $schema GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO $role");
+        $c->execute("ALTER DEFAULT PRIVILEGES IN SCHEMA $schema GRANT USAGE, SELECT ON SEQUENCES TO $role");
     }
 
     public function modulesBaseDir(): string
@@ -161,6 +187,10 @@ class ModuleLifecycle
             }
 
             $this->migrations->runUp($moduleId, $schema, $targetPath . '/migrations');
+
+            // App-Rolle (NOBYPASSRLS) auf das neue Modul-Schema berechtigen,
+            // damit der Request-Pfad nach dem Install darauf zugreifen kann (E26).
+            $this->grantSchemaToAppRole($schema);
 
             // contracts_provided als Contract-Definitionen registrieren.
             foreach ($manifest->contractsProvided() as $c) {

@@ -29,7 +29,7 @@ class ModuleMigrationRunner
         $files = glob($migrationsDir . '/*.sql') ?: [];
         sort($files);
 
-        $connection = ConnectionManager::get('default');
+        $connection = \App\Infrastructure\Db::privileged();
         $executed = [];
 
         foreach ($files as $file) {
@@ -80,7 +80,7 @@ class ModuleMigrationRunner
         }
         $down = $this->downPart((string)file_get_contents($file));
 
-        $connection = ConnectionManager::get('default');
+        $connection = \App\Infrastructure\Db::privileged();
         $connection->transactional(function () use ($connection, $schema, $down, $moduleId, $name): void {
             $connection->execute("SET LOCAL search_path TO $schema, core, public");
             foreach ($this->statements($down) as $stmt) {
@@ -95,7 +95,7 @@ class ModuleMigrationRunner
 
     public function isApplied(string $moduleId, string $name): bool
     {
-        return ConnectionManager::get('default')->execute(
+        return \App\Infrastructure\Db::privileged()->execute(
             'SELECT 1 FROM core.module_migrations_log WHERE module_id = :m AND migration_name = :n',
             ['m' => $moduleId, 'n' => $name],
         )->fetch() !== false;

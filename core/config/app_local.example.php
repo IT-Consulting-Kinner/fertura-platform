@@ -58,9 +58,12 @@ return [
             //'schema' => 'myapp',
 
             /*
-             * You can use a DSN string to set the entire configuration
+             * Default-Connection: im Betrieb die NOBYPASSRLS-App-Rolle
+             * (APP_DATABASE_URL), damit RLS greift; fällt auf DATABASE_URL
+             * (Superuser) zurück, wenn nicht gesetzt (abwärtskompatibel /
+             * Entrypoint-Bootstrap). `?:` behandelt auch Leerstring als „unset".
              */
-            'url' => env('DATABASE_URL', null),
+            'url' => env('APP_DATABASE_URL') ?: env('DATABASE_URL', null),
         ],
 
         /*
