@@ -30,6 +30,8 @@ core/tmp/
 core/logs/
 core/config/app_local.php
 core/config/.env
+# Vom Migrations-Plugin generierter Schema-Cache (kein Quellartefakt)
+core/config/Migrations/schema-dump-*.lock
 
 # Compose-Env
 .env

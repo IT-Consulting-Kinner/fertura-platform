@@ -29,10 +29,11 @@ für Verifikation ist das **Plattform-Anforderungsdokument v6.28**
 - `[x]` **1. Migrations-Fundament & DB-Konventionen** — `cakephp/migrations`,
   Migration-Runner, Constraint-First (partielle Unique/Check/Exclusion),
   JSONB-Konventionen. *(Kap. 30, 1.8, 28.14.2)* → siehe `DB_CONVENTIONS.md`
-- `[ ]` **2. Identität & Zugriff** — Benutzer, Gruppen, Gruppen-
+- `[x]` **2. Identität & Zugriff** — Benutzer, Gruppen, Gruppen-
   mitgliedschaften, Core-Administrationsbereiche, lokale Auth
   (Resolver-Default), Passwort-Policy, Anmeldeschutz, Anonymisierung.
-  *(Kap. 27, 25.x soweit Core)*
+  *(Kap. 27, 25.x soweit Core)* — Teilschritte 2a (Datenmodell), 2b (lokale
+  Auth), 2c (Anonymisierung + Anmeldeschutz).
 - `[ ]` **3. Audit-Log & Logging** — referenzrobuste Einträge (textuelle
   Bezeichner), JSONB-Payloads, unveränderlich. *(Kap. 1.6, 24.16, 20.6)*
 - `[ ]` **4. Konfigurationsspeicher** — Core-Settings (Key/Value + JSONB),
@@ -126,6 +127,47 @@ für Verifikation ist das **Plattform-Anforderungsdokument v6.28**
   + Extension-Voraussetzung etabliert; konkrete Constraints entstehen an realen
   Tabellen ab Step 2.
 
+### Schritt 2 — abgeschlossen & verifiziert (2026-06-05)
+
+**Geprüfte Kapitel:** 27 (Identität & Zugriff), Entscheidungen 135 (Zwei-Ebenen-
+Rechtemodell), 160 (Anonymisierung), 162 (Anmeldeschutz/Token), 170 (6 feste
+Administrationsbereiche), 171 (Auth-Resolver, lokal als Default). Bewusst NICHT
+in Step 2 (spätere Schritte): BREAD-Ressourcen (25)→Step 9, RLS (30.3)→Step 9,
+Admin-GUI/Login-Formular→Step 10, Resolver-Registry→Step 5, Config-Store
+(Policy/Schwellen in DB)→Step 4.
+
+**2a — Datenmodell (core-Schema):** `users` (Status invited|active|disabled|
+anonymized, case-insensitive unique), `groups` (active), `groups_users`
+(Mehrfachmitgliedschaft), `admin_areas` (6 Bereiche geseedet), `user_admin_areas`,
+`api_tokens`, `auth_failures`. Constraint-First (FK/Unique/Check/Trigger).
+Verifiziert: migrate/rollback/migrate, Seed, Constraints.
+
+**2b — Lokale Auth:** cakephp/authentication; Form+Session-Authenticator,
+Password-Identifier gegen `core.users` (Finder „active"), bcrypt; Command
+`create_admin` (Volladmin + 6 Bereiche). Schema-Konsistenz: `schema=core` für
+Reflektion, `schema_init`-Command + Entrypoint stellen `core` vor dem Runner
+bereit → `cake_migrations` liegt in `core`. Verifiziert per **sauberem
+Rebuild/Fresh-Bootstrap**: beide Migrationen `up`, Admin (active, 6 Bereiche),
+Passwort-Hash correct=true/wrong=false, HTTP 200.
+
+**2c — Anonymisierung & Anmeldeschutz:** `UsersTable::anonymize()` (irreversibel,
+transaktional: Identitätsfelder → nicht rückführbare Platzhalter, password_hash→
+null, Tokens widerrufen, ID/Mitgliedschaften/Referenzen bleiben); Command
+`anonymize_user` (Einladungs-Accounts physisch löschbar). `LoginThrottle`-Service
+mit sicheren Defaults (10 Versuche / 15 min) auf `auth_failures`. Verifiziert:
+Feld-Scrubbing, Einladungslöschung, Fensterlogik (alter Versuch ausgeschlossen),
+HTTP 200.
+
+**Offene Punkte / Beobachtungen:**
+- Audit-Einträge für Identity-Events (Kap. 27.18) werden in **Step 3** ergänzt
+  (Audit-Log). Hooks an create_admin/anonymize/Gruppenänderungen dann nachziehen.
+- HTTP-Login-Formular + Throttle-/Auth-Erzwingung im Request-Pfad: **Step 10**
+  (Admin-GUI). Logik/Daten dafür liegen bereits vor.
+- Passwort-Policy/Throttle-Schwellen aktuell als Code-Defaults; DB-Konfiguration
+  ab **Step 4**.
+- Assoziationen von `UsersTable` (Groups/AdminAreas/Tokens als ORM-Relationen)
+  folgen mit ihren Table-Klassen, wo benötigt (Step 9/10).
+
 ## Entscheidungs-Log (autonome Entscheidungen)
 
 | Nr. | Schritt | Entscheidung | Begründung (Anforderungskontext) |
@@ -140,4 +182,8 @@ für Verifikation ist das **Plattform-Anforderungsdokument v6.28**
 | E8 | 1 | „Deaktivieren statt löschen" via Spalte `active boolean NOT NULL DEFAULT true`; kein generisches `deleted_at`. | Direkte Umsetzung der Grundregel Kap. 1.6; passt zu partiellen Unique-Constraints (`WHERE active`). |
 | E9 | 1 | Namenskonventionen: snake_case, Tabellen Plural; Constraints/Indizes explizit benannt (`fk_`, `uq_`, `ck_`, `ex_`, `ix_`, `gin_`, `trg_`). | Konsistenz/Lesbarkeit; CakePHP-ORM-kompatibel. Doku-offen → autonom. |
 | E10 | 1 | `config/app.php`: Default-Connection von MySQL- auf Postgres-Treiber umgestellt (`encoding=utf8`), inkl. `test`-Connection. | Skeleton-Altlast; Projekt ist Postgres-only (Entscheidung 173). Bisher nur durch `url` zur Laufzeit kaschiert. |
-| E11 | 1 | Migrations-Trackingtabelle `cake_migrations` verbleibt in `public`. | Runner-Standardort; `core` entsteht erst durch Migration. Hält `core` per `RESTRICT` unabhängig droppbar. |
+| E11 | 1 | ~~Migrations-Trackingtabelle `cake_migrations` in `public`.~~ **Ersetzt durch E12.** | — |
+| E12 | 2 | `schema=core` an der Connection (für Reflektion). `core`-Schema wird vor dem Migrations-Runner durch `bin/cake schema_init` (im Entrypoint) bereitgestellt → `cake_migrations` liegt in `core`. `CoreFoundation` legt das Schema nur noch defensiv an und droppt es nicht mehr; `btree_gist` in `public`. | CakePHP-Reflektion filtert `information_schema` nach `schema`; ohne `schema=core` werden core-Tabellen nicht gefunden. Konsistenz: Tracking + Daten im selben Schema. Henne-Ei (Schema vs. erste Migration) über Infrastruktur-Bootstrap gelöst; per sauberem Rebuild verifiziert. |
+| E13 | 2 | Lokale Auth: `cakephp/authentication`, Form+Session, bcrypt (DefaultPasswordHasher), Identifier-Finder „active". `quoteIdentifiers=true`. | CakePHP-Standard; bcrypt ausreichend/On-Prem. Finder erzwingt: nur aktive Benutzer anmeldbar (Kap. 27.15). quoteIdentifiers wegen reserviertem `groups`. Hash-Verfahren war doku-offen → autonom. |
+| E14 | 2 | Anonymisierung: `username='geloeschter_benutzer_<id>'`, `email='anonymized-<id>@invalid.local'`, Vor-/Nachname/locale/timezone/`password_hash`→NULL, `status=anonymized`, `anonymized_at=now()`, Tokens widerrufen; ID + Mitgliedschaften bleiben; eingeladene Accounts physisch löschbar. | Setzt Entscheidung 160 / Kap. 27.15.3 um (irreversibel, keine Zuordnungstabelle). Konkrete Platzhalter waren doku-offen → autonom. |
+| E15 | 2 | Anmeldeschutz-Defaults: 10 Fehlversuche / 15-min-Fenster, dann temporäre Sperre (`LoginThrottle`, persistiert in `auth_failures`). | Entscheidung 162 fordert „sicheren Vorgabewert ohne Konfiguration". Konkrete Schwellen doku-offen → autonom; ab Step 4 DB-konfigurierbar. |

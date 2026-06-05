@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Model\Table;
 
+use App\Model\Entity\User;
 use Cake\ORM\Query\SelectQuery;
 use Cake\ORM\Table;
 use Cake\Validation\Validator;
@@ -63,6 +64,46 @@ class UsersTable extends Table
      */
     public function findActive(SelectQuery $query, array $options = []): SelectQuery
     {
-        return $query->where([$this->aliasField('status') => \App\Model\Entity\User::STATUS_ACTIVE]);
+        return $query->where([$this->aliasField('status') => User::STATUS_ACTIVE]);
+    }
+
+    /**
+     * Irreversible Anonymisierung eines Benutzers (Recht auf Löschung,
+     * Entscheidung 160 / Kap. 27.15.3).
+     *
+     * Personenbezogene Identitätsfelder werden durch nicht rückführbare
+     * Platzhalter ersetzt; technische ID, Gruppenmitgliedschaften und
+     * historische Referenzen bleiben erhalten. Keine Zuordnungstabelle,
+     * kein Schlüssel -> nicht umkehrbar. API-Tokens werden widerrufen.
+     * Alles in einer Transaktion (atomar).
+     *
+     * Hinweis: Der zugehörige Audit-Eintrag wird in Step 3 (Audit-Log) ergänzt.
+     */
+    public function anonymize(User $user): bool
+    {
+        return (bool)$this->getConnection()->transactional(function () use ($user): bool {
+            $id = $user->id;
+            $user->username = 'geloeschter_benutzer_' . $id;
+            $user->email = 'anonymized-' . $id . '@invalid.local';
+            $user->first_name = null;
+            $user->last_name = null;
+            $user->locale = null;
+            $user->timezone = null;
+            $user->password_hash = null;
+            $user->status = User::STATUS_ANONYMIZED;
+            $user->anonymized_at = new \Cake\I18n\DateTime();
+
+            if (!$this->save($user, ['checkRules' => false])) {
+                return false;
+            }
+
+            // Aktive API-Tokens widerrufen (Entscheidung 162: sofort ungültig).
+            $this->getConnection()->execute(
+                'UPDATE api_tokens SET revoked_at = now() WHERE user_id = :uid AND revoked_at IS NULL',
+                ['uid' => $id],
+            );
+
+            return true;
+        });
     }
 }
