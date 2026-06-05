@@ -317,8 +317,11 @@ return [
              * mysql configuration directive 'innodb_stats_on_metadata = 0'
              * which is the recommended value in production environments
              */
-            // Schema-Trennung (DB_CONVENTIONS.md): Core-Tabellen liegen im
-            // Schema "core", public bleibt fuer Extensions/uebergreifende Objekte.
+            // Schema-Trennung (DB_CONVENTIONS.md): Core-Tabellen liegen im Schema
+            // "core". 'schema' steuert die Schema-Reflektion (information_schema-
+            // Filter); 'init' setzt den effektiven search_path und laeuft NACH
+            // setSchema, behaelt also core+public fuer Laufzeit & Migrationen.
+            'schema' => 'core',
             'init' => ['SET search_path TO core, public'],
         ],
 
@@ -335,8 +338,11 @@ return [
             'cacheMetadata' => true,
             'quoteIdentifiers' => true,
             'log' => false,
-            // Schema-Trennung (DB_CONVENTIONS.md): Core-Tabellen liegen im
-            // Schema "core", public bleibt fuer Extensions/uebergreifende Objekte.
+            // Schema-Trennung (DB_CONVENTIONS.md): Core-Tabellen liegen im Schema
+            // "core". 'schema' steuert die Schema-Reflektion (information_schema-
+            // Filter); 'init' setzt den effektiven search_path und laeuft NACH
+            // setSchema, behaelt also core+public fuer Laufzeit & Migrationen.
+            'schema' => 'core',
             'init' => ['SET search_path TO core, public'],
         ],
     ],

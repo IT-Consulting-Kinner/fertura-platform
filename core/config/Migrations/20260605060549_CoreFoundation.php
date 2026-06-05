@@ -21,17 +21,19 @@ class CoreFoundation extends BaseMigration
      */
     public function up(): void
     {
-        // 1. Dediziertes Schema fuer Core-Plattformtabellen.
+        // 1. Dediziertes Schema fuer Core-Plattformtabellen (defensiv; primaer
+        //    durch Entrypoint/`bin/cake schema_init` bereitgestellt, da die
+        //    Migrations-Trackingtabelle ebenfalls in `core` liegt).
         //    Module verwenden eigene Schemas (mod_<modulkey>); public bleibt
         //    fuer Extensions/uebergreifende Objekte reserviert.
         $this->execute('CREATE SCHEMA IF NOT EXISTS core');
-        $this->execute("COMMENT ON SCHEMA core IS 'Fertura Core-Plattform (Step 1 Fundament)'");
+        $this->execute("COMMENT ON SCHEMA core IS 'Fertura Core-Plattform'");
 
-        // 2. btree_gist: ermoeglicht Exclusion-Constraints, die Gleichheit (=)
-        //    mit Bereichsueberlappung (&&) kombinieren, z. B.
-        //    EXCLUDE USING gist (scope_id WITH =, period WITH &&).
-        //    (Constraint-First, Kap. 30.1.)
-        $this->execute('CREATE EXTENSION IF NOT EXISTS btree_gist');
+        // 2. btree_gist (in public = gemeinsame Infrastruktur): ermoeglicht
+        //    Exclusion-Constraints, die Gleichheit (=) mit Bereichsueberlappung
+        //    (&&) kombinieren, z. B. EXCLUDE USING gist (scope_id WITH =,
+        //    period WITH &&). (Constraint-First, Kap. 30.1.)
+        $this->execute('CREATE EXTENSION IF NOT EXISTS btree_gist WITH SCHEMA public');
 
         // 3. Gemeinsame Trigger-Funktion: pflegt updated_at (timestamptz) bei UPDATE.
         //    Tabellen haengen sich per BEFORE UPDATE-Trigger an (siehe Konventionen).
@@ -61,8 +63,7 @@ class CoreFoundation extends BaseMigration
         $this->execute('DROP FUNCTION IF EXISTS core.set_updated_at()');
         // Extension nur entfernen, wenn keine abhaengigen Objekte mehr existieren.
         $this->execute('DROP EXTENSION IF EXISTS btree_gist');
-        // RESTRICT (kein CASCADE): scheitert bewusst, falls noch Objekte im
-        // core-Schema liegen -> spaetere Migrationen muessen vorher zurueckgerollt sein.
-        $this->execute('DROP SCHEMA IF EXISTS core RESTRICT');
+        // Das core-Schema wird NICHT gedroppt: es ist Infrastruktur (Entrypoint/
+        // schema_init) und beherbergt die Migrations-Trackingtabelle cake_migrations.
     }
 }

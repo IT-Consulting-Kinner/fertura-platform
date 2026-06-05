@@ -24,9 +24,12 @@ until pg_isready -h "${DB_HOST:-db}" -p "${DB_PORT:-5432}" >/dev/null 2>&1; do
 done
 echo "[entrypoint] Datenbank erreichbar"
 
-# 3. Migrationen (nur core; geguardet, solange kein migrations-Plugin vorhanden)
+# 3. Schema-Bootstrap + Migrationen (nur core; geguardet)
 if [ "$ROLE" = "core" ]; then
   if bin/cake migrations --help >/dev/null 2>&1; then
+    # core-Schema bereitstellen, BEVOR der Runner seine Trackingtabelle anlegt.
+    echo "[entrypoint] schema_init"
+    bin/cake schema_init || echo "[entrypoint] WARN: schema_init fehlgeschlagen"
     echo "[entrypoint] migrations migrate"
     bin/cake migrations migrate || echo "[entrypoint] WARN: migrate fehlgeschlagen"
   else
