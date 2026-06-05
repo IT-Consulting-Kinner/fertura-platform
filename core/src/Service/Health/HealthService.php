@@ -58,6 +58,7 @@ class HealthService
             'modules' => $this->checkModules(),
             'outbox' => $this->checkOutbox(),
             'licenses' => $this->checkLicenses(),
+            'marketplace' => $this->checkMarketplace(),
             'module_contributions' => $this->collectModuleHealth(),
         ];
 
@@ -170,9 +171,8 @@ class HealthService
     private function checkModules(): array
     {
         try {
-            $rows = ConnectionManager::get('default')->execute(
-                'SELECT status, count(*) AS n FROM modules GROUP BY status',
-            )->fetchAll('assoc');
+            $conn = ConnectionManager::get('default');
+            $rows = $conn->execute('SELECT status, count(*) AS n FROM modules GROUP BY status')->fetchAll('assoc');
             $byStatus = [];
             $errors = 0;
             foreach ($rows as $r) {
@@ -181,13 +181,40 @@ class HealthService
                     $errors += (int)$r['n'];
                 }
             }
+            // Module mit nachträglich widerrufener Signatur (Kap. 24.9.2).
+            $revoked = (int)$conn->execute(
+                "SELECT count(*) FROM modules WHERE signature_status = 'revoked'",
+            )->fetch()[0];
 
             return [
-                'status' => $errors > 0 ? 'degraded' : 'up',
-                'detail' => ['by_status' => $byStatus, 'error_modules' => $errors],
+                'status' => ($errors > 0 || $revoked > 0) ? 'degraded' : 'up',
+                'detail' => ['by_status' => $byStatus, 'error_modules' => $errors, 'revoked_signature' => $revoked],
             ];
         } catch (Throwable $e) {
             return ['status' => 'down', 'detail' => $e->getMessage()];
+        }
+    }
+
+    private function checkMarketplace(): array
+    {
+        try {
+            $baseUrl = (string)$this->settings->get('core', 'marketplace.base_url', '');
+            if ($baseUrl === '') {
+                return ['status' => 'up', 'detail' => 'nicht konfiguriert'];
+            }
+            $crl = (new \App\Service\Marketplace\MarketplaceClient())->crlState();
+
+            return [
+                'status' => $crl['stale'] ? 'degraded' : 'up',
+                'detail' => [
+                    'crl_last_fetch_at' => $crl['last_fetch_at'],
+                    'crl_age_days' => $crl['age_days'],
+                    'crl_max_age_days' => $crl['max_age_days'],
+                    'crl_stale' => $crl['stale'],
+                ],
+            ];
+        } catch (Throwable $e) {
+            return ['status' => 'degraded', 'detail' => $e->getMessage()];
         }
     }
 

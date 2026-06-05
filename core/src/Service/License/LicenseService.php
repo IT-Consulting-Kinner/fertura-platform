@@ -6,6 +6,7 @@ namespace App\Service\License;
 use App\Audit\AuditLogger;
 use App\Service\Security\Signer;
 use App\Service\Security\TrustStore;
+use App\Service\Settings\SettingsManager;
 use Cake\Datasource\ConnectionManager;
 use RuntimeException;
 
@@ -30,9 +31,16 @@ class LicenseService
         $this->audit = $audit ?? new AuditLogger();
     }
 
+    private ?SettingsManager $settings = null;
+
     private function conn()
     {
         return ConnectionManager::get('default');
+    }
+
+    private function settings(): SettingsManager
+    {
+        return $this->settings ??= new SettingsManager();
     }
 
     /**
@@ -123,7 +131,8 @@ class LicenseService
     public function evaluate(string $moduleKey): array
     {
         $row = $this->conn()->execute(
-            'SELECT signed_key_id, valid_to, status FROM licenses WHERE module_key = :k',
+            'SELECT signed_key_id, valid_to, grace_window_days, online_enforcement, last_online_check, status '
+            . 'FROM licenses WHERE module_key = :k',
             ['k' => $moduleKey],
         )->fetch('assoc');
         if ($row === false) {
@@ -132,18 +141,61 @@ class LicenseService
         if ($this->trust->isRevoked((string)$row['signed_key_id'])) {
             return ['status' => 'revoked', 'reason' => 'Signaturschlüssel widerrufen.'];
         }
+
+        $now = time();
+        $inGrace = false;
+
+        // Ablauf + Karenzfenster (Kap. 28.7.3.1).
         if ($row['valid_to'] !== null) {
             $validTo = strtotime((string)$row['valid_to']);
-            if ($validTo !== false && $validTo < time()) {
-                return ['status' => 'expired', 'reason' => 'Gültigkeitszeitraum abgelaufen.'];
+            if ($validTo !== false && $validTo < $now) {
+                $graceDays = (int)($row['grace_window_days'] ?? 0);
+                $graceEnd = $validTo + $graceDays * 86400;
+                if ($now > $graceEnd) {
+                    return ['status' => 'expired', 'reason' => 'Gültigkeitszeitraum abgelaufen.'];
+                }
+                $inGrace = true;
             }
+        }
+
+        // Online-Enforcement: die Server-Bestätigung muss aktuell sein.
+        if ($this->truthy($row['online_enforcement'] ?? false)) {
+            $maxAgeDays = (int)$this->settings()->get('core', 'license.online_max_age_days', 7);
+            $lastCheck = $row['last_online_check'] !== null ? strtotime((string)$row['last_online_check']) : false;
+            $stale = $lastCheck === false || ($now - $lastCheck) > $maxAgeDays * 86400;
+            if ($stale) {
+                if ($inGrace) {
+                    return ['status' => 'grace', 'reason' => 'Online-Bestätigung überfällig, Karenzfenster aktiv.'];
+                }
+
+                return ['status' => 'needs_online', 'reason' => 'Online-Bestätigung überfällig.'];
+            }
+        }
+
+        if ($inGrace) {
+            return ['status' => 'grace', 'reason' => 'Gültigkeit abgelaufen, Karenzfenster aktiv.'];
         }
 
         return ['status' => 'valid'];
     }
 
+    /** Karenzfenster gilt als (eingeschränkt) gültig: Aktivierung bleibt erlaubt. */
     public function isValid(string $moduleKey): bool
     {
-        return $this->evaluate($moduleKey)['status'] === 'valid';
+        return in_array($this->evaluate($moduleKey)['status'], ['valid', 'grace'], true);
+    }
+
+    /** Vermerkt eine erfolgreiche Online-Bestätigung (setzt last_online_check). */
+    public function recordOnlineCheck(string $moduleKey): void
+    {
+        $this->conn()->execute(
+            'UPDATE licenses SET last_online_check = now() WHERE module_key = :k',
+            ['k' => $moduleKey],
+        );
+    }
+
+    private function truthy(mixed $v): bool
+    {
+        return $v === true || $v === 't' || $v === '1' || $v === 1 || $v === 'true';
     }
 }

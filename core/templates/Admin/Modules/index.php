@@ -13,7 +13,10 @@ $badge = ['active' => 'success', 'installed_inactive' => 'secondary', 'installed
     <tbody>
     <?php foreach ($modules as $m): $active = $m['status'] === 'active'; ?>
         <tr>
-            <td><code><?= h($m['module_key']) ?></code></td>
+            <td><code><?= h($m['module_key']) ?></code>
+                <?php if (($m['signature_status'] ?? 'valid') === 'revoked'): ?>
+                    <span class="badge text-bg-danger" title="Der signierende Schlüssel wurde widerrufen.">Signatur widerrufen</span>
+                <?php endif; ?></td>
             <td><?= h($m['name']) ?></td>
             <td><?= h($m['version']) ?></td>
             <td><?= h($m['type']) ?></td>

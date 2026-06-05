@@ -111,8 +111,9 @@ class ModuleLifecycle
             $key = $manifest->key();
             $this->assertKeySafe($key);
 
-            // Signaturprüfung: Hook für Step 8 (hier Stub).
-            $this->verifySignature($sourcePath, $manifest);
+            // Signaturprüfung (Step 8): liefert die signierende Schlüssel-ID,
+            // damit nachträgliche Widerrufe dem Modul zugeordnet werden können.
+            $signatureKeyId = $this->verifySignature($sourcePath, $manifest);
 
             $errors = $manifest->validate($this->coreVersion);
             if ($errors !== []) {
@@ -154,8 +155,8 @@ class ModuleLifecycle
             $row = $conn->execute(
                 'INSERT INTO modules (module_key, name, version, type, edition, publisher, php_namespace, '
                 . 'core_compatibility, extends_main_module, main_module_compatibility, requires_license, '
-                . 'status, manifest, source_path) VALUES (:key, :name, :ver, :type, :ed, :pub, :ns, :cc, '
-                . ":ext, :mmc, :rl, 'installed_inactive', CAST(:man AS jsonb), :sp) RETURNING id",
+                . 'status, manifest, source_path, signature_key_id) VALUES (:key, :name, :ver, :type, :ed, :pub, :ns, :cc, '
+                . ":ext, :mmc, :rl, 'installed_inactive', CAST(:man AS jsonb), :sp, :skid) RETURNING id",
                 [
                     'key' => $key,
                     'name' => $manifest->name(),
@@ -170,6 +171,7 @@ class ModuleLifecycle
                     'rl' => $manifest->requiresLicense() ? 'true' : 'false',
                     'man' => json_encode($manifest->data),
                     'sp' => $targetPath,
+                    'skid' => $signatureKeyId,
                 ],
             )->fetch('assoc');
             $moduleId = (string)$row['id'];
@@ -468,13 +470,15 @@ class ModuleLifecycle
         }
     }
 
-    private function verifySignature(string $sourcePath, ModuleManifest $manifest): void
+    private function verifySignature(string $sourcePath, ModuleManifest $manifest): ?string
     {
         if (!(bool)$this->settings->get('core', 'require_module_signature', true)) {
-            return; // Dev-Bypass (Setting)
+            return null; // Dev-Bypass (Setting)
         }
         try {
-            $this->verifier->verify($sourcePath, $manifest->publisher());
+            $result = $this->verifier->verify($sourcePath, $manifest->publisher());
+
+            return $result['key_id'] ?? null;
         } catch (PackageVerificationException $e) {
             $this->audit->log('module.signature_invalid', 'module', $manifest->key(), [
                 'newValue' => ['error' => $e->getMessage()],

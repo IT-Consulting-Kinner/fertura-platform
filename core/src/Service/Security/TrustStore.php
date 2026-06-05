@@ -60,5 +60,26 @@ class TrustStore
             . 'ON CONFLICT (key_id) DO NOTHING',
             ['id' => $keyId, 'r' => $reason, 's' => $source],
         );
+        // Installierte Module, die mit diesem Schlüssel signiert wurden, als
+        // „Signatur widerrufen" kennzeichnen (Kap. 24.9.2).
+        $this->reconcileModuleSignatures();
+    }
+
+    /**
+     * Gleicht installierte Module gegen die Sperrliste ab und markiert
+     * betroffene als signature_status='revoked' (Kap. 24.9.2). Keine
+     * Auto-Deaktivierung; nur Kennzeichnung + Adminwarnung.
+     *
+     * @return int Anzahl neu als widerrufen markierter Module.
+     */
+    public function reconcileModuleSignatures(): int
+    {
+        $rows = $this->conn()->execute(
+            "UPDATE modules SET signature_status = 'revoked' "
+            . 'WHERE signature_key_id IN (SELECT key_id FROM revoked_keys) '
+            . "AND signature_status <> 'revoked' RETURNING module_key",
+        )->fetchAll('assoc');
+
+        return count($rows);
     }
 }

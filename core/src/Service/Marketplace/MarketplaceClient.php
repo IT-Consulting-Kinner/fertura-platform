@@ -7,6 +7,7 @@ use App\Audit\AuditLogger;
 use App\Service\Security\Signer;
 use App\Service\Security\TrustStore;
 use App\Service\Settings\SettingsManager;
+use Cake\Datasource\ConnectionManager;
 use Cake\Http\Client;
 use RuntimeException;
 use Throwable;
@@ -112,6 +113,8 @@ class MarketplaceClient
                 $this->trust->revokeKey((string)$entry['key_id'], $entry['reason'] ?? null, 'crl');
                 $revoked++;
             }
+            // Erfolgreichen CRL-Abruf datieren (Cache-Alter/Stale-Warnung, Kap. 24.9.2).
+            $this->setMeta('last_crl_fetch_at', date('c'));
         }
 
         $anchorDoc = $this->verifySigned($this->fetch('anchors.json'));
@@ -154,5 +157,41 @@ class MarketplaceClient
     public function metadata(): ?array
     {
         return $this->verifySigned($this->fetch('metadata.json'));
+    }
+
+    private function setMeta(string $key, string $value): void
+    {
+        ConnectionManager::get('default')->execute(
+            'INSERT INTO marketplace_meta (meta_key, meta_value, updated_at) VALUES (:k, :v, now()) '
+            . 'ON CONFLICT (meta_key) DO UPDATE SET meta_value = EXCLUDED.meta_value, updated_at = now()',
+            ['k' => $key, 'v' => $value],
+        );
+    }
+
+    /**
+     * Zustand der Sperrliste (CRL): Zeitpunkt des letzten erfolgreichen Abrufs,
+     * Alter in Tagen, Schwellwert und Stale-Flag (Kap. 24.9.2).
+     *
+     * @return array{last_fetch_at: ?string, age_days: ?int, max_age_days: int, stale: bool}
+     */
+    public function crlState(): array
+    {
+        $maxAge = (int)$this->settings->get('core', 'crl_max_age_days', 7);
+        $row = ConnectionManager::get('default')->execute(
+            "SELECT meta_value FROM marketplace_meta WHERE meta_key = 'last_crl_fetch_at'",
+        )->fetch('assoc');
+
+        $last = $row['meta_value'] ?? null;
+        $ageDays = null;
+        $stale = true;
+        if ($last !== null) {
+            $ts = strtotime((string)$last);
+            if ($ts !== false) {
+                $ageDays = (int)floor((time() - $ts) / 86400);
+                $stale = $maxAge > 0 && $ageDays > $maxAge;
+            }
+        }
+
+        return ['last_fetch_at' => $last, 'age_days' => $ageDays, 'max_age_days' => $maxAge, 'stale' => $stale];
     }
 }
