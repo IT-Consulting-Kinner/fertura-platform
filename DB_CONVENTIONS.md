@@ -138,3 +138,21 @@ Integritäts-/Zugriffsregeln werden, wo möglich, **in der DB** erzwungen:
 ## 12. Nebenläufigkeit (Kap. 30.7, Entscheidung 178) — ab Step 7
 
 - Lifecycle-Lock als **PostgreSQL-Advisory-Lock** (knotenübergreifend).
+
+## 13. Audit-Log (Step 3, Kap. 1.6 / 24.16 / 20.6 / 27.18; E16)
+
+- Tabelle `core.audit_log`, **append-only** (Immutability-Trigger blockiert
+  UPDATE/DELETE; Bypass nur via `SET LOCAL app.allow_audit_mutation = 'on'`).
+- **RANGE-Partitionierung** über `created_at` (monatlich) + DEFAULT-Partition;
+  Monatspartitionen stellt `bin/cake audit_partition` sicher.
+- **Personen per auflösbarer UUID** (`actor_user_id`, person-`entity_id`) — **kein**
+  denormalisierter Klartext (Name/E-Mail) und **keine PII** in `old_value`/
+  `new_value`. So wirkt eine Anonymisierung automatisch, ohne das Log zu ändern.
+- **Referenzrobuste Textkopien** (`entity_label`, `module_key/name/version`) nur
+  für **nicht-personenbezogene** Entitäten (Module/Config) → bleiben nach Löschung
+  lesbar.
+- Schreiben über `App\Audit\AuditLogger` (transaktional, gleiche Connection wie
+  die fachliche Änderung). `correlation_id` verknüpft zusammengehörige Einträge.
+- Felder: `actor_user_id`, `action`, `entity_type`, `entity_id`, `entity_label`,
+  `module_key/name/version`, `component`, `correlation_id`, `old_value`/`new_value`
+  (jsonb, GIN-indiziert).

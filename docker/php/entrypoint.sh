@@ -32,6 +32,9 @@ if [ "$ROLE" = "core" ]; then
     bin/cake schema_init || echo "[entrypoint] WARN: schema_init fehlgeschlagen"
     echo "[entrypoint] migrations migrate"
     bin/cake migrations migrate || echo "[entrypoint] WARN: migrate fehlgeschlagen"
+    # Audit-Log-Monatspartitionen sicherstellen (vor dem ersten Schreiben).
+    echo "[entrypoint] audit_partition"
+    bin/cake audit_partition || echo "[entrypoint] WARN: audit_partition fehlgeschlagen"
   else
     echo "[entrypoint] migrations-Plugin (noch) nicht verfuegbar -> uebersprungen"
   fi

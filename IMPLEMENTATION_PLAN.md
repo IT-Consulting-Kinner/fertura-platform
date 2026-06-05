@@ -34,7 +34,7 @@ für Verifikation ist das **Plattform-Anforderungsdokument v6.28**
   (Resolver-Default), Passwort-Policy, Anmeldeschutz, Anonymisierung.
   *(Kap. 27, 25.x soweit Core)* — Teilschritte 2a (Datenmodell), 2b (lokale
   Auth), 2c (Anonymisierung + Anmeldeschutz).
-- `[ ]` **3. Audit-Log & Logging** — referenzrobuste Einträge (textuelle
+- `[x]` **3. Audit-Log & Logging** — referenzrobuste Einträge (textuelle
   Bezeichner), JSONB-Payloads, unveränderlich. *(Kap. 1.6, 24.16, 20.6)*
 - `[ ]` **4. Konfigurationsspeicher** — Core-Settings (Key/Value + JSONB),
   „deaktivieren statt löschen", Audit. *(Kap. 23.3, 1.6)*
@@ -168,6 +168,42 @@ HTTP 200.
 - Assoziationen von `UsersTable` (Groups/AdminAreas/Tokens als ORM-Relationen)
   folgen mit ihren Table-Klassen, wo benötigt (Step 9/10).
 
+### Schritt 3 — abgeschlossen & verifiziert (2026-06-05)
+
+**Geprüfte Kapitel:** 1.6, 24.16/24.16.1 (Entscheidung 163 Referenzrobustheit),
+20.6 (Unveränderlichkeit/Partitionierung), 27.18 (Identity-Ereignisse), 30.5
+(JSONB/GIN), 30.8 (Entscheidung 179 Partitionierung).
+
+**Soll → Ist:**
+- Unveränderliches Audit-Log → `core.audit_log`, **RANGE-partitioniert** über
+  `created_at`; Immutability-Trigger blockiert UPDATE/DELETE (Bypass nur via
+  `SET LOCAL app.allow_audit_mutation='on'`). ✔
+- Referenzrobustheit/PII → Personen per auflösbarer UUID (`actor_user_id`,
+  person-`entity_id`); textuelle Schnappschüsse (`entity_label`, `module_*`) nur
+  für nicht-personenbezogene Entitäten (E16). ✔
+- JSONB-Payload + GIN → `old_value`/`new_value` jsonb, GIN-Indizes; B-Tree-Indizes
+  auf actor/entity/action/module/correlation. ✔
+- Partitionierung → DEFAULT-Partition (Netz) + Monatspartitionen via
+  `bin/cake audit_partition` (Entrypoint, vor dem ersten Schreiben). ✔
+- Schreib-Service → `App\Audit\AuditLogger` (transaktional über Default-Connection). ✔
+- Identity-Events nachgerüstet (Kap. 27.18) → `create_admin` schreibt
+  `user.create` + `admin_access.grant` (verknüpft via correlation_id);
+  `UsersTable::anonymize()` schreibt `user.anonymize`. ✔
+
+**Container-Lauf / Test:** partitionierte Tabelle + Default + 3 Monatspartitionen
+(Indizes propagiert); Audit-Einträge mit JSONB + gemeinsamer correlation_id,
+actor=<system> bei CLI; Routing in Monatspartition; UPDATE/DELETE blockiert,
+Bypass funktioniert; `user.anonymize` erfasst; HTTP 200.
+
+**Offene Punkte / Beobachtungen:**
+- **Generisches Auto-Auditing** (Behavior/Event-Listener für CRUD, Kap. 1.8)
+  folgt mit dem Admin-CRUD in **Step 10**; aktuell explizite Audit-Aufrufe an den
+  vorhandenen Operationen.
+- **Strukturiertes technisches Logging** (Kap. 20.2, SIEM, Korrelation) → **Step 12**.
+- **Laufende Partitionspflege/Archivierung** (vorausschauend, alte Partitionen
+  abtrennen) → Wartungs-Worker **Step 6**.
+- Audit-Anzeige/Filter im Admin-Bereich → **Step 10**.
+
 ## Entscheidungs-Log (autonome Entscheidungen)
 
 | Nr. | Schritt | Entscheidung | Begründung (Anforderungskontext) |
@@ -187,3 +223,5 @@ HTTP 200.
 | E13 | 2 | **(revidiert nach Review)** Lokale Auth: `cakephp/authentication`, Form+Session, Identifier-Finder „active", `quoteIdentifiers=true`. Hashing **Argon2id** (PHP-Defaults) **mit bcrypt-Fallback** (`FallbackPasswordHasher`): erzeugt Argon2id, verifiziert auch bcrypt. | Argon2id = OWASP-Empfehlung, nativ verfügbar. Fallback macht spätere Hash-Importe zukunftssicher. Vom Nutzer bestätigt. |
 | E14 | 2 | Anonymisierung: `username='geloeschter_benutzer_<id>'`, `email='anonymized-<id>@invalid.local'`, Vor-/Nachname/locale/timezone/`password_hash`→NULL, `status=anonymized`, `anonymized_at=now()`, Tokens widerrufen; ID + Mitgliedschaften bleiben; eingeladene Accounts physisch löschbar. | Setzt Entscheidung 160 / Kap. 27.15.3 um (irreversibel, keine Zuordnungstabelle). Konkrete Platzhalter waren doku-offen → autonom. |
 | E15 | 2 | Anmeldeschutz-Defaults: 10 Fehlversuche / 15-min-Fenster, dann temporäre Sperre (`LoginThrottle`, persistiert in `auth_failures`). | Entscheidung 162 fordert „sicheren Vorgabewert ohne Konfiguration". Konkrete Schwellen doku-offen → autonom; ab Step 4 DB-konfigurierbar. |
+| E16 | 3 | Audit-Log-Design: (a) **Personen per auflösbarer UUID** (kein denormalisierter Klartext-Name/E-Mail) → Anonymisierung wirkt ohne Log-Mutation; **textuelle Schnappschüsse nur für nicht-personenbezogene** Entitäten (Module/Config) = referenzrobust. (b) **Unveränderlichkeit per Trigger** (UPDATE/DELETE blockiert; Bypass nur via `SET LOCAL app.allow_audit_mutation`). (c) **Monats-RANGE-Partitionierung** + DEFAULT-Partition; `audit_partition`-Command stellt Monatspartitionen im Entrypoint sicher. (d) `AuditLogger`-Service schreibt transaktional. | Vereint Referenzrobustheit (24.16.1) und DSGVO-Anonymisierung (27.15.3) ohne Konflikt mit der Unveränderlichkeit (20.6). Partitionierung gem. 30.8/Entscheidung 179. Konkrete Felder/Platzhalter doku-offen → autonom. |
+| E17 | 3 | nginx löst den Upstream `core` zur Laufzeit über den Docker-Resolver (`127.0.0.11`) + Variable im `fastcgi_pass` auf, statt die IP beim Start zu cachen. | Behebt 502 „Connection refused" nach `docker compose up -d --force-recreate core` (neue Container-IP). Robustheit für Recreate/Autostart. Verifiziert. |

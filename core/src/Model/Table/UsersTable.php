@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Model\Table;
 
+use App\Audit\AuditLogger;
 use App\Model\Entity\User;
 use Cake\ORM\Query\SelectQuery;
 use Cake\Validation\Validator;
@@ -86,6 +87,7 @@ class UsersTable extends AppTable
     {
         return (bool)$this->getConnection()->transactional(function () use ($user): bool {
             $id = $user->id;
+            $previousStatus = $user->status;
             $user->username = 'geloeschter_benutzer_' . $id;
             $user->email = 'anonymized-' . $id . '@invalid.local';
             $user->first_name = null;
@@ -105,6 +107,13 @@ class UsersTable extends AppTable
                 'UPDATE api_tokens SET revoked_at = now() WHERE user_id = :uid AND revoked_at IS NULL',
                 ['uid' => $id],
             );
+
+            // Audit (Kap. 27.18): Anonymisierung protokollieren. Keine PII im
+            // Payload (E16); Benutzer per UUID referenziert.
+            (new AuditLogger())->log('user.anonymize', 'user', $id, [
+                'oldValue' => ['status' => $previousStatus],
+                'newValue' => ['status' => User::STATUS_ANONYMIZED],
+            ]);
 
             return true;
         });

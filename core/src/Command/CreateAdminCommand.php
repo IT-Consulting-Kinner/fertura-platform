@@ -3,11 +3,13 @@ declare(strict_types=1);
 
 namespace App\Command;
 
+use App\Audit\AuditLogger;
 use App\Model\Entity\User;
 use Cake\Command\Command;
 use Cake\Console\Arguments;
 use Cake\Console\ConsoleIo;
 use Cake\Console\ConsoleOptionParser;
+use Symfony\Component\Uid\Uuid;
 
 /**
  * Legt einen Volladministrator an (oder aktualisiert ihn) und weist ihm alle
@@ -58,6 +60,7 @@ class CreateAdminCommand extends Command
 
         $user->setPassword($password);
         $user->status = User::STATUS_ACTIVE;
+        $isNew = $user->isNew();
 
         if ($user->getErrors()) {
             $io->error('Validierung fehlgeschlagen:');
@@ -66,31 +69,58 @@ class CreateAdminCommand extends Command
             return static::CODE_ERROR;
         }
 
-        if (!$users->save($user, ['checkRules' => true])) {
+        $connection = $users->getConnection();
+        $audit = new AuditLogger();
+        $correlationId = Uuid::v7()->toRfc4122();
+
+        // Speichern, Bereiche zuweisen und Audit-Einträge in EINER Transaktion
+        // (transaktionaler Audit-Bezug, Kap. 1.8).
+        $count = $connection->transactional(function () use (
+            $users, $user, $connection, $audit, $correlationId, $isNew
+        ) {
+            if (!$users->save($user, ['checkRules' => true])) {
+                return false;
+            }
+
+            $connection->execute(
+                'INSERT INTO user_admin_areas (user_id, admin_area_key) ' .
+                'SELECT :uid, area_key FROM admin_areas ' .
+                'ON CONFLICT (user_id, admin_area_key) DO NOTHING',
+                ['uid' => $user->id],
+            );
+
+            $areaKeys = $connection
+                ->execute('SELECT admin_area_key FROM user_admin_areas WHERE user_id = :uid ORDER BY admin_area_key', ['uid' => $user->id])
+                ->fetchAll('assoc');
+            $areaKeys = array_column($areaKeys, 'admin_area_key');
+
+            // Audit (E16: keine Klartext-PII; Benutzer per UUID referenziert).
+            $audit->log(
+                $isNew ? 'user.create' : 'user.update',
+                'user',
+                $user->id,
+                ['newValue' => ['status' => $user->status], 'correlationId' => $correlationId],
+            );
+            $audit->log('admin_access.grant', 'user', $user->id, [
+                'newValue' => ['admin_areas' => $areaKeys],
+                'correlationId' => $correlationId,
+            ]);
+
+            return count($areaKeys);
+        });
+
+        if ($count === false) {
             $io->error('Speichern fehlgeschlagen:');
             $io->error(print_r($user->getErrors(), true));
 
             return static::CODE_ERROR;
         }
 
-        // Alle Administrationsbereiche zuweisen (Volladministrator).
-        $connection = $users->getConnection();
-        $connection->execute(
-            'INSERT INTO user_admin_areas (user_id, admin_area_key) ' .
-            'SELECT :uid, area_key FROM admin_areas ' .
-            'ON CONFLICT (user_id, admin_area_key) DO NOTHING',
-            ['uid' => $user->id],
-        );
-
-        $count = $connection
-            ->execute('SELECT count(*) AS c FROM user_admin_areas WHERE user_id = :uid', ['uid' => $user->id])
-            ->fetch('assoc');
-
         $io->success(sprintf(
-            'Volladministrator "%s" (ID %s) gespeichert, %s Administrationsbereiche zugewiesen.',
+            'Volladministrator "%s" (ID %s) gespeichert, %d Administrationsbereiche zugewiesen.',
             $user->username,
             $user->id,
-            $count['c'] ?? '?',
+            $count,
         ));
 
         return static::CODE_SUCCESS;
