@@ -160,6 +160,28 @@ class ContractRegistry
             }
         }
 
+        // Mehrfachnutzungs-Regel für öffentliche Modul-Interfaces (Kap. 29.8.1):
+        // Bei multi_use=false darf nur ein nutzendes Modul gleichzeitig aktiv sein.
+        if ($registrationType === ContractRegistration::TYPE_CONSUMER && !$contract->multi_use) {
+            $existing = $this->registrations()->find()
+                ->where([
+                    'contract_id' => $contract->id,
+                    'registration_type' => ContractRegistration::TYPE_CONSUMER,
+                    'active' => true,
+                    'module_key !=' => $moduleKey,
+                ])
+                ->first();
+            if ($existing !== null) {
+                $this->audit->log('interface.multiuse_conflict', 'contract', $contractName, [
+                    'newValue' => ['active_consumer' => $existing->module_key, 'rejected_module' => $moduleKey],
+                    'moduleKey' => $moduleKey,
+                ]);
+                throw new RegistryException(
+                    "Mehrfachnutzung untersagt: $contractName (aktiver Nutzer: {$existing->module_key})."
+                );
+            }
+        }
+
         $registrations = $this->registrations();
 
         return $registrations->getConnection()->transactional(function () use (

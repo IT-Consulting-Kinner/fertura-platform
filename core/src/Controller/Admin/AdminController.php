@@ -39,7 +39,7 @@ class AdminController extends AppController
         ],
         'registry_contracts' => [
             'label' => 'Registry',
-            'items' => [['Contracts', '/admin/registry']],
+            'items' => [['Contracts', '/admin/registry'], ['Interfaces', '/admin/registry/interfaces']],
         ],
         'update_manager' => [
             'label' => 'Updates',

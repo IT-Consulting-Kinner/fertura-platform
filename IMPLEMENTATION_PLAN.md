@@ -57,7 +57,7 @@ für Verifikation ist das **Plattform-Anforderungsdokument v6.28**
 - `[x]` **10. Admin-Bereich (GUI)** — SSR/Bootstrap: Benutzer/Gruppen/
   Administrationsbereiche, Registry-Sichten, Modulverwaltung,
   Abhängigkeitsgraph, Update-Oberfläche. *(Kap. 23.8, 27.17, 28.17)*
-- `[ ]` **11. Öffentliche Modul-Interfaces / Integrations-Infra** —
+- `[x]` **11. Öffentliche Modul-Interfaces / Integrations-Infra** —
   Service-Contracts, Interface-Registry, registrierte Nutzung.
   *(Kap. 29)*
 - `[ ]` **12. Observability** — `/health` (Liveness + Detail), Health-
@@ -486,6 +486,59 @@ Entscheidung 170: 6 feste Bereiche, Sichtbarkeit = serverseitige Berechtigung),
 - CSRF-Testaufrufe benötigen `--data-urlencode` (Token enthält base64-Zeichen);
   reines `-d` verfälscht `+`→Leerzeichen (Test-Artefakt, kein App-Bug).
 
+### Schritt 11 — abgeschlossen & verifiziert (2026-06-05)
+
+**Geprüfte Kapitel:** 29 vollständig (öffentliche Modul-Interfaces als Service-
+Contracts), insb. 29.3 (Einordnung Contract-Modell), 29.5/29.6 (Spezifikation),
+29.8 (Nutzung + Capability-Bindung + Abweisung), 29.8.1 (Mehrfachnutzung), 29.12
+(Interface-Registry im Admin), 29.13 (Kompatibilitätsprüfung), 29.14/29.15
+(De-/Aktivierungsverhalten), 29.16 (Auditierbarkeit).
+
+**Soll → Ist:**
+- **Öffentliches Interface = Service-Contract** (keine Parallelarchitektur):
+  nutzt die in Step 5 gebaute Registry (`contract_type='service'`, Bindings,
+  Handles, Versions-Matching). ✔
+- **Aufrufbare Schnittstelle:** `App\Service\Registry\ServiceInterface`
+  (`handle(array): array`) als Implementierungsvertrag; `CapabilityHandle::invoke()`
+  ruft den aktiven Provider auf, mit Guard → ohne gültige Bindung / aktiven
+  Anbieter Abweisung via `CapabilityRejectedException` (Kap. 29.8.4). ✔
+- **Provider-Deklaration:** neue Manifest-Sektion `services_registered`
+  ({contract, version, class}) → bei Aktivierung als `TYPE_PROVIDER` registriert
+  (konsistent zu resolvers/collectors/events). Service-Contract-Felder
+  (multi_use, input/output/error-spec) werden bei `install` aus dem Manifest
+  übernommen. ✔
+- **Mehrfachnutzung (29.8.1):** bei `multi_use=false` nur ein aktiver
+  CONSUMER — Slot-Prüfung in `ContractRegistry::register()` (Audit
+  `interface.multiuse_conflict`). ✔
+- **Interface-Registry-Admin (29.12):** `/admin/registry/interfaces` —
+  Sicht je Interface (Anbieter, Provider-aktiv, Mehrfachnutzung, **aktive
+  Nutzerzahl**, Input-/Output-/Fehler-Spezifikation) + Sicht je nutzendem Modul
+  (Status/Kompatibilität). ✔
+- **CLI `service`** (`list`/`call`) für Inspektion + Aufruf über das Handle. ✔
+- **Lifecycle (29.14/29.15):** Provider-Deaktivierung → Provider-Registrierung
+  inaktiv → `invoke()` weist ab, Konsument bleibt lauffähig (kein Datenverlust). ✔
+
+**Container-Lauf / Test (`step11test.sh`, echtes Provider+2 Consumer-Fixtures):**
+- `service list` zeigt beide Interfaces (echo multi_use=ja, exclusive=nein).
+- Consumer-Registrierungen nach Aktivierung aktiv (echo + exclusive).
+- **E2E-Aufruf** `sample_consumer → sample_module.service.echo {"msg":"hallo"}`
+  → `{"echo":"hallo","length":5}`.
+- Abweisung ohne Handle (`nobody`) → „Kein gültiges Handle".
+- **Mehrfachnutzungs-Sperre:** Aktivierung `sample_consumer2` auf exklusivem
+  Interface blockiert (aktiver Nutzer: sample_consumer); nur 1 aktiver Nutzer.
+- **Abweisung nach Provider-Deaktivierung:** Aufruf → „kein aktiver Anbieter".
+- Admin `/admin/registry` und `/admin/registry/interfaces` → HTTP 200.
+
+**Offene Punkte / Beobachtungen / autonome Entscheidungen:**
+- In-Process-PHP-Aufruf via `ServiceInterface` (Nutzerwahl) — passt zum
+  PSR-4-Modul-Loading (Step 7), keine Serialisierung/HTTP. (E29)
+- Integrations-Extension-Module (29.9/29.10): eigene Datenhaltung der
+  Beziehungen liegt beim jeweiligen Modul; der Core stellt Contracts +
+  Capability-Bindung + Sichtbarkeit bereit (Demo: `sample_consumer` als
+  Extension, die ein Interface konsumiert).
+- `invoke()` wird bewusst **nicht** je Aufruf auditiert (29.16 fordert es nicht;
+  Definition/Nutzung/De-/Aktivierung/Inkompatibilität sind auditiert).
+
 ## Entscheidungs-Log (autonome Entscheidungen)
 
 | Nr. | Schritt | Entscheidung | Begründung (Anforderungskontext) |
@@ -507,6 +560,7 @@ Entscheidung 170: 6 feste Bereiche, Sichtbarkeit = serverseitige Berechtigung),
 | E15 | 2 | Anmeldeschutz-Defaults: 10 Fehlversuche / 15-min-Fenster, dann temporäre Sperre (`LoginThrottle`, persistiert in `auth_failures`). | Entscheidung 162 fordert „sicheren Vorgabewert ohne Konfiguration". Konkrete Schwellen doku-offen → autonom; ab Step 4 DB-konfigurierbar. |
 | E16 | 3 | Audit-Log-Design: (a) **Personen per auflösbarer UUID** (kein denormalisierter Klartext-Name/E-Mail) → Anonymisierung wirkt ohne Log-Mutation; **textuelle Schnappschüsse nur für nicht-personenbezogene** Entitäten (Module/Config) = referenzrobust. (b) **Unveränderlichkeit per Trigger** (UPDATE/DELETE blockiert; Bypass nur via `SET LOCAL app.allow_audit_mutation`). (c) **Monats-RANGE-Partitionierung** + DEFAULT-Partition; `audit_partition`-Command stellt Monatspartitionen im Entrypoint sicher. (d) `AuditLogger`-Service schreibt transaktional. | Vereint Referenzrobustheit (24.16.1) und DSGVO-Anonymisierung (27.15.3) ohne Konflikt mit der Unveränderlichkeit (20.6). Partitionierung gem. 30.8/Entscheidung 179. Konkrete Felder/Platzhalter doku-offen → autonom. |
 | E17 | 3 | nginx löst den Upstream `core` zur Laufzeit über den Docker-Resolver (`127.0.0.11`) + Variable im `fastcgi_pass` auf, statt die IP beim Start zu cachen. | Behebt 502 „Connection refused" nach `docker compose up -d --force-recreate core` (neue Container-IP). Robustheit für Recreate/Autostart. Verifiziert. |
+| E29 | 11 | Öffentliches Modul-Interface = **Service-Contract** (nutzt Step-5-Registry, keine Parallelarchitektur). Aufruf **in-process** über `ServiceInterface::handle(array):array` + `CapabilityHandle::invoke()` (Guard → `CapabilityRejectedException` als Abweisung, Kap. 29.8.4). Provider via neuer Manifest-Sektion `services_registered` (PROVIDER). Mehrfachnutzung (multi_use=false) = ein aktiver CONSUMER (Slot-Prüfung). Interface-Registry = auf Service-Contracts gefilterte Admin-Sicht. CLI `service list/call`. `invoke()` nicht je Aufruf auditiert. | Kap. 29.3/29.8/29.12. In-Process passt zum PSR-4-Modul-Loading (E21), kein HTTP/Serialisierungs-Overhead. Vom Nutzer bestätigt (In-Process + echtes Consumer-Fixture/CLI-E2E). |
 | E27 | 10 | Admin-GUI: **SSR mit gebündeltem Bootstrap 5** (offline/vendored, Nutzerwahl); **alle 6 Administrationsbereiche voll ausgebaut** (Nutzerwahl). Scoped-Enforcement serverseitig in `Admin\AdminController::beforeFilter` (Bereichsbesitz). Modul-/Core-**Installation** bleibt CLI (signierte Pakete); GUI steuert Lebenszyklus/Update aus Paketpfad. Lizenz-Upload (Datei oder JSON) in der GUI. Audit-Sicht für jeden Admin (kein fester Bereich). | Kap. 23.8/27.3.1/27.16.2, Entscheidung 170. Offline-Bündelung = keine CDN-Abhängigkeit im Betrieb. CLI-Install = sichere Paketherkunft. Vom Nutzer bestätigt (Bootstrap gebündelt, alle 6 Bereiche voll). |
 | E28 | 10 | Login/Logout im HTTP-Pfad nachgezogen: `unauthenticatedRedirect`/Form-`loginUrl` auf `/login`, `LoginThrottle` an POST `/login` gekoppelt. `SettingsCatalog::all()` als Enumerator für den Settings-Editor ergänzt. | Schließt die in Step 2 vermerkte „Login-Formular → Step 10"-Lücke. Editor braucht Katalog-Enumeration; Werte werden weiter gegen den Katalog validiert. |
 | E26 | 9 | BREAD additiv (Spalten can_browse/read/add/edit/delete + extra_actions jsonb); RLS-Kontext via **SET LOCAL + Transaktion-pro-Request** (vom Nutzer bestätigt); Core-Helfer-Funktionen für Policies; **Bypass über privilegierte DB-Rolle** (nicht über settbare GUC). App muss als NOBYPASSRLS-Rolle laufen (Deployment-Aufgabe). | Kap. 25/30.3, Entscheidung 124/175. SET-LOCAL-Variante = doku-konform/pooling-sicher. Rolle statt GUC = sicher (kein Self-Bypass). |

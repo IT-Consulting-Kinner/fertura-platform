@@ -11,9 +11,11 @@ namespace App\Service\Registry;
  * eine aktive Bindung besteht. `isValid()` prüft den Live-Status erneut, sodass
  * Deaktivierung/Widerruf sofort wirken.
  *
- * Hinweis: Die tatsächliche Instanziierung/der Aufruf der Implementierungsklasse
- * erfolgt, sobald Module existieren (ab Step 7). Step 5 liefert die Auflösung
- * (welche Klasse ist aktiver Provider / welche Beiträge / Listener).
+ * Für Service-Contracts (öffentliche Modul-Interfaces, Kap. 29) ruft das
+ * nutzende Modul die Implementierung des Anbieters ausschließlich über
+ * {@see self::invoke()} auf. Die Zugriffskontrolle wirkt durch Konstruktion:
+ * Nur ein gültiges Handle ist nutzbar (Kap. 29.8.3); andernfalls greift das
+ * Abweisungsverhalten (Kap. 29.8.4) via {@see CapabilityRejectedException}.
  */
 final class CapabilityHandle
 {
@@ -27,6 +29,54 @@ final class CapabilityHandle
     public function isValid(): bool
     {
         return $this->registry->isBindingActive($this->moduleKey, $this->contractName);
+    }
+
+    /**
+     * Ruft das öffentliche Modul-Interface (Service-Contract) auf (Kap. 29.8).
+     *
+     * Wirkt als Guard: Ohne gültige Bindung bzw. ohne aktiven Anbieter wird der
+     * Aufruf *technisch* abgewiesen (Kap. 29.8.4). Die Anbieterklasse muss
+     * {@see ServiceInterface} implementieren.
+     *
+     * @param array<string, mixed> $input
+     * @return array<string, mixed>
+     * @throws CapabilityRejectedException
+     */
+    public function invoke(array $input): array
+    {
+        if (!$this->isValid()) {
+            throw new CapabilityRejectedException(
+                "Interface-Aufruf abgewiesen: keine gültige Bindung für Modul "
+                . "'{$this->moduleKey}' an '{$this->contractName}'."
+            );
+        }
+
+        $contract = $this->registry->findContract($this->contractName);
+        if ($contract === null || $contract->contract_type !== 'service') {
+            throw new CapabilityRejectedException(
+                "Kein aufrufbares Service-Interface: '{$this->contractName}'."
+            );
+        }
+
+        $class = $this->registry->resolveProviderClass($this->contractName);
+        if ($class === null) {
+            // Anbieter deaktiviert/entfernt -> Interface nicht verfügbar (Kap. 29.14).
+            throw new CapabilityRejectedException(
+                "Interface-Aufruf abgewiesen: kein aktiver Anbieter für '{$this->contractName}'."
+            );
+        }
+        if (!class_exists($class)) {
+            throw new CapabilityRejectedException("Anbieterklasse nicht ladbar: $class");
+        }
+
+        $impl = new $class();
+        if (!$impl instanceof ServiceInterface) {
+            throw new CapabilityRejectedException(
+                "Anbieterklasse implementiert kein ServiceInterface: $class"
+            );
+        }
+
+        return $impl->handle($input);
     }
 
     /** Aktiver Provider (Resolver/Service) oder null (-> Default greift). */

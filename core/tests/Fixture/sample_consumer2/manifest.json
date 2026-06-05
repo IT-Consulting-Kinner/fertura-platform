@@ -1,0 +1,21 @@
+{
+    "id": "sample_consumer2",
+    "name": "Sample Consumer 2",
+    "version": "1.0.0",
+    "type": "extension",
+    "edition": "free",
+    "description": "Zweiter Nutzer des exklusiven Interfaces - dient dem Mehrfachnutzungs-Test (Kap. 29.8.1).",
+    "publisher": "Fertura",
+    "php_namespace": "SampleConsumer2",
+    "core_compatibility": ">=1.0.0 <2.0.0",
+    "extends_main_module": "sample_module",
+    "main_module_compatibility": ">=1.0.0 <2.0.0",
+    "requires_license": false,
+    "dependencies": [
+        {"module": "sample_module", "version": ">=1.0.0 <2.0.0"}
+    ],
+    "contracts_provided": [],
+    "contracts_used": [
+        {"contract": "sample_module.service.exclusive", "version": ">=1.0.0 <2.0.0"}
+    ]
+}

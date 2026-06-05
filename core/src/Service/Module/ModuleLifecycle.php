@@ -169,7 +169,15 @@ class ModuleLifecycle
                     (string)$c['name'],
                     (string)$c['type'],
                     (string)$c['version'],
-                    ['description' => $c['description'] ?? null],
+                    [
+                        'description' => $c['description'] ?? null,
+                        // Service-Interface-Felder (Kap. 29.5): Mehrfachnutzung +
+                        // maschinenlesbare Input-/Output-/Fehler-Spezifikation.
+                        'multiUse' => $c['multi_use'] ?? true,
+                        'inputSpec' => $c['input_spec'] ?? null,
+                        'outputSpec' => $c['output_spec'] ?? null,
+                        'defaultBehavior' => $c['error_behavior'] ?? null,
+                    ],
                 );
             }
 
@@ -260,6 +268,15 @@ class ModuleLifecycle
                     $this->registry->register($key, (string)$e['contract'], ContractRegistration::TYPE_LISTENER, [
                         'implementationClass' => $e['class'] ?? null,
                         'requiredVersion' => $e['version'] ?? null,
+                        'moduleVersion' => $mod['version'],
+                    ]);
+                }
+                // Service-Anbieter: das anbietende Modul stellt die Implementierung
+                // seines öffentlichen Interfaces als PROVIDER bereit (Kap. 29.3.1/29.8).
+                foreach ($manifest->servicesRegistered() as $s) {
+                    $this->registry->register($key, (string)$s['contract'], ContractRegistration::TYPE_PROVIDER, [
+                        'implementationClass' => $s['class'] ?? null,
+                        'requiredVersion' => $s['version'] ?? null,
                         'moduleVersion' => $mod['version'],
                     ]);
                 }

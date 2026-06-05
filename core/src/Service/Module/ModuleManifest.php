@@ -114,6 +114,18 @@ class ModuleManifest
         return array_values($this->data['events_registered'] ?? []);
     }
 
+    /**
+     * Vom anbietenden Modul bereitgestellte Service-Implementierungen für eigene
+     * Service-Contracts (öffentliche Modul-Interfaces, Kap. 29). Je Eintrag:
+     * contract, version (Constraint), class (implementiert ServiceInterface).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function servicesRegistered(): array
+    {
+        return array_values($this->data['services_registered'] ?? []);
+    }
+
     /** @return list<array<string, mixed>> Deklarierte BREAD-Ressourcen. */
     public function permissions(): array
     {
