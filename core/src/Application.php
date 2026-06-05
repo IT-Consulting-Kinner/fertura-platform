@@ -144,11 +144,13 @@ class Application extends BaseApplication implements AuthenticationServiceProvid
     }
 
     /**
-     * Authentifizierungsdienst (lokaler Default-Provider, Entscheidung 171).
+     * Authentifizierungsdienst über den austauschbaren Provider-Resolver-Slot
+     * (Kap. 27.2.2). Der aktive Provider für `core.auth.provider` konfiguriert
+     * den Dienst; ohne aktiven (oder bei defektem) Provider greift der lokale
+     * Default — die Plattform bleibt immer anmeldbar (Break-Glass).
      *
-     * Formular- + Session-Authenticator; Password-Identifier gegen core.users
-     * (nur Status = active, Finder "active"). Das Passwort liegt als bcrypt-Hash
-     * in der Spalte password_hash.
+     * Identitäten bleiben Core-verwaltet; ein externer Provider (SSO/AD)
+     * authentifiziert nur (JIT-Provisioning). Autorisierung bleibt unabhängig.
      *
      * @param \Psr\Http\Message\ServerRequestInterface $request Request.
      * @return \Authentication\AuthenticationServiceInterface
@@ -160,35 +162,7 @@ class Application extends BaseApplication implements AuthenticationServiceProvid
             'queryParam' => 'redirect',
         ]);
 
-        $service->loadIdentifier('Authentication.Password', [
-            'fields' => [
-                'username' => 'username',
-                'password' => 'password_hash',
-            ],
-            'resolver' => [
-                'className' => 'Authentication.Orm',
-                'userModel' => 'Users',
-                'finder' => 'active',
-            ],
-            // Argon2id (E13) mit bcrypt-Fallback: Hashing erzeugt Argon2id,
-            // Verifikation akzeptiert auch bcrypt-Althashes.
-            'passwordHasher' => [
-                'className' => 'Authentication.Fallback',
-                'hashers' => [
-                    ['className' => 'Authentication.Default', 'hashType' => PASSWORD_ARGON2ID],
-                    ['className' => 'Authentication.Default'],
-                ],
-            ],
-        ]);
-
-        $service->loadAuthenticator('Authentication.Session');
-        $service->loadAuthenticator('Authentication.Form', [
-            'fields' => [
-                'username' => 'username',
-                'password' => 'password',
-            ],
-            'loginUrl' => '/login',
-        ]);
+        (new \App\Service\Auth\AuthProviderResolver())->provider()->configure($service);
 
         return $service;
     }
