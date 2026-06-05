@@ -38,7 +38,7 @@ für Verifikation ist das **Plattform-Anforderungsdokument v6.28**
   Bezeichner), JSONB-Payloads, unveränderlich. *(Kap. 1.6, 24.16, 20.6)*
 - `[x]` **4. Konfigurationsspeicher** — Core-Settings (Key/Value + JSONB),
   „deaktivieren statt löschen", Audit. *(Kap. 23.3, 1.6)*
-- `[ ]` **5. Contract-/Capability-Registry** — 4 Contract-Typen
+- `[x]` **5. Contract-/Capability-Registry** — 4 Contract-Typen
   (Resolver/Collector/Event/Service), Registry, Capability-Bindung,
   Validierung, Versions-Matching. *(Kap. 26, 26.6.4)*
 - `[ ]` **6. Event-Outbox + Worker** — transaktionaler Outbox,
@@ -242,6 +242,41 @@ Throttle-Wiring; HTTP 200 nach Recreate (ohne web-Restart, E17).
 - **Modul-Settings** (`<modul_key>.*`): Schema vorhanden, Verwaltung/Schemas via
   Manifest → Step 7.
 
+### Schritt 5 — abgeschlossen & verifiziert (2026-06-05)
+
+**Geprüfte Kapitel:** 26 (Contract-Modell, 4 Typen), 26.6.4 (Versions-Matching),
+26.7 (Resolver-Slots, Entscheidung 129), 26.13.2 (Capability-Bindung,
+Entscheidung 151), 26.17 (Auditierbarkeit), 29 (Service-Interfaces, soweit
+Registry).
+
+**Soll → Ist:**
+- Datenmodell `contracts` / `contract_registrations` / `capability_bindings`
+  (core-Schema, Footprint, Constraint-First inkl. Version-Format-Check). ✔
+- **Slot-Exklusivität** (genau 1 aktiver Provider): partieller Unique-Index
+  `… WHERE provider AND active` + sauberer Service-Fehler + Audit. ✔
+- **Versions-Matching (26.6.4):** `SemVer` + `VersionConstraint` (exakt oder
+  expliziter Bereich; Caret/Tilde verboten; gleiche Major + Angebot ≥ Anforderung). ✔
+- **Capability-Bindung (151):** persistierte `capability_bindings` + Laufzeit-
+  `CapabilityHandle`; Handle nur bei aktiver Bindung; Deaktivierung → sofort ungültig. ✔
+- **ContractRegistry**: registerContract/register (Validierung: Existenz, Version,
+  Slot, Typ-Match), deactivate, resolveProvider/collect/listeners, Bindings. ✔
+- **Audit** aller Vorgänge (Kap. 26.17). ✔
+- Verifikation ohne echte Module: `registry_selftest` (14 Checks grün) +
+  read-only `registry_list`. ✔
+
+**Container-Lauf / Test:** Migration inkrementell; partieller Unique-Index;
+Selbsttest deckt Resolver/Collector/Service, Slot-Konflikt, Versions-Matching,
+Handle-Guard, Deaktivierungs-Fallback, Audit ab; HTTP 200.
+
+**Offene Punkte / Beobachtungen:**
+- **Echte Modul-Registrierung** (aus dem Manifest bei Install/Activate) treibt die
+  Registry in **Step 7** an; Step 5 liefert die Maschinerie + Self-Test.
+- **Event-Zustellung** (Outbox/Worker, Listener-Aufruf) → **Step 6**.
+- **Runtime-Dispatch** (Implementierungsklassen instanziieren/aufrufen) wird mit
+  echten Modulen ab **Step 7** verdrahtet; Handle liefert bereits die Auflösung.
+- **Lizenz-/Signaturprüfung** bei Registrierung → **Step 8** (Felder/Hooks bereit).
+- Registry-Ansicht im Admin-Bereich → **Step 10**.
+
 ## Entscheidungs-Log (autonome Entscheidungen)
 
 | Nr. | Schritt | Entscheidung | Begründung (Anforderungskontext) |
@@ -263,4 +298,5 @@ Throttle-Wiring; HTTP 200 nach Recreate (ohne web-Restart, E17).
 | E15 | 2 | Anmeldeschutz-Defaults: 10 Fehlversuche / 15-min-Fenster, dann temporäre Sperre (`LoginThrottle`, persistiert in `auth_failures`). | Entscheidung 162 fordert „sicheren Vorgabewert ohne Konfiguration". Konkrete Schwellen doku-offen → autonom; ab Step 4 DB-konfigurierbar. |
 | E16 | 3 | Audit-Log-Design: (a) **Personen per auflösbarer UUID** (kein denormalisierter Klartext-Name/E-Mail) → Anonymisierung wirkt ohne Log-Mutation; **textuelle Schnappschüsse nur für nicht-personenbezogene** Entitäten (Module/Config) = referenzrobust. (b) **Unveränderlichkeit per Trigger** (UPDATE/DELETE blockiert; Bypass nur via `SET LOCAL app.allow_audit_mutation`). (c) **Monats-RANGE-Partitionierung** + DEFAULT-Partition; `audit_partition`-Command stellt Monatspartitionen im Entrypoint sicher. (d) `AuditLogger`-Service schreibt transaktional. | Vereint Referenzrobustheit (24.16.1) und DSGVO-Anonymisierung (27.15.3) ohne Konflikt mit der Unveränderlichkeit (20.6). Partitionierung gem. 30.8/Entscheidung 179. Konkrete Felder/Platzhalter doku-offen → autonom. |
 | E17 | 3 | nginx löst den Upstream `core` zur Laufzeit über den Docker-Resolver (`127.0.0.11`) + Variable im `fastcgi_pass` auf, statt die IP beim Start zu cachen. | Behebt 502 „Connection refused" nach `docker compose up -d --force-recreate core` (neue Container-IP). Robustheit für Recreate/Autostart. Verifiziert. |
+| E19 | 5 | Registry referenziert Module per **`module_key` (Text, kein FK)**; **Capability-Bindings persistiert** + Laufzeit-Handle (Guard). Contract-Namen Konvention `modul.typ.name` (unique). Slot-Exklusivität per partiellem Unique-Index. Versions-Matching nur exakt/expliziter Bereich (26.6.4). | Entkoppelt Step 5 von der modules-Tabelle (Step 7); Bindings auditierbar/debugbar. Vom Nutzer bestätigt. Konkretes Datenmodell doku-offen → autonom. |
 | E18 | 4 | Konfigurationsspeicher `core.settings`: Modell (namespace, config_key, `value` jsonb, `value_encrypted`, `is_secret`); **sichere Defaults im Code-Katalog** (`SettingsCatalog`, greifen ohne DB-Eintrag) inkl. Typ-/Bereichsvalidierung; **Secrets AES-256-GCM** (Schlüssel aus `Security.encryptionKey`/env, nie aus DB); Audit `config.update` (entity_type `core_setting`) **ohne** Klartext bei Secrets; Footprint. „Deaktivieren statt löschen" gilt für Konfig-*objekte*, nicht Setting-*werte* (kein `active`). | Setzt Kap. 1.4/23.3 + Entscheidungen 159/162/164/176 um. Konkrete Felder/Defaults/Validierung waren doku-offen → autonom. |
