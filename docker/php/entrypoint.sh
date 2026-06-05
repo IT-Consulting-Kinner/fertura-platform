@@ -25,16 +25,23 @@ done
 echo "[entrypoint] Datenbank erreichbar"
 
 # 3. Schema-Bootstrap + Migrationen (nur core; geguardet)
+#    Bootstrap-Schritte laufen als Superuser: APP_DATABASE_URL wird geleert,
+#    sodass die Default-Connection auf DATABASE_URL (Superuser) zurueckfaellt.
+#    DDL/Migrationen brauchen Superuser; die App-Rolle (NOBYPASSRLS) wird hier
+#    erst provisioniert. php-fpm startet danach mit vollem Env (App-Rolle).
 if [ "$ROLE" = "core" ]; then
   if bin/cake migrations --help >/dev/null 2>&1; then
     # core-Schema bereitstellen, BEVOR der Runner seine Trackingtabelle anlegt.
     echo "[entrypoint] schema_init"
-    bin/cake schema_init || echo "[entrypoint] WARN: schema_init fehlgeschlagen"
+    env APP_DATABASE_URL= bin/cake schema_init || echo "[entrypoint] WARN: schema_init fehlgeschlagen"
     echo "[entrypoint] migrations migrate"
-    bin/cake migrations migrate || echo "[entrypoint] WARN: migrate fehlgeschlagen"
+    env APP_DATABASE_URL= bin/cake migrations migrate || echo "[entrypoint] WARN: migrate fehlgeschlagen"
+    # NOBYPASSRLS-App-Rolle + Rechte (idempotent; nur wenn APP_DB_PASSWORD gesetzt).
+    echo "[entrypoint] db_provision_app_role"
+    env APP_DATABASE_URL= bin/cake db_provision_app_role || echo "[entrypoint] WARN: provisioning fehlgeschlagen"
     # Audit-Log-Monatspartitionen sicherstellen (vor dem ersten Schreiben).
     echo "[entrypoint] audit_partition"
-    bin/cake audit_partition || echo "[entrypoint] WARN: audit_partition fehlgeschlagen"
+    env APP_DATABASE_URL= bin/cake audit_partition || echo "[entrypoint] WARN: audit_partition fehlgeschlagen"
   else
     echo "[entrypoint] migrations-Plugin (noch) nicht verfuegbar -> uebersprungen"
   fi

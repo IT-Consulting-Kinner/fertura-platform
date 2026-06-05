@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Command;
 
+use App\Service\Security\TrustChain;
 use App\Service\Security\TrustStore;
 use Cake\Command\Command;
 use Cake\Console\Arguments;
@@ -13,9 +14,14 @@ use Cake\Datasource\ConnectionManager;
 /**
  * Verwaltung von Vertrauensankern und Sperrliste (Kap. 24.9.2).
  *
- *   bin/cake trust add-anchor <key_id> <public_key_b64> [--type root|publisher] [--publisher P]
+ *   bin/cake trust add-anchor <key_id> <public_key_b64> --type root
+ *   bin/cake trust add-anchor --cert <publisher-cert.json>   (Kette wird geprüft)
  *   bin/cake trust revoke <key_id> [--reason R]
  *   bin/cake trust list
+ *
+ * Root-Anker werden direkt (außerhalb des Bandes vertrauenswürdig) installiert.
+ * Publisher-Anker werden nur akzeptiert, wenn ihr Zertifikat (aus `mp_tool
+ * sign-key`) von einem aktiven Root signiert ist (Kette Root -> Publisher).
  */
 class TrustCommand extends Command
 {
@@ -23,10 +29,11 @@ class TrustCommand extends Command
     {
         $parser
             ->addArgument('operation', ['choices' => ['add-anchor', 'revoke', 'list'], 'required' => true])
-            ->addArgument('key_id', ['help' => 'Schlüssel-ID'])
-            ->addArgument('public_key', ['help' => 'Public Key (base64, nur add-anchor)'])
+            ->addArgument('key_id', ['help' => 'Schlüssel-ID (Root-Anker)'])
+            ->addArgument('public_key', ['help' => 'Public Key (base64, Root-Anker)'])
             ->addOption('type', ['choices' => ['root', 'publisher'], 'default' => 'root'])
             ->addOption('publisher', ['help' => 'Publisher (für publisher-Keys)'])
+            ->addOption('cert', ['help' => 'Publisher-Zertifikat (JSON aus mp_tool sign-key)'])
             ->addOption('reason', ['help' => 'Widerrufsgrund']);
 
         return $parser;
@@ -38,15 +45,7 @@ class TrustCommand extends Command
 
         switch ($args->getArgument('operation')) {
             case 'add-anchor':
-                $trust->addAnchor(
-                    (string)$args->getArgument('key_id'),
-                    (string)$args->getArgument('public_key'),
-                    (string)$args->getOption('type'),
-                    $args->getOption('publisher'),
-                );
-                $io->success('Vertrauensanker hinzugefügt: ' . $args->getArgument('key_id'));
-
-                return static::CODE_SUCCESS;
+                return $this->addAnchor($args, $io, $trust);
 
             case 'revoke':
                 $trust->revokeKey((string)$args->getArgument('key_id'), $args->getOption('reason'));
@@ -56,10 +55,11 @@ class TrustCommand extends Command
 
             case 'list':
                 $rows = ConnectionManager::get('default')->execute(
-                    'SELECT key_id, key_type, publisher, active FROM trust_anchors ORDER BY key_id',
+                    'SELECT key_id, key_type, publisher, signed_by, active FROM trust_anchors ORDER BY key_id',
                 )->fetchAll('assoc');
                 foreach ($rows as $r) {
-                    $io->out(sprintf('  %-16s %-10s %s%s', $r['key_id'], $r['key_type'], $r['publisher'] ?? '-', $r['active'] ? '' : ' [inaktiv]'));
+                    $chain = $r['key_type'] === 'publisher' ? ' <- ' . ($r['signed_by'] ?? '?') : '';
+                    $io->out(sprintf('  %-16s %-10s %s%s%s', $r['key_id'], $r['key_type'], $r['publisher'] ?? '-', $chain, $r['active'] ? '' : ' [inaktiv]'));
                 }
                 $revoked = ConnectionManager::get('default')->execute('SELECT key_id FROM revoked_keys')->fetchAll('assoc');
                 foreach ($revoked as $r) {
@@ -70,5 +70,59 @@ class TrustCommand extends Command
         }
 
         return static::CODE_ERROR;
+    }
+
+    private function addAnchor(Arguments $args, ConsoleIo $io, TrustStore $trust): int
+    {
+        // Publisher-Anker aus Zertifikat (Kette wird geprüft).
+        $certPath = $args->getOption('cert');
+        if ($certPath !== null) {
+            if (!is_file((string)$certPath)) {
+                $io->error('Zertifikatsdatei nicht gefunden: ' . $certPath);
+
+                return static::CODE_ERROR;
+            }
+            $cert = json_decode((string)file_get_contents((string)$certPath), true);
+            if (!is_array($cert)) {
+                $io->error('Zertifikat ist kein gültiges JSON-Objekt.');
+
+                return static::CODE_ERROR;
+            }
+            $check = (new TrustChain())->verifyPublisherCert($cert);
+            if (!$check['ok']) {
+                $io->error('Kette ungültig: ' . ($check['reason'] ?? 'unbekannt'));
+
+                return static::CODE_ERROR;
+            }
+            $trust->addAnchor(
+                (string)$cert['key_id'],
+                (string)$cert['public_key'],
+                'publisher',
+                $cert['publisher'] ?? null,
+                (string)$cert['signed_by'],
+                (string)$cert['key_signature'],
+            );
+            $io->success('Publisher-Anker (Kette geprüft) hinzugefügt: ' . $cert['key_id']);
+
+            return static::CODE_SUCCESS;
+        }
+
+        // Root-Anker (direkt vertrauenswürdig).
+        $keyId = (string)$args->getArgument('key_id');
+        $publicKey = (string)$args->getArgument('public_key');
+        if ($keyId === '' || $publicKey === '') {
+            $io->error('Root-Anker benötigt <key_id> und <public_key>; Publisher-Anker via --cert.');
+
+            return static::CODE_ERROR;
+        }
+        if ((string)$args->getOption('type') === 'publisher') {
+            $io->error('Publisher-Anker bitte über --cert hinzufügen (Kettenprüfung erforderlich).');
+
+            return static::CODE_ERROR;
+        }
+        $trust->addAnchor($keyId, $publicKey, 'root');
+        $io->success('Root-Vertrauensanker hinzugefügt: ' . $keyId);
+
+        return static::CODE_SUCCESS;
     }
 }

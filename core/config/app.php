@@ -329,6 +329,27 @@ return [
         ],
 
         /*
+         * Privilegierte Connection (Superuser) für DDL/Migrationen/Modul-
+         * Lifecycle/Wartung/Recovery/Worker — umgeht RLS (Bypass-Pfad, E26).
+         * Die Default-Connection läuft im Betrieb als NOBYPASSRLS-Rolle
+         * (APP_DATABASE_URL), damit RLS zur Laufzeit greift.
+         */
+        'privileged' => [
+            'className' => Connection::class,
+            'driver' => Postgres::class,
+            'persistent' => false,
+            'timezone' => 'UTC',
+            'encoding' => 'utf8',
+            'flags' => [],
+            'cacheMetadata' => true,
+            'quoteIdentifiers' => true,
+            'log' => false,
+            'schema' => 'core',
+            'init' => ['SET search_path TO core, public'],
+            'url' => env('DATABASE_URL', null),
+        ],
+
+        /*
          * The test connection is used during the test suite.
          */
         'test' => [

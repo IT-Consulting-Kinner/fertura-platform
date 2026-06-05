@@ -58,7 +58,7 @@ class UpdateManager
 
     private function conn()
     {
-        return ConnectionManager::get('default');
+        return \App\Infrastructure\Db::privileged();
     }
 
     // ---- Modul-Update --------------------------------------------------------
