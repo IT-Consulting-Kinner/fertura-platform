@@ -16,7 +16,15 @@ declare(strict_types=1);
  */
 namespace App;
 
+use App\Middleware\FootprintMiddleware;
 use App\Middleware\HostHeaderMiddleware;
+use App\Middleware\MaintenanceMiddleware;
+use App\Middleware\TransactionRlsMiddleware;
+use App\Service\Module\ModuleAutoloader;
+use Authentication\AuthenticationService;
+use Authentication\AuthenticationServiceInterface;
+use Authentication\AuthenticationServiceProviderInterface;
+use Authentication\Middleware\AuthenticationMiddleware;
 use Cake\Core\Configure;
 use Cake\Core\ContainerInterface;
 use Cake\Datasource\FactoryLocator;
@@ -29,6 +37,7 @@ use Cake\Http\MiddlewareQueue;
 use Cake\ORM\Locator\TableLocator;
 use Cake\Routing\Middleware\AssetMiddleware;
 use Cake\Routing\Middleware\RoutingMiddleware;
+use Psr\Http\Message\ServerRequestInterface;
 
 /**
  * Application setup class.
@@ -38,8 +47,11 @@ use Cake\Routing\Middleware\RoutingMiddleware;
  *
  * @extends \Cake\Http\BaseApplication<\App\Application>
  */
-class Application extends BaseApplication
+class Application extends BaseApplication implements AuthenticationServiceProviderInterface
 {
+    /** Aktuelle Core-Version (SemVer) für Modul-Kompatibilitätsprüfungen. */
+    public const CORE_VERSION = '1.0.0';
+
     /**
      * Load all the application configuration and bootstrap logic.
      *
@@ -52,6 +64,12 @@ class Application extends BaseApplication
 
         // By default, does not allow fallback classes.
         FactoryLocator::add('Table', (new TableLocator())->allowFallbackClass(false));
+
+        // Lokale Authentifizierung (Resolver-Default, Entscheidung 171).
+        $this->addPlugin('Authentication');
+
+        // Aktive Module zur Laufzeit autoloaden (Step 7, fehlertolerant).
+        ModuleAutoloader::registerActiveModules();
     }
 
     /**
@@ -71,6 +89,9 @@ class Application extends BaseApplication
             // In production, ensures App.fullBaseUrl is configured and validates
             // the incoming Host header against it.
             ->add(new HostHeaderMiddleware())
+
+            // Wartungsmodus (Step 8): 503, wenn core.maintenance_mode aktiv.
+            ->add(new MaintenanceMiddleware())
 
             // Handle plugin/theme assets like CakePHP normally does.
             ->add(new AssetMiddleware([
@@ -92,9 +113,71 @@ class Application extends BaseApplication
             // https://book.cakephp.org/5/en/security/csrf.html#cross-site-request-forgery-csrf-middleware
             ->add(new CsrfProtectionMiddleware([
                 'httponly' => true,
-            ]));
+            ]))
+
+            // Authentifizierung: stellt die Identitaet pro Request bereit.
+            // Erzwingt selbst keinen Login; Controller/Adminbereich entscheiden.
+            ->add(new AuthenticationMiddleware($this))
+
+            // Footprint: uebernimmt die Identitaet in den ActorContext fuer
+            // created_by/updated_by (muss NACH der AuthenticationMiddleware laufen).
+            ->add(new FootprintMiddleware())
+
+            // RLS: Request in Transaktion huellen + Zugriffskontext via SET LOCAL
+            // (Step 9, Entscheidung 175). Nach der AuthenticationMiddleware.
+            ->add(new TransactionRlsMiddleware());
 
         return $middlewareQueue;
+    }
+
+    /**
+     * Authentifizierungsdienst (lokaler Default-Provider, Entscheidung 171).
+     *
+     * Formular- + Session-Authenticator; Password-Identifier gegen core.users
+     * (nur Status = active, Finder "active"). Das Passwort liegt als bcrypt-Hash
+     * in der Spalte password_hash.
+     *
+     * @param \Psr\Http\Message\ServerRequestInterface $request Request.
+     * @return \Authentication\AuthenticationServiceInterface
+     */
+    public function getAuthenticationService(ServerRequestInterface $request): AuthenticationServiceInterface
+    {
+        $service = new AuthenticationService([
+            'unauthenticatedRedirect' => '/login',
+            'queryParam' => 'redirect',
+        ]);
+
+        $service->loadIdentifier('Authentication.Password', [
+            'fields' => [
+                'username' => 'username',
+                'password' => 'password_hash',
+            ],
+            'resolver' => [
+                'className' => 'Authentication.Orm',
+                'userModel' => 'Users',
+                'finder' => 'active',
+            ],
+            // Argon2id (E13) mit bcrypt-Fallback: Hashing erzeugt Argon2id,
+            // Verifikation akzeptiert auch bcrypt-Althashes.
+            'passwordHasher' => [
+                'className' => 'Authentication.Fallback',
+                'hashers' => [
+                    ['className' => 'Authentication.Default', 'hashType' => PASSWORD_ARGON2ID],
+                    ['className' => 'Authentication.Default'],
+                ],
+            ],
+        ]);
+
+        $service->loadAuthenticator('Authentication.Session');
+        $service->loadAuthenticator('Authentication.Form', [
+            'fields' => [
+                'username' => 'username',
+                'password' => 'password',
+            ],
+            'loginUrl' => '/login',
+        ]);
+
+        return $service;
     }
 
     /**

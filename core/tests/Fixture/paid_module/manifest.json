@@ -1,0 +1,15 @@
+{
+    "id": "paid_module",
+    "name": "Paid Module",
+    "version": "1.0.0",
+    "type": "main",
+    "edition": "commercial",
+    "description": "Kostenpflichtiges Beispielmodul fuer den Lizenz-Test.",
+    "publisher": "Fertura",
+    "php_namespace": "PaidModule",
+    "core_compatibility": ">=1.0.0 <2.0.0",
+    "requires_license": true,
+    "contracts_provided": [],
+    "contracts_used": [],
+    "events_registered": []
+}

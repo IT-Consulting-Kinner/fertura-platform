@@ -2,7 +2,7 @@
 
 use Cake\Cache\Engine\FileEngine;
 use Cake\Database\Connection;
-use Cake\Database\Driver\Mysql;
+use Cake\Database\Driver\Postgres;
 use Cake\Log\Engine\FileLog;
 use Cake\Mailer\Transport\MailTransport;
 use function Cake\Core\env;
@@ -79,6 +79,9 @@ return [
      */
     'Security' => [
         'salt' => env('SECURITY_SALT'),
+        // Schlüssel für verschlüsselte Settings (AES-256-GCM, Entscheidung 159).
+        // Dediziert; fällt in DEV auf SECURITY_SALT zurück (siehe SecretCipher).
+        'encryptionKey' => env('APP_ENCRYPTION_KEY', null),
     ],
 
     /*
@@ -287,20 +290,15 @@ return [
          */
         'default' => [
             'className' => Connection::class,
-            'driver' => Mysql::class,
+            'driver' => Postgres::class,
             'persistent' => false,
             'timezone' => 'UTC',
 
             /*
-             * For MariaDB/MySQL the internal default changed from utf8 to utf8mb4, aka full utf-8 support
+             * Fertura nutzt PostgreSQL (Entscheidung 173); client_encoding = utf8.
              */
-            'encoding' => 'utf8mb4',
+            'encoding' => 'utf8',
 
-            /*
-             * If your MySQL server is configured with `skip-character-set-client-handshake`
-             * then you MUST use the `flags` config to set your charset encoding.
-             * For e.g. `'flags' => [\PDO::MYSQL_ATTR_INIT_COMMAND => 'SET NAMES utf8mb4']`
-             */
             'flags' => [],
             'cacheMetadata' => true,
             'log' => false,
@@ -313,7 +311,7 @@ return [
              * decreases performance because each query needs to be traversed and
              * manipulated before being executed.
              */
-            'quoteIdentifiers' => false,
+            'quoteIdentifiers' => true,
 
             /*
              * During development, if using MySQL < 5.6, uncommenting the
@@ -322,7 +320,12 @@ return [
              * mysql configuration directive 'innodb_stats_on_metadata = 0'
              * which is the recommended value in production environments
              */
-            //'init' => ['SET GLOBAL innodb_stats_on_metadata = 0'],
+            // Schema-Trennung (DB_CONVENTIONS.md): Core-Tabellen liegen im Schema
+            // "core". 'schema' steuert die Schema-Reflektion (information_schema-
+            // Filter); 'init' setzt den effektiven search_path und laeuft NACH
+            // setSchema, behaelt also core+public fuer Laufzeit & Migrationen.
+            'schema' => 'core',
+            'init' => ['SET search_path TO core, public'],
         ],
 
         /*
@@ -330,15 +333,20 @@ return [
          */
         'test' => [
             'className' => Connection::class,
-            'driver' => Mysql::class,
+            'driver' => Postgres::class,
             'persistent' => false,
             'timezone' => 'UTC',
-            'encoding' => 'utf8mb4',
+            'encoding' => 'utf8',
             'flags' => [],
             'cacheMetadata' => true,
-            'quoteIdentifiers' => false,
+            'quoteIdentifiers' => true,
             'log' => false,
-            //'init' => ['SET GLOBAL innodb_stats_on_metadata = 0'],
+            // Schema-Trennung (DB_CONVENTIONS.md): Core-Tabellen liegen im Schema
+            // "core". 'schema' steuert die Schema-Reflektion (information_schema-
+            // Filter); 'init' setzt den effektiven search_path und laeuft NACH
+            // setSchema, behaelt also core+public fuer Laufzeit & Migrationen.
+            'schema' => 'core',
+            'init' => ['SET search_path TO core, public'],
         ],
     ],
 
@@ -346,6 +354,9 @@ return [
      * Configures logging options
      */
     'Log' => [
+        // Strukturierte, maschinenlesbare Logs (JSON-Zeilen) für Auswertung/SIEM
+        // (Kap. 20.2.3): Zeitstempel, Ebene, Nachricht und Kontext (z. B.
+        // component/module/correlation_id, sofern am Aufrufort mitgegeben).
         'debug' => [
             'className' => FileLog::class,
             'path' => LOGS,
@@ -353,6 +364,7 @@ return [
             'url' => env('LOG_DEBUG_URL', null),
             'scopes' => null,
             'levels' => ['notice', 'info', 'debug'],
+            'formatter' => ['className' => \Cake\Log\Formatter\JsonFormatter::class],
         ],
         'error' => [
             'className' => FileLog::class,
@@ -361,6 +373,7 @@ return [
             'url' => env('LOG_ERROR_URL', null),
             'scopes' => null,
             'levels' => ['warning', 'error', 'critical', 'alert', 'emergency'],
+            'formatter' => ['className' => \Cake\Log\Formatter\JsonFormatter::class],
         ],
         // To enable this dedicated query log, you need to set your datasource's log flag to true
         'queries' => [

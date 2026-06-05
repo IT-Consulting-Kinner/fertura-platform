@@ -1,0 +1,70 @@
+{
+    "id": "sample_module",
+    "name": "Sample Module",
+    "version": "1.0.0",
+    "type": "main",
+    "edition": "free",
+    "description": "Beispielmodul fuer den Lifecycle-/Registry-/Outbox-/Interface-E2E-Test.",
+    "publisher": "Fertura",
+    "php_namespace": "SampleModule",
+    "core_compatibility": ">=1.0.0 <2.0.0",
+    "requires_license": false,
+    "dependencies": [],
+    "contracts_provided": [
+        {
+            "name": "sample_module.event.ping",
+            "type": "event",
+            "version": "1.0.0",
+            "description": "Wird beim Ping ausgeloest."
+        },
+        {
+            "name": "sample_module.service.echo",
+            "type": "service",
+            "version": "1.0.0",
+            "multi_use": true,
+            "description": "Oeffentliches Modul-Interface: gibt die Eingabe zurueck.",
+            "input_spec": {"msg": "string, pflicht"},
+            "output_spec": {"echo": "string", "length": "int"},
+            "error_behavior": "Leere msg -> echo='', length=0."
+        },
+        {
+            "name": "sample_module.service.exclusive",
+            "type": "service",
+            "version": "1.0.0",
+            "multi_use": false,
+            "description": "Exklusives Interface: nur ein nutzendes Modul gleichzeitig (Kap. 29.8.1).",
+            "input_spec": {"msg": "string, pflicht"},
+            "output_spec": {"echo": "string", "length": "int"},
+            "error_behavior": "wie echo"
+        }
+    ],
+    "contracts_used": [],
+    "events_registered": [
+        {
+            "contract": "sample_module.event.ping",
+            "version": ">=1.0.0 <2.0.0",
+            "class": "SampleModule\\Listener\\PingListener"
+        }
+    ],
+    "services_registered": [
+        {
+            "contract": "sample_module.service.echo",
+            "version": ">=1.0.0 <2.0.0",
+            "class": "SampleModule\\Service\\EchoService"
+        },
+        {
+            "contract": "sample_module.service.exclusive",
+            "version": ">=1.0.0 <2.0.0",
+            "class": "SampleModule\\Service\\EchoService"
+        }
+    ],
+    "permissions": [
+        {
+            "resource_type": "ping",
+            "name": "sample_module.ping",
+            "description": "Ping-Ressource",
+            "is_scoped": true,
+            "extra_actions": ["trigger"]
+        }
+    ]
+}

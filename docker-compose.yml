@@ -28,9 +28,17 @@ services:
     restart: unless-stopped
     volumes:
       - ./core:/var/www/html
+      # vendor liegt auf einem Named Volume (ext4 in der VM), NICHT auf dem
+      # 9p-Windows-Bind-Mount -> verhindert p9_client_rpc-Haenger beim Autoload.
+      - core_vendor:/var/www/html/vendor
+      # Geteilt mit dem Test-Marketplace-Server (signierte Fixtures schreiben).
+      - ./marketplace-data:/var/www/html/marketplace-data
     environment:
       DATABASE_URL: "postgres://${POSTGRES_USER:-fertura}:${POSTGRES_PASSWORD:-fertura}@db/${POSTGRES_DB:-fertura}?encoding=utf8"
       DEBUG: "true"
+      ROLE: core
+      SECURITY_SALT: "${SECURITY_SALT:-dev-salt-change-me-0123456789abcdef0123456789abcdef}"
+      APP_ENCRYPTION_KEY: "${APP_ENCRYPTION_KEY:-dev-encryption-key-change-me-fedcba9876543210}"
     depends_on:
       db:
         condition: service_healthy
@@ -51,12 +59,16 @@ services:
       context: .
       dockerfile: docker/php/Dockerfile
     restart: unless-stopped
-    # Platzhalter – die echten CLI-Worker (Outbox/Cron) folgen mit dem Core.
-    command: ["sh", "-c", "echo '[worker] Platzhalter aktiv'; sleep infinity"]
+    # Outbox-Worker (Step 6): verarbeitet Events via LISTEN/NOTIFY + Poll-Fallback.
+    command: ["bin/cake", "event_worker"]
     volumes:
       - ./core:/var/www/html
+      - core_vendor:/var/www/html/vendor
     environment:
       DATABASE_URL: "postgres://${POSTGRES_USER:-fertura}:${POSTGRES_PASSWORD:-fertura}@db/${POSTGRES_DB:-fertura}?encoding=utf8"
+      ROLE: worker
+      SECURITY_SALT: "${SECURITY_SALT:-dev-salt-change-me-0123456789abcdef0123456789abcdef}"
+      APP_ENCRYPTION_KEY: "${APP_ENCRYPTION_KEY:-dev-encryption-key-change-me-fedcba9876543210}"
     depends_on:
       db:
         condition: service_healthy
@@ -68,5 +80,15 @@ services:
       - "8025:8025"   # Web-UI
       - "1025:1025"   # SMTP
 
+  # Test-Marketplace: serviert signierte Metadaten/CRL/Anker statisch (Step 8).
+  marketplace:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    volumes:
+      - ./marketplace-data:/usr/share/nginx/html:ro
+    ports:
+      - "8090:80"
+
 volumes:
   db_data:
+  core_vendor:

@@ -1,0 +1,22 @@
+{
+    "id": "sample_consumer",
+    "name": "Sample Consumer",
+    "version": "1.0.0",
+    "type": "extension",
+    "edition": "free",
+    "description": "Integrations-Extension-Modul: nutzt oeffentliche Interfaces von sample_module (Kap. 29).",
+    "publisher": "Fertura",
+    "php_namespace": "SampleConsumer",
+    "core_compatibility": ">=1.0.0 <2.0.0",
+    "extends_main_module": "sample_module",
+    "main_module_compatibility": ">=1.0.0 <2.0.0",
+    "requires_license": false,
+    "dependencies": [
+        {"module": "sample_module", "version": ">=1.0.0 <2.0.0"}
+    ],
+    "contracts_provided": [],
+    "contracts_used": [
+        {"contract": "sample_module.service.echo", "version": ">=1.0.0 <2.0.0"},
+        {"contract": "sample_module.service.exclusive", "version": ">=1.0.0 <2.0.0"}
+    ]
+}

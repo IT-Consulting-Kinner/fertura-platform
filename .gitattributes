@@ -1,0 +1,21 @@
+# Einheitliche Zeilenenden: Repository speichert LF, Checkout = LF.
+# Das Projekt laeuft in Linux-Containern -> LF ist maßgeblich. Verhindert
+# CRLF/LF-Drift (z. B. unter Windows/WSL ueber den 9p-Mount).
+* text=auto eol=lf
+
+# Shell-Skripte / Docker-Entrypoints MUESSEN LF haben (sonst bricht /bin/sh).
+*.sh text eol=lf
+
+# PowerShell-Skripte sind Windows-seitig -> CRLF.
+*.ps1 text eol=crlf
+
+# Binaerformate nicht anfassen.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.woff binary
+*.woff2 binary
