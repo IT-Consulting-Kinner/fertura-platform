@@ -32,6 +32,8 @@ core/config/app_local.php
 core/config/.env
 # Vom Migrations-Plugin generierter Schema-Cache (kein Quellartefakt)
 core/config/Migrations/schema-dump-*.lock
+# Zur Laufzeit installierte Module (Runtime-Artefakt, wie vendor/)
+core/modules/
 
 # Compose-Env
 .env

@@ -18,6 +18,7 @@ namespace App;
 
 use App\Middleware\FootprintMiddleware;
 use App\Middleware\HostHeaderMiddleware;
+use App\Service\Module\ModuleAutoloader;
 use Authentication\AuthenticationService;
 use Authentication\AuthenticationServiceInterface;
 use Authentication\AuthenticationServiceProviderInterface;
@@ -46,6 +47,9 @@ use Psr\Http\Message\ServerRequestInterface;
  */
 class Application extends BaseApplication implements AuthenticationServiceProviderInterface
 {
+    /** Aktuelle Core-Version (SemVer) für Modul-Kompatibilitätsprüfungen. */
+    public const CORE_VERSION = '1.0.0';
+
     /**
      * Load all the application configuration and bootstrap logic.
      *
@@ -61,6 +65,9 @@ class Application extends BaseApplication implements AuthenticationServiceProvid
 
         // Lokale Authentifizierung (Resolver-Default, Entscheidung 171).
         $this->addPlugin('Authentication');
+
+        // Aktive Module zur Laufzeit autoloaden (Step 7, fehlertolerant).
+        ModuleAutoloader::registerActiveModules();
     }
 
     /**

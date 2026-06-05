@@ -44,10 +44,10 @@ für Verifikation ist das **Plattform-Anforderungsdokument v6.28**
 - `[x]` **6. Event-Outbox + Worker** — transaktionaler Outbox,
   LISTEN/NOTIFY, Worker-Command, mindestens-einmal/idempotent.
   *(Kap. 26.9.2, 30.6)*
-- `[ ]` **7. Modul-Manifest & Lifecycle** — Manifest, Paketformat,
+- `[x]` **7. Modul-Manifest & Lifecycle** — Manifest, Paketformat,
   Install/Aktivieren/Deaktivieren/Update/Löschen, Abhängigkeits-/
   Kompatibilitätsprüfung, Signatur/Vertrauensanker, Advisory-Lock.
-  *(Kap. 24, 23.10, 24.18)*
+  *(Kap. 24, 23.10, 24.18)* — Update + Signatur/Lizenz = Step 8.
 - `[ ]` **8. Marketplace / Lizenz / Update-Manager** — Marketplace-Komm.,
   Signaturprüfung, Offline-first-Lizenz, Core-/Modul-Update,
   Wiederherstellungspunkt. *(Kap. 28, 24.9.2)*
@@ -311,6 +311,44 @@ Worker → done); Integrations-Selbsttest (7 Checks): Erfolg, Retry→Dead-Lette
 - **Core-eigene Events** (z. B. „Benutzer angelegt") optional; Infrastruktur steht,
   konkrete Emission folgt nach Bedarf (Module ab Step 7).
 
+### Schritt 7 — abgeschlossen & verifiziert (2026-06-05)
+
+**Geprüfte Kapitel:** 24.2–24.16 (Paket/Manifest/Lifecycle/Audit), 24.7.3
+(Typregeln), 24.18 + 30.7 (Advisory-Lock, Entscheidung 165/178), 26.6.4
+(Versions-Matching). Nutzer-Scope: Update + Signatur/Lizenz → Step 8.
+
+**Soll → Ist:**
+- Datenmodell `modules` (Zustandsautomat, Manifest-Kopie jsonb),
+  `module_dependencies`, `module_migrations_log`. ✔
+- `ModuleManifest` (Parser + Validierung: Pflichtfelder, SemVer, Typregel
+  „Main ohne contracts_used", Core-Kompatibilität). ✔
+- `ModuleLifecycle` (install/activate/deactivate/delete) **unter Advisory-Lock**
+  (`pg_try_advisory_lock`, knotenübergreifend serialisiert); treibt die Step-5-
+  Registry an (contracts_provided registrieren; Provider/Collector/Listener/
+  Consumer bei Aktivierung; Deaktivierung → Registrierungen deaktivieren +
+  Bindings widerrufen; Delete → Contracts/Registrierungen/Schema/Dateien weg). ✔
+- **Modul-Migrationen** (SQL-Dateien, transaktional, im Modul-Schema `mod_<key>`,
+  getrackt). ✔
+- **Echtes Modul-Code-Laden:** eigener PSR-4-Autoloader (`ModuleAutoloader`);
+  aktive Module beim App-Bootstrap + per Worker-Wake registriert. ✔
+- Lifecycle vollständig **auditiert** (Kap. 24.16, referenzrobust). ✔
+- `module`-CLI (list/install/activate/deactivate/delete) bis GUI (Step 10). ✔
+
+**Container-Lauf / Test (Beispiel-Modul `sample_module`):** install (Schema +
+Migration `ping_log` + Contract), activate (Listener registriert), **E2E**:
+Ping-Event → Worker lädt Modul-Listener → Eintrag in `mod_sample_module.ping_log`,
+Event `done`; deactivate → kein neuer Eintrag (Fallback); delete → restloses
+Cleanup; Manifest-Validierung greift; HTTP 200.
+
+**Offene Punkte / Beobachtungen:**
+- **Update-Operation** (Kap. 24.13) + **echte Signatur-/Lizenzprüfung** (24.9,
+  Vertrauensanker/Sperrliste) + **Wiederherstellungspunkt** (pg_dump, 28.14.2) +
+  **Marketplace** → **Step 8** (Signatur ist als Hook `verifySignature()` vorbereitet).
+- **Modul-Schema-Trennung** (`mod_<key>`) hier umgesetzt (über E5 hinaus; das
+  Dokument ließ Schema-Trennung als „spätere Version" offen — wir trennen sauber).
+- Admin-GUI für Modulverwaltung/Abhängigkeitsgraph → **Step 10**.
+- Installation aus lokalem Verzeichnis; Paket-Upload/ZIP-Entpacken → Step 8/10.
+
 ## Entscheidungs-Log (autonome Entscheidungen)
 
 | Nr. | Schritt | Entscheidung | Begründung (Anforderungskontext) |
@@ -332,6 +370,7 @@ Worker → done); Integrations-Selbsttest (7 Checks): Erfolg, Retry→Dead-Lette
 | E15 | 2 | Anmeldeschutz-Defaults: 10 Fehlversuche / 15-min-Fenster, dann temporäre Sperre (`LoginThrottle`, persistiert in `auth_failures`). | Entscheidung 162 fordert „sicheren Vorgabewert ohne Konfiguration". Konkrete Schwellen doku-offen → autonom; ab Step 4 DB-konfigurierbar. |
 | E16 | 3 | Audit-Log-Design: (a) **Personen per auflösbarer UUID** (kein denormalisierter Klartext-Name/E-Mail) → Anonymisierung wirkt ohne Log-Mutation; **textuelle Schnappschüsse nur für nicht-personenbezogene** Entitäten (Module/Config) = referenzrobust. (b) **Unveränderlichkeit per Trigger** (UPDATE/DELETE blockiert; Bypass nur via `SET LOCAL app.allow_audit_mutation`). (c) **Monats-RANGE-Partitionierung** + DEFAULT-Partition; `audit_partition`-Command stellt Monatspartitionen im Entrypoint sicher. (d) `AuditLogger`-Service schreibt transaktional. | Vereint Referenzrobustheit (24.16.1) und DSGVO-Anonymisierung (27.15.3) ohne Konflikt mit der Unveränderlichkeit (20.6). Partitionierung gem. 30.8/Entscheidung 179. Konkrete Felder/Platzhalter doku-offen → autonom. |
 | E17 | 3 | nginx löst den Upstream `core` zur Laufzeit über den Docker-Resolver (`127.0.0.11`) + Variable im `fastcgi_pass` auf, statt die IP beim Start zu cachen. | Behebt 502 „Connection refused" nach `docker compose up -d --force-recreate core` (neue Container-IP). Robustheit für Recreate/Autostart. Verifiziert. |
+| E21 | 7 | Module = lokales **Verzeichnis** (Install kopiert nach `core/modules/<key>`, gitignored); Modul-Tabellen in eigenem Schema **`mod_<key>`** (über E5 hinaus, sauberer als „public for now"); **Modul-Migrationen als versionierte SQL-Dateien** (Core-gesteuert, transaktional, getrackt) statt per-Modul-Phinx; **eigener PSR-4-Autoloader** für Modul-Code; Lifecycle-Lock via `pg_try_advisory_lock` (klarer Fehler bei Belegung). Update/Signatur/Lizenz = Step 8. | Doku ließ Datenmodell/Paketdetails/Schema-Trennung offen → autonom. SQL-Migrationen umgehen die fragile per-Modul-Phinx-Pfadauflösung; Schema-Trennung passt zu E5/RLS (Entscheidung 175). Vom Nutzer bestätigt: echtes Laden + Update→Step 8. |
 | E20 | 6 | Outbox: `pg_notify` **innerhalb der Transaktion** (Zustellung auf COMMIT, kein After-Commit-Hook nötig). Worker-Defaults: max_attempts=5, exponentielles Backoff (Basis 5 s, cap 1 h), Reclaim 5 min, Poll-Fallback 5 s, Batch 50, Channel `core_event_outbox`. Claim per `FOR UPDATE SKIP LOCKED`. `pcntl`-Graceful-Shutdown. | Kap. 26.9.2/30.6, Entscheidung 168/177. Konkrete Retry-/Backoff-Werte doku-offen → autonom. NOTIFY-in-Transaktion ist PostgreSQL-Standardverhalten und vermeidet Race/Verlust. |
 | E19 | 5 | Registry referenziert Module per **`module_key` (Text, kein FK)**; **Capability-Bindings persistiert** + Laufzeit-Handle (Guard). Contract-Namen Konvention `modul.typ.name` (unique). Slot-Exklusivität per partiellem Unique-Index. Versions-Matching nur exakt/expliziter Bereich (26.6.4). | Entkoppelt Step 5 von der modules-Tabelle (Step 7); Bindings auditierbar/debugbar. Vom Nutzer bestätigt. Konkretes Datenmodell doku-offen → autonom. |
 | E18 | 4 | Konfigurationsspeicher `core.settings`: Modell (namespace, config_key, `value` jsonb, `value_encrypted`, `is_secret`); **sichere Defaults im Code-Katalog** (`SettingsCatalog`, greifen ohne DB-Eintrag) inkl. Typ-/Bereichsvalidierung; **Secrets AES-256-GCM** (Schlüssel aus `Security.encryptionKey`/env, nie aus DB); Audit `config.update` (entity_type `core_setting`) **ohne** Klartext bei Secrets; Footprint. „Deaktivieren statt löschen" gilt für Konfig-*objekte*, nicht Setting-*werte* (kein `active`). | Setzt Kap. 1.4/23.3 + Entscheidungen 159/162/164/176 um. Konkrete Felder/Defaults/Validierung waren doku-offen → autonom. |

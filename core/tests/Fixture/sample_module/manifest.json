@@ -1,0 +1,29 @@
+{
+    "id": "sample_module",
+    "name": "Sample Module",
+    "version": "1.0.0",
+    "type": "main",
+    "edition": "free",
+    "description": "Beispielmodul fuer den Lifecycle-/Registry-/Outbox-E2E-Test.",
+    "publisher": "Fertura",
+    "php_namespace": "SampleModule",
+    "core_compatibility": ">=1.0.0 <2.0.0",
+    "requires_license": false,
+    "dependencies": [],
+    "contracts_provided": [
+        {
+            "name": "sample_module.event.ping",
+            "type": "event",
+            "version": "1.0.0",
+            "description": "Wird beim Ping ausgeloest."
+        }
+    ],
+    "contracts_used": [],
+    "events_registered": [
+        {
+            "contract": "sample_module.event.ping",
+            "version": ">=1.0.0 <2.0.0",
+            "class": "SampleModule\\Listener\\PingListener"
+        }
+    ]
+}

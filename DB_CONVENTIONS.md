@@ -186,3 +186,19 @@ Integritäts-/Zugriffsregeln werden, wo möglich, **in der DB** erzwungen:
   `dead_letter`; Reclaim hängender `processing`-Events.
 - **Listener** implementieren `App\Event\EventListenerInterface` und MÜSSEN
   **idempotent** sein (mindestens-einmal-Zustellung); Dedup über `event_id`.
+
+## 16. Module & Lifecycle (Step 7, Kap. 24; E21)
+
+- Stammdaten in `core.modules` (Zustandsautomat: `installed_inactive` →
+  `active` ↔ `inactive`, Fehlerzustände); `module_dependencies`,
+  `module_migrations_log`. Registrierungen = Step-5-`contract_registrations`.
+- **Modul-Tabellen** liegen im Schema **`mod_<module_key>`** (Install legt es an;
+  Delete droppt es CASCADE). Gruppen-/bereichs-scoped Modultabellen MÜSSEN RLS
+  führen (Entscheidung 175, Step 9).
+- **Modul-Migrationen**: versionierte SQL-Dateien `migrations/NNN_name.sql` mit
+  `-- @DOWN`-Trenner; vom Core transaktional im Modul-Schema ausgeführt + in
+  `module_migrations_log` getrackt. Reversibel; expand/contract.
+- **Manifest** (`manifest.json`): Pflichtfelder Kap. 24.4; Main-Module ohne
+  `contracts_used`. Modul-Code wird per PSR-4 (`php_namespace` → `src/`) geladen.
+- Lifecycle-verändernde Operationen laufen unter **PostgreSQL-Advisory-Lock**
+  (knotenübergreifend serialisiert).

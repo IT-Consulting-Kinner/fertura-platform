@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Service\Event;
 
 use App\Event\EventListenerInterface;
+use App\Service\Module\ModuleAutoloader;
 use App\Service\Registry\ContractRegistry;
 use Cake\Datasource\ConnectionManager;
 use Closure;
@@ -191,6 +192,8 @@ class OutboxWorker
 
         while ($this->running) {
             try {
+                // Neu aktivierte Modul-Listener nachladbar machen (Step 7).
+                ModuleAutoloader::registerActiveModules();
                 $reclaimed = $this->reclaimStuck();
                 if ($reclaimed > 0) {
                     $this->log("$reclaimed haengende Events zurueckgesetzt.");
