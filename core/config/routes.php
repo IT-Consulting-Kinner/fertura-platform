@@ -50,16 +50,18 @@ return function (RouteBuilder $routes): void {
     $routes->setRouteClass(DashedRoute::class);
 
     $routes->scope('/', function (RouteBuilder $builder): void {
-        /*
-         * Here, we are connecting '/' (base path) to a controller called 'Pages',
-         * its action called 'display', and we pass a param to select the view file
-         * to use (in this case, templates/Pages/home.php)...
-         */
         $builder->connect('/', ['controller' => 'Pages', 'action' => 'display', 'home']);
 
-        /*
-         * ...and connect the rest of 'Pages' controller's URLs.
-         */
+        // Authentifizierung (Step 10).
+        $builder->connect('/login', ['controller' => 'Auth', 'action' => 'login']);
+        $builder->connect('/logout', ['controller' => 'Auth', 'action' => 'logout']);
+
+        // Admin-Bereich (scoped admin, Kap. 27.3.1).
+        $builder->prefix('Admin', function (RouteBuilder $admin): void {
+            $admin->connect('/', ['controller' => 'Dashboard', 'action' => 'index']);
+            $admin->fallbacks();
+        });
+
         $builder->connect('/pages/*', 'Pages::display');
 
         /*

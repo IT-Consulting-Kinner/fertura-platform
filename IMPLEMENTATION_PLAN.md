@@ -54,7 +54,7 @@ für Verifikation ist das **Plattform-Anforderungsdokument v6.28**
 - `[x]` **9. BREAD + RLS-Infrastruktur** — BREAD-Ressourcen/Aggregation
   (Core-Seite), RLS-Konventionen + Session-Kontext, Bypass-Pfade.
   *(Kap. 25, 30.3)*
-- `[ ]` **10. Admin-Bereich (GUI)** — SSR/Bootstrap: Benutzer/Gruppen/
+- `[x]` **10. Admin-Bereich (GUI)** — SSR/Bootstrap: Benutzer/Gruppen/
   Administrationsbereiche, Registry-Sichten, Modulverwaltung,
   Abhängigkeitsgraph, Update-Oberfläche. *(Kap. 23.8, 27.17, 28.17)*
 - `[ ]` **11. Öffentliche Modul-Interfaces / Integrations-Infra** —
@@ -440,6 +440,52 @@ Rolle (G1→2, G2→1, ohne Kontext→0, Superuser-Bypass→3); Resource-Hook; H
 - **Konkrete Modul-Policies + Ressourcen** liefern die Module; Admin-GUI für
   Gruppen-Ressourcen-Zuordnung → **Step 10**.
 
+### Schritt 10 — abgeschlossen & verifiziert (2026-06-05)
+
+**Geprüfte Kapitel:** 23.8 (Admin-GUI/SSR), 27.3.1/27.16.2 (scoped Administration,
+Entscheidung 170: 6 feste Bereiche, Sichtbarkeit = serverseitige Berechtigung),
+27.17 (Benutzer-/Gruppen-/Rechteverwaltung), 28.17 (Modul-/Update-Oberfläche).
+
+**Soll → Ist:**
+- **Login/Logout im Request-Pfad** (`AuthController`, `/login`+`/logout`): Form-
+  Auth + Session, `LoginThrottle` (Sperre/Reset/Record), `unauthenticatedRedirect`
+  auf `/login`. `AppController` lädt die Authentication-Komponente. ✔
+- **Scoped-Admin-Basis** (`Admin\AdminController`): erzwingt serverseitig
+  angemeldet **und** Halten des geforderten Bereichs (`requiredArea`); leere
+  Bereichsmenge → `ForbiddenException`; Navigation wird auf gehaltene Bereiche
+  gescoped. ✔
+- **Alle 6 Bereiche voll** (Nutzerwahl): Benutzer (Liste/Detail/anlegen/
+  aktivieren/deaktivieren/**Administrationsbereich-Zuweisung**/**Anonymisierung**),
+  Gruppen (anlegen/aktiv-schalten/**Mitgliedschaft**/**BREAD-Ressourcenrechte**
+  via `PermissionService`), Module (Liste/aktivieren/deaktivieren/entfernen +
+  **Abhängigkeitsanzeige**), Registry (Contracts/Registrierungen/Bindings, lesend),
+  Marketplace (Status/**Sync**) + Lizenzen (Status/**Upload+Install**), Updates
+  (Historie + Modul-/Core-Update auslösen), Konfiguration (Settings-Katalog
+  bearbeiten, Secrets maskiert). ✔
+- **Audit-Sicht** (jeder Admin, kein fester Bereich): gefilterte Liste
+  (Aktion/Entitätstyp/Modul), Akteur per UUID→Username nur zur Anzeige aufgelöst. ✔
+- **Bootstrap 5 gebündelt/offline** (Nutzerwahl): `core/webroot/css/
+  bootstrap.min.css` vendored; `admin`/`login`-Layout. ✔
+
+**Container-Lauf / Test:**
+- `step10test.sh`: unauth `/admin`→**302**; Login-Flow (CSRF 152 Zeichen) POST
+  `/login`→**302**; alle 10 Admin-Seiten authentifiziert **200**
+  (Dashboard/Users/Groups/Modules/Registry/Updates/Marketplace/Licenses/Config/
+  Audit).
+- `step10scope.sh`: **delegierter Admin** mit nur `user_group_admin` →
+  users/groups/audit **200**, die 5 fremden Bereiche **403** (serverseitig).
+  Schreibaktionen als Voll-Admin: Gruppe anlegen (302, DB-Zeile), `set-permission`
+  (302, BREAD-Zeile `b=t,r=t`), `toggle-area` (302, Bereich ergänzt).
+
+**Offene Punkte / Beobachtungen / autonome Entscheidungen:**
+- Modul-/Core-**Installation** bleibt CLI-getrieben (signierte Pakete); die GUI
+  steuert Lebenszyklus/Update aus bereitgestelltem Paketpfad. Begründung: sichere
+  Paketherkunft/Signatur, kein Upload großer Artefakte durch die GUI. (E27)
+- Settings-Editor deckt den **bekannten Katalog** ab (`SettingsCatalog::all()` neu);
+  unbekannte Schlüssel sind bewusst nicht editierbar (Typ-/Bereichsvalidierung).
+- CSRF-Testaufrufe benötigen `--data-urlencode` (Token enthält base64-Zeichen);
+  reines `-d` verfälscht `+`→Leerzeichen (Test-Artefakt, kein App-Bug).
+
 ## Entscheidungs-Log (autonome Entscheidungen)
 
 | Nr. | Schritt | Entscheidung | Begründung (Anforderungskontext) |
@@ -461,6 +507,8 @@ Rolle (G1→2, G2→1, ohne Kontext→0, Superuser-Bypass→3); Resource-Hook; H
 | E15 | 2 | Anmeldeschutz-Defaults: 10 Fehlversuche / 15-min-Fenster, dann temporäre Sperre (`LoginThrottle`, persistiert in `auth_failures`). | Entscheidung 162 fordert „sicheren Vorgabewert ohne Konfiguration". Konkrete Schwellen doku-offen → autonom; ab Step 4 DB-konfigurierbar. |
 | E16 | 3 | Audit-Log-Design: (a) **Personen per auflösbarer UUID** (kein denormalisierter Klartext-Name/E-Mail) → Anonymisierung wirkt ohne Log-Mutation; **textuelle Schnappschüsse nur für nicht-personenbezogene** Entitäten (Module/Config) = referenzrobust. (b) **Unveränderlichkeit per Trigger** (UPDATE/DELETE blockiert; Bypass nur via `SET LOCAL app.allow_audit_mutation`). (c) **Monats-RANGE-Partitionierung** + DEFAULT-Partition; `audit_partition`-Command stellt Monatspartitionen im Entrypoint sicher. (d) `AuditLogger`-Service schreibt transaktional. | Vereint Referenzrobustheit (24.16.1) und DSGVO-Anonymisierung (27.15.3) ohne Konflikt mit der Unveränderlichkeit (20.6). Partitionierung gem. 30.8/Entscheidung 179. Konkrete Felder/Platzhalter doku-offen → autonom. |
 | E17 | 3 | nginx löst den Upstream `core` zur Laufzeit über den Docker-Resolver (`127.0.0.11`) + Variable im `fastcgi_pass` auf, statt die IP beim Start zu cachen. | Behebt 502 „Connection refused" nach `docker compose up -d --force-recreate core` (neue Container-IP). Robustheit für Recreate/Autostart. Verifiziert. |
+| E27 | 10 | Admin-GUI: **SSR mit gebündeltem Bootstrap 5** (offline/vendored, Nutzerwahl); **alle 6 Administrationsbereiche voll ausgebaut** (Nutzerwahl). Scoped-Enforcement serverseitig in `Admin\AdminController::beforeFilter` (Bereichsbesitz). Modul-/Core-**Installation** bleibt CLI (signierte Pakete); GUI steuert Lebenszyklus/Update aus Paketpfad. Lizenz-Upload (Datei oder JSON) in der GUI. Audit-Sicht für jeden Admin (kein fester Bereich). | Kap. 23.8/27.3.1/27.16.2, Entscheidung 170. Offline-Bündelung = keine CDN-Abhängigkeit im Betrieb. CLI-Install = sichere Paketherkunft. Vom Nutzer bestätigt (Bootstrap gebündelt, alle 6 Bereiche voll). |
+| E28 | 10 | Login/Logout im HTTP-Pfad nachgezogen: `unauthenticatedRedirect`/Form-`loginUrl` auf `/login`, `LoginThrottle` an POST `/login` gekoppelt. `SettingsCatalog::all()` als Enumerator für den Settings-Editor ergänzt. | Schließt die in Step 2 vermerkte „Login-Formular → Step 10"-Lücke. Editor braucht Katalog-Enumeration; Werte werden weiter gegen den Katalog validiert. |
 | E26 | 9 | BREAD additiv (Spalten can_browse/read/add/edit/delete + extra_actions jsonb); RLS-Kontext via **SET LOCAL + Transaktion-pro-Request** (vom Nutzer bestätigt); Core-Helfer-Funktionen für Policies; **Bypass über privilegierte DB-Rolle** (nicht über settbare GUC). App muss als NOBYPASSRLS-Rolle laufen (Deployment-Aufgabe). | Kap. 25/30.3, Entscheidung 124/175. SET-LOCAL-Variante = doku-konform/pooling-sicher. Rolle statt GUC = sicher (kein Self-Bypass). |
 | E22 | 8 | **Ed25519** (libsodium) für Paket-/Lizenz-/CRL-/Anker-Signaturen. Paket-Digest über **alle Dateien** (außer signature.json) → jede Manipulation (Manifest oder Code) wird erkannt. | Modern/schnell, nativ verfügbar. Doku-offen → autonom, vom Nutzer bestätigt. |
 | E23 | 8 | Lizenz = signierte JSON-Lizenzdatei (`payload`+`signature`+`key_id`), offline gegen Vertrauensanker geprüft; Felder Modulbezug/Gültigkeit/Karenzfenster/Online-Enforcement. Ablauf → Aktivierung blockiert, kein Datenverlust. | Setzt Entscheidung 158/Kap. 28.7 um. Format doku-offen → autonom. |

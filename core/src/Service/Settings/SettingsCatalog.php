@@ -41,6 +41,16 @@ class SettingsCatalog
         return self::DEFINITIONS[$namespace][$key] ?? null;
     }
 
+    /**
+     * Alle bekannten Definitionen (für die Verwaltungs-GUI, Step 10).
+     *
+     * @return array<string, array<string, array<string, mixed>>>
+     */
+    public function all(): array
+    {
+        return self::DEFINITIONS;
+    }
+
     public function default(string $namespace, string $key): mixed
     {
         return self::DEFINITIONS[$namespace][$key]['default'] ?? null;
