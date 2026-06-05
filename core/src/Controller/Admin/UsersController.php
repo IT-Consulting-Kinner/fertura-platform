@@ -5,6 +5,7 @@ namespace App\Controller\Admin;
 
 use App\Model\Entity\User;
 use App\Service\Identity\PasswordResetService;
+use App\Service\Mail\MailService;
 use Cake\Datasource\ConnectionManager;
 
 /**
@@ -77,7 +78,28 @@ class UsersController extends AdminController
 
             return $this->redirect(['action' => 'index']);
         }
-        ConnectionManager::get('default')->execute(
+        $conn = ConnectionManager::get('default');
+
+        if ($status === User::STATUS_DISABLED) {
+            // Selbst-Aussperr-Schutz (Kap. 27.14/27.15).
+            if ($id === $this->currentUserId()) {
+                $this->Flash->error('Sie können sich nicht selbst deaktivieren.');
+
+                return $this->redirect(['action' => 'view', $id]);
+            }
+            if ($this->isLastUserGroupAdmin($id)) {
+                $this->Flash->error('Letzter Administrator der Benutzer- & Gruppenverwaltung — Deaktivierung blockiert.');
+
+                return $this->redirect(['action' => 'view', $id]);
+            }
+        }
+        if ($status === User::STATUS_ACTIVE && !$this->hasPassword($id)) {
+            $this->Flash->error('Benutzer hat noch kein Passwort. Bitte Einladungslink senden oder Passwort setzen.');
+
+            return $this->redirect(['action' => 'view', $id]);
+        }
+
+        $conn->execute(
             'UPDATE users SET status = :s, deactivated_at = CASE WHEN :s = \'disabled\' THEN now() ELSE NULL END WHERE id = :id',
             ['s' => $status, 'id' => $id],
         );
@@ -93,6 +115,12 @@ class UsersController extends AdminController
         $conn = ConnectionManager::get('default');
         $exists = $conn->execute('SELECT 1 FROM user_admin_areas WHERE user_id = :u AND admin_area_key = :a', ['u' => $id, 'a' => $area])->fetch();
         if ($exists) {
+            // Selbst-Aussperr-Schutz: letzten user_group_admin-Bereich nicht entziehen.
+            if ($area === 'user_group_admin' && $this->isLastUserGroupAdmin($id)) {
+                $this->Flash->error('Letzter Administrator der Benutzer- & Gruppenverwaltung — Entzug blockiert.');
+
+                return $this->redirect(['action' => 'view', $id]);
+            }
             $conn->execute('DELETE FROM user_admin_areas WHERE user_id = :u AND admin_area_key = :a', ['u' => $id, 'a' => $area]);
             $this->audit()->log('admin_access.revoke', 'user', $id, ['newValue' => ['area' => $area]]);
         } else {
@@ -104,17 +132,57 @@ class UsersController extends AdminController
         return $this->redirect(['action' => 'view', $id]);
     }
 
+    public function edit(string $id)
+    {
+        $users = $this->fetchTable('Users');
+        $user = $users->find()->where(['id' => $id])->first();
+        if ($user === null || $user->get('status') === User::STATUS_ANONYMIZED) {
+            $this->Flash->error('Benutzer nicht verfügbar.');
+
+            return $this->redirect(['action' => 'index']);
+        }
+        if ($this->request->is(['post', 'put', 'patch'])) {
+            $user = $users->patchEntity($user, $this->request->getData(), [
+                'fields' => ['username', 'email', 'first_name', 'last_name'],
+            ]);
+            if ($users->save($user)) {
+                $this->audit()->log('user.update', 'user', $id, ['newValue' => ['username' => $user->get('username')]]);
+                $this->Flash->success('Benutzer aktualisiert.');
+
+                return $this->redirect(['action' => 'view', $id]);
+            }
+            $this->Flash->error('Aktualisierung fehlgeschlagen (Eindeutigkeit/Validierung prüfen).');
+        }
+        $this->set(compact('user'));
+
+        return null;
+    }
+
     /**
-     * Erzeugt einen Einladungs-/Passwort-Setz-Link (Kap. 27.2/27.15). Der Link
-     * wird dem Administrator angezeigt (E-Mail-Versand = Modul-Scope).
+     * Erzeugt einen Einladungs-/Passwort-Setz-Link (Kap. 27.2/27.15) und versendet
+     * ihn per E-Mail (Core-MailService). Der Link wird zusätzlich angezeigt
+     * (Fallback, falls kein Mailversand möglich ist).
      */
     public function invite(string $id)
     {
         $this->request->allowMethod('post');
+        $conn = ConnectionManager::get('default');
+        $row = $conn->execute('SELECT username, email, status FROM users WHERE id = :id', ['id' => $id])->fetch('assoc');
+        if ($row === false || $row['status'] === User::STATUS_ANONYMIZED) {
+            $this->Flash->error('Benutzer nicht verfügbar.');
+
+            return $this->redirect(['action' => 'index']);
+        }
         $actor = $this->identity()?->getIdentifier();
         $token = (new PasswordResetService())->create($id, 'invite', 72, $actor !== null ? (string)$actor : null);
         $url = (string)$this->request->getUri()->withPath('/set-password')->withQuery('token=' . $token);
-        $this->Flash->success('Einladungslink (72 h gültig): ' . $url);
+
+        $sent = (new MailService())->sendInvitation((string)$row['email'], (string)$row['username'], $url);
+        if ($sent) {
+            $this->Flash->success('Einladung per E-Mail an ' . h($row['email']) . ' gesendet. Link (72 h): ' . $url);
+        } else {
+            $this->Flash->success('Einladungslink (72 h gültig): ' . $url);
+        }
 
         return $this->redirect(['action' => 'view', $id]);
     }
@@ -152,6 +220,16 @@ class UsersController extends AdminController
     public function anonymize(string $id)
     {
         $this->request->allowMethod('post');
+        if ($id === $this->currentUserId()) {
+            $this->Flash->error('Sie können sich nicht selbst anonymisieren.');
+
+            return $this->redirect(['action' => 'view', $id]);
+        }
+        if ($this->isLastUserGroupAdmin($id)) {
+            $this->Flash->error('Letzter Administrator der Benutzer- & Gruppenverwaltung — Anonymisierung blockiert.');
+
+            return $this->redirect(['action' => 'view', $id]);
+        }
         $users = $this->fetchTable('Users');
         $user = $users->find()->where(['id' => $id])->first();
         if ($user !== null && $users->anonymize($user)) {
@@ -161,5 +239,45 @@ class UsersController extends AdminController
         }
 
         return $this->redirect(['action' => 'index']);
+    }
+
+    private function currentUserId(): ?string
+    {
+        $id = $this->identity()?->getIdentifier();
+
+        return $id !== null ? (string)$id : null;
+    }
+
+    private function hasPassword(string $id): bool
+    {
+        $row = ConnectionManager::get('default')->execute(
+            'SELECT password_hash FROM users WHERE id = :id',
+            ['id' => $id],
+        )->fetch('assoc');
+
+        return $row !== false && $row['password_hash'] !== null && $row['password_hash'] !== '';
+    }
+
+    /**
+     * Hält dieser (aktive) Benutzer den Bereich user_group_admin und wäre er der
+     * letzte aktive Träger? Dann darf er nicht entzogen/deaktiviert werden.
+     */
+    private function isLastUserGroupAdmin(string $id): bool
+    {
+        $conn = ConnectionManager::get('default');
+        $holds = $conn->execute(
+            "SELECT 1 FROM user_admin_areas WHERE user_id = :id AND admin_area_key = 'user_group_admin'",
+            ['id' => $id],
+        )->fetch();
+        if ($holds === false) {
+            return false;
+        }
+        $others = (int)$conn->execute(
+            "SELECT count(DISTINCT ua.user_id) FROM user_admin_areas ua JOIN users u ON u.id = ua.user_id "
+            . "WHERE ua.admin_area_key = 'user_group_admin' AND u.status = 'active' AND ua.user_id <> :id",
+            ['id' => $id],
+        )->fetch()[0];
+
+        return $others === 0;
     }
 }

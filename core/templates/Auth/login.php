@@ -14,3 +14,4 @@
     </div>
     <?= $this->Form->button('Anmelden', ['class' => 'btn btn-primary w-100']) ?>
 <?= $this->Form->end() ?>
+<p class="text-center mt-3 mb-0"><a href="/forgot-password">Passwort vergessen?</a></p>

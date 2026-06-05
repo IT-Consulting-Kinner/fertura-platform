@@ -25,6 +25,10 @@ class SettingsCatalog
             'session.timeout_minutes' => ['type' => 'int', 'default' => 120, 'min' => 1, 'max' => 43200],
             // Beispiel für ein verschlüsseltes Geheimnis.
             'smtp.password' => ['type' => 'string', 'default' => null, 'secret' => true],
+            // System-/Identitätsmails (Einladung, Passwort-Reset).
+            'mail.enabled' => ['type' => 'bool', 'default' => true],
+            'mail.from_address' => ['type' => 'string', 'default' => 'no-reply@fertura.local'],
+            'mail.from_name' => ['type' => 'string', 'default' => 'Fertura'],
             // Marketplace / Signatur / Wartung (Step 8).
             'require_module_signature' => ['type' => 'bool', 'default' => true],
             'crl_max_age_days' => ['type' => 'int', 'default' => 7, 'min' => 0, 'max' => 365],

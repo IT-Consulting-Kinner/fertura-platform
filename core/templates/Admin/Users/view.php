@@ -10,7 +10,12 @@ $anon = $user['status'] === 'anonymized';
 ?>
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h1 class="h3 mb-0"><?= h($user['username']) ?></h1>
-    <?= $this->Html->link('&laquo; Zur Liste', ['action' => 'index'], ['class' => 'btn btn-outline-secondary btn-sm', 'escape' => false]) ?>
+    <div class="d-flex gap-2">
+        <?php if ($user['status'] !== 'anonymized'): ?>
+            <?= $this->Html->link('Bearbeiten', ['action' => 'edit', $user['id']], ['class' => 'btn btn-outline-primary btn-sm']) ?>
+        <?php endif; ?>
+        <?= $this->Html->link('&laquo; Zur Liste', ['action' => 'index'], ['class' => 'btn btn-outline-secondary btn-sm', 'escape' => false]) ?>
+    </div>
 </div>
 
 <div class="row g-4">

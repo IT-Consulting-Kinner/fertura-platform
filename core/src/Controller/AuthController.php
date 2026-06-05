@@ -5,6 +5,8 @@ namespace App\Controller;
 
 use App\Auth\LoginThrottle;
 use App\Service\Identity\PasswordResetService;
+use App\Service\Mail\MailService;
+use Cake\Datasource\ConnectionManager;
 use Cake\Event\EventInterface;
 
 /**
@@ -16,7 +18,7 @@ class AuthController extends AppController
     public function initialize(): void
     {
         parent::initialize();
-        $this->Authentication->allowUnauthenticated(['login', 'setPassword']);
+        $this->Authentication->allowUnauthenticated(['login', 'setPassword', 'forgotPassword']);
     }
 
     public function beforeFilter(EventInterface $event): void
@@ -61,6 +63,36 @@ class AuthController extends AppController
         $this->Flash->success('Abgemeldet.');
 
         return $this->redirect('/login');
+    }
+
+    /**
+     * Self-Service „Passwort vergessen" (Kap. 27.2/27.15): erzeugt einen
+     * Reset-Token und versendet den Link per E-Mail (Core-MailService). Die
+     * Antwort ist immer neutral (keine Konto-Enumeration).
+     */
+    public function forgotPassword()
+    {
+        if ($this->request->is('post')) {
+            $q = trim((string)$this->request->getData('identifier'));
+            if ($q !== '') {
+                $row = ConnectionManager::get('default')->execute(
+                    'SELECT id, username, email FROM users '
+                    . 'WHERE (lower(username) = lower(:q) OR lower(email) = lower(:q)) '
+                    . "AND status IN ('active', 'invited') LIMIT 1",
+                    ['q' => $q],
+                )->fetch('assoc');
+                if ($row !== false) {
+                    $token = (new PasswordResetService())->create((string)$row['id'], 'reset', 72);
+                    $url = (string)$this->request->getUri()->withPath('/set-password')->withQuery('token=' . $token);
+                    (new MailService())->sendPasswordReset((string)$row['email'], (string)$row['username'], $url);
+                }
+            }
+            $this->Flash->success('Falls ein Konto existiert, wurde eine E-Mail mit Anweisungen versendet.');
+
+            return $this->redirect('/login');
+        }
+
+        return null;
     }
 
     /**
