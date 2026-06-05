@@ -27,6 +27,10 @@ class UsersTable extends Table
         $this->setDisplayField('username');
         $this->setPrimaryKey('id');
 
+        // UUIDv7-PK (E6) + Akteur-Spalten created_by/updated_by (E8).
+        $this->addBehavior('UuidV7');
+        $this->addBehavior('Footprint');
+
         // Assoziationen (Groups, UserAdminAreas, ApiTokens) folgen mit ihren
         // Table-Klassen in spaeteren Schritten (allowFallbackClass=false).
     }

@@ -55,11 +55,12 @@ class User extends Entity
     ];
 
     /**
-     * Setzt das Passwort als bcrypt-Hash (gleicher Hasher wie der Identifier).
+     * Setzt das Passwort als Argon2id-Hash (Entscheidung E13). Der Identifier
+     * verifiziert via Fallback auch bcrypt-Hashes (zukunftssicher bei Import).
      */
     public function setPassword(string $plain): void
     {
-        $this->password_hash = (new DefaultPasswordHasher())->hash($plain);
+        $this->password_hash = (new DefaultPasswordHasher(['hashType' => PASSWORD_ARGON2ID]))->hash($plain);
     }
 
     public function isActive(): bool

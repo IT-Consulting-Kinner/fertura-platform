@@ -87,7 +87,7 @@ class CreateAdminCommand extends Command
             ->fetch('assoc');
 
         $io->success(sprintf(
-            'Volladministrator "%s" (ID %d) gespeichert, %s Administrationsbereiche zugewiesen.',
+            'Volladministrator "%s" (ID %s) gespeichert, %s Administrationsbereiche zugewiesen.',
             $user->username,
             $user->id,
             $count['c'] ?? '?',

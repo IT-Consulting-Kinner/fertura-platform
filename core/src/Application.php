@@ -16,6 +16,7 @@ declare(strict_types=1);
  */
 namespace App;
 
+use App\Middleware\FootprintMiddleware;
 use App\Middleware\HostHeaderMiddleware;
 use Authentication\AuthenticationService;
 use Authentication\AuthenticationServiceInterface;
@@ -104,7 +105,11 @@ class Application extends BaseApplication implements AuthenticationServiceProvid
 
             // Authentifizierung: stellt die Identitaet pro Request bereit.
             // Erzwingt selbst keinen Login; Controller/Adminbereich entscheiden.
-            ->add(new AuthenticationMiddleware($this));
+            ->add(new AuthenticationMiddleware($this))
+
+            // Footprint: uebernimmt die Identitaet in den ActorContext fuer
+            // created_by/updated_by (muss NACH der AuthenticationMiddleware laufen).
+            ->add(new FootprintMiddleware());
 
         return $middlewareQueue;
     }
@@ -135,6 +140,15 @@ class Application extends BaseApplication implements AuthenticationServiceProvid
                 'className' => 'Authentication.Orm',
                 'userModel' => 'Users',
                 'finder' => 'active',
+            ],
+            // Argon2id (E13) mit bcrypt-Fallback: Hashing erzeugt Argon2id,
+            // Verifikation akzeptiert auch bcrypt-Althashes.
+            'passwordHasher' => [
+                'className' => 'Authentication.Fallback',
+                'hashers' => [
+                    ['className' => 'Authentication.Default', 'hashType' => PASSWORD_ARGON2ID],
+                    ['className' => 'Authentication.Default'],
+                ],
             ],
         ]);
 
