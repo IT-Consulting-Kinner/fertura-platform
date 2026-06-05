@@ -40,4 +40,17 @@ class Db
         /** @var Connection */
         return ConnectionManager::get('default');
     }
+
+    /**
+     * Name der privilegierten Connection (für APIs, die einen Connection-Namen
+     * erwarten, z. B. cakephp/migrations). Fällt auf 'default' zurück.
+     */
+    public static function privilegedName(): string
+    {
+        if (env('DATABASE_URL') && ConnectionManager::getConfig('privileged') !== null) {
+            return 'privileged';
+        }
+
+        return 'default';
+    }
 }

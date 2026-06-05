@@ -27,6 +27,41 @@ class UpdatesController extends AdminController
         $this->set(compact('history', 'modules', 'coreVersion'));
     }
 
+    public function previewModule()
+    {
+        $this->request->allowMethod('post');
+        $key = (string)$this->request->getData('module_key');
+        $path = trim((string)$this->request->getData('source_path'));
+        try {
+            $preview = (new UpdateManager())->previewModule($key, $path);
+        } catch (\Throwable $e) {
+            $this->Flash->error('Vorschau fehlgeschlagen: ' . $e->getMessage());
+
+            return $this->redirect(['action' => 'index']);
+        }
+        $this->set(compact('preview'));
+        $this->set('sourcePath', $path);
+
+        return null;
+    }
+
+    public function previewCore()
+    {
+        $this->request->allowMethod('post');
+        $target = trim((string)$this->request->getData('target_version'));
+        $force = (bool)$this->request->getData('force');
+        try {
+            $preview = (new UpdateManager())->previewCore($target);
+        } catch (\Throwable $e) {
+            $this->Flash->error('Vorschau fehlgeschlagen: ' . $e->getMessage());
+
+            return $this->redirect(['action' => 'index']);
+        }
+        $this->set(compact('preview', 'force'));
+
+        return null;
+    }
+
     public function module()
     {
         $this->request->allowMethod('post');
