@@ -116,13 +116,28 @@ class MarketplaceClient
 
         $anchorDoc = $this->verifySigned($this->fetch('anchors.json'));
         if ($anchorDoc !== null) {
+            $chain = new \App\Service\Security\TrustChain($this->signer, $this->trust);
             foreach ($anchorDoc['anchors'] ?? [] as $a) {
+                $type = (string)($a['type'] ?? 'publisher');
+                // Publisher-Anker nur mit gültiger Root-Signatur übernehmen
+                // (Kette Root -> Publisher, Kap. 24.9.2) – Defense-in-Depth über
+                // die Dokument-Signatur hinaus.
+                if ($type === 'publisher') {
+                    $check = $chain->verifyPublisherCert($a);
+                    if (!$check['ok']) {
+                        $this->audit->log('trust_anchor.rejected', 'trust_anchor', (string)($a['key_id'] ?? ''), [
+                            'newValue' => ['reason' => $check['reason'] ?? 'Kette ungültig'],
+                        ]);
+                        continue;
+                    }
+                }
                 $this->trust->addAnchor(
                     (string)$a['key_id'],
                     (string)$a['public_key'],
-                    (string)($a['type'] ?? 'publisher'),
+                    $type,
                     $a['publisher'] ?? null,
                     $a['signed_by'] ?? null,
+                    $a['key_signature'] ?? null,
                 );
                 $anchors++;
             }

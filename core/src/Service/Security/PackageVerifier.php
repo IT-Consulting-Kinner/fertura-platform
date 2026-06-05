@@ -92,6 +92,17 @@ class PackageVerifier
             throw new PackageVerificationException('Publisher des Schlüssels passt nicht zum Manifest.');
         }
 
+        // Vertrauenskette (Kap. 24.9.2): Publisher-Anker müssen weiterhin von
+        // einem aktiven, nicht-widerrufenen Root signiert sein. So entzieht ein
+        // Root-Widerruf nachträglich allen darunter signierten Paketen das
+        // Vertrauen (Defense-in-Depth über die Insert-Zeit-Prüfung hinaus).
+        if ($anchor['key_type'] === 'publisher') {
+            $chain = (new TrustChain($this->signer, $this->trust))->verifyPublisherCert($anchor);
+            if (!$chain['ok']) {
+                throw new PackageVerificationException('Vertrauenskette ungültig: ' . ($chain['reason'] ?? 'unbekannt'));
+            }
+        }
+
         $digest = $this->packageDigest($dir);
         if (!$this->signer->verify($digest, (string)$sig['signature'], (string)$anchor['public_key'])) {
             throw new PackageVerificationException('Signatur ungültig (Paket manipuliert oder falscher Schlüssel).');

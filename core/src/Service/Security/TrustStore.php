@@ -22,14 +22,15 @@ class TrustStore
         string $type = 'root',
         ?string $publisher = null,
         ?string $signedBy = null,
+        ?string $keySignature = null,
     ): void {
         $this->conn()->execute(
-            'INSERT INTO trust_anchors (key_id, public_key, key_type, publisher, signed_by, active) '
-            . 'VALUES (:id, :pk, :t, :pub, :sb, true) '
+            'INSERT INTO trust_anchors (key_id, public_key, key_type, publisher, signed_by, key_signature, active) '
+            . 'VALUES (:id, :pk, :t, :pub, :sb, :ks, true) '
             . 'ON CONFLICT (key_id) DO UPDATE SET public_key = EXCLUDED.public_key, '
             . 'key_type = EXCLUDED.key_type, publisher = EXCLUDED.publisher, '
-            . 'signed_by = EXCLUDED.signed_by, active = true',
-            ['id' => $keyId, 'pk' => $publicKey, 't' => $type, 'pub' => $publisher, 'sb' => $signedBy],
+            . 'signed_by = EXCLUDED.signed_by, key_signature = EXCLUDED.key_signature, active = true',
+            ['id' => $keyId, 'pk' => $publicKey, 't' => $type, 'pub' => $publisher, 'sb' => $signedBy, 'ks' => $keySignature],
         );
     }
 
