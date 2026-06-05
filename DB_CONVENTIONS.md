@@ -172,3 +172,17 @@ Integritäts-/Zugriffsregeln werden, wo möglich, **in der DB** erzwungen:
   transaktional + Audit (`config.update`, ohne Klartext bei Secrets) + Footprint.
 - „Deaktivieren statt löschen" gilt für Konfig-*objekte* (Stammdaten), **nicht**
   für Setting-*werte* (dürfen auf Default zurückgesetzt werden).
+
+## 15. Event-Outbox (Step 6, Kap. 26.9.2 / 30.6; E20)
+
+- `core.event_outbox`, RANGE-partitioniert (created_at, monatlich; via
+  `audit_partition`). Status `pending|processing|done|dead_letter`.
+- **Emission:** Module/Core schreiben Events über `App\Service\Event\OutboxPublisher`
+  **innerhalb der Transaktion der fachlichen Änderung** (atomar). `pg_notify`
+  läuft in derselben Transaktion → Zustellung erst nach COMMIT.
+- **Worker** (`event_worker` = worker-Container): LISTEN/NOTIFY + Poll-Fallback;
+  Claim `FOR UPDATE SKIP LOCKED` (mehrere Worker möglich); Listener aus der
+  Registry, isoliert; Retry mit exponentiellem Backoff; nach `max_attempts` →
+  `dead_letter`; Reclaim hängender `processing`-Events.
+- **Listener** implementieren `App\Event\EventListenerInterface` und MÜSSEN
+  **idempotent** sein (mindestens-einmal-Zustellung); Dedup über `event_id`.

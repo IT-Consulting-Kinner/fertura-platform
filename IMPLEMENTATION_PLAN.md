@@ -41,7 +41,7 @@ für Verifikation ist das **Plattform-Anforderungsdokument v6.28**
 - `[x]` **5. Contract-/Capability-Registry** — 4 Contract-Typen
   (Resolver/Collector/Event/Service), Registry, Capability-Bindung,
   Validierung, Versions-Matching. *(Kap. 26, 26.6.4)*
-- `[ ]` **6. Event-Outbox + Worker** — transaktionaler Outbox,
+- `[x]` **6. Event-Outbox + Worker** — transaktionaler Outbox,
   LISTEN/NOTIFY, Worker-Command, mindestens-einmal/idempotent.
   *(Kap. 26.9.2, 30.6)*
 - `[ ]` **7. Modul-Manifest & Lifecycle** — Manifest, Paketformat,
@@ -277,6 +277,40 @@ Handle-Guard, Deaktivierungs-Fallback, Audit ab; HTTP 200.
 - **Lizenz-/Signaturprüfung** bei Registrierung → **Step 8** (Felder/Hooks bereit).
 - Registry-Ansicht im Admin-Bereich → **Step 10**.
 
+### Schritt 6 — abgeschlossen & verifiziert (2026-06-05)
+
+**Geprüfte Kapitel:** 26.9.2 (transaktionaler Outbox, Entscheidung 168), 30.6
+(LISTEN/NOTIFY, Entscheidung 177), 26.16 (Fehler-Isolation), 30.8 (Partitionierung).
+
+**Soll → Ist:**
+- `core.event_outbox` (RANGE-partitioniert über created_at; Status
+  pending/processing/done/dead_letter; attempt_count/max_attempts/available_at/
+  last_error). ✔
+- **Transaktionaler Outbox:** `OutboxPublisher.publish()` schreibt + `pg_notify`
+  in derselben Transaktion (Zustellung erst nach COMMIT). ✔
+- **Worker** (`event_worker`, jetzt der echte worker-Container): LISTEN/NOTIFY +
+  Poll-Fallback; Claim per `FOR UPDATE SKIP LOCKED` (mehrere Worker möglich);
+  Listener aus der Registry, **isoliert** aufgerufen. ✔
+- **Mindestens-einmal + Retry/Backoff + Dead-Letter:** Erfolg→done; Fehler→Retry
+  (exponentiell, Basis 5 s); nach max_attempts→dead_letter (sichtbar via
+  `outbox_status`, nie auto-gelöscht). Reclaim hängender 'processing' nach 5 min. ✔
+- `EventListenerInterface` (idempotente Listener); `pcntl`-Graceful-Shutdown. ✔
+- Partition-Command erzeugt nun Monatspartitionen für audit_log **und** event_outbox. ✔
+
+**Container-Lauf / Test:** Fresh-Rebuild (pcntl, Worker-Command); E2E (publish →
+Worker → done); Integrations-Selbsttest (7 Checks): Erfolg, Retry→Dead-Letter
+(attempt=max, last_error), Listener-Isolation; HTTP 200.
+
+**Offene Punkte / Beobachtungen / autonome Defaults:**
+- Konkrete Werte (doku-offen → autonom): max_attempts=5 (pro Event override),
+  Backoff exponentiell Basis 5 s (cap 1 h), Reclaim 5 min, Poll-Fallback 5 s,
+  Batch 50, Channel `core_event_outbox`. Ab späterer Stufe via Settings (Step 4)
+  konfigurierbar machbar.
+- **Health-Endpoint** (Worker-Aktualität, Dead-Letter-Zähler) → **Step 12**.
+- **Admin-GUI** für Dead-Letter/Retry → **Step 10** (CLI `outbox_status` bis dahin).
+- **Core-eigene Events** (z. B. „Benutzer angelegt") optional; Infrastruktur steht,
+  konkrete Emission folgt nach Bedarf (Module ab Step 7).
+
 ## Entscheidungs-Log (autonome Entscheidungen)
 
 | Nr. | Schritt | Entscheidung | Begründung (Anforderungskontext) |
@@ -298,5 +332,6 @@ Handle-Guard, Deaktivierungs-Fallback, Audit ab; HTTP 200.
 | E15 | 2 | Anmeldeschutz-Defaults: 10 Fehlversuche / 15-min-Fenster, dann temporäre Sperre (`LoginThrottle`, persistiert in `auth_failures`). | Entscheidung 162 fordert „sicheren Vorgabewert ohne Konfiguration". Konkrete Schwellen doku-offen → autonom; ab Step 4 DB-konfigurierbar. |
 | E16 | 3 | Audit-Log-Design: (a) **Personen per auflösbarer UUID** (kein denormalisierter Klartext-Name/E-Mail) → Anonymisierung wirkt ohne Log-Mutation; **textuelle Schnappschüsse nur für nicht-personenbezogene** Entitäten (Module/Config) = referenzrobust. (b) **Unveränderlichkeit per Trigger** (UPDATE/DELETE blockiert; Bypass nur via `SET LOCAL app.allow_audit_mutation`). (c) **Monats-RANGE-Partitionierung** + DEFAULT-Partition; `audit_partition`-Command stellt Monatspartitionen im Entrypoint sicher. (d) `AuditLogger`-Service schreibt transaktional. | Vereint Referenzrobustheit (24.16.1) und DSGVO-Anonymisierung (27.15.3) ohne Konflikt mit der Unveränderlichkeit (20.6). Partitionierung gem. 30.8/Entscheidung 179. Konkrete Felder/Platzhalter doku-offen → autonom. |
 | E17 | 3 | nginx löst den Upstream `core` zur Laufzeit über den Docker-Resolver (`127.0.0.11`) + Variable im `fastcgi_pass` auf, statt die IP beim Start zu cachen. | Behebt 502 „Connection refused" nach `docker compose up -d --force-recreate core` (neue Container-IP). Robustheit für Recreate/Autostart. Verifiziert. |
+| E20 | 6 | Outbox: `pg_notify` **innerhalb der Transaktion** (Zustellung auf COMMIT, kein After-Commit-Hook nötig). Worker-Defaults: max_attempts=5, exponentielles Backoff (Basis 5 s, cap 1 h), Reclaim 5 min, Poll-Fallback 5 s, Batch 50, Channel `core_event_outbox`. Claim per `FOR UPDATE SKIP LOCKED`. `pcntl`-Graceful-Shutdown. | Kap. 26.9.2/30.6, Entscheidung 168/177. Konkrete Retry-/Backoff-Werte doku-offen → autonom. NOTIFY-in-Transaktion ist PostgreSQL-Standardverhalten und vermeidet Race/Verlust. |
 | E19 | 5 | Registry referenziert Module per **`module_key` (Text, kein FK)**; **Capability-Bindings persistiert** + Laufzeit-Handle (Guard). Contract-Namen Konvention `modul.typ.name` (unique). Slot-Exklusivität per partiellem Unique-Index. Versions-Matching nur exakt/expliziter Bereich (26.6.4). | Entkoppelt Step 5 von der modules-Tabelle (Step 7); Bindings auditierbar/debugbar. Vom Nutzer bestätigt. Konkretes Datenmodell doku-offen → autonom. |
 | E18 | 4 | Konfigurationsspeicher `core.settings`: Modell (namespace, config_key, `value` jsonb, `value_encrypted`, `is_secret`); **sichere Defaults im Code-Katalog** (`SettingsCatalog`, greifen ohne DB-Eintrag) inkl. Typ-/Bereichsvalidierung; **Secrets AES-256-GCM** (Schlüssel aus `Security.encryptionKey`/env, nie aus DB); Audit `config.update` (entity_type `core_setting`) **ohne** Klartext bei Secrets; Footprint. „Deaktivieren statt löschen" gilt für Konfig-*objekte*, nicht Setting-*werte* (kein `active`). | Setzt Kap. 1.4/23.3 + Entscheidungen 159/162/164/176 um. Konkrete Felder/Defaults/Validierung waren doku-offen → autonom. |

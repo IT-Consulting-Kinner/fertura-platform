@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libicu-dev libpq-dev libzip-dev libonig-dev \
     && docker-php-ext-configure intl \
     && docker-php-ext-install -j"$(nproc)" \
-        intl mbstring pdo_pgsql pgsql zip opcache \
+        intl mbstring pdo_pgsql pgsql zip opcache pcntl \
     && rm -rf /var/lib/apt/lists/*
 
 # Composer aus dem offiziellen Image übernehmen

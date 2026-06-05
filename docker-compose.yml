@@ -57,8 +57,8 @@ services:
       context: .
       dockerfile: docker/php/Dockerfile
     restart: unless-stopped
-    # Platzhalter – die echten CLI-Worker (Outbox/Cron) folgen mit dem Core.
-    command: ["sh", "-c", "echo '[worker] Platzhalter aktiv'; sleep infinity"]
+    # Outbox-Worker (Step 6): verarbeitet Events via LISTEN/NOTIFY + Poll-Fallback.
+    command: ["bin/cake", "event_worker"]
     volumes:
       - ./core:/var/www/html
       - core_vendor:/var/www/html/vendor
