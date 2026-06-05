@@ -70,6 +70,19 @@ class Application extends BaseApplication implements AuthenticationServiceProvid
 
         // Aktive Module zur Laufzeit autoloaden (Step 7, fehlertolerant).
         ModuleAutoloader::registerActiveModules();
+
+        // Session-Timeout aus der DB-Konfiguration anwenden (Kap. 27.16 /
+        // setting core.session.timeout_minutes). Fehlertolerant: greift erst,
+        // wenn die DB verfügbar ist (sonst CakePHP-Default).
+        try {
+            $minutes = (int)(new \App\Service\Settings\SettingsManager())
+                ->get('core', 'session.timeout_minutes', 120);
+            if ($minutes > 0) {
+                \Cake\Core\Configure::write('Session.timeout', $minutes);
+            }
+        } catch (\Throwable) {
+            // DB (noch) nicht verfügbar -> Framework-Default belassen.
+        }
     }
 
     /**
