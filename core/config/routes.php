@@ -55,6 +55,8 @@ return function (RouteBuilder $routes): void {
         // Authentifizierung (Step 10).
         $builder->connect('/login', ['controller' => 'Auth', 'action' => 'login']);
         $builder->connect('/logout', ['controller' => 'Auth', 'action' => 'logout']);
+        // Passwort setzen per Einladungs-/Reset-Token (Kap. 27.2/27.15).
+        $builder->connect('/set-password', ['controller' => 'Auth', 'action' => 'setPassword']);
 
         // Health-Endpoint (Step 12, Kap. 20.2.1): öffentlicher Liveness + geschützter Detailstatus.
         $builder->connect('/health', ['controller' => 'Health', 'action' => 'index']);

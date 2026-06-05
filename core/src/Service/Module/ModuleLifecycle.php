@@ -111,8 +111,9 @@ class ModuleLifecycle
             $key = $manifest->key();
             $this->assertKeySafe($key);
 
-            // Signaturprüfung: Hook für Step 8 (hier Stub).
-            $this->verifySignature($sourcePath, $manifest);
+            // Signaturprüfung (Step 8): liefert die signierende Schlüssel-ID,
+            // damit nachträgliche Widerrufe dem Modul zugeordnet werden können.
+            $signatureKeyId = $this->verifySignature($sourcePath, $manifest);
 
             $errors = $manifest->validate($this->coreVersion);
             if ($errors !== []) {
@@ -154,8 +155,8 @@ class ModuleLifecycle
             $row = $conn->execute(
                 'INSERT INTO modules (module_key, name, version, type, edition, publisher, php_namespace, '
                 . 'core_compatibility, extends_main_module, main_module_compatibility, requires_license, '
-                . 'status, manifest, source_path) VALUES (:key, :name, :ver, :type, :ed, :pub, :ns, :cc, '
-                . ":ext, :mmc, :rl, 'installed_inactive', CAST(:man AS jsonb), :sp) RETURNING id",
+                . 'status, manifest, source_path, signature_key_id) VALUES (:key, :name, :ver, :type, :ed, :pub, :ns, :cc, '
+                . ":ext, :mmc, :rl, 'installed_inactive', CAST(:man AS jsonb), :sp, :skid) RETURNING id",
                 [
                     'key' => $key,
                     'name' => $manifest->name(),
@@ -170,6 +171,7 @@ class ModuleLifecycle
                     'rl' => $manifest->requiresLicense() ? 'true' : 'false',
                     'man' => json_encode($manifest->data),
                     'sp' => $targetPath,
+                    'skid' => $signatureKeyId,
                 ],
             )->fetch('assoc');
             $moduleId = (string)$row['id'];
@@ -214,8 +216,8 @@ class ModuleLifecycle
             // Deklarierte BREAD-Ressourcen registrieren (Step 9, Kap. 25.11).
             foreach ($manifest->permissions() as $p) {
                 $conn->execute(
-                    'INSERT INTO resources (module_key, resource_type, resource_name, description, is_scoped, extra_actions) '
-                    . 'VALUES (:m, :t, :n, :d, :s, CAST(:e AS jsonb)) '
+                    'INSERT INTO resources (module_key, resource_type, resource_name, description, is_scoped, group_capable, extra_actions) '
+                    . 'VALUES (:m, :t, :n, :d, :s, :gc, CAST(:e AS jsonb)) '
                     . 'ON CONFLICT (module_key, resource_name) DO NOTHING',
                     [
                         'm' => $key,
@@ -223,6 +225,8 @@ class ModuleLifecycle
                         'n' => (string)($p['name'] ?? ''),
                         'd' => $p['description'] ?? null,
                         's' => !empty($p['is_scoped']) ? 'true' : 'false',
+                        // Gruppenfähig per Default; Modul kann es per Manifest abschalten (Kap. 25.11).
+                        'gc' => (!array_key_exists('group_capable', $p) || !empty($p['group_capable'])) ? 'true' : 'false',
                         'e' => isset($p['extra_actions']) ? json_encode($p['extra_actions']) : null,
                     ],
                 );
@@ -466,13 +470,15 @@ class ModuleLifecycle
         }
     }
 
-    private function verifySignature(string $sourcePath, ModuleManifest $manifest): void
+    private function verifySignature(string $sourcePath, ModuleManifest $manifest): ?string
     {
         if (!(bool)$this->settings->get('core', 'require_module_signature', true)) {
-            return; // Dev-Bypass (Setting)
+            return null; // Dev-Bypass (Setting)
         }
         try {
-            $this->verifier->verify($sourcePath, $manifest->publisher());
+            $result = $this->verifier->verify($sourcePath, $manifest->publisher());
+
+            return $result['key_id'] ?? null;
         } catch (PackageVerificationException $e) {
             $this->audit->log('module.signature_invalid', 'module', $manifest->key(), [
                 'newValue' => ['error' => $e->getMessage()],

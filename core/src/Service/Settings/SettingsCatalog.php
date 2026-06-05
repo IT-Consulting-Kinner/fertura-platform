@@ -28,6 +28,8 @@ class SettingsCatalog
             // Marketplace / Signatur / Wartung (Step 8).
             'require_module_signature' => ['type' => 'bool', 'default' => true],
             'crl_max_age_days' => ['type' => 'int', 'default' => 7, 'min' => 0, 'max' => 365],
+            // Maximales Alter der Online-Lizenzbestätigung (Kap. 28.7.3.1).
+            'license.online_max_age_days' => ['type' => 'int', 'default' => 7, 'min' => 1, 'max' => 365],
             'marketplace.base_url' => ['type' => 'string', 'default' => null],
             'maintenance_mode' => ['type' => 'bool', 'default' => false],
             // Observability (Step 12, Kap. 20.2).

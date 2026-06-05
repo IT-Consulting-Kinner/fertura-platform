@@ -3,7 +3,7 @@
  * @var \App\View\AppView $this
  * @var array<int, array<string, mixed>> $licenses
  */
-$evalBadge = ['valid' => 'success', 'expired' => 'danger', 'revoked' => 'danger', 'missing' => 'secondary'];
+$evalBadge = ['valid' => 'success', 'grace' => 'warning', 'needs_online' => 'warning', 'expired' => 'danger', 'revoked' => 'danger', 'missing' => 'secondary'];
 ?>
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h1 class="h3 mb-0">Lizenzen</h1>

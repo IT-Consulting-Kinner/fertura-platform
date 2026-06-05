@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Controller\Admin;
 
 use App\Model\Entity\User;
+use App\Service\Identity\PasswordResetService;
 use Cake\Datasource\ConnectionManager;
 
 /**
@@ -99,6 +100,51 @@ class UsersController extends AdminController
             $this->audit()->log('admin_access.grant', 'user', $id, ['newValue' => ['area' => $area]]);
         }
         $this->Flash->success('Administrationsbereich aktualisiert.');
+
+        return $this->redirect(['action' => 'view', $id]);
+    }
+
+    /**
+     * Erzeugt einen Einladungs-/Passwort-Setz-Link (Kap. 27.2/27.15). Der Link
+     * wird dem Administrator angezeigt (E-Mail-Versand = Modul-Scope).
+     */
+    public function invite(string $id)
+    {
+        $this->request->allowMethod('post');
+        $actor = $this->identity()?->getIdentifier();
+        $token = (new PasswordResetService())->create($id, 'invite', 72, $actor !== null ? (string)$actor : null);
+        $url = (string)$this->request->getUri()->withPath('/set-password')->withQuery('token=' . $token);
+        $this->Flash->success('Einladungslink (72 h gültig): ' . $url);
+
+        return $this->redirect(['action' => 'view', $id]);
+    }
+
+    /** Setzt das Passwort direkt (Administrator) und aktiviert „invited"-Benutzer. */
+    public function setPassword(string $id)
+    {
+        $this->request->allowMethod('post');
+        $password = (string)$this->request->getData('password');
+        $service = new PasswordResetService();
+        $min = $service->minPasswordLength();
+        if (strlen($password) < $min) {
+            $this->Flash->error("Passwort muss mindestens $min Zeichen haben.");
+
+            return $this->redirect(['action' => 'view', $id]);
+        }
+        $users = $this->fetchTable('Users');
+        $user = $users->find()->where(['id' => $id])->first();
+        if ($user === null || $user->get('status') === User::STATUS_ANONYMIZED) {
+            $this->Flash->error('Benutzer nicht verfügbar.');
+
+            return $this->redirect(['action' => 'index']);
+        }
+        $user->setPassword($password);
+        if ($user->get('status') === User::STATUS_INVITED) {
+            $user->set('status', User::STATUS_ACTIVE);
+        }
+        $users->save($user, ['checkRules' => false]);
+        $this->audit()->log('user.password_set', 'user', $id, ['newValue' => ['by' => 'admin', 'status' => $user->get('status')]]);
+        $this->Flash->success('Passwort gesetzt.');
 
         return $this->redirect(['action' => 'view', $id]);
     }

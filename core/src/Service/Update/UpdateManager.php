@@ -64,6 +64,112 @@ class UpdateManager
     // ---- Modul-Update --------------------------------------------------------
 
     /** @return array<string, mixed> */
+    /**
+     * Migrations-/Kompatibilitätsvorschau für ein Modul-Update OHNE Ausführung
+     * (Kap. 24.13 Schritt 8). Liefert Versionsdelta, ausstehende Migrationen und
+     * blockierende Fehler (Signatur/Manifest/Downgrade).
+     *
+     * @return array<string, mixed>
+     */
+    public function previewModule(string $key, string $newSourcePath): array
+    {
+        $newSourcePath = rtrim($newSourcePath, '/');
+        $mod = $this->findModuleOrFail($key);
+        $errors = [];
+
+        $manifestFile = $newSourcePath . '/manifest.json';
+        if (!is_file($manifestFile)) {
+            return ['module_key' => $key, 'ok' => false, 'errors' => ['manifest.json nicht gefunden: ' . $newSourcePath]];
+        }
+        $manifest = ModuleManifest::fromJson((string)file_get_contents($manifestFile));
+        if ($manifest->key() !== $key) {
+            $errors[] = "Paket gehört nicht zu Modul $key (id={$manifest->key()}).";
+        }
+        try {
+            $this->verify($newSourcePath, $manifest);
+        } catch (Throwable $e) {
+            $errors[] = 'Signatur: ' . $e->getMessage();
+        }
+        $errors = array_merge($errors, $manifest->validate($this->coreVersion));
+
+        $oldVersion = (string)$mod['version'];
+        $newVersion = $manifest->version();
+        $isDowngrade = false;
+        try {
+            $isDowngrade = SemVer::parse($newVersion)->compare(SemVer::parse($oldVersion)) < 0;
+        } catch (Throwable $e) {
+            $errors[] = 'Version: ' . $e->getMessage();
+        }
+        if ($isDowngrade) {
+            $errors[] = "Zielversion $newVersion ist älter als $oldVersion.";
+        }
+
+        $pending = $this->migrations->listPending((string)$mod['id'], $newSourcePath . '/migrations');
+
+        return [
+            'module_key' => $key,
+            'current_version' => $oldVersion,
+            'new_version' => $newVersion,
+            'is_downgrade' => $isDowngrade,
+            'is_security' => $manifest->isSecurityUpdate(),
+            'pending_migrations' => $pending,
+            'errors' => $errors,
+            'ok' => $errors === [],
+        ];
+    }
+
+    /**
+     * Vorschau für ein Core-Update: ausstehende Core-Migrationen + inkompatible
+     * Module (ohne Ausführung).
+     *
+     * @return array<string, mixed>
+     */
+    public function previewCore(string $targetVersion): array
+    {
+        $errors = [];
+        try {
+            SemVer::parse($targetVersion);
+        } catch (Throwable $e) {
+            $errors[] = 'Zielversion: ' . $e->getMessage();
+        }
+
+        $incompatible = [];
+        foreach ($this->conn()->execute('SELECT module_key, core_compatibility FROM modules')->fetchAll('assoc') as $m) {
+            $cc = (string)$m['core_compatibility'];
+            if ($cc === '') {
+                continue;
+            }
+            try {
+                if (!VersionConstraint::parse($cc)->isSatisfiedBy(SemVer::parse($targetVersion))) {
+                    $incompatible[] = "{$m['module_key']} ($cc)";
+                }
+            } catch (Throwable) {
+                $incompatible[] = "{$m['module_key']} (ungültiges core_compatibility)";
+            }
+        }
+
+        $pending = [];
+        try {
+            $status = (new Migrations(['connection' => \App\Infrastructure\Db::privilegedName()]))->status();
+            foreach ($status as $row) {
+                if (($row['status'] ?? '') === 'down') {
+                    $pending[] = trim(($row['id'] ?? '') . ' ' . ($row['name'] ?? ''));
+                }
+            }
+        } catch (Throwable $e) {
+            $errors[] = 'Migrationsstatus: ' . $e->getMessage();
+        }
+
+        return [
+            'current_version' => $this->coreVersion,
+            'target_version' => $targetVersion,
+            'incompatible_modules' => $incompatible,
+            'pending_migrations' => $pending,
+            'errors' => $errors,
+            'ok' => $errors === [],
+        ];
+    }
+
     public function updateModule(string $key, string $newSourcePath): array
     {
         return $this->withLock(function () use ($key, $newSourcePath): array {
@@ -128,7 +234,7 @@ class UpdateManager
                 }
 
                 $this->removeDir($backupPath);
-                $this->recordHistory('module', $key, $oldVersion, $newVersion, 'success', null, $recoveryPath);
+                $this->recordHistory('module', $key, $oldVersion, $newVersion, 'success', null, $recoveryPath, $manifest->isSecurityUpdate(), $manifest->severity());
                 $this->audit->log('module.update', 'module', $key, [
                     'oldValue' => ['version' => $oldVersion],
                     'newValue' => ['version' => $newVersion],
@@ -176,7 +282,7 @@ class UpdateManager
                 } catch (Throwable) {
                     $result = 'failed';
                 }
-                $this->recordHistory('module', $key, $oldVersion, $newVersion, $result, $e->getMessage(), $recoveryPath);
+                $this->recordHistory('module', $key, $oldVersion, $newVersion, $result, $e->getMessage(), $recoveryPath, $manifest->isSecurityUpdate(), $manifest->severity());
                 $this->audit->log('module.update_failed', 'module', $key, [
                     'newValue' => ['error' => $e->getMessage(), 'result' => $result],
                     'moduleKey' => $key,
@@ -231,8 +337,9 @@ class UpdateManager
             $recoveryPath = $this->recovery->create('update_core');
 
             try {
-                // Ausstehende Core-Migrationen ausführen.
-                $migrations = new Migrations(['connection' => 'default']);
+                // Ausstehende Core-Migrationen ausführen (privilegierte Connection
+                // wegen DDL; Default läuft als NOBYPASSRLS-Rolle, E26).
+                $migrations = new Migrations(['connection' => \App\Infrastructure\Db::privilegedName()]);
                 $migrations->migrate();
 
                 $this->recordHistory('core', 'core', $oldVersion, $targetVersion, 'success', null, $recoveryPath);
@@ -259,7 +366,7 @@ class UpdateManager
     public function listHistory(): array
     {
         return $this->conn()->execute(
-            'SELECT component_type, component_key, old_version, new_version, result, executed_at '
+            'SELECT component_type, component_key, old_version, new_version, result, executed_at, is_security, severity '
             . 'FROM update_history ORDER BY executed_at DESC LIMIT 20',
         )->fetchAll('assoc');
     }
@@ -274,11 +381,14 @@ class UpdateManager
         string $result,
         ?string $error,
         ?string $recoveryPath,
+        bool $isSecurity = false,
+        ?string $severity = null,
     ): void {
         $this->conn()->execute(
-            'INSERT INTO update_history (component_type, component_key, old_version, new_version, result, error, recovery_point) '
-            . 'VALUES (:t, :k, :o, :n, :r, :e, :rp)',
-            ['t' => $type, 'k' => $key, 'o' => $old, 'n' => $new, 'r' => $result, 'e' => $error, 'rp' => $recoveryPath],
+            'INSERT INTO update_history (component_type, component_key, old_version, new_version, result, error, recovery_point, is_security, severity) '
+            . 'VALUES (:t, :k, :o, :n, :r, :e, :rp, :sec, :sev)',
+            ['t' => $type, 'k' => $key, 'o' => $old, 'n' => $new, 'r' => $result, 'e' => $error, 'rp' => $recoveryPath,
+                'sec' => $isSecurity ? 'true' : 'false', 'sev' => $severity],
         );
     }
 

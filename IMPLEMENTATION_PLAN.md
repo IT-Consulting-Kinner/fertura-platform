@@ -79,6 +79,93 @@ für Verifikation ist das **Plattform-Anforderungsdokument v6.28**
 - `[x]` **Schlüsselrotation-CLI** (`secret rotate`, Re-Encryption verschlüsselter
   Settings, Entscheidung 164). *(erledigt, E31)*
 
+## Merkliste / offene Punkte (Verifikation 2026-06-05)
+
+Ergebnis einer systematischen Re-Verifikation des Codes gegen Kap. 1, 20, 23–30.
+Die zentralen Muss-Mechanismen (Signatur/Vertrauenskette, Lifecycle, BREAD,
+Registry/Contracts, Outbox, RLS-Wirksamkeit, Health, Audit-Unveränderlichkeit,
+Container-Deployment) sind erfüllt. Offen sind v. a. Rand-/Transparenz- und
+GUI-Funktionen:
+
+### A. Echte Muss-Lücken — ✅ alle geschlossen & verifiziert (2026-06-05, Branch `feat/release-gaps`)
+
+> Alle 8 Punkte umgesetzt und im Container verifiziert. Belege je Punkt in
+> Klammern. Frischer Bootstrap (force-recreate) mit Migrationen 071–074 sauber;
+> alle Admin-/Public-Seiten HTTP 200 als NOBYPASSRLS-App-Rolle.
+
+1. ✅ **Lizenz: Online-Enforcement + Karenzfenster** (28.7.3.1). `LicenseService::
+   evaluate()` wertet Karenzfenster + Online-Bestätigungsalter aus → Status
+   valid|grace|needs_online|expired; `recordOnlineCheck()`. *(evaluate liefert
+   valid/grace/expired/needs_online/valid/grace wie erwartet)*
+   Felder `online_enforcement`/`grace_window_days`/`last_online_check` werden
+2. ✅ **Widerrufene Signatur installierter Module** (24.9.2). `modules.
+   signature_key_id` beim Install erfasst; `TrustStore::revokeKey/
+   reconcileModuleSignatures` markiert betroffene Module `signature_status=revoked`
+   (keine Auto-Deaktivierung), Anzeige in Modul-Liste + Health. *(Widerruf →
+   status=revoked)*
+3. ✅ **CRL-Cache-Alter / Stale-Warnung** (24.9.2). `MarketplaceClient` datiert
+   CRL-Abrufe (`marketplace_meta`), `crlState()` liefert Alter/Schwelle/stale;
+   Health-Subsystem `marketplace` warnt. *(30 Tage → stale, frisch → ok)*
+4. ✅ **Sicherheitsupdate-Kennzeichnung** (28.10). Manifest `security`/`severity`,
+   `update_history.is_security`/`severity`; Vorschau + Historie heben sie hervor.
+   *(security=true/severity=high in Historie, Badge sichtbar)*
+5. ✅ **Migrationsvorschau vor Update** (24.13/28.8.1). `UpdateManager::previewModule/
+   previewCore` + `ModuleMigrationRunner::listPending`; GUI führt über Vorschau mit
+   Bestätigung. *(Vorschau zeigt Zielversion+Migration, führt nichts aus)*
+6. ✅ **Session-Timeout verdrahtet** (27). `Application::bootstrap` wendet
+   `session.timeout_minutes` auf `Session.timeout` an. *(120 → 7 greift)*
+7. ✅ **Einladungs-/Passwort-Setz-Flow** (27.2/27.15). `password_reset_tokens` +
+   `PasswordResetService`; Admin erzeugt Einladungslink / setzt Passwort direkt;
+   öffentliche `/set-password`. *(invited → Link → Passwort → active → Login;
+   Token-Wiederverwendung abgelehnt)*
+8. ✅ **BREAD-Admin-UI vollständig** (25.11/25.12). `resources.group_capable`;
+   `setPermission` mit Einzelobjekt + Zusatzaktionen; nicht-gruppenfähige
+   Ressourcen ausgeblendet. *(report ausgeblendet, extra[trigger]+resource_key
+   persistiert)*
+
+Begleitend behoben: Core-Update-Migrationen laufen über die `privileged`-
+Connection (`Db::privilegedName`), da der Default zur Laufzeit die NOBYPASSRLS-
+Rolle ist.
+
+### B. Soll / Robustheit
+
+- **Selbst-Aussperr-Schutz** (letzter Volladministrator): keine Prüfung bei
+  Selbst-Deaktivierung / Bereich-Entzug / Austritt aus letzter Admin-Gruppe.
+- **Anker-Gültigkeitsdauer** (`valid_from/valid_to` in `trust_anchors`) wird nicht
+  geprüft (Soll, 24.9.2).
+- **API-/Token-Authentifizierung**: `api_tokens`-Tabelle vorhanden, aber kein
+  Authenticator/Route/Management → zu klären, ob eine externe API v1-Core-Scope
+  ist (Kap. 29 = in-process Modul-Interfaces; externe REST-API evtl. später).
+- **Cron-Status-Widget** (20.3 Soll): keine Lauf-Dauer, keine „>2×-Intervall"-
+  Warnung (nur Heartbeat-Alter).
+- **Strukturierte Logs** (20.2.3 Soll): `component/module/correlation_id` nur,
+  „sofern am Aufrufort mitgegeben" — kein erzwingender Processor.
+- **Dead-Letter-Admin-Sicht/Retry** (26.9.2): nur Zähler im Health/Dashboard +
+  CLI `outbox_status`; keine dedizierte GUI-Retry-Sicht.
+- **Grafische Abhängigkeits-/Slot-Darstellung** (23.13.1/24.15.1, Soll): nur Liste.
+- **RLS-Verpflichtung nicht erzwungen** (30.3): Core stellt Helfer/Kontext bereit,
+  validiert aber beim Install nicht, dass `is_scoped`-Ressourcen RLS-Policies
+  mitbringen (Durchsetzung liegt beim Modul).
+- **Manifest-Pflichtfelder** `entrypoint`/`description` werden nicht validiert
+  (formal, geringes Risiko).
+
+### C. Bewusst Modul-/Betreiber-Scope bzw. „spätere Version" (keine Abnahme-Lücke)
+
+- Out-of-Process-Sandbox / Drittanbieter-Isolation (23.16, spätere Version).
+- E-Mail-Betrieb 20.4, `fetch_mails`/`check_escalations`/… (Ticketing-Modul).
+- Matrix-Konfiguration 1.5, fachliche Entitäten 1.6 (Ticketing-Modul).
+- Backup/Restore 20.1, Betreiber-Alerting/Dashboards 20.2.5 (Betreiber).
+- Integrations-Extension-Module + deren Datenhaltung 29.9/29.10 (Modul).
+- Konkrete RLS-Policies je Modultabelle (Modul liefert via Migrationen).
+- Gleitende Zero-Downtime-Schlüsselrotation mit Key-ID (1.4, spätere Version).
+
+### D. Bekannte Dev-/Betriebsbeobachtungen (dokumentiert)
+
+- Cold-Start-504 beim allerersten Request (9p-Mount, Dev).
+- Langlaufende Worker brauchen Neustart nach Code-Änderung.
+- Worker-Heartbeat liegt in `core.worker_heartbeats` statt `system_settings`
+  (sachlich gleichwertig; Abweichung dokumentiert).
+
 ## Verifikationsbericht je Schritt
 
 > Wird je Schritt befüllt: geprüfte Kapitel, Soll/Ist, Container-Lauf,
@@ -635,6 +722,7 @@ Worker (Superuser-Pfad) + `/health` gesund; Fresh-Clone-Pfad über
 | E15 | 2 | Anmeldeschutz-Defaults: 10 Fehlversuche / 15-min-Fenster, dann temporäre Sperre (`LoginThrottle`, persistiert in `auth_failures`). | Entscheidung 162 fordert „sicheren Vorgabewert ohne Konfiguration". Konkrete Schwellen doku-offen → autonom; ab Step 4 DB-konfigurierbar. |
 | E16 | 3 | Audit-Log-Design: (a) **Personen per auflösbarer UUID** (kein denormalisierter Klartext-Name/E-Mail) → Anonymisierung wirkt ohne Log-Mutation; **textuelle Schnappschüsse nur für nicht-personenbezogene** Entitäten (Module/Config) = referenzrobust. (b) **Unveränderlichkeit per Trigger** (UPDATE/DELETE blockiert; Bypass nur via `SET LOCAL app.allow_audit_mutation`). (c) **Monats-RANGE-Partitionierung** + DEFAULT-Partition; `audit_partition`-Command stellt Monatspartitionen im Entrypoint sicher. (d) `AuditLogger`-Service schreibt transaktional. | Vereint Referenzrobustheit (24.16.1) und DSGVO-Anonymisierung (27.15.3) ohne Konflikt mit der Unveränderlichkeit (20.6). Partitionierung gem. 30.8/Entscheidung 179. Konkrete Felder/Platzhalter doku-offen → autonom. |
 | E17 | 3 | nginx löst den Upstream `core` zur Laufzeit über den Docker-Resolver (`127.0.0.11`) + Variable im `fastcgi_pass` auf, statt die IP beim Start zu cachen. | Behebt 502 „Connection refused" nach `docker compose up -d --force-recreate core` (neue Container-IP). Robustheit für Recreate/Autostart. Verifiziert. |
+| E34 | Merkliste A | Acht Muss-Lücken aus der Re-Verifikation geschlossen: Lizenz-Online/Karenz-Auswertung; nachträglicher Signatur-Widerruf für installierte Module (signature_status); CRL-Cache-Alter/Stale; Sicherheitsupdate-Kennzeichnung (Manifest+Historie); Migrationsvorschau vor Update; Session-Timeout-Verdrahtung; Einladungs-/Passwort-Setz-Flow (Token, E-Mail-Versand bleibt Modul-Scope); BREAD-Admin-UI (Einzelobjekt/Zusatzaktionen/Gruppenfähigkeit). Begleitend: Core-Update-Migrationen über privileged-Connection. | Kap. 24.9.2/25.11/25.12/27/28.7.3.1/28.8.1/28.10. Releaserelevante Transparenz-/Sicherheits- und GUI-Funktionen; jede einzeln im Container verifiziert. |
 | E33 | Härtung | NOBYPASSRLS-App-Rolle `fertura_app` als Default-Connection (APP_DATABASE_URL); zweite `privileged`-Connection (Superuser) für DDL/Migrationen/Modul-Lifecycle/Update/Worker (`Db::privileged()` mit Fallback). Provisionierung via idempotentem `db_provision_app_role` (Entrypoint, nach Migrationen); Bootstrap als Superuser (APP_DATABASE_URL geleert), Laufzeit als App-Rolle. Worker bleibt Superuser. | Kap. 30.3 / Entscheidung 175/E26. Erst damit greift RLS zur Laufzeit (Superuser umgeht RLS immer). Vom Nutzer bestätigt (Entrypoint-Provisionierung + privileged-Connection). |
 | E32 | Härtung | Lizenz-/Signaturverfahren mit **Root→Publisher-Kette**: `mp_tool sign-key/sign-doc`; `TrustChain` verifiziert Publisher-Zertifikate gegen aktiven Root; `key_signature` persistiert; Kette geprüft bei `trust add-anchor --cert`, `marketplace.sync` und **jeder** Paketinstallation (Root-Widerruf wirkt nachträglich). `SIGNING.md`. | Kap. 24.9.2. Getrennte, kompromittierungs-eindämmende Publisher-Schlüssel statt flachem Root-Signing. Vom Nutzer bestätigt. |
 | E31 | Härtung | Schlüsselrotation-CLI `secret rotate --old [--new] [--dry-run]`: re-verschlüsselt alle is_secret-Settings transaktional, mit Dry-Run und Verify gegen den neuen Schlüssel. | Entscheidung 164 (Soll). Betriebssicherer Schlüsselwechsel ohne Datenverlust. Vom Nutzer bestätigt (Rotation + Dry-Run + Verify). |

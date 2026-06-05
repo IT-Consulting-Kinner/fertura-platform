@@ -21,6 +21,7 @@ class ModulesController extends AdminController
         $conn = ConnectionManager::get('default');
         $modules = $conn->execute(
             'SELECT m.module_key, m.name, m.version, m.type, m.status, m.requires_license, '
+            . 'm.signature_status, '
             . '(SELECT count(*) FROM module_dependencies d WHERE d.module_id = m.id) AS dep_count '
             . 'FROM modules m ORDER BY m.module_key',
         )->fetchAll('assoc');

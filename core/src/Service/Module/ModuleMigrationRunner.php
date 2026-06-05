@@ -101,6 +101,30 @@ class ModuleMigrationRunner
         )->fetch() !== false;
     }
 
+    /**
+     * Listet die noch nicht angewendeten Migrationen eines Pakets, OHNE sie
+     * auszuführen (Migrationsvorschau, Kap. 24.13/28.8.1).
+     *
+     * @return list<string> Dateinamen der ausstehenden Migrationen (sortiert).
+     */
+    public function listPending(string $moduleId, string $migrationsDir): array
+    {
+        if (!is_dir($migrationsDir)) {
+            return [];
+        }
+        $files = glob($migrationsDir . '/*.sql') ?: [];
+        sort($files);
+        $pending = [];
+        foreach ($files as $file) {
+            $name = basename($file);
+            if (!$this->isApplied($moduleId, $name)) {
+                $pending[] = $name;
+            }
+        }
+
+        return $pending;
+    }
+
     private function upPart(string $sql): string
     {
         $parts = preg_split('/^\s*--\s*@DOWN\s*$/mi', $sql, 2);

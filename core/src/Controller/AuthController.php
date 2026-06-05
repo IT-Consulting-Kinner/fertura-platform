@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Auth\LoginThrottle;
+use App\Service\Identity\PasswordResetService;
 use Cake\Event\EventInterface;
 
 /**
@@ -15,7 +16,7 @@ class AuthController extends AppController
     public function initialize(): void
     {
         parent::initialize();
-        $this->Authentication->allowUnauthenticated(['login']);
+        $this->Authentication->allowUnauthenticated(['login', 'setPassword']);
     }
 
     public function beforeFilter(EventInterface $event): void
@@ -60,5 +61,38 @@ class AuthController extends AppController
         $this->Flash->success('Abgemeldet.');
 
         return $this->redirect('/login');
+    }
+
+    /**
+     * Öffentliches Setzen des Passworts per Einladungs-/Reset-Token (Kap.
+     * 27.2/27.15). GET zeigt das Formular, POST löst den Token ein.
+     */
+    public function setPassword()
+    {
+        $token = (string)($this->request->getQuery('token') ?? $this->request->getData('token') ?? '');
+        $service = new PasswordResetService();
+        $this->set('token', $token);
+        $this->set('minLength', $service->minPasswordLength());
+
+        if ($this->request->is('post')) {
+            $password = (string)$this->request->getData('password');
+            $confirm = (string)$this->request->getData('password_confirm');
+            if ($password !== $confirm) {
+                $this->Flash->error('Passwörter stimmen nicht überein.');
+
+                return null;
+            }
+            $error = $service->redeem($token, $password);
+            if ($error !== null) {
+                $this->Flash->error($error);
+
+                return null;
+            }
+            $this->Flash->success('Passwort gesetzt. Sie können sich jetzt anmelden.');
+
+            return $this->redirect('/login');
+        }
+
+        return null;
     }
 }

@@ -132,6 +132,18 @@ class ModuleManifest
         return array_values($this->data['permissions'] ?? []);
     }
 
+    /** Sicherheitsupdate-Kennzeichnung (Kap. 28.10): `security: true` im Manifest. */
+    public function isSecurityUpdate(): bool
+    {
+        return !empty($this->data['security']);
+    }
+
+    /** Dringlichkeit (optional): low|medium|high|critical. */
+    public function severity(): ?string
+    {
+        return isset($this->data['severity']) ? (string)$this->data['severity'] : null;
+    }
+
     /**
      * Validiert das Manifest. Gibt eine Liste der Fehler zurück (leer = gültig).
      *
