@@ -28,9 +28,13 @@ services:
     restart: unless-stopped
     volumes:
       - ./core:/var/www/html
+      # vendor liegt auf einem Named Volume (ext4 in der VM), NICHT auf dem
+      # 9p-Windows-Bind-Mount -> verhindert p9_client_rpc-Haenger beim Autoload.
+      - core_vendor:/var/www/html/vendor
     environment:
       DATABASE_URL: "postgres://${POSTGRES_USER:-fertura}:${POSTGRES_PASSWORD:-fertura}@db/${POSTGRES_DB:-fertura}?encoding=utf8"
       DEBUG: "true"
+      ROLE: core
     depends_on:
       db:
         condition: service_healthy
@@ -55,8 +59,10 @@ services:
     command: ["sh", "-c", "echo '[worker] Platzhalter aktiv'; sleep infinity"]
     volumes:
       - ./core:/var/www/html
+      - core_vendor:/var/www/html/vendor
     environment:
       DATABASE_URL: "postgres://${POSTGRES_USER:-fertura}:${POSTGRES_PASSWORD:-fertura}@db/${POSTGRES_DB:-fertura}?encoding=utf8"
+      ROLE: worker
     depends_on:
       db:
         condition: service_healthy
@@ -70,3 +76,4 @@ services:
 
 volumes:
   db_data:
+  core_vendor:
