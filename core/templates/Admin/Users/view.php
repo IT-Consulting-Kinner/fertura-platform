@@ -33,6 +33,15 @@ $anon = $user['status'] === 'anonymized';
                     <?php endif; ?>
                     <?= $this->Form->postLink('Anonymisieren', ['action' => 'anonymize', $user['id']], ['class' => 'btn btn-outline-danger btn-sm', 'confirm' => 'Benutzer irreversibel anonymisieren? Dies kann nicht rückgängig gemacht werden.']) ?>
                 </div>
+                <hr>
+                <p class="mb-1 small text-muted">Einladung &amp; Passwort</p>
+                <div class="d-flex gap-2 mb-2">
+                    <?= $this->Form->postLink('Einladungslink erzeugen', ['action' => 'invite', $user['id']], ['class' => 'btn btn-outline-primary btn-sm']) ?>
+                </div>
+                <?= $this->Form->create(null, ['url' => ['action' => 'setPassword', $user['id']], 'class' => 'input-group input-group-sm']) ?>
+                    <?= $this->Form->control('password', ['type' => 'password', 'label' => false, 'class' => 'form-control', 'placeholder' => 'Passwort direkt setzen', 'required' => true]) ?>
+                    <?= $this->Form->button('Setzen', ['class' => 'btn btn-outline-secondary']) ?>
+                <?= $this->Form->end() ?>
                 <?php endif; ?>
             </div>
         </div>
