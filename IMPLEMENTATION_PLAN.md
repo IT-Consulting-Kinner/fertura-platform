@@ -65,20 +65,19 @@ für Verifikation ist das **Plattform-Anforderungsdokument v6.28**
 
 ## Spätere/offene projektweite Aufgaben
 
-- **App-DB-Rolle ohne Superuser (für RLS-Wirksamkeit):** Damit Row-Level-Security
-  zur Laufzeit greift, MUSS die App-Connection als **NOBYPASSRLS-Rolle** laufen
-  (Superuser/`fertura` umgeht RLS immer). Privilegierte Pfade (Migrationen,
-  Wartung, Worker, DSGVO) nutzen weiterhin die privilegierte Rolle (Bypass). Die
-  duale Connection-/Rollen-Einrichtung ist noch zu verdrahten (Datenmodell +
-  Helfer + Middleware sind fertig). *(offen, Step 9)*
-- **Lizenz- & Signaturerstellungs-Verfahren (Betreiber-/Marketplace-Seite):** Ein
-  echtes Verfahren für Schlüsselverwaltung (Root-/Publisher-Schlüssel,
-  Aufbewahrung/HSM), **Lizenzausstellung** und den **Signier-Workflow** für
-  Pakete/CRL/Anker muss noch definiert und implementiert werden. Aktuell existiert
-  nur das Entwickler-/Test-Werkzeug `mp_tool` (keygen/sign/license). *(offen, vom
-  Nutzer angemerkt 2026-06-05)*
-- **Schlüsselrotation-CLI** (Re-Encryption verschlüsselter Settings, Entscheidung
-  164 = Soll) — zurückgestellt.
+> Alle drei zuvor offenen Aufgaben sind am 2026-06-05 umgesetzt & verifiziert
+> (Branch `feat/security-hardening`). Details: Abschnitt „Sicherheits-Härtung".
+
+- `[x]` **App-DB-Rolle ohne Superuser (für RLS-Wirksamkeit):** Default-Connection
+  läuft als **NOBYPASSRLS-Rolle** `fertura_app`; privilegierte Pfade (DDL,
+  Migrationen, Modul-Lifecycle, Update, Worker) nutzen die `privileged`-Connection
+  (Superuser). RLS greift damit zur Laufzeit. *(erledigt, E33)*
+- `[x]` **Lizenz- & Signaturerstellungs-Verfahren (Betreiber-/Marketplace-Seite):**
+  Root→Publisher-Schlüsselhierarchie, Zertifikatsausstellung (`mp_tool sign-key`),
+  Dokument-Signatur (`sign-doc`), persistierte + geprüfte Vertrauenskette;
+  dokumentiert in `SIGNING.md`. *(erledigt, E32)*
+- `[x]` **Schlüsselrotation-CLI** (`secret rotate`, Re-Encryption verschlüsselter
+  Settings, Entscheidung 164). *(erledigt, E31)*
 
 ## Verifikationsbericht je Schritt
 
@@ -585,6 +584,36 @@ Contracts), insb. 29.3 (Einordnung Contract-Modell), 29.5/29.6 (Spezifikation),
   Prozess hält die geladenen Klassen) — im Dev über `docker compose restart worker`;
   im Betrieb über Deployment/Reload. Notiert als Betriebsbeobachtung.
 
+### Sicherheits-Härtung (nach Core, 2026-06-05) — abgeschlossen & verifiziert
+
+Umsetzung der drei zuvor offenen projektweiten Aufgaben (Branch
+`feat/security-hardening`).
+
+**Aufgabe 3 — Schlüsselrotation (`secret rotate`):** Re-Encryption aller
+is_secret-Settings (alt→neu) mit Dry-Run + Verify, transaktional.
+*Verifiziert:* Round-Trip (Klartext gesetzt → K0→K1 → Lesen mit K0 schlägt fehl
+→ K1→K0 zurück → Klartext wiederhergestellt); Dry-Run schreibt nichts.
+
+**Aufgabe 1 — Lizenz-/Signaturverfahren (Root→Publisher):** `mp_tool sign-key`
+(Root signiert Publisher-Zertifikat) + `sign-doc`; `TrustChain` prüft die Kette;
+`trust_anchors.key_signature` persistiert die Root-Signatur; `trust add-anchor
+--cert`, `MarketplaceClient.sync` und `PackageVerifier` prüfen die Kette;
+`SIGNING.md` dokumentiert das Verfahren. *Verifiziert:* Zertifikatsausstellung;
+Ketten-Prüfung; manipuliertes Zertifikat abgewiesen; Publisher-Paketinstallation;
+Lizenz gültig; **Root-Widerruf entzieht Publisher-Paketen nachträglich das
+Vertrauen**.
+
+**Aufgabe 2 — NOBYPASSRLS-App-Rolle:** Default-Connection = `fertura_app`
+(NOBYPASSRLS) über `APP_DATABASE_URL`; `privileged`-Connection (Superuser) für
+DDL/Migrationen/Modul-Lifecycle/Update/Worker via `Db::privileged()`.
+`db_provision_app_role` (idempotent, vom Entrypoint) legt Rolle + Grants an;
+Entrypoint-Bootstrap läuft als Superuser, php-fpm als App-Rolle.
+*Verifiziert:* Rolle `super=f/bypassrls=f`; App läuft als `fertura_app`
+(`bypass_rls=false` im Health-Detail); alle Admin-Seiten 200; **RLS greift**
+(G1=2/G2=1/ohne Kontext=0/Superuser=3); Modul-Install via privilegiertem Pfad ok;
+Worker (Superuser-Pfad) + `/health` gesund; Fresh-Clone-Pfad über
+`app_local.example.php`-Fallback abgedeckt.
+
 ## Entscheidungs-Log (autonome Entscheidungen)
 
 | Nr. | Schritt | Entscheidung | Begründung (Anforderungskontext) |
@@ -606,6 +635,9 @@ Contracts), insb. 29.3 (Einordnung Contract-Modell), 29.5/29.6 (Spezifikation),
 | E15 | 2 | Anmeldeschutz-Defaults: 10 Fehlversuche / 15-min-Fenster, dann temporäre Sperre (`LoginThrottle`, persistiert in `auth_failures`). | Entscheidung 162 fordert „sicheren Vorgabewert ohne Konfiguration". Konkrete Schwellen doku-offen → autonom; ab Step 4 DB-konfigurierbar. |
 | E16 | 3 | Audit-Log-Design: (a) **Personen per auflösbarer UUID** (kein denormalisierter Klartext-Name/E-Mail) → Anonymisierung wirkt ohne Log-Mutation; **textuelle Schnappschüsse nur für nicht-personenbezogene** Entitäten (Module/Config) = referenzrobust. (b) **Unveränderlichkeit per Trigger** (UPDATE/DELETE blockiert; Bypass nur via `SET LOCAL app.allow_audit_mutation`). (c) **Monats-RANGE-Partitionierung** + DEFAULT-Partition; `audit_partition`-Command stellt Monatspartitionen im Entrypoint sicher. (d) `AuditLogger`-Service schreibt transaktional. | Vereint Referenzrobustheit (24.16.1) und DSGVO-Anonymisierung (27.15.3) ohne Konflikt mit der Unveränderlichkeit (20.6). Partitionierung gem. 30.8/Entscheidung 179. Konkrete Felder/Platzhalter doku-offen → autonom. |
 | E17 | 3 | nginx löst den Upstream `core` zur Laufzeit über den Docker-Resolver (`127.0.0.11`) + Variable im `fastcgi_pass` auf, statt die IP beim Start zu cachen. | Behebt 502 „Connection refused" nach `docker compose up -d --force-recreate core` (neue Container-IP). Robustheit für Recreate/Autostart. Verifiziert. |
+| E33 | Härtung | NOBYPASSRLS-App-Rolle `fertura_app` als Default-Connection (APP_DATABASE_URL); zweite `privileged`-Connection (Superuser) für DDL/Migrationen/Modul-Lifecycle/Update/Worker (`Db::privileged()` mit Fallback). Provisionierung via idempotentem `db_provision_app_role` (Entrypoint, nach Migrationen); Bootstrap als Superuser (APP_DATABASE_URL geleert), Laufzeit als App-Rolle. Worker bleibt Superuser. | Kap. 30.3 / Entscheidung 175/E26. Erst damit greift RLS zur Laufzeit (Superuser umgeht RLS immer). Vom Nutzer bestätigt (Entrypoint-Provisionierung + privileged-Connection). |
+| E32 | Härtung | Lizenz-/Signaturverfahren mit **Root→Publisher-Kette**: `mp_tool sign-key/sign-doc`; `TrustChain` verifiziert Publisher-Zertifikate gegen aktiven Root; `key_signature` persistiert; Kette geprüft bei `trust add-anchor --cert`, `marketplace.sync` und **jeder** Paketinstallation (Root-Widerruf wirkt nachträglich). `SIGNING.md`. | Kap. 24.9.2. Getrennte, kompromittierungs-eindämmende Publisher-Schlüssel statt flachem Root-Signing. Vom Nutzer bestätigt. |
+| E31 | Härtung | Schlüsselrotation-CLI `secret rotate --old [--new] [--dry-run]`: re-verschlüsselt alle is_secret-Settings transaktional, mit Dry-Run und Verify gegen den neuen Schlüssel. | Entscheidung 164 (Soll). Betriebssicherer Schlüsselwechsel ohne Datenverlust. Vom Nutzer bestätigt (Rotation + Dry-Run + Verify). |
 | E30 | 12 | Observability: `/health` öffentlicher Liveness + auth-/token-geschützter Detail (Session **oder** `core.health_token`). `HealthService` aggregiert DB/Storage/Worker/Registry/Module/Outbox+Dead-Letter/Lizenz + Modul-Collector (`core.collector.health`, `HealthCheckInterface`). Worker-Frische in **dedizierter Tabelle** `core.worker_heartbeats` (nicht in katalog-gegateter `core.settings`). Strukturierte JSON-Logs via `JsonFormatter`. Admin-Statusfläche `/admin/health`. | Kap. 20.2/20.3. Token-Pfad bedient externes Monitoring ohne Login (20.2.5); Heartbeat-Tabelle trennt Laufzeitzustand sauber von validierter Konfiguration. Alle drei Punkte vom Nutzer bestätigt (Session-oder-Token, dedizierte Tabelle, beide Soll). |
 | E29 | 11 | Öffentliches Modul-Interface = **Service-Contract** (nutzt Step-5-Registry, keine Parallelarchitektur). Aufruf **in-process** über `ServiceInterface::handle(array):array` + `CapabilityHandle::invoke()` (Guard → `CapabilityRejectedException` als Abweisung, Kap. 29.8.4). Provider via neuer Manifest-Sektion `services_registered` (PROVIDER). Mehrfachnutzung (multi_use=false) = ein aktiver CONSUMER (Slot-Prüfung). Interface-Registry = auf Service-Contracts gefilterte Admin-Sicht. CLI `service list/call`. `invoke()` nicht je Aufruf auditiert. | Kap. 29.3/29.8/29.12. In-Process passt zum PSR-4-Modul-Loading (E21), kein HTTP/Serialisierungs-Overhead. Vom Nutzer bestätigt (In-Process + echtes Consumer-Fixture/CLI-E2E). |
 | E27 | 10 | Admin-GUI: **SSR mit gebündeltem Bootstrap 5** (offline/vendored, Nutzerwahl); **alle 6 Administrationsbereiche voll ausgebaut** (Nutzerwahl). Scoped-Enforcement serverseitig in `Admin\AdminController::beforeFilter` (Bereichsbesitz). Modul-/Core-**Installation** bleibt CLI (signierte Pakete); GUI steuert Lebenszyklus/Update aus Paketpfad. Lizenz-Upload (Datei oder JSON) in der GUI. Audit-Sicht für jeden Admin (kein fester Bereich). | Kap. 23.8/27.3.1/27.16.2, Entscheidung 170. Offline-Bündelung = keine CDN-Abhängigkeit im Betrieb. CLI-Install = sichere Paketherkunft. Vom Nutzer bestätigt (Bootstrap gebündelt, alle 6 Bereiche voll). |
