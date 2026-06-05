@@ -87,31 +87,45 @@ Registry/Contracts, Outbox, RLS-Wirksamkeit, Health, Audit-Unveränderlichkeit,
 Container-Deployment) sind erfüllt. Offen sind v. a. Rand-/Transparenz- und
 GUI-Funktionen:
 
-### A. Echte Muss-Lücken (vor Release zu schließen)
+### A. Echte Muss-Lücken — ✅ alle geschlossen & verifiziert (2026-06-05, Branch `feat/release-gaps`)
 
-1. **Lizenz: Online-Enforcement + Karenzfenster nicht ausgewertet** (28.7.3.1).
+> Alle 8 Punkte umgesetzt und im Container verifiziert. Belege je Punkt in
+> Klammern. Frischer Bootstrap (force-recreate) mit Migrationen 071–074 sauber;
+> alle Admin-/Public-Seiten HTTP 200 als NOBYPASSRLS-App-Rolle.
+
+1. ✅ **Lizenz: Online-Enforcement + Karenzfenster** (28.7.3.1). `LicenseService::
+   evaluate()` wertet Karenzfenster + Online-Bestätigungsalter aus → Status
+   valid|grace|needs_online|expired; `recordOnlineCheck()`. *(evaluate liefert
+   valid/grace/expired/needs_online/valid/grace wie erwartet)*
    Felder `online_enforcement`/`grace_window_days`/`last_online_check` werden
-   gespeichert, aber `LicenseService::evaluate()` prüft nur Widerruf + `valid_to`.
-   Offline-Default korrekt; Online-/Miet-Lizenzen werden nicht durchgesetzt.
-2. **Widerrufene Signatur installierter Module** (24.9.2). Nach Schlüssel-Widerruf
-   wird ein installiertes Modul nicht als „Signatur widerrufen" gekennzeichnet;
-   `MarketplaceClient::sync()` gleicht die CRL nicht gegen installierte Module ab.
-3. **CRL-Cache-Alter / Stale-Warnung** (24.9.2). Kein Abruf-Zeitstempel, stiller
-   Fetch-Fehler, keine Alters-/Schwellenwarnung vor Install/Update.
-4. **Sicherheitsupdate-Kennzeichnung** (28.10). Kein `is_security`/`severity` in
-   Manifest, Update-Historie oder Marketplace-Metadaten.
-5. **Migrationsvorschau vor Update** (24.13 Schritt 8 / 28.8.1). Update führt
-   `runUp` direkt aus; keine Vorschau/Ergebnisdarstellung.
-6. **Session-Timeout nicht verdrahtet** (27). `session.timeout_minutes` existiert
-   im Katalog, wird aber nirgends auf die Session angewandt.
-7. **Einladungs-/Passwort-Setz-Flow fehlt** (27.2/27.15). GUI legt `invited`-
-   Benutzer ohne Passwort an; es gibt keine Aktion zum Passwort-Setzen → über die
-   GUI angelegte Benutzer können nie aktiv werden. (E-Mail-Versand = Modul-Scope;
-   ein Core-„Initialpasswort/Reset-Token" schließt die Lücke.)
-8. **BREAD-Admin-UI unvollständig** (25.11/25.12). `GroupsController::setPermission`
-   setzt nur Klassenrechte (`resource_key=null` hartcodiert), keine Zusatzaktionen,
-   keine Einzelobjekt-Auswahl; kein „gruppenfähig"-Flag an `resources`. Die
-   Service-Schicht (`PermissionService::grant`) kann all das bereits.
+2. ✅ **Widerrufene Signatur installierter Module** (24.9.2). `modules.
+   signature_key_id` beim Install erfasst; `TrustStore::revokeKey/
+   reconcileModuleSignatures` markiert betroffene Module `signature_status=revoked`
+   (keine Auto-Deaktivierung), Anzeige in Modul-Liste + Health. *(Widerruf →
+   status=revoked)*
+3. ✅ **CRL-Cache-Alter / Stale-Warnung** (24.9.2). `MarketplaceClient` datiert
+   CRL-Abrufe (`marketplace_meta`), `crlState()` liefert Alter/Schwelle/stale;
+   Health-Subsystem `marketplace` warnt. *(30 Tage → stale, frisch → ok)*
+4. ✅ **Sicherheitsupdate-Kennzeichnung** (28.10). Manifest `security`/`severity`,
+   `update_history.is_security`/`severity`; Vorschau + Historie heben sie hervor.
+   *(security=true/severity=high in Historie, Badge sichtbar)*
+5. ✅ **Migrationsvorschau vor Update** (24.13/28.8.1). `UpdateManager::previewModule/
+   previewCore` + `ModuleMigrationRunner::listPending`; GUI führt über Vorschau mit
+   Bestätigung. *(Vorschau zeigt Zielversion+Migration, führt nichts aus)*
+6. ✅ **Session-Timeout verdrahtet** (27). `Application::bootstrap` wendet
+   `session.timeout_minutes` auf `Session.timeout` an. *(120 → 7 greift)*
+7. ✅ **Einladungs-/Passwort-Setz-Flow** (27.2/27.15). `password_reset_tokens` +
+   `PasswordResetService`; Admin erzeugt Einladungslink / setzt Passwort direkt;
+   öffentliche `/set-password`. *(invited → Link → Passwort → active → Login;
+   Token-Wiederverwendung abgelehnt)*
+8. ✅ **BREAD-Admin-UI vollständig** (25.11/25.12). `resources.group_capable`;
+   `setPermission` mit Einzelobjekt + Zusatzaktionen; nicht-gruppenfähige
+   Ressourcen ausgeblendet. *(report ausgeblendet, extra[trigger]+resource_key
+   persistiert)*
+
+Begleitend behoben: Core-Update-Migrationen laufen über die `privileged`-
+Connection (`Db::privilegedName`), da der Default zur Laufzeit die NOBYPASSRLS-
+Rolle ist.
 
 ### B. Soll / Robustheit
 
@@ -708,6 +722,7 @@ Worker (Superuser-Pfad) + `/health` gesund; Fresh-Clone-Pfad über
 | E15 | 2 | Anmeldeschutz-Defaults: 10 Fehlversuche / 15-min-Fenster, dann temporäre Sperre (`LoginThrottle`, persistiert in `auth_failures`). | Entscheidung 162 fordert „sicheren Vorgabewert ohne Konfiguration". Konkrete Schwellen doku-offen → autonom; ab Step 4 DB-konfigurierbar. |
 | E16 | 3 | Audit-Log-Design: (a) **Personen per auflösbarer UUID** (kein denormalisierter Klartext-Name/E-Mail) → Anonymisierung wirkt ohne Log-Mutation; **textuelle Schnappschüsse nur für nicht-personenbezogene** Entitäten (Module/Config) = referenzrobust. (b) **Unveränderlichkeit per Trigger** (UPDATE/DELETE blockiert; Bypass nur via `SET LOCAL app.allow_audit_mutation`). (c) **Monats-RANGE-Partitionierung** + DEFAULT-Partition; `audit_partition`-Command stellt Monatspartitionen im Entrypoint sicher. (d) `AuditLogger`-Service schreibt transaktional. | Vereint Referenzrobustheit (24.16.1) und DSGVO-Anonymisierung (27.15.3) ohne Konflikt mit der Unveränderlichkeit (20.6). Partitionierung gem. 30.8/Entscheidung 179. Konkrete Felder/Platzhalter doku-offen → autonom. |
 | E17 | 3 | nginx löst den Upstream `core` zur Laufzeit über den Docker-Resolver (`127.0.0.11`) + Variable im `fastcgi_pass` auf, statt die IP beim Start zu cachen. | Behebt 502 „Connection refused" nach `docker compose up -d --force-recreate core` (neue Container-IP). Robustheit für Recreate/Autostart. Verifiziert. |
+| E34 | Merkliste A | Acht Muss-Lücken aus der Re-Verifikation geschlossen: Lizenz-Online/Karenz-Auswertung; nachträglicher Signatur-Widerruf für installierte Module (signature_status); CRL-Cache-Alter/Stale; Sicherheitsupdate-Kennzeichnung (Manifest+Historie); Migrationsvorschau vor Update; Session-Timeout-Verdrahtung; Einladungs-/Passwort-Setz-Flow (Token, E-Mail-Versand bleibt Modul-Scope); BREAD-Admin-UI (Einzelobjekt/Zusatzaktionen/Gruppenfähigkeit). Begleitend: Core-Update-Migrationen über privileged-Connection. | Kap. 24.9.2/25.11/25.12/27/28.7.3.1/28.8.1/28.10. Releaserelevante Transparenz-/Sicherheits- und GUI-Funktionen; jede einzeln im Container verifiziert. |
 | E33 | Härtung | NOBYPASSRLS-App-Rolle `fertura_app` als Default-Connection (APP_DATABASE_URL); zweite `privileged`-Connection (Superuser) für DDL/Migrationen/Modul-Lifecycle/Update/Worker (`Db::privileged()` mit Fallback). Provisionierung via idempotentem `db_provision_app_role` (Entrypoint, nach Migrationen); Bootstrap als Superuser (APP_DATABASE_URL geleert), Laufzeit als App-Rolle. Worker bleibt Superuser. | Kap. 30.3 / Entscheidung 175/E26. Erst damit greift RLS zur Laufzeit (Superuser umgeht RLS immer). Vom Nutzer bestätigt (Entrypoint-Provisionierung + privileged-Connection). |
 | E32 | Härtung | Lizenz-/Signaturverfahren mit **Root→Publisher-Kette**: `mp_tool sign-key/sign-doc`; `TrustChain` verifiziert Publisher-Zertifikate gegen aktiven Root; `key_signature` persistiert; Kette geprüft bei `trust add-anchor --cert`, `marketplace.sync` und **jeder** Paketinstallation (Root-Widerruf wirkt nachträglich). `SIGNING.md`. | Kap. 24.9.2. Getrennte, kompromittierungs-eindämmende Publisher-Schlüssel statt flachem Root-Signing. Vom Nutzer bestätigt. |
 | E31 | Härtung | Schlüsselrotation-CLI `secret rotate --old [--new] [--dry-run]`: re-verschlüsselt alle is_secret-Settings transaktional, mit Dry-Run und Verify gegen den neuen Schlüssel. | Entscheidung 164 (Soll). Betriebssicherer Schlüsselwechsel ohne Datenverlust. Vom Nutzer bestätigt (Rotation + Dry-Run + Verify). |
