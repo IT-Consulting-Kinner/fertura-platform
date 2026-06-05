@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Command;
 
 use App\Audit\AuditLogger;
+use App\Auth\PasswordPolicy;
 use App\Model\Entity\User;
 use Cake\Command\Command;
 use Cake\Console\Arguments;
@@ -39,6 +40,14 @@ class CreateAdminCommand extends Command
         $username = (string)$args->getArgument('username');
         $email = (string)$args->getArgument('email');
         $password = (string)$args->getArgument('password');
+
+        // Passwort-Policy aus dem Konfigurationsspeicher (Step 4) durchsetzen.
+        $policyErrors = (new PasswordPolicy())->validate($password);
+        if ($policyErrors) {
+            $io->error(implode(' ', $policyErrors));
+
+            return static::CODE_ERROR;
+        }
 
         /** @var \App\Model\Entity\User|null $user */
         $user = $users->find()

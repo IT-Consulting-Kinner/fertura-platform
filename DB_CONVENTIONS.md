@@ -156,3 +156,19 @@ Integritäts-/Zugriffsregeln werden, wo möglich, **in der DB** erzwungen:
 - Felder: `actor_user_id`, `action`, `entity_type`, `entity_id`, `entity_label`,
   `module_key/name/version`, `component`, `correlation_id`, `old_value`/`new_value`
   (jsonb, GIN-indiziert).
+
+## 14. Konfigurationsspeicher (Step 4, Kap. 1.4 / 23.3; E18)
+
+- Tabelle `core.settings`: `(namespace, config_key)` unique; `value` jsonb für
+  Klartextwerte, `value_encrypted` (text) für Geheimnisse (`is_secret`).
+- **DB vs. app.php:** Anwendungs-/Modul-Konfiguration in die DB; nur
+  Infrastruktur (DB-Verbindung, Salt, Encryption-Key, Cache) bleibt in app.php
+  (Entscheidung 159).
+- **Sichere Vorgabewerte** im Code-Katalog (`SettingsCatalog`) — greifen auch
+  ohne DB-Eintrag (Entscheidung 162); dort auch Typ-/Bereichsvalidierung.
+- **Secrets verschlüsselt** (AES-256-GCM, `SecretCipher`); Schlüssel aus
+  `Security.encryptionKey` (env), **nicht** aus der DB.
+- Zugriff über `App\Service\Settings\SettingsManager` (`get`/`set`),
+  transaktional + Audit (`config.update`, ohne Klartext bei Secrets) + Footprint.
+- „Deaktivieren statt löschen" gilt für Konfig-*objekte* (Stammdaten), **nicht**
+  für Setting-*werte* (dürfen auf Default zurückgesetzt werden).

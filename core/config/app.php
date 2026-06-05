@@ -79,6 +79,9 @@ return [
      */
     'Security' => [
         'salt' => env('SECURITY_SALT'),
+        // Schlüssel für verschlüsselte Settings (AES-256-GCM, Entscheidung 159).
+        // Dediziert; fällt in DEV auf SECURITY_SALT zurück (siehe SecretCipher).
+        'encryptionKey' => env('APP_ENCRYPTION_KEY', null),
     ],
 
     /*

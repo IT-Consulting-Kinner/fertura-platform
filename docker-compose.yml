@@ -35,6 +35,8 @@ services:
       DATABASE_URL: "postgres://${POSTGRES_USER:-fertura}:${POSTGRES_PASSWORD:-fertura}@db/${POSTGRES_DB:-fertura}?encoding=utf8"
       DEBUG: "true"
       ROLE: core
+      SECURITY_SALT: "${SECURITY_SALT:-dev-salt-change-me-0123456789abcdef0123456789abcdef}"
+      APP_ENCRYPTION_KEY: "${APP_ENCRYPTION_KEY:-dev-encryption-key-change-me-fedcba9876543210}"
     depends_on:
       db:
         condition: service_healthy
@@ -63,6 +65,8 @@ services:
     environment:
       DATABASE_URL: "postgres://${POSTGRES_USER:-fertura}:${POSTGRES_PASSWORD:-fertura}@db/${POSTGRES_DB:-fertura}?encoding=utf8"
       ROLE: worker
+      SECURITY_SALT: "${SECURITY_SALT:-dev-salt-change-me-0123456789abcdef0123456789abcdef}"
+      APP_ENCRYPTION_KEY: "${APP_ENCRYPTION_KEY:-dev-encryption-key-change-me-fedcba9876543210}"
     depends_on:
       db:
         condition: service_healthy

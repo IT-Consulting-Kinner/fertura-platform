@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Auth;
 
+use App\Service\Settings\SettingsManager;
 use Cake\Datasource\ConnectionManager;
 
 /**
@@ -23,10 +24,17 @@ class LoginThrottle
     private int $maxAttempts;
     private int $windowMinutes;
 
-    public function __construct(?int $maxAttempts = null, ?int $windowMinutes = null)
-    {
-        $this->maxAttempts = $maxAttempts ?? self::DEFAULT_MAX_ATTEMPTS;
-        $this->windowMinutes = $windowMinutes ?? self::DEFAULT_WINDOW_MINUTES;
+    public function __construct(
+        ?int $maxAttempts = null,
+        ?int $windowMinutes = null,
+        ?SettingsManager $settings = null,
+    ) {
+        // Schwellen aus dem Konfigurationsspeicher (DB), Code-Konstanten als Netz.
+        $settings ??= new SettingsManager();
+        $this->maxAttempts = $maxAttempts
+            ?? (int)$settings->get('core', 'login_throttle.max_attempts', self::DEFAULT_MAX_ATTEMPTS);
+        $this->windowMinutes = $windowMinutes
+            ?? (int)$settings->get('core', 'login_throttle.window_minutes', self::DEFAULT_WINDOW_MINUTES);
     }
 
     private function connection()

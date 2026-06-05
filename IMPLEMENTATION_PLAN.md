@@ -36,7 +36,7 @@ für Verifikation ist das **Plattform-Anforderungsdokument v6.28**
   Auth), 2c (Anonymisierung + Anmeldeschutz).
 - `[x]` **3. Audit-Log & Logging** — referenzrobuste Einträge (textuelle
   Bezeichner), JSONB-Payloads, unveränderlich. *(Kap. 1.6, 24.16, 20.6)*
-- `[ ]` **4. Konfigurationsspeicher** — Core-Settings (Key/Value + JSONB),
+- `[x]` **4. Konfigurationsspeicher** — Core-Settings (Key/Value + JSONB),
   „deaktivieren statt löschen", Audit. *(Kap. 23.3, 1.6)*
 - `[ ]` **5. Contract-/Capability-Registry** — 4 Contract-Typen
   (Resolver/Collector/Event/Service), Registry, Capability-Bindung,
@@ -204,6 +204,44 @@ Bypass funktioniert; `user.anonymize` erfasst; HTTP 200.
   abtrennen) → Wartungs-Worker **Step 6**.
 - Audit-Anzeige/Filter im Admin-Bereich → **Step 10**.
 
+### Schritt 4 — abgeschlossen & verifiziert (2026-06-05)
+
+**Geprüfte Kapitel:** 1.4 (Konfiguration in DB vs. app.php, Entscheidung 159),
+23.3 (Konfigurationsspeicher), 1.6 (Audit), 27.16.3 (sichere Vorgabewerte,
+Entscheidung 162), 30.5 (JSONB, Entscheidung 176), Entscheidung 164 (Secrets/
+Schlüssel).
+
+**Soll → Ist:**
+- `core.settings` (namespace, config_key, value jsonb, value_encrypted, is_secret,
+  Footprint, Trigger, unique(namespace,config_key)). ✔
+- `SettingsManager.get/set` mit Katalog-Defaults (greifen ohne DB-Eintrag),
+  Validierung (Typ/Bereich), transaktionalem Audit. ✔
+- **Secrets verschlüsselt** (AES-256-GCM, `SecretCipher`, Schlüssel aus
+  `Security.encryptionKey`/env, nicht aus der DB) — verifiziert: Klartext nicht im
+  Chiffrat, Audit ohne Klartext. ✔
+- **Code-Defaults aus Step 2 jetzt DB-konfigurierbar:** Passwort-Policy
+  (`PasswordPolicy`, in `create_admin` durchgesetzt) + Anmeldeschutz-Schwellen
+  (`LoginThrottle` liest aus Settings). ✔
+- `setting`-CLI-Command (get/set) bis zur GUI (Step 10). ✔
+- app.php/Compose/.env: `APP_ENCRYPTION_KEY` (+ `SECURITY_SALT`) verankert. ✔
+
+**Container-Lauf / Test:** Migration inkrementell angewandt; Defaults, set/get,
+Validierung, Secret-Round-Trip (kein Klartext-Leak), Audit `config.update`,
+Throttle-Wiring; HTTP 200 nach Recreate (ohne web-Restart, E17).
+
+**Offene Punkte / Beobachtungen:**
+- **„Deaktivieren statt löschen"** gilt laut Kap. 23.3.1 für Konfigurations-
+  *objekte* (Stammdaten), **nicht** für Setting-*Werte*: Settings dürfen auf den
+  Default zurückgesetzt/gelöscht werden. Bewusst so umgesetzt (kein `active` auf
+  `settings`).
+- **Re-Encryption-CLI** (Schlüsselrotation, Entscheidung 164 = *Soll*) → bewusst
+  zurückgestellt; Struktur (SecretCipher) vorbereitet.
+- **Session-Timeout-Setting** definiert, aber Wiring an die Session folgt mit der
+  GUI/Session-Konfiguration (Step 10).
+- **Caching** der Settings (In-Memory/TTL) → später; aktuell direkter DB-Read.
+- **Modul-Settings** (`<modul_key>.*`): Schema vorhanden, Verwaltung/Schemas via
+  Manifest → Step 7.
+
 ## Entscheidungs-Log (autonome Entscheidungen)
 
 | Nr. | Schritt | Entscheidung | Begründung (Anforderungskontext) |
@@ -225,3 +263,4 @@ Bypass funktioniert; `user.anonymize` erfasst; HTTP 200.
 | E15 | 2 | Anmeldeschutz-Defaults: 10 Fehlversuche / 15-min-Fenster, dann temporäre Sperre (`LoginThrottle`, persistiert in `auth_failures`). | Entscheidung 162 fordert „sicheren Vorgabewert ohne Konfiguration". Konkrete Schwellen doku-offen → autonom; ab Step 4 DB-konfigurierbar. |
 | E16 | 3 | Audit-Log-Design: (a) **Personen per auflösbarer UUID** (kein denormalisierter Klartext-Name/E-Mail) → Anonymisierung wirkt ohne Log-Mutation; **textuelle Schnappschüsse nur für nicht-personenbezogene** Entitäten (Module/Config) = referenzrobust. (b) **Unveränderlichkeit per Trigger** (UPDATE/DELETE blockiert; Bypass nur via `SET LOCAL app.allow_audit_mutation`). (c) **Monats-RANGE-Partitionierung** + DEFAULT-Partition; `audit_partition`-Command stellt Monatspartitionen im Entrypoint sicher. (d) `AuditLogger`-Service schreibt transaktional. | Vereint Referenzrobustheit (24.16.1) und DSGVO-Anonymisierung (27.15.3) ohne Konflikt mit der Unveränderlichkeit (20.6). Partitionierung gem. 30.8/Entscheidung 179. Konkrete Felder/Platzhalter doku-offen → autonom. |
 | E17 | 3 | nginx löst den Upstream `core` zur Laufzeit über den Docker-Resolver (`127.0.0.11`) + Variable im `fastcgi_pass` auf, statt die IP beim Start zu cachen. | Behebt 502 „Connection refused" nach `docker compose up -d --force-recreate core` (neue Container-IP). Robustheit für Recreate/Autostart. Verifiziert. |
+| E18 | 4 | Konfigurationsspeicher `core.settings`: Modell (namespace, config_key, `value` jsonb, `value_encrypted`, `is_secret`); **sichere Defaults im Code-Katalog** (`SettingsCatalog`, greifen ohne DB-Eintrag) inkl. Typ-/Bereichsvalidierung; **Secrets AES-256-GCM** (Schlüssel aus `Security.encryptionKey`/env, nie aus DB); Audit `config.update` (entity_type `core_setting`) **ohne** Klartext bei Secrets; Footprint. „Deaktivieren statt löschen" gilt für Konfig-*objekte*, nicht Setting-*werte* (kein `active`). | Setzt Kap. 1.4/23.3 + Entscheidungen 159/162/164/176 um. Konkrete Felder/Defaults/Validierung waren doku-offen → autonom. |
