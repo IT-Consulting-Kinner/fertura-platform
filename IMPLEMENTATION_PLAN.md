@@ -190,9 +190,10 @@ Locale `ll_CC`, **flacher** Fallback auf Englisch der Version; jeder Text über
   `I18n::setLocale`+`intl.default_locale`; Settings `locale.default`/`locale.enabled`;
   Englisch-Fallback. *Verifik: öffentliche Auth-Seiten als Testfläche, ?lang
   schaltet, fehlender Key → Englisch, Datums-/Zahlenformat folgt.*
-- `[ ]` **i18n-2 — Core-UI auslagern:** alle harten Strings → `__()`; **`en_US`**
+- `[x]` **i18n-2 — Core-UI auslagern** (verifiziert 2026-06-05): alle harten Strings → `__()`; **`en_US`**
   (kanonisch) + **`de_DE`** (bisherige Texte, keine Regression); Schlüssel-
-  konvention dokumentiert.
+  konvention `<bereich>.<element>`. ~330 Schlüssel; statische Vollabdeckung
+  (328/328) + CLI-Fallback + HTTP-Render de/en verifiziert.
 - `[ ]` **i18n-3 — Managed Locale Store + Metadaten + sicheres Schreiben:**
   persistentes Volume; Metadaten-Migration (`signed/reviewed/edited`,
   version, source, file_path, checksum, `write_state/started_at/last_write_error`);
