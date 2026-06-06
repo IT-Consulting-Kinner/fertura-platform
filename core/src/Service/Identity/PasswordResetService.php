@@ -70,7 +70,7 @@ class PasswordResetService
     {
         $min = $this->minPasswordLength();
         if (strlen($newPassword) < $min) {
-            return "Passwort muss mindestens $min Zeichen haben.";
+            return __('passwordreset.too_short', $min);
         }
 
         $hash = hash('sha256', $token);
@@ -79,19 +79,19 @@ class PasswordResetService
             ['h' => $hash],
         )->fetch('assoc');
         if ($row === false) {
-            return 'Token ungültig.';
+            return __('passwordreset.token_invalid');
         }
         if ($row['used_at'] !== null) {
-            return 'Token wurde bereits verwendet.';
+            return __('passwordreset.token_used');
         }
         if (strtotime((string)$row['expires_at']) < time()) {
-            return 'Token ist abgelaufen.';
+            return __('passwordreset.token_expired');
         }
 
         $users = $this->fetchTable('Users');
         $user = $users->find()->where(['id' => $row['user_id']])->first();
         if ($user === null || $user->get('status') === User::STATUS_ANONYMIZED) {
-            return 'Benutzer nicht verfügbar.';
+            return __('passwordreset.user_unavailable');
         }
 
         return $this->conn()->transactional(function () use ($users, $user, $newPassword, $row): ?string {
@@ -100,7 +100,7 @@ class PasswordResetService
                 $user->set('status', User::STATUS_ACTIVE);
             }
             if (!$users->save($user, ['checkRules' => false])) {
-                return 'Speichern fehlgeschlagen.';
+                return __('passwordreset.save_failed');
             }
             $this->conn()->execute(
                 'UPDATE password_reset_tokens SET used_at = now() WHERE id = :id',

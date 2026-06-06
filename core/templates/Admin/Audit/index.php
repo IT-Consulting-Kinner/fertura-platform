@@ -9,25 +9,25 @@
  * @var string $moduleKey
  */
 ?>
-<h1 class="h3 mb-3">Audit-Log</h1>
+<h1 class="h3 mb-3"><?= h(__('admin.audit.title')) ?></h1>
 
 <?= $this->Form->create(null, ['type' => 'get', 'class' => 'row g-2 align-items-end mb-3']) ?>
-    <div class="col-auto"><label class="form-label small mb-0">Aktion</label>
-        <?= $this->Form->control('action', ['label' => false, 'value' => $action, 'class' => 'form-control form-control-sm', 'placeholder' => 'enthält …']) ?></div>
-    <div class="col-auto"><label class="form-label small mb-0">Entitätstyp</label>
+    <div class="col-auto"><label class="form-label small mb-0"><?= h(__('admin.audit.label_action')) ?></label>
+        <?= $this->Form->control('action', ['label' => false, 'value' => $action, 'class' => 'form-control form-control-sm', 'placeholder' => __('admin.audit.placeholder_contains')]) ?></div>
+    <div class="col-auto"><label class="form-label small mb-0"><?= h(__('admin.audit.label_entity_type')) ?></label>
         <?= $this->Form->select('entity_type', array_column($entityTypes, 'entity_type', 'entity_type'),
-            ['value' => $entityType, 'empty' => '— alle —', 'class' => 'form-select form-select-sm']) ?></div>
-    <div class="col-auto"><label class="form-label small mb-0">Modul</label>
+            ['value' => $entityType, 'empty' => __('admin.audit.option_all'), 'class' => 'form-select form-select-sm']) ?></div>
+    <div class="col-auto"><label class="form-label small mb-0"><?= h(__('admin.audit.label_module')) ?></label>
         <?= $this->Form->control('module_key', ['label' => false, 'value' => $moduleKey, 'class' => 'form-control form-control-sm']) ?></div>
     <div class="col-auto">
-        <?= $this->Form->button('Filtern', ['class' => 'btn btn-primary btn-sm']) ?>
-        <?= $this->Html->link('Zurücksetzen', ['action' => 'index'], ['class' => 'btn btn-outline-secondary btn-sm']) ?>
+        <?= $this->Form->button(__('admin.audit.btn_filter'), ['class' => 'btn btn-primary btn-sm']) ?>
+        <?= $this->Html->link(__('admin.audit.btn_reset'), ['action' => 'index'], ['class' => 'btn btn-outline-secondary btn-sm']) ?>
     </div>
 <?= $this->Form->end() ?>
 
-<p class="text-muted small">Letzte 100 Einträge (neueste zuerst).</p>
+<p class="text-muted small"><?= h(__('admin.audit.hint_last_100')) ?></p>
 <table class="table table-sm table-hover align-middle">
-    <thead><tr><th>Zeitpunkt</th><th>Akteur</th><th>Aktion</th><th>Entität</th><th>Modul</th><th>Komponente</th></tr></thead>
+    <thead><tr><th><?= h(__('admin.audit.col_timestamp')) ?></th><th><?= h(__('admin.audit.col_actor')) ?></th><th><?= h(__('admin.audit.col_action')) ?></th><th><?= h(__('admin.audit.col_entity')) ?></th><th><?= h(__('admin.audit.col_module')) ?></th><th><?= h(__('admin.audit.col_component')) ?></th></tr></thead>
     <tbody>
     <?php foreach ($entries as $e): ?>
         <tr>
@@ -39,6 +39,6 @@
             <td class="small"><?= h($e['component']) ?></td>
         </tr>
     <?php endforeach; ?>
-    <?php if ($entries === []): ?><tr><td colspan="6" class="text-muted">Keine Einträge.</td></tr><?php endif; ?>
+    <?php if ($entries === []): ?><tr><td colspan="6" class="text-muted"><?= h(__('admin.audit.empty')) ?></td></tr><?php endif; ?>
     </tbody>
 </table>

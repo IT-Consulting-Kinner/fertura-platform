@@ -33,11 +33,8 @@ class MailService
     {
         return $this->send(
             $to,
-            'Ihre Einladung zu Fertura',
-            "Hallo $username,\n\n"
-            . "für Ihr Konto wurde eine Einladung erstellt. Bitte setzen Sie Ihr Passwort:\n\n"
-            . "$link\n\n"
-            . "Der Link ist 72 Stunden gültig.\n",
+            __('mail.invite.subject'),
+            __('mail.invite.body', [$username, $link]),
         );
     }
 
@@ -45,11 +42,8 @@ class MailService
     {
         return $this->send(
             $to,
-            'Passwort zurücksetzen',
-            "Hallo $username,\n\n"
-            . "zum Zurücksetzen Ihres Passworts öffnen Sie bitte folgenden Link:\n\n"
-            . "$link\n\n"
-            . "Falls Sie das nicht angefordert haben, ignorieren Sie diese E-Mail.\n",
+            __('mail.reset.subject'),
+            __('mail.reset.body', [$username, $link]),
         );
     }
 

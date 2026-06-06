@@ -33,7 +33,7 @@ class UsersController extends AdminController
         $conn = ConnectionManager::get('default');
         $user = $conn->execute('SELECT * FROM users WHERE id = :id', ['id' => $id])->fetch('assoc');
         if ($user === false) {
-            $this->Flash->error('Benutzer nicht gefunden.');
+            $this->Flash->error(__('flash.user.not_found'));
             $this->redirect(['action' => 'index']);
 
             return;
@@ -59,11 +59,11 @@ class UsersController extends AdminController
             $user->set('status', User::STATUS_INVITED);
             if ($users->save($user)) {
                 $this->audit()->log('user.create', 'user', (string)$user->id, ['newValue' => ['status' => $user->status]]);
-                $this->Flash->success('Benutzer angelegt.');
+                $this->Flash->success(__('flash.user.created'));
 
                 return $this->redirect(['action' => 'index']);
             }
-            $this->Flash->error('Anlegen fehlgeschlagen.');
+            $this->Flash->error(__('flash.user.create_failed'));
         }
         $this->set(compact('user'));
 
@@ -74,7 +74,7 @@ class UsersController extends AdminController
     {
         $this->request->allowMethod('post');
         if (!in_array($status, [User::STATUS_ACTIVE, User::STATUS_DISABLED], true)) {
-            $this->Flash->error('Ungültiger Status.');
+            $this->Flash->error(__('flash.user.invalid_status'));
 
             return $this->redirect(['action' => 'index']);
         }
@@ -83,18 +83,18 @@ class UsersController extends AdminController
         if ($status === User::STATUS_DISABLED) {
             // Selbst-Aussperr-Schutz (Kap. 27.14/27.15).
             if ($id === $this->currentUserId()) {
-                $this->Flash->error('Sie können sich nicht selbst deaktivieren.');
+                $this->Flash->error(__('flash.user.self_deactivate'));
 
                 return $this->redirect(['action' => 'view', $id]);
             }
             if ($this->isLastUserGroupAdmin($id)) {
-                $this->Flash->error('Letzter Administrator der Benutzer- & Gruppenverwaltung — Deaktivierung blockiert.');
+                $this->Flash->error(__('flash.user.last_admin_deactivate'));
 
                 return $this->redirect(['action' => 'view', $id]);
             }
         }
         if ($status === User::STATUS_ACTIVE && !$this->hasPassword($id)) {
-            $this->Flash->error('Benutzer hat noch kein Passwort. Bitte Einladungslink senden oder Passwort setzen.');
+            $this->Flash->error(__('flash.user.no_password'));
 
             return $this->redirect(['action' => 'view', $id]);
         }
@@ -104,7 +104,7 @@ class UsersController extends AdminController
             ['s' => $status, 'id' => $id],
         );
         $this->audit()->log($status === 'active' ? 'user.activate' : 'user.deactivate', 'user', $id, ['newValue' => ['status' => $status]]);
-        $this->Flash->success('Status aktualisiert.');
+        $this->Flash->success(__('flash.user.status_updated'));
 
         return $this->redirect(['action' => 'view', $id]);
     }
@@ -117,7 +117,7 @@ class UsersController extends AdminController
         if ($exists) {
             // Selbst-Aussperr-Schutz: letzten user_group_admin-Bereich nicht entziehen.
             if ($area === 'user_group_admin' && $this->isLastUserGroupAdmin($id)) {
-                $this->Flash->error('Letzter Administrator der Benutzer- & Gruppenverwaltung — Entzug blockiert.');
+                $this->Flash->error(__('flash.user.last_admin_revoke'));
 
                 return $this->redirect(['action' => 'view', $id]);
             }
@@ -127,7 +127,7 @@ class UsersController extends AdminController
             $conn->execute('INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a) ON CONFLICT DO NOTHING', ['u' => $id, 'a' => $area]);
             $this->audit()->log('admin_access.grant', 'user', $id, ['newValue' => ['area' => $area]]);
         }
-        $this->Flash->success('Administrationsbereich aktualisiert.');
+        $this->Flash->success(__('flash.user.area_updated'));
 
         return $this->redirect(['action' => 'view', $id]);
     }
@@ -137,7 +137,7 @@ class UsersController extends AdminController
         $users = $this->fetchTable('Users');
         $user = $users->find()->where(['id' => $id])->first();
         if ($user === null || $user->get('status') === User::STATUS_ANONYMIZED) {
-            $this->Flash->error('Benutzer nicht verfügbar.');
+            $this->Flash->error(__('flash.user.not_available'));
 
             return $this->redirect(['action' => 'index']);
         }
@@ -147,11 +147,11 @@ class UsersController extends AdminController
             ]);
             if ($users->save($user)) {
                 $this->audit()->log('user.update', 'user', $id, ['newValue' => ['username' => $user->get('username')]]);
-                $this->Flash->success('Benutzer aktualisiert.');
+                $this->Flash->success(__('flash.user.updated'));
 
                 return $this->redirect(['action' => 'view', $id]);
             }
-            $this->Flash->error('Aktualisierung fehlgeschlagen (Eindeutigkeit/Validierung prüfen).');
+            $this->Flash->error(__('flash.user.update_failed'));
         }
         $this->set(compact('user'));
 
@@ -169,7 +169,7 @@ class UsersController extends AdminController
         $conn = ConnectionManager::get('default');
         $row = $conn->execute('SELECT username, email, status FROM users WHERE id = :id', ['id' => $id])->fetch('assoc');
         if ($row === false || $row['status'] === User::STATUS_ANONYMIZED) {
-            $this->Flash->error('Benutzer nicht verfügbar.');
+            $this->Flash->error(__('flash.user.not_available'));
 
             return $this->redirect(['action' => 'index']);
         }
@@ -179,9 +179,9 @@ class UsersController extends AdminController
 
         $sent = (new MailService())->sendInvitation((string)$row['email'], (string)$row['username'], $url);
         if ($sent) {
-            $this->Flash->success('Einladung per E-Mail an ' . h($row['email']) . ' gesendet. Link (72 h): ' . $url);
+            $this->Flash->success(__('flash.user.invite_sent', h($row['email']), $url));
         } else {
-            $this->Flash->success('Einladungslink (72 h gültig): ' . $url);
+            $this->Flash->success(__('flash.user.invite_link', $url));
         }
 
         return $this->redirect(['action' => 'view', $id]);
@@ -195,14 +195,14 @@ class UsersController extends AdminController
         $service = new PasswordResetService();
         $min = $service->minPasswordLength();
         if (strlen($password) < $min) {
-            $this->Flash->error("Passwort muss mindestens $min Zeichen haben.");
+            $this->Flash->error(__('flash.user.password_too_short', $min));
 
             return $this->redirect(['action' => 'view', $id]);
         }
         $users = $this->fetchTable('Users');
         $user = $users->find()->where(['id' => $id])->first();
         if ($user === null || $user->get('status') === User::STATUS_ANONYMIZED) {
-            $this->Flash->error('Benutzer nicht verfügbar.');
+            $this->Flash->error(__('flash.user.not_available'));
 
             return $this->redirect(['action' => 'index']);
         }
@@ -212,7 +212,7 @@ class UsersController extends AdminController
         }
         $users->save($user, ['checkRules' => false]);
         $this->audit()->log('user.password_set', 'user', $id, ['newValue' => ['by' => 'admin', 'status' => $user->get('status')]]);
-        $this->Flash->success('Passwort gesetzt.');
+        $this->Flash->success(__('flash.user.password_set'));
 
         return $this->redirect(['action' => 'view', $id]);
     }
@@ -221,21 +221,21 @@ class UsersController extends AdminController
     {
         $this->request->allowMethod('post');
         if ($id === $this->currentUserId()) {
-            $this->Flash->error('Sie können sich nicht selbst anonymisieren.');
+            $this->Flash->error(__('flash.user.self_anonymize'));
 
             return $this->redirect(['action' => 'view', $id]);
         }
         if ($this->isLastUserGroupAdmin($id)) {
-            $this->Flash->error('Letzter Administrator der Benutzer- & Gruppenverwaltung — Anonymisierung blockiert.');
+            $this->Flash->error(__('flash.user.last_admin_anonymize'));
 
             return $this->redirect(['action' => 'view', $id]);
         }
         $users = $this->fetchTable('Users');
         $user = $users->find()->where(['id' => $id])->first();
         if ($user !== null && $users->anonymize($user)) {
-            $this->Flash->success('Benutzer irreversibel anonymisiert.');
+            $this->Flash->success(__('flash.user.anonymized'));
         } else {
-            $this->Flash->error('Anonymisierung fehlgeschlagen.');
+            $this->Flash->error(__('flash.user.anonymize_failed'));
         }
 
         return $this->redirect(['action' => 'index']);

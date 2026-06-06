@@ -31,14 +31,14 @@ class GroupsController extends AdminController
             $name = trim((string)$this->request->getData('name'));
             $desc = trim((string)$this->request->getData('description')) ?: null;
             if ($name === '') {
-                $this->Flash->error('Name darf nicht leer sein.');
+                $this->Flash->error(__('flash.group.name_empty'));
             } else {
                 $row = ConnectionManager::get('default')->execute(
                     'INSERT INTO "groups" (name, description) VALUES (:n, :d) RETURNING id',
                     ['n' => $name, 'd' => $desc],
                 )->fetch('assoc');
                 (new AuditLogger())->log('group.create', 'group', (string)$row['id'], ['newValue' => ['name' => $name]]);
-                $this->Flash->success('Gruppe angelegt.');
+                $this->Flash->success(__('flash.group.created'));
 
                 return $this->redirect(['action' => 'view', $row['id']]);
             }
@@ -52,7 +52,7 @@ class GroupsController extends AdminController
         $conn = ConnectionManager::get('default');
         $group = $conn->execute('SELECT * FROM "groups" WHERE id = :id', ['id' => $id])->fetch('assoc');
         if ($group === false) {
-            $this->Flash->error('Gruppe nicht gefunden.');
+            $this->Flash->error(__('flash.group.not_found'));
 
             return $this->redirect(['action' => 'index']);
         }
@@ -90,7 +90,7 @@ class GroupsController extends AdminController
             ['a' => $active, 'id' => $id],
         );
         (new AuditLogger())->log($active ? 'group.activate' : 'group.deactivate', 'group', $id, ['newValue' => ['active' => $active]]);
-        $this->Flash->success('Gruppenstatus aktualisiert.');
+        $this->Flash->success(__('flash.group.status_updated'));
 
         return $this->redirect(['action' => 'view', $id]);
     }
@@ -105,7 +105,7 @@ class GroupsController extends AdminController
                 ['g' => $id, 'u' => $userId],
             );
             (new AuditLogger())->log('group.member_add', 'group', $id, ['newValue' => ['user' => $userId]]);
-            $this->Flash->success('Mitglied hinzugefügt.');
+            $this->Flash->success(__('flash.group.member_added'));
         }
 
         return $this->redirect(['action' => 'view', $id]);
@@ -119,7 +119,7 @@ class GroupsController extends AdminController
             ['g' => $id, 'u' => $userId],
         );
         (new AuditLogger())->log('group.member_remove', 'group', $id, ['oldValue' => ['user' => $userId]]);
-        $this->Flash->success('Mitglied entfernt.');
+        $this->Flash->success(__('flash.group.member_removed'));
 
         return $this->redirect(['action' => 'view', $id]);
     }
@@ -130,7 +130,7 @@ class GroupsController extends AdminController
         $data = $this->request->getData();
         [$moduleKey, $resourceType] = array_pad(explode('::', (string)($data['resource'] ?? ''), 2), 2, '');
         if ($moduleKey === '' || $resourceType === '') {
-            $this->Flash->error('Ungültige Ressource.');
+            $this->Flash->error(__('flash.group.invalid_resource'));
 
             return $this->redirect(['action' => 'view', $id]);
         }
@@ -155,10 +155,10 @@ class GroupsController extends AdminController
         $service = new PermissionService();
         if (!in_array(true, $bread, true) && $extra === []) {
             $service->revoke($id, $moduleKey, $resourceType, $resourceKey);
-            $this->Flash->success('Rechte entzogen.');
+            $this->Flash->success(__('flash.group.perms_revoked'));
         } else {
             $service->grant($id, $moduleKey, $resourceType, $resourceKey, $bread, $extra);
-            $this->Flash->success('Rechte gesetzt.');
+            $this->Flash->success(__('flash.group.perms_set'));
         }
 
         return $this->redirect(['action' => 'view', $id]);

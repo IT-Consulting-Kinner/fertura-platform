@@ -12,34 +12,34 @@ $flag = static fn ($v) => filter_var($v, FILTER_VALIDATE_BOOLEAN) ? '✓' : '–
 ?>
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h1 class="h3 mb-0"><?= h($group['name']) ?>
-        <span class="badge text-bg-<?= $active ? 'success' : 'secondary' ?> align-middle"><?= $active ? 'aktiv' : 'inaktiv' ?></span></h1>
+        <span class="badge text-bg-<?= $active ? 'success' : 'secondary' ?> align-middle"><?= h($active ? __('admin.groups.active') : __('admin.groups.inactive')) ?></span></h1>
     <div class="d-flex gap-2">
-        <?= $this->Form->postLink($active ? 'Deaktivieren' : 'Aktivieren',
+        <?= $this->Form->postLink($active ? __('admin.groups.deactivate') : __('admin.groups.activate'),
             ['action' => 'setActive', $group['id'], $active ? 'off' : 'on'],
             ['class' => 'btn btn-sm ' . ($active ? 'btn-warning' : 'btn-success')]) ?>
-        <?= $this->Html->link('&laquo; Zur Liste', ['action' => 'index'], ['class' => 'btn btn-outline-secondary btn-sm', 'escape' => false]) ?>
+        <?= $this->Html->link('&laquo; ' . __('admin.groups.backtolist'), ['action' => 'index'], ['class' => 'btn btn-outline-secondary btn-sm', 'escape' => false]) ?>
     </div>
 </div>
 
 <div class="row g-4">
     <div class="col-md-5">
         <div class="card">
-            <div class="card-header">Mitglieder</div>
+            <div class="card-header"><?= h(__('admin.groups.members')) ?></div>
             <ul class="list-group list-group-flush">
                 <?php foreach ($members as $m): ?>
                     <li class="list-group-item d-flex justify-content-between align-items-center">
                         <span><?= h($m['username']) ?> <span class="text-muted small"><?= h($m['email']) ?></span></span>
-                        <?= $this->Form->postLink('Entfernen', ['action' => 'removeMember', $group['id'], $m['id']], ['class' => 'btn btn-outline-danger btn-sm']) ?>
+                        <?= $this->Form->postLink(__('admin.groups.member_remove'), ['action' => 'removeMember', $group['id'], $m['id']], ['class' => 'btn btn-outline-danger btn-sm']) ?>
                     </li>
                 <?php endforeach; ?>
-                <?php if ($members === []): ?><li class="list-group-item text-muted">Keine Mitglieder.</li><?php endif; ?>
+                <?php if ($members === []): ?><li class="list-group-item text-muted"><?= h(__('admin.groups.members_empty')) ?></li><?php endif; ?>
             </ul>
             <div class="card-body">
                 <?= $this->Form->create(null, ['url' => ['action' => 'addMember', $group['id']]]) ?>
                 <div class="input-group input-group-sm">
                     <?= $this->Form->select('user_id', array_column($candidates, 'username', 'id'),
-                        ['empty' => '— Benutzer wählen —', 'class' => 'form-select']) ?>
-                    <?= $this->Form->button('Hinzufügen', ['class' => 'btn btn-primary']) ?>
+                        ['empty' => __('admin.groups.member_select'), 'class' => 'form-select']) ?>
+                    <?= $this->Form->button(__('admin.groups.member_add'), ['class' => 'btn btn-primary']) ?>
                 </div>
                 <?= $this->Form->end() ?>
             </div>
@@ -47,15 +47,15 @@ $flag = static fn ($v) => filter_var($v, FILTER_VALIDATE_BOOLEAN) ? '✓' : '–
     </div>
     <div class="col-md-7">
         <div class="card mb-4">
-            <div class="card-header">Vergebene Rechte</div>
+            <div class="card-header"><?= h(__('admin.groups.perms_granted')) ?></div>
             <table class="table table-sm mb-0">
-                <thead><tr><th>Modul / Ressource</th><th>Objekt</th><th class="text-center">B</th><th class="text-center">R</th><th class="text-center">A</th><th class="text-center">E</th><th class="text-center">D</th><th>Zusatz</th></tr></thead>
+                <thead><tr><th><?= h(__('admin.groups.perms_col_resource')) ?></th><th><?= h(__('admin.groups.perms_col_object')) ?></th><th class="text-center">B</th><th class="text-center">R</th><th class="text-center">A</th><th class="text-center">E</th><th class="text-center">D</th><th><?= h(__('admin.groups.perms_col_extra')) ?></th></tr></thead>
                 <tbody>
                 <?php foreach ($permissions as $p): ?>
                     <?php $ex = is_string($p['extra_actions'] ?? null) ? (json_decode((string)$p['extra_actions'], true) ?: []) : (array)($p['extra_actions'] ?? []); ?>
                     <tr>
                         <td><code class="small"><?= h($p['module_key']) ?>::<?= h($p['resource_type']) ?></code></td>
-                        <td class="small"><?= $p['resource_key'] === null ? '<span class="text-muted">Klasse</span>' : h((string)$p['resource_key']) ?></td>
+                        <td class="small"><?= $p['resource_key'] === null ? '<span class="text-muted">' . h(__('admin.groups.perms_class')) . '</span>' : h((string)$p['resource_key']) ?></td>
                         <td class="text-center"><?= $flag($p['can_browse']) ?></td>
                         <td class="text-center"><?= $flag($p['can_read']) ?></td>
                         <td class="text-center"><?= $flag($p['can_add']) ?></td>
@@ -64,18 +64,18 @@ $flag = static fn ($v) => filter_var($v, FILTER_VALIDATE_BOOLEAN) ? '✓' : '–
                         <td class="small"><?= h(implode(', ', array_keys(array_filter($ex)))) ?: '–' ?></td>
                     </tr>
                 <?php endforeach; ?>
-                <?php if ($permissions === []): ?><tr><td colspan="8" class="text-muted">Keine Rechte vergeben.</td></tr><?php endif; ?>
+                <?php if ($permissions === []): ?><tr><td colspan="8" class="text-muted"><?= h(__('admin.groups.perms_empty')) ?></td></tr><?php endif; ?>
                 </tbody>
             </table>
         </div>
 
         <div class="card">
-            <div class="card-header">Rechte vergeben/ändern (gruppenfähige Ressourcen)</div>
+            <div class="card-header"><?= h(__('admin.groups.perms_editor_title')) ?></div>
             <div class="card-body">
                 <?php if ($resources === []): ?>
-                    <p class="text-muted mb-0">Keine gruppenfähigen Ressourcen. Module mit Ressourcen müssen erst installiert werden.</p>
+                    <p class="text-muted mb-0"><?= h(__('admin.groups.perms_editor_none')) ?></p>
                 <?php else: ?>
-                    <p class="text-muted small">Pro Ressource: BREAD + Zusatzaktionen setzen. Objekt-Schlüssel leer = ganze Objektklasse (Kap. 25.4/25.7/25.11). Alle Häkchen leer = Rechte entziehen.</p>
+                    <p class="text-muted small"><?= h(__('admin.groups.perms_editor_hint')) ?></p>
                     <?php foreach ($resources as $r):
                         $rid = $r['module_key'] . '::' . $r['resource_type'];
                         $rkey = str_replace(['.', ':'], '_', $rid);
@@ -96,8 +96,8 @@ $flag = static fn ($v) => filter_var($v, FILTER_VALIDATE_BOOLEAN) ? '✓' : '–
                                 <div class="form-check"><?= $this->Form->checkbox('extra[' . $ea . ']', ['class' => 'form-check-input', 'id' => $rkey . '_x_' . $ea]) ?>
                                     <label class="form-check-label small" for="<?= $rkey . '_x_' . $ea ?>"><?= h($ea) ?></label></div>
                             <?php endforeach; ?>
-                            <?= $this->Form->control('resource_key', ['label' => false, 'placeholder' => 'Objekt-ID (optional)', 'class' => 'form-control form-control-sm', 'style' => 'max-width:150px']) ?>
-                            <?= $this->Form->button('Speichern', ['class' => 'btn btn-outline-primary btn-sm']) ?>
+                            <?= $this->Form->control('resource_key', ['label' => false, 'placeholder' => __('admin.groups.perms_object_placeholder'), 'class' => 'form-control form-control-sm', 'style' => 'max-width:150px']) ?>
+                            <?= $this->Form->button(__('admin.groups.perms_save'), ['class' => 'btn btn-outline-primary btn-sm']) ?>
                             <?= $this->Form->end() ?>
                         </div>
                     <?php endforeach; ?>

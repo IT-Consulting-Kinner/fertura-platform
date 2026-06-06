@@ -4,12 +4,12 @@
  * @var array<int, array<string, mixed>> $settings
  */
 ?>
-<h1 class="h3 mb-3">Konfiguration</h1>
-<p class="text-muted small">Bekannte Core-Einstellungen. Greifen Vorgabewerte auch ohne DB-Eintrag. Secrets werden verschlüsselt gespeichert und nie im Klartext angezeigt.</p>
+<h1 class="h3 mb-3"><?= h(__('admin.config.title')) ?></h1>
+<p class="text-muted small"><?= h(__('admin.config.intro')) ?></p>
 
 <div class="table-responsive">
 <table class="table align-middle">
-    <thead><tr><th>Schlüssel</th><th>Typ</th><th>Standard</th><th style="min-width:280px">Wert</th></tr></thead>
+    <thead><tr><th><?= h(__('admin.config.col_key')) ?></th><th><?= h(__('admin.config.col_type')) ?></th><th><?= h(__('admin.config.col_default')) ?></th><th style="min-width:280px"><?= h(__('admin.config.col_value')) ?></th></tr></thead>
     <tbody>
     <?php foreach ($settings as $s): ?>
         <tr>
@@ -31,11 +31,11 @@
                         'label' => false,
                         'type' => $s['type'] === 'int' ? 'number' : 'text',
                         'value' => $s['secret'] ? '' : $s['value'],
-                        'placeholder' => $s['secret'] ? ($s['value'] !== null ? '•••• gesetzt' : 'nicht gesetzt') : '',
+                        'placeholder' => $s['secret'] ? ($s['value'] !== null ? __('admin.config.secret_set') : __('admin.config.secret_unset')) : '',
                         'class' => 'form-control form-control-sm',
                     ]) ?>
                 <?php endif; ?>
-                <?= $this->Form->button('Speichern', ['class' => 'btn btn-outline-primary btn-sm']) ?>
+                <?= $this->Form->button(__('admin.config.save'), ['class' => 'btn btn-outline-primary btn-sm']) ?>
                 <?= $this->Form->end() ?>
             </td>
         </tr>

@@ -49,14 +49,14 @@ class ConfigController extends AdminController
         $catalog = new SettingsCatalog();
         $def = $catalog->definition($namespace, $key);
         if ($def === null) {
-            $this->Flash->error('Unbekanntes Setting.');
+            $this->Flash->error(__('flash.config.unknown_setting'));
 
             return $this->redirect(['action' => 'index']);
         }
 
         $raw = $this->request->getData('value');
         if (!empty($def['secret']) && ($raw === null || $raw === '')) {
-            $this->Flash->success('Secret unverändert (leeres Feld).');
+            $this->Flash->success(__('flash.config.secret_unchanged'));
 
             return $this->redirect(['action' => 'index']);
         }
@@ -70,7 +70,7 @@ class ConfigController extends AdminController
         }
 
         (new SettingsManager())->set($namespace, $key, $value);
-        $this->Flash->success(sprintf('„%s.%s" gespeichert.', $namespace, $key));
+        $this->Flash->success(__('flash.config.saved', $namespace, $key));
 
         return $this->redirect(['action' => 'index']);
     }
