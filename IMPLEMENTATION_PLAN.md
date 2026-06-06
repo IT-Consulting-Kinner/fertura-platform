@@ -174,6 +174,44 @@ Rolle ist.
 - Worker-Heartbeat liegt in `core.worker_heartbeats` statt `system_settings`
   (sachlich gleichwertig; Abweichung dokumentiert).
 
+## i18n / Mehrsprachigkeit — Implementierungsplan (finalisiert 2026-06-05)
+
+Design finalisiert mit dem Nutzer (Entscheidungen E37–E41). Umsetzung in 8
+verifizierbaren Etappen; nach jeder Etappe Container-Verifikation, dann die
+nächste.
+
+**Querschnitt-Prinzipien:** Basissprache **Englisch**; **symbolische Schlüssel**
+(`<bereich>.<sache>.<variante>`); Domain = `component_key` (Core: `default`);
+Locale `ll_CC`, **flacher** Fallback auf Englisch der Version; jeder Text über
+`__()/__d()/__x()`.
+
+- `[ ]` **i18n-1 — Laufzeit & Locale-Auflösung:** `LocaleMiddleware` (Präzedenz
+  Session/`?lang` → `user.locale` → opt. `Accept-Language` → System-Default),
+  `I18n::setLocale`+`intl.default_locale`; Settings `locale.default`/`locale.enabled`;
+  Englisch-Fallback. *Verifik: öffentliche Auth-Seiten als Testfläche, ?lang
+  schaltet, fehlender Key → Englisch, Datums-/Zahlenformat folgt.*
+- `[ ]` **i18n-2 — Core-UI auslagern:** alle harten Strings → `__()`; **`en_US`**
+  (kanonisch) + **`de_DE`** (bisherige Texte, keine Regression); Schlüssel-
+  konvention dokumentiert.
+- `[ ]` **i18n-3 — Managed Locale Store + Metadaten + sicheres Schreiben:**
+  persistentes Volume; Metadaten-Migration (`signed/reviewed/edited`,
+  version, source, file_path, checksum, `write_state/started_at/last_write_error`);
+  `.tmp`+`fsync`→atomarer Rename + MO-Kompilierung; Recovery/Cleaner mit
+  **pg-Advisory-Lock** (in-flight vs. verwaist), Selbstheilung/Bereinigung.
+- `[ ]` **i18n-4 — Komponenten-Integration:** Manifest `locales`; Install kopiert
+  Paket-`locales/` in den Store; Aktivierung registriert Domain; Deinstallation
+  behält Dateien; Modul-Fixture.
+- `[ ]` **i18n-5 — Auflösung, Versions-Gate & Status:** exakt > Same-Major
+  (Hinweis) > Englisch (Fehler); wählbar = Core hat Datei; berechneter Status;
+  Caching.
+- `[ ]` **i18n-6 — Sprachverwaltung (Admin-Bereich `localization`, 7.):** Liste
+  aktiver Komponenten + inaktiv-mit-Dateien; Import (Signatur nur hier;
+  `signed/reviewed/edited`; ungültige Signatur = Hinweis+Review+Abbruch;
+  Re-Import-Warnung bei `edited`); Löschregeln; **Feld-Editor** (verlustfrei,
+  sicheres Schreiben; edit→reviewed=yes/edited=yes); Review.
+- `[ ]` **i18n-7 — Umschalter, Benutzer-/Session-Locale, Einstellungen.**
+- `[ ]` **i18n-8 — Audit, Health, Entwicklerdoku.**
+
 ## Verifikationsbericht je Schritt
 
 > Wird je Schritt befüllt: geprüfte Kapitel, Soll/Ist, Container-Lauf,
@@ -730,6 +768,11 @@ Worker (Superuser-Pfad) + `/health` gesund; Fresh-Clone-Pfad über
 | E15 | 2 | Anmeldeschutz-Defaults: 10 Fehlversuche / 15-min-Fenster, dann temporäre Sperre (`LoginThrottle`, persistiert in `auth_failures`). | Entscheidung 162 fordert „sicheren Vorgabewert ohne Konfiguration". Konkrete Schwellen doku-offen → autonom; ab Step 4 DB-konfigurierbar. |
 | E16 | 3 | Audit-Log-Design: (a) **Personen per auflösbarer UUID** (kein denormalisierter Klartext-Name/E-Mail) → Anonymisierung wirkt ohne Log-Mutation; **textuelle Schnappschüsse nur für nicht-personenbezogene** Entitäten (Module/Config) = referenzrobust. (b) **Unveränderlichkeit per Trigger** (UPDATE/DELETE blockiert; Bypass nur via `SET LOCAL app.allow_audit_mutation`). (c) **Monats-RANGE-Partitionierung** + DEFAULT-Partition; `audit_partition`-Command stellt Monatspartitionen im Entrypoint sicher. (d) `AuditLogger`-Service schreibt transaktional. | Vereint Referenzrobustheit (24.16.1) und DSGVO-Anonymisierung (27.15.3) ohne Konflikt mit der Unveränderlichkeit (20.6). Partitionierung gem. 30.8/Entscheidung 179. Konkrete Felder/Platzhalter doku-offen → autonom. |
 | E17 | 3 | nginx löst den Upstream `core` zur Laufzeit über den Docker-Resolver (`127.0.0.11`) + Variable im `fastcgi_pass` auf, statt die IP beim Start zu cachen. | Behebt 502 „Connection refused" nach `docker compose up -d --force-recreate core` (neue Container-IP). Robustheit für Recreate/Autostart. Verifiziert. |
+| E41 | i18n | **Sprachverwaltung** als eigener fester Admin-Bereich (`localization`, 7.). **Feld-basierter, verlustfreier Editor** (msgctxt/Plural/Kommentare bleiben); nur Admins editieren. Löschregeln: aktive Komponente alles außer Englisch; inaktive inkl. Englisch (keine Leichen); inaktive nur sichtbar solange Dateien existieren; Löschen markiert die Komponente. Deinstallation behält Sprachdateien. | Saubere Trennung + Governance; verhindert kaputte Dateien per Konstruktion. Mit dem Nutzer finalisiert. |
+| E40 | i18n | **Sicheres Schreiben + Recovery:** `.tmp`+`fsync`→**atomarer Rename** (kein Lösch-Fenster); Store auf persistentem Volume. **pg-Advisory-Lock** je Datei unterscheidet *in-flight* (Lock gehalten) von *verwaist* (Lock frei). Recovery (Start/periodisch/lazy): Original fehlt + valide `.tmp` → promoten (Selbstheilung); sonst verwaiste `.tmp` löschen + Fehlerhinweis (Audit/Health). Idempotent, lock-serialisiert. | Korrektheit unter Absturz/Concurrency; konsistent mit Lifecycle-Lock (E21). Mit dem Nutzer finalisiert. |
+| E39 | i18n | **Versions-Gate** je Sprachdatei gegen aktive Komponentenversion: identisch = sauber; Major gleich, Minor/Patch abweichend = **genutzt + Hinweis**; Major abweichend = **nicht genutzt + Fehler** → Englisch. **Auflösung:** exakt > Same-Major-höchste (Hinweis) > Englisch. **Wählbar** = Locales, für die der **Core** eine Datei hat (Mismatch → Englisch der Version). Status wird berechnet, nicht gespeichert. | Robuster, vorhersagbarer Fallback; Major als Bruchgrenze (Key-Änderungen). Mit dem Nutzer finalisiert. |
+| E38 | i18n | **Managed Locale Store:** Katalog-Inhalt in **Dateien** (PO editierbar + MO Laufzeit), **DB nur Metadaten**. Status-Trio **`signed/reviewed/edited`**: Signatur **nur beim Import** geprüft → `signed` persistiert die Herkunft; Editieren invalidiert die Signatur **nicht** → `edited=yes`, `reviewed=yes` (Admin-Edit = Review). `signed`→`reviewed=yes`; unsigniert/ungültig signiert → `reviewed=no` bis Review; ungültige Signatur = wie unsigniert + spezifischer Hinweis + Review-vor-Import + Abbruch. Re-Import bewertet frisch, warnt bei `edited`. Keine eigene Pack-Versionierung (Überschreiben je `component/version/locale`). | Herkunft vs. Bearbeitung sauber getrennt; Dateien = natives Laufzeitformat. Mit dem Nutzer finalisiert. |
+| E37 | i18n | **Basissprache Englisch; symbolische Schlüssel** (Variante B, `<bereich>.<sache>.<variante>`); Domain je Komponente (`component_key`, Core `default`); Locale-Format `ll_CC`, **flacher** Fallback (gewählt → Englisch, kein `de_AT→de`). Jede Komponente bringt ≥ Englisch für ihre Version mit; weitere Sprachen über die Verwaltung nachladbar. CakePHP I18n (`__()/__d()/__x()`). | Doku-konform („CakePHP I18n, Standard: Englisch"); stabile Schlüssel passen zum Versions-Gate und zum Feld-Editor. Mit dem Nutzer finalisiert. |
 | E36 | Auth-Slot | Authentifizierungsmethode über den Core-Resolver-Slot `core.auth.provider` austauschbar gemacht (Kap. 27.2.2): `AuthProviderInterface` + `LocalAuthProvider` (Default); `AuthProviderResolver` löst den aktiven Provider aus der Capability-Registry auf; `Application::getAuthenticationService` nutzt ihn. **Break-Glass:** defekter/fehlender Provider → Warnung + lokaler Fallback (nie Lockout). CLI `auth status`. Eine SSO/AD-Extension registriert künftig `resolvers_registered` für `core.auth.provider` + implementiert `AuthProviderInterface`; Identitäten/Autorisierung bleiben Core. | Schließt die in der Onboarding-Review benannte Lücke (Pluggability war konzeptuell vorgesehen, aber nicht verdrahtet). Mechanismus (Registry/Resolver) existierte bereits. Vom Nutzer beauftragt. |
 | E35 | Onboarding | Identitätsmails (Einladung, Passwort-Reset) gehören in den **Core**: schlanker `MailService` über den konfigurierten Transport (`EMAIL_TRANSPORT_DEFAULT_URL`, Dev → Mailpit), Settings `mail.*`; Self-Service `/forgot-password` (neutral, keine Enumeration). Plus „Benutzer bearbeiten" und Selbst-Aussperr-Schutz (kein Selbst-Deaktivieren/-Anonymisieren, letzter `user_group_admin` geschützt, Aktivierung nur mit Passwort). Fachliche Modul-Benachrichtigungen + Ticketing-Mailbox-Betrieb (20.4) bleiben Modul-Scope. | Der Core hatte SMTP-Konfig + Mailpit, aber keinen Mailer → inkonsistent. Identität ist Plattform-Verantwortung; der Transport bleibt zentral, Fachmails liegen bei den Modulen. Vom Nutzer bestätigt (Reset-Mail-Flow in den Core). |
 | E34 | Merkliste A | Acht Muss-Lücken aus der Re-Verifikation geschlossen: Lizenz-Online/Karenz-Auswertung; nachträglicher Signatur-Widerruf für installierte Module (signature_status); CRL-Cache-Alter/Stale; Sicherheitsupdate-Kennzeichnung (Manifest+Historie); Migrationsvorschau vor Update; Session-Timeout-Verdrahtung; Einladungs-/Passwort-Setz-Flow (Token, E-Mail-Versand bleibt Modul-Scope); BREAD-Admin-UI (Einzelobjekt/Zusatzaktionen/Gruppenfähigkeit). Begleitend: Core-Update-Migrationen über privileged-Connection. | Kap. 24.9.2/25.11/25.12/27/28.7.3.1/28.8.1/28.10. Releaserelevante Transparenz-/Sicherheits- und GUI-Funktionen; jede einzeln im Container verifiziert. |
