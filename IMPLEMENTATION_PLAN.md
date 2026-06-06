@@ -185,7 +185,7 @@ nächste.
 Locale `ll_CC`, **flacher** Fallback auf Englisch der Version; jeder Text über
 `__()/__d()/__x()`.
 
-- `[ ]` **i18n-1 — Laufzeit & Locale-Auflösung:** `LocaleMiddleware` (Präzedenz
+- `[x]` **i18n-1 — Laufzeit & Locale-Auflösung** (verifiziert 2026-06-05): `LocaleMiddleware` (Präzedenz
   Session/`?lang` → `user.locale` → opt. `Accept-Language` → System-Default),
   `I18n::setLocale`+`intl.default_locale`; Settings `locale.default`/`locale.enabled`;
   Englisch-Fallback. *Verifik: öffentliche Auth-Seiten als Testfläche, ?lang
