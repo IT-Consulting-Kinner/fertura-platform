@@ -45,12 +45,12 @@ class AuthController extends AppController
         if ($this->request->is('post')) {
             $username = (string)$this->request->getData('username');
             if ($username !== '' && $throttle->isBlocked($username)) {
-                $this->Flash->error('Zu viele Fehlversuche. Bitte später erneut versuchen.');
+                $this->Flash->error(__('flash.auth.throttled'));
             } else {
                 if ($username !== '') {
                     $throttle->recordFailure($username, $this->request->clientIp());
                 }
-                $this->Flash->error('Ungültige Anmeldedaten.');
+                $this->Flash->error(__('flash.auth.invalid'));
             }
         }
 
@@ -60,7 +60,7 @@ class AuthController extends AppController
     public function logout()
     {
         $this->Authentication->logout();
-        $this->Flash->success('Abgemeldet.');
+        $this->Flash->success(__('flash.auth.loggedout'));
 
         return $this->redirect('/login');
     }
@@ -87,7 +87,7 @@ class AuthController extends AppController
                     (new MailService())->sendPasswordReset((string)$row['email'], (string)$row['username'], $url);
                 }
             }
-            $this->Flash->success('Falls ein Konto existiert, wurde eine E-Mail mit Anweisungen versendet.');
+            $this->Flash->success(__('flash.auth.reset_sent'));
 
             return $this->redirect('/login');
         }
@@ -110,7 +110,7 @@ class AuthController extends AppController
             $password = (string)$this->request->getData('password');
             $confirm = (string)$this->request->getData('password_confirm');
             if ($password !== $confirm) {
-                $this->Flash->error('Passwörter stimmen nicht überein.');
+                $this->Flash->error(__('flash.auth.pw_mismatch'));
 
                 return null;
             }
@@ -120,7 +120,7 @@ class AuthController extends AppController
 
                 return null;
             }
-            $this->Flash->success('Passwort gesetzt. Sie können sich jetzt anmelden.');
+            $this->Flash->success(__('flash.auth.pw_set'));
 
             return $this->redirect('/login');
         }

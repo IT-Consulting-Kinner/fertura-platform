@@ -26,28 +26,28 @@ class AdminController extends AppController
     /** Bereichs-Navigation (Bereich-Key => Label + Menüpunkte). */
     public const NAV = [
         'user_group_admin' => [
-            'label' => 'Benutzer & Gruppen',
-            'items' => [['Benutzer', '/admin/users'], ['Gruppen', '/admin/groups']],
+            'label' => 'admin.nav.users_groups',
+            'items' => [['admin.nav.users', '/admin/users'], ['admin.nav.groups', '/admin/groups']],
         ],
         'module_lifecycle' => [
-            'label' => 'Module',
-            'items' => [['Module', '/admin/modules']],
+            'label' => 'admin.nav.modules',
+            'items' => [['admin.nav.module_list', '/admin/modules']],
         ],
         'marketplace_license' => [
-            'label' => 'Marketplace & Lizenz',
-            'items' => [['Marketplace', '/admin/marketplace'], ['Lizenzen', '/admin/marketplace/licenses']],
+            'label' => 'admin.nav.marketplace',
+            'items' => [['admin.nav.marketplace_item', '/admin/marketplace'], ['admin.nav.licenses', '/admin/marketplace/licenses']],
         ],
         'registry_contracts' => [
-            'label' => 'Registry',
-            'items' => [['Contracts', '/admin/registry'], ['Interfaces', '/admin/registry/interfaces']],
+            'label' => 'admin.nav.registry',
+            'items' => [['admin.nav.contracts', '/admin/registry'], ['admin.nav.interfaces', '/admin/registry/interfaces']],
         ],
         'update_manager' => [
-            'label' => 'Updates',
-            'items' => [['Update-Manager', '/admin/updates']],
+            'label' => 'admin.nav.updates',
+            'items' => [['admin.nav.update_manager_item', '/admin/updates']],
         ],
         'core_config' => [
-            'label' => 'Konfiguration',
-            'items' => [['Einstellungen', '/admin/config']],
+            'label' => 'admin.nav.config',
+            'items' => [['admin.nav.settings', '/admin/config']],
         ],
     ];
 

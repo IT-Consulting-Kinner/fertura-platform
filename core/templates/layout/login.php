@@ -4,11 +4,11 @@
  */
 ?>
 <!DOCTYPE html>
-<html lang="de">
+<html lang="<?= h(str_replace('_', '-', \Cake\I18n\I18n::getLocale())) ?>">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Anmeldung – Fertura</title>
+    <title><?= __('auth.layout.title') ?></title>
     <?= $this->Html->css('bootstrap.min') ?>
     <style>body { background:#212529; }</style>
 </head>

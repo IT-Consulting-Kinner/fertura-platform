@@ -19,3 +19,114 @@ msgstr "Forgot password?"
 # Nur im Englischen vorhanden -> dient dem Fallback-Test (de fehlt absichtlich).
 msgid "i18n.fallbackcheck"
 msgstr "English-only fallback"
+
+# --- Auth / öffentliche Seiten (Cluster 1) ---
+msgid "auth.layout.title"
+msgstr "Sign in – Fertura"
+
+msgid "auth.backtologin"
+msgstr "Back to sign in"
+
+msgid "auth.forgot.title"
+msgstr "Forgot password"
+
+msgid "auth.forgot.intro"
+msgstr "Enter your username or email address. If an account exists, you will receive an email with a reset link."
+
+msgid "auth.forgot.identifier"
+msgstr "Username or email"
+
+msgid "auth.forgot.submit"
+msgstr "Request link"
+
+msgid "auth.setpw.title"
+msgstr "Set password"
+
+msgid "auth.setpw.notoken"
+msgstr "No token provided. Please use the complete invitation link."
+
+msgid "auth.setpw.password"
+msgstr "New password (min. %d characters)"
+
+msgid "auth.setpw.confirm"
+msgstr "Confirm password"
+
+msgid "auth.setpw.submit"
+msgstr "Set password"
+
+# --- Admin-Chrome / Navigation ---
+msgid "admin.nav.dashboard"
+msgstr "Dashboard"
+
+msgid "admin.nav.health"
+msgstr "System status"
+
+msgid "admin.nav.audit"
+msgstr "Audit log"
+
+msgid "admin.nav.logout"
+msgstr "Sign out"
+
+msgid "admin.nav.users_groups"
+msgstr "Users & groups"
+
+msgid "admin.nav.modules"
+msgstr "Modules"
+
+msgid "admin.nav.marketplace"
+msgstr "Marketplace & license"
+
+msgid "admin.nav.registry"
+msgstr "Registry"
+
+msgid "admin.nav.updates"
+msgstr "Updates"
+
+msgid "admin.nav.config"
+msgstr "Configuration"
+
+msgid "admin.nav.users"
+msgstr "Users"
+
+msgid "admin.nav.groups"
+msgstr "Groups"
+
+msgid "admin.nav.module_list"
+msgstr "Modules"
+
+msgid "admin.nav.marketplace_item"
+msgstr "Marketplace"
+
+msgid "admin.nav.licenses"
+msgstr "Licenses"
+
+msgid "admin.nav.contracts"
+msgstr "Contracts"
+
+msgid "admin.nav.interfaces"
+msgstr "Interfaces"
+
+msgid "admin.nav.update_manager_item"
+msgstr "Update manager"
+
+msgid "admin.nav.settings"
+msgstr "Settings"
+
+# --- Flash: Auth ---
+msgid "flash.auth.throttled"
+msgstr "Too many failed attempts. Please try again later."
+
+msgid "flash.auth.invalid"
+msgstr "Invalid credentials."
+
+msgid "flash.auth.loggedout"
+msgstr "Signed out."
+
+msgid "flash.auth.reset_sent"
+msgstr "If an account exists, an email with instructions has been sent."
+
+msgid "flash.auth.pw_mismatch"
+msgstr "Passwords do not match."
+
+msgid "flash.auth.pw_set"
+msgstr "Password set. You can now sign in."
