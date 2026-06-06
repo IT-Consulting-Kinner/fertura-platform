@@ -1,0 +1,21 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: Fertura Core\n"
+"Language: en_US\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+
+msgid "auth.login.username"
+msgstr "Username"
+
+msgid "auth.login.password"
+msgstr "Password"
+
+msgid "auth.login.submit"
+msgstr "Sign in"
+
+msgid "auth.login.forgot"
+msgstr "Forgot password?"
+
+# Nur im Englischen vorhanden -> dient dem Fallback-Test (de fehlt absichtlich).
+msgid "i18n.fallbackcheck"
+msgstr "English-only fallback"

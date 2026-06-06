@@ -1,0 +1,17 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: Fertura Core\n"
+"Language: de_DE\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+
+msgid "auth.login.username"
+msgstr "Benutzername"
+
+msgid "auth.login.password"
+msgstr "Passwort"
+
+msgid "auth.login.submit"
+msgstr "Anmelden"
+
+msgid "auth.login.forgot"
+msgstr "Passwort vergessen?"
