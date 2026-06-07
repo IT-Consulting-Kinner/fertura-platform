@@ -189,15 +189,32 @@ Rolle ist.
   `ModuleAutoloader`) realisiert; `signature` ist die separate Paketsignatur.
   *(Fixture gültig; ohne description/publisher → beide Felder gemeldet)*
 
-### C. Bewusst Modul-/Betreiber-Scope bzw. „spätere Version" (keine Abnahme-Lücke)
+### C. Modul-/Betreiber-Scope — mit dem Nutzer durchgesprochen (2026-06-07)
 
-- Out-of-Process-Sandbox / Drittanbieter-Isolation (23.16, spätere Version).
-- E-Mail-Betrieb 20.4, `fetch_mails`/`check_escalations`/… (Ticketing-Modul).
-- Matrix-Konfiguration 1.5, fachliche Entitäten 1.6 (Ticketing-Modul).
-- Backup/Restore 20.1, Betreiber-Alerting/Dashboards 20.2.5 (Betreiber).
-- Integrations-Extension-Module + deren Datenhaltung 29.9/29.10 (Modul).
-- Konkrete RLS-Policies je Modultabelle (Modul liefert via Migrationen).
-- Gleitende Zero-Downtime-Schlüsselrotation mit Key-ID (1.4, spätere Version).
+- **C1 — Out-of-Process-Sandbox** (23.16): **bewusst zurückgestellt** (Nutzer:
+  „wirkt overengineered"). In-Process für einen kuratierten, **signierten**
+  Modulbestand akzeptiert (E52); echte Isolation erst bei nicht-vertrauenswürdigem
+  Drittanbieter-Code nötig → später Trust-Tiering + Prozess-Sandbox.
+- ✅ **C2 — Andock-Punkt für periodische Modul-Aufgaben** (20.4, E52): Core-
+  Worker tickt registrierte `ScheduledTaskInterface` (Collector
+  `core.collector.scheduled`) im Intervall, fehlerisoliert, mit Heartbeat/Health.
+  Fachlogik (`fetch_mails`/`check_escalations`) bleibt im Ticketing-Modul.
+  Dokumentiert in `MODULE_DEVELOPMENT.md`. *(Runner: läuft/skippt nach Intervall,
+  Heartbeat verifiziert)*
+- C3 — Matrix-Konfiguration 1.5 / fachliche Entitäten 1.6: **Modul-Scope** (keine
+  Core-Aktion; Nutzer bestätigt).
+- ⏳ **C4 — Backup/Restore in den Core aufgenommen** (20.1): bewusste Abweichung
+  von „keine Systemfunktion" (Nutzer: nur Core-koordiniert sind DB↔Storage-
+  Konsistenz + Prüfbarkeit garantierbar). *(in Umsetzung — eigener Abschnitt)*
+- ✅ **C5 — Integrations-Extension-Module** (29.9/29.10): **Konzept/Checkliste**
+  in `MODULE_DEVELOPMENT.md` festgehalten (Nutzer: nur im Konzept). Umsetzung mit
+  dem konkreten Integrationsmodul.
+- ✅ **C6 — Modul-RLS-Policies** (30.3): **Doku** in `MODULE_DEVELOPMENT.md`
+  (Core-Kontext-Settings + Referenz-Policy); Durchsetzung via E47. Modul liefert
+  die konkreten Policies (Nutzer: Doku-only).
+- ✅ **C7 — Gleitende Schlüsselrotation** (1.4): CLI `trust rotate <alt> <neu>
+  --overlap-days N` setzt überlappende Gültigkeitsfenster (neu ab sofort, alt
+  läuft aus; E45 erzwingt das Auslaufen). *(Fenster gesetzt + Fehlerfall geprüft)*
 
 ### D. Bekannte Dev-/Betriebsbeobachtungen (dokumentiert)
 
@@ -826,6 +843,7 @@ Worker (Superuser-Pfad) + `/health` gesund; Fresh-Clone-Pfad über
 | E15 | 2 | Anmeldeschutz-Defaults: 10 Fehlversuche / 15-min-Fenster, dann temporäre Sperre (`LoginThrottle`, persistiert in `auth_failures`). | Entscheidung 162 fordert „sicheren Vorgabewert ohne Konfiguration". Konkrete Schwellen doku-offen → autonom; ab Step 4 DB-konfigurierbar. |
 | E16 | 3 | Audit-Log-Design: (a) **Personen per auflösbarer UUID** (kein denormalisierter Klartext-Name/E-Mail) → Anonymisierung wirkt ohne Log-Mutation; **textuelle Schnappschüsse nur für nicht-personenbezogene** Entitäten (Module/Config) = referenzrobust. (b) **Unveränderlichkeit per Trigger** (UPDATE/DELETE blockiert; Bypass nur via `SET LOCAL app.allow_audit_mutation`). (c) **Monats-RANGE-Partitionierung** + DEFAULT-Partition; `audit_partition`-Command stellt Monatspartitionen im Entrypoint sicher. (d) `AuditLogger`-Service schreibt transaktional. | Vereint Referenzrobustheit (24.16.1) und DSGVO-Anonymisierung (27.15.3) ohne Konflikt mit der Unveränderlichkeit (20.6). Partitionierung gem. 30.8/Entscheidung 179. Konkrete Felder/Platzhalter doku-offen → autonom. |
 | E17 | 3 | nginx löst den Upstream `core` zur Laufzeit über den Docker-Resolver (`127.0.0.11`) + Variable im `fastcgi_pass` auf, statt die IP beim Start zu cachen. | Behebt 502 „Connection refused" nach `docker compose up -d --force-recreate core` (neue Container-IP). Robustheit für Recreate/Autostart. Verifiziert. |
+| E52 | Modul-Andock | **Periodische Modul-Aufgaben + Scope-Klärungen** (Merkliste C, mit Nutzer): `ScheduledTaskInterface` + `ScheduledTaskRunner` (Collector `core.collector.scheduled`) — der Core-Worker tickt registrierte Modul-Aufgaben im Intervall, fehlerisoliert, mit Heartbeat (→ Health). Damit docken Ticketing-Jobs (`fetch_mails`/`check_escalations`) an, ohne Fachlogik im Core. `MODULE_DEVELOPMENT.md` dokumentiert Andock-Punkte (C2), Integrations-Extension-Anforderungen (C5, Konzept) und Modul-RLS-Doku (C6). **C1** (Sandbox) bewusst zurückgestellt: In-Process für signierten/kuratierten Bestand akzeptiert. **C7** `trust rotate` ergänzt. | Stellt den fehlenden Periodik-Andock-Punkt bereit, ohne Fachlichkeit in den Core zu ziehen; Sandbox erst bei nicht-vertrauenswürdigem Drittcode nötig. Vom Nutzer so entschieden. |
 | E51 | GUI | **Grafische Modul-Abhängigkeitsdarstellung** (Kap. 23.13.1, Merkliste B): serverseitig berechnetes SVG `/admin/modules/graph` — Ebenen per Longest-Path-Relaxation (azyklisch), Knoten als Statusfarb-Boxen, Kanten Modul → Abhängigkeit mit Pfeilmarker; ohne Client-JS (Layouts laden keins). Slot-/Binding-Diagramm (24.15.1) bewusst späterer Ausbau (Registry listet Bindings bereits). | Visualisiert Abhängigkeiten statt reiner Liste, ohne JS-Abhängigkeit. Selbst entschieden; ggf. korrigierbar. |
 | E50 | Betrieb | **Strukturierte Logs erzwungen** (Kap. 20.2.3, Merkliste B): `App\Log\ContextJsonFormatter` ersetzt den Standard-`JsonFormatter` (der `$context` komplett verwarf) und mischt den prozessweiten `App\Log\LogContext` (`correlation_id`/`request_id`/`component`, optional `module`) sowie Aufruf-Kontext in **jede** Logzeile; `LogContextMiddleware` (outermost, damit auch ErrorHandler-Logs ihn tragen) befüllt ihn je Request, der Outbox-Worker setzt `component=worker`. | Verlässliche Korrelierbarkeit ohne Aufruferdisziplin; SIEM-tauglich. Selbst entschieden; ggf. korrigierbar. |
 | E49 | API | **Externe API v1 voll ausgebaut** (Kap. 29, Merkliste B #1; Nutzer-Entscheidung „voll ausbauen"): Bearer-Token unter `/api/v1` (`ApiAuthMiddleware`, nur `/api/`-Pfade, JSON 401/403; CSRF-Skip für `/api`), Token-**Scopes** (`me:read`/`health:read`/`modules:read`/`*`) zusätzlich zur Benutzer-Autorisierung (RLS/Permissions); `TokenService` (SHA-256-Hash, Klartext nur bei Erzeugung, Ablauf/Widerruf, `last_used_at`); Endpunkte `GET me/health/modules`; Self-Service-GUI `/admin/tokens`; Audit (`api_token.create/revoke`); `API.md`. Rate-Limiting bewusst späterer Ausbau. | Externer Integrationszugang ergänzend zu den in-process Modul-Interfaces; Token bindet an Benutzer, Scopes engen ein. Vom Nutzer beauftragt. |
