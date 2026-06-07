@@ -32,6 +32,95 @@ class ModulesController extends AdminController
         $this->set(compact('modules', 'deps'));
     }
 
+    /**
+     * Grafische Abhängigkeitsdarstellung (Kap. 23.13.1): geschichtetes SVG
+     * (Ebene = Tiefe der Abhängigkeitskette), Kanten Modul → Abhängigkeit.
+     * Serverseitig berechnet (kein Client-JS nötig).
+     */
+    public function graph(): void
+    {
+        $conn = ConnectionManager::get('default');
+        $mods = $conn->execute(
+            'SELECT module_key, name, version, status FROM modules ORDER BY module_key',
+        )->fetchAll('assoc');
+        $depRows = $conn->execute(
+            'SELECT m.module_key AS module, d.required_module_key AS requires '
+            . 'FROM module_dependencies d JOIN modules m ON m.id = d.module_id',
+        )->fetchAll('assoc');
+
+        $keys = array_column($mods, 'module_key');
+        $level = array_fill_keys($keys, 0);
+        $reqsByMod = [];
+        foreach ($depRows as $d) {
+            $reqsByMod[(string)$d['module']][] = (string)$d['requires'];
+        }
+        // Longest-Path-Relaxation (Module sind azyklisch, Lifecycle garantiert).
+        for ($i = 0, $c = count($keys); $i <= $c; $i++) {
+            foreach ($reqsByMod as $m => $reqs) {
+                foreach ($reqs as $r) {
+                    if (isset($level[$m], $level[$r])) {
+                        $level[$m] = max($level[$m], $level[$r] + 1);
+                    }
+                }
+            }
+        }
+
+        // Positionen je Ebene.
+        $boxW = 170;
+        $boxH = 46;
+        $colGap = 90;
+        $rowGap = 22;
+        $pad = 20;
+        $byLevel = [];
+        foreach ($keys as $k) {
+            $byLevel[$level[$k]][] = $k;
+        }
+        ksort($byLevel);
+        $pos = [];
+        $maxRows = 0;
+        foreach ($byLevel as $lvl => $ks) {
+            sort($ks);
+            foreach ($ks as $idx => $k) {
+                $pos[$k] = [
+                    'x' => $pad + $lvl * ($boxW + $colGap),
+                    'y' => $pad + $idx * ($boxH + $rowGap),
+                ];
+            }
+            $maxRows = max($maxRows, count($ks));
+        }
+        $byKey = [];
+        foreach ($mods as $m) {
+            $byKey[(string)$m['module_key']] = $m;
+        }
+
+        $nodes = [];
+        foreach ($keys as $k) {
+            $nodes[] = [
+                'key' => $k,
+                'name' => (string)($byKey[$k]['name'] ?? $k),
+                'version' => (string)($byKey[$k]['version'] ?? ''),
+                'status' => (string)($byKey[$k]['status'] ?? ''),
+                'x' => $pos[$k]['x'], 'y' => $pos[$k]['y'], 'w' => $boxW, 'h' => $boxH,
+            ];
+        }
+        $edges = [];
+        foreach ($reqsByMod as $m => $reqs) {
+            foreach ($reqs as $r) {
+                if (!isset($pos[$m], $pos[$r])) {
+                    continue;
+                }
+                $edges[] = [
+                    'x1' => $pos[$m]['x'], 'y1' => $pos[$m]['y'] + $boxH / 2,
+                    'x2' => $pos[$r]['x'] + $boxW, 'y2' => $pos[$r]['y'] + $boxH / 2,
+                ];
+            }
+        }
+        $width = $pad * 2 + (count($byLevel) ?: 1) * ($boxW + $colGap);
+        $height = $pad * 2 + max(1, $maxRows) * ($boxH + $rowGap);
+
+        $this->set(compact('nodes', 'edges', 'width', 'height'));
+    }
+
     public function activate(string $key)
     {
         $this->request->allowMethod('post');

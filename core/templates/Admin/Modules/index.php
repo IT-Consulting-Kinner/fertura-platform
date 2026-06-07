@@ -6,7 +6,10 @@
  */
 $badge = ['active' => 'success', 'installed_inactive' => 'secondary', 'installed' => 'secondary', 'error' => 'danger'];
 ?>
-<h1 class="h3 mb-3"><?= h(__('admin.modules.title')) ?></h1>
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0"><?= h(__('admin.modules.title')) ?></h1>
+    <?= $this->Html->link(__('admin.modules.show_graph'), ['action' => 'graph'], ['class' => 'btn btn-outline-primary btn-sm']) ?>
+</div>
 <p class="text-muted small"><?= __('admin.modules.intro', '<code>bin/cake module install</code>') ?></p>
 <table class="table table-hover align-middle">
     <thead><tr><th><?= h(__('admin.modules.col_key')) ?></th><th><?= h(__('admin.modules.col_name')) ?></th><th><?= h(__('admin.modules.col_version')) ?></th><th><?= h(__('admin.modules.col_type')) ?></th><th><?= h(__('admin.modules.col_license')) ?></th><th><?= h(__('admin.modules.col_status')) ?></th><th class="text-end"><?= h(__('admin.modules.col_action')) ?></th></tr></thead>
