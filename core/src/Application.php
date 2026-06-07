@@ -71,6 +71,16 @@ class Application extends BaseApplication implements AuthenticationServiceProvid
         // Aktive Module zur Laufzeit autoloaden (Step 7, fehlertolerant).
         ModuleAutoloader::registerActiveModules();
 
+        // i18n (E37/E39): fehlende Schlüssel fallen auf Englisch zurück. CakePHPs
+        // eingebauter Fallback ist nur Domain-, kein Locale-Fallback -> eigener
+        // Merge-Loader (Englisch als Basis) für die Core-Domain `default`.
+        // Modul-Domains werden in i18n-4 analog registriert.
+        \Cake\I18n\I18n::useFallback(true);
+        \App\I18n\EnglishFallbackLoader::register('default');
+        // Modul-/Extension-Domains aus dem Managed Locale Store (i18n-4),
+        // fehlertolerant.
+        \App\I18n\StoreLocaleLoader::registerActiveModules();
+
         // Session-Timeout aus der DB-Konfiguration anwenden (Kap. 27.16 /
         // setting core.session.timeout_minutes). Fehlertolerant: greift erst,
         // wenn die DB verfügbar ist (sonst CakePHP-Default).
@@ -131,6 +141,10 @@ class Application extends BaseApplication implements AuthenticationServiceProvid
             // Authentifizierung: stellt die Identitaet pro Request bereit.
             // Erzwingt selbst keinen Login; Controller/Adminbereich entscheiden.
             ->add(new AuthenticationMiddleware($this))
+
+            // Anzeigesprache pro Request setzen (i18n, E37) – nach der
+            // AuthenticationMiddleware, damit user.locale verfuegbar ist.
+            ->add(new \App\Middleware\LocaleMiddleware())
 
             // Footprint: uebernimmt die Identitaet in den ActorContext fuer
             // created_by/updated_by (muss NACH der AuthenticationMiddleware laufen).

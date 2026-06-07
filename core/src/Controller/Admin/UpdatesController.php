@@ -35,7 +35,7 @@ class UpdatesController extends AdminController
         try {
             $preview = (new UpdateManager())->previewModule($key, $path);
         } catch (\Throwable $e) {
-            $this->Flash->error('Vorschau fehlgeschlagen: ' . $e->getMessage());
+            $this->Flash->error(__('flash.update.preview_failed', $e->getMessage()));
 
             return $this->redirect(['action' => 'index']);
         }
@@ -53,7 +53,7 @@ class UpdatesController extends AdminController
         try {
             $preview = (new UpdateManager())->previewCore($target);
         } catch (\Throwable $e) {
-            $this->Flash->error('Vorschau fehlgeschlagen: ' . $e->getMessage());
+            $this->Flash->error(__('flash.update.preview_failed', $e->getMessage()));
 
             return $this->redirect(['action' => 'index']);
         }
@@ -69,9 +69,9 @@ class UpdatesController extends AdminController
         $path = trim((string)$this->request->getData('source_path'));
         try {
             $result = (new UpdateManager())->updateModule($key, $path);
-            $this->Flash->success(sprintf('Modul %s aktualisiert: %s', $key, $result['new_version'] ?? '–'));
+            $this->Flash->success(__('flash.update.module_updated', $key, $result['new_version'] ?? '–'));
         } catch (\Throwable $e) {
-            $this->Flash->error('Update fehlgeschlagen (Rollback ausgeführt): ' . $e->getMessage());
+            $this->Flash->error(__('flash.update.module_failed', $e->getMessage()));
         }
 
         return $this->redirect(['action' => 'index']);
@@ -84,9 +84,9 @@ class UpdatesController extends AdminController
         $force = (bool)$this->request->getData('force');
         try {
             (new UpdateManager())->updateCore($target, $force);
-            $this->Flash->success('Core aktualisiert auf ' . $target . '.');
+            $this->Flash->success(__('flash.update.core_updated', $target));
         } catch (\Throwable $e) {
-            $this->Flash->error('Core-Update fehlgeschlagen: ' . $e->getMessage());
+            $this->Flash->error(__('flash.update.core_failed', $e->getMessage()));
         }
 
         return $this->redirect(['action' => 'index']);

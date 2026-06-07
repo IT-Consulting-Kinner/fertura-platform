@@ -36,7 +36,7 @@ class ModulesController extends AdminController
     {
         $this->request->allowMethod('post');
 
-        return $this->run(fn (ModuleLifecycle $l) => $l->activate($key), 'Modul aktiviert.');
+        return $this->run(fn (ModuleLifecycle $l) => $l->activate($key), __('flash.module.activated'));
     }
 
     public function deactivate(string $key)
@@ -45,7 +45,7 @@ class ModulesController extends AdminController
 
         return $this->run(function (ModuleLifecycle $l) use ($key): void {
             $l->deactivate($key);
-        }, 'Modul deaktiviert.');
+        }, __('flash.module.deactivated'));
     }
 
     public function delete(string $key)
@@ -54,7 +54,7 @@ class ModulesController extends AdminController
 
         return $this->run(function (ModuleLifecycle $l) use ($key): void {
             $l->delete($key);
-        }, 'Modul entfernt.');
+        }, __('flash.module.deleted'));
     }
 
     private function run(callable $fn, string $okMessage)
@@ -63,7 +63,7 @@ class ModulesController extends AdminController
             $fn(new ModuleLifecycle());
             $this->Flash->success($okMessage);
         } catch (\Throwable $e) {
-            $this->Flash->error('Fehlgeschlagen: ' . $e->getMessage());
+            $this->Flash->error(__('flash.module.failed', $e->getMessage()));
         }
 
         return $this->redirect(['action' => 'index']);

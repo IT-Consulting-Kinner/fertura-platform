@@ -25,6 +25,9 @@ class SettingsCatalog
             'session.timeout_minutes' => ['type' => 'int', 'default' => 120, 'min' => 1, 'max' => 43200],
             // Beispiel für ein verschlüsseltes Geheimnis.
             'smtp.password' => ['type' => 'string', 'default' => null, 'secret' => true],
+            // Mehrsprachigkeit (i18n, E37): Standardsprache + angebotene Sprachen.
+            'locale.default' => ['type' => 'string', 'default' => 'en_US'],
+            'locale.enabled' => ['type' => 'json', 'default' => ['en_US', 'de_DE']],
             // System-/Identitätsmails (Einladung, Passwort-Reset).
             'mail.enabled' => ['type' => 'bool', 'default' => true],
             'mail.from_address' => ['type' => 'string', 'default' => 'no-reply@fertura.local'],

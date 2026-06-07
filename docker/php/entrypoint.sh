@@ -24,6 +24,10 @@ until pg_isready -h "${DB_HOST:-db}" -p "${DB_PORT:-5432}" >/dev/null 2>&1; do
 done
 echo "[entrypoint] Datenbank erreichbar"
 
+# Managed Locale Store (i18n) fuer den Laufzeit-Nutzer (www-data) beschreibbar machen.
+mkdir -p /var/www/html/language-store 2>/dev/null || true
+chown -R www-data:www-data /var/www/html/language-store 2>/dev/null || true
+
 # 3. Schema-Bootstrap + Migrationen (nur core; geguardet)
 #    Bootstrap-Schritte laufen als Superuser: APP_DATABASE_URL wird geleert,
 #    sodass die Default-Connection auf DATABASE_URL (Superuser) zurueckfaellt.

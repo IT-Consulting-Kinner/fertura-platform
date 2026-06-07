@@ -59,6 +59,7 @@ class HealthService
             'outbox' => $this->checkOutbox(),
             'licenses' => $this->checkLicenses(),
             'marketplace' => $this->checkMarketplace(),
+            'localization' => $this->checkLocalization(),
             'module_contributions' => $this->collectModuleHealth(),
         ];
 
@@ -259,6 +260,92 @@ class HealthService
         } catch (Throwable $e) {
             return ['status' => 'down', 'detail' => $e->getMessage()];
         }
+    }
+
+    /**
+     * Lokalisierung (i18n-8): fehlende Englisch-Basis aktiver Komponenten,
+     * Versionsfehler (Major-Mismatch genutzter Packs) und verwaiste/in-flight
+     * `.tmp` im Store. Read-only (heilt nicht; dafür `bin/cake lang recover`).
+     */
+    private function checkLocalization(): array
+    {
+        try {
+            $conn = ConnectionManager::get('default');
+            $resolver = new \App\Service\I18n\LocaleResolver();
+            $coreVersion = \App\Application::CORE_VERSION;
+
+            $rows = $conn->execute(
+                'SELECT lp.component_key, lp.locale, lp.version, '
+                . 'COALESCE(m.version, :core) AS active_version, '
+                . "COALESCE(m.status, 'inactive') AS comp_status "
+                . 'FROM language_packs lp '
+                . 'LEFT JOIN modules m ON m.module_key = lp.component_key',
+                ['core' => $coreVersion],
+            )->fetchAll('assoc');
+
+            $versionErrors = [];
+            $activeComponents = [];
+            foreach ($rows as $r) {
+                $active = (string)$r['component_key'] === 'core' || (string)$r['comp_status'] === 'active';
+                if (!$active) {
+                    continue;
+                }
+                $key = (string)$r['component_key'];
+                $activeComponents[$key] = (string)$r['active_version'];
+                $packMajor = explode('.', (string)$r['version'])[0];
+                $activeMajor = explode('.', (string)$r['active_version'])[0];
+                if ($packMajor !== $activeMajor) {
+                    $versionErrors[] = $key . '/' . $r['locale'] . ' v' . $r['version'] . ' (aktiv v' . $r['active_version'] . ')';
+                }
+            }
+
+            // Fehlende Englisch-Basis: aktive Nicht-Core-Komponente ohne nutzbares
+            // en_US (Core liefert Englisch via resources/locales immer mit).
+            $missingBase = [];
+            foreach ($activeComponents as $key => $ver) {
+                if ($key === 'core') {
+                    continue;
+                }
+                if ($resolver->resolveVersion($key, $ver, 'en_US') === null) {
+                    $missingBase[] = $key . ' v' . $ver;
+                }
+            }
+
+            $tmp = $this->countStoreTmp();
+
+            $degraded = $missingBase !== [] || $versionErrors !== [] || $tmp > 0;
+
+            return [
+                'status' => $degraded ? 'degraded' : 'up',
+                'detail' => [
+                    'active_components' => count($activeComponents),
+                    'missing_english_base' => $missingBase,
+                    'version_errors' => $versionErrors,
+                    'stray_tmp_files' => $tmp,
+                ],
+            ];
+        } catch (Throwable $e) {
+            return ['status' => 'down', 'detail' => $e->getMessage()];
+        }
+    }
+
+    private function countStoreTmp(): int
+    {
+        $base = (new \App\Service\I18n\LanguagePackStore())->base();
+        if (!is_dir($base)) {
+            return 0;
+        }
+        $n = 0;
+        $it = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($base, \FilesystemIterator::SKIP_DOTS),
+        );
+        foreach ($it as $f) {
+            if (substr((string)$f, -7) === '.po.tmp') {
+                $n++;
+            }
+        }
+
+        return $n;
     }
 
     /**

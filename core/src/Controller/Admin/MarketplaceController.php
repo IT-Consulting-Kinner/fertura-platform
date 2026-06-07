@@ -37,13 +37,13 @@ class MarketplaceController extends AdminController
         $this->request->allowMethod('post');
         try {
             $result = (new MarketplaceClient())->sync();
-            $this->Flash->success(sprintf(
-                'Synchronisierung abgeschlossen (Trust-Anchors: %d, Sperrliste: %d).',
+            $this->Flash->success(__(
+                'flash.marketplace.sync_done',
                 $result['anchors'] ?? 0,
                 $result['revoked'] ?? 0,
             ));
         } catch (\Throwable $e) {
-            $this->Flash->error('Synchronisierung fehlgeschlagen: ' . $e->getMessage());
+            $this->Flash->error(__('flash.marketplace.sync_failed', $e->getMessage()));
         }
 
         return $this->redirect(['action' => 'index']);
@@ -75,15 +75,15 @@ class MarketplaceController extends AdminController
             $json = trim((string)$this->request->getData('license_json'));
         }
         if ($json === '') {
-            $this->Flash->error('Keine Lizenzdatei übergeben.');
+            $this->Flash->error(__('flash.marketplace.no_license_file'));
 
             return $this->redirect(['action' => 'licenses']);
         }
         try {
             $result = (new LicenseService())->install($json);
-            $this->Flash->success('Lizenz installiert (Status: ' . ($result['status'] ?? '–') . ').');
+            $this->Flash->success(__('flash.marketplace.license_installed', $result['status'] ?? '–'));
         } catch (\Throwable $e) {
-            $this->Flash->error('Lizenzinstallation fehlgeschlagen: ' . $e->getMessage());
+            $this->Flash->error(__('flash.marketplace.license_failed', $e->getMessage()));
         }
 
         return $this->redirect(['action' => 'licenses']);

@@ -7,38 +7,38 @@
  */
 $resBadge = ['success' => 'success', 'failed' => 'danger', 'rolled_back' => 'warning'];
 ?>
-<h1 class="h3 mb-3">Update-Manager</h1>
+<h1 class="h3 mb-3"><?= h(__('admin.updates.title')) ?></h1>
 
 <div class="row g-4 mb-4">
     <div class="col-md-6">
-        <div class="card"><div class="card-header">Modul aktualisieren</div><div class="card-body">
+        <div class="card"><div class="card-header"><?= h(__('admin.updates.module_update')) ?></div><div class="card-body">
             <?= $this->Form->create(null, ['url' => ['action' => 'previewModule']]) ?>
-            <div class="mb-2"><label class="form-label">Modul</label>
+            <div class="mb-2"><label class="form-label"><?= h(__('admin.updates.module')) ?></label>
                 <?= $this->Form->select('module_key', array_combine(array_column($modules, 'module_key'),
                     array_map(fn ($m) => $m['module_key'] . ' (' . $m['version'] . ')', $modules)),
-                    ['class' => 'form-select', 'empty' => '— wählen —', 'required' => true]) ?></div>
-            <div class="mb-2"><label class="form-label">Paketpfad (signiert)</label>
+                    ['class' => 'form-select', 'empty' => __('admin.updates.choose'), 'required' => true]) ?></div>
+            <div class="mb-2"><label class="form-label"><?= h(__('admin.updates.package_path')) ?></label>
                 <?= $this->Form->control('source_path', ['label' => false, 'class' => 'form-control', 'placeholder' => '/pfad/zum/paket', 'required' => true]) ?></div>
-            <?= $this->Form->button('Vorschau', ['class' => 'btn btn-primary btn-sm']) ?>
+            <?= $this->Form->button(__('admin.updates.preview'), ['class' => 'btn btn-primary btn-sm']) ?>
             <?= $this->Form->end() ?>
         </div></div>
     </div>
     <div class="col-md-6">
-        <div class="card"><div class="card-header">Core aktualisieren <span class="text-muted small">aktuell: <?= h($coreVersion) ?></span></div><div class="card-body">
+        <div class="card"><div class="card-header"><?= h(__('admin.updates.core_update')) ?> <span class="text-muted small"><?= h(__('admin.updates.current', $coreVersion)) ?></span></div><div class="card-body">
             <?= $this->Form->create(null, ['url' => ['action' => 'previewCore']]) ?>
-            <div class="mb-2"><label class="form-label">Zielversion</label>
-                <?= $this->Form->control('target_version', ['label' => false, 'class' => 'form-control', 'placeholder' => 'z. B. 1.1.0', 'required' => true]) ?></div>
+            <div class="mb-2"><label class="form-label"><?= h(__('admin.updates.target_version')) ?></label>
+                <?= $this->Form->control('target_version', ['label' => false, 'class' => 'form-control', 'placeholder' => __('admin.updates.target_version_placeholder'), 'required' => true]) ?></div>
             <div class="form-check mb-2"><?= $this->Form->checkbox('force', ['class' => 'form-check-input', 'id' => 'force']) ?>
-                <label class="form-check-label" for="force">Erzwingen (Kompatibilitätsprüfung übergehen)</label></div>
-            <?= $this->Form->button('Vorschau', ['class' => 'btn btn-warning btn-sm']) ?>
+                <label class="form-check-label" for="force"><?= h(__('admin.updates.force')) ?></label></div>
+            <?= $this->Form->button(__('admin.updates.preview'), ['class' => 'btn btn-warning btn-sm']) ?>
             <?= $this->Form->end() ?>
         </div></div>
     </div>
 </div>
 
-<h2 class="h5">Historie</h2>
+<h2 class="h5"><?= h(__('admin.updates.history')) ?></h2>
 <table class="table table-sm table-hover align-middle">
-    <thead><tr><th>Zeitpunkt</th><th>Typ</th><th>Komponente</th><th>Von</th><th>Nach</th><th>Ergebnis</th></tr></thead>
+    <thead><tr><th><?= h(__('admin.updates.col_time')) ?></th><th><?= h(__('admin.updates.col_type')) ?></th><th><?= h(__('admin.updates.col_component')) ?></th><th><?= h(__('admin.updates.col_from')) ?></th><th><?= h(__('admin.updates.col_to')) ?></th><th><?= h(__('admin.updates.col_result')) ?></th></tr></thead>
     <tbody>
     <?php foreach ($history as $h): ?>
         <tr>
@@ -46,13 +46,13 @@ $resBadge = ['success' => 'success', 'failed' => 'danger', 'rolled_back' => 'war
             <td><?= h($h['component_type']) ?></td>
             <td><code><?= h($h['component_key']) ?></code>
                 <?php if (filter_var($h['is_security'] ?? false, FILTER_VALIDATE_BOOLEAN)): ?>
-                    <span class="badge text-bg-danger">Security<?= !empty($h['severity']) ? ': ' . h($h['severity']) : '' ?></span>
+                    <span class="badge text-bg-danger"><?= h(__('admin.updates.security')) ?><?= !empty($h['severity']) ? ': ' . h($h['severity']) : '' ?></span>
                 <?php endif; ?></td>
             <td><?= h($h['old_version']) ?: '–' ?></td>
             <td><?= h($h['new_version']) ?: '–' ?></td>
             <td><span class="badge text-bg-<?= $resBadge[$h['result']] ?? 'secondary' ?>"><?= h($h['result']) ?></span></td>
         </tr>
     <?php endforeach; ?>
-    <?php if ($history === []): ?><tr><td colspan="6" class="text-muted">Keine Updates protokolliert.</td></tr><?php endif; ?>
+    <?php if ($history === []): ?><tr><td colspan="6" class="text-muted"><?= h(__('admin.updates.no_history')) ?></td></tr><?php endif; ?>
     </tbody>
 </table>

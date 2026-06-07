@@ -1,0 +1,11 @@
+msgid ""
+msgstr ""
+"Language: en_US\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+
+msgid "sample.greeting"
+msgstr "Hello from sample"
+
+# Nur Englisch -> Fallback-Test (de fehlt absichtlich).
+msgid "sample.enonly"
+msgstr "EN only"
