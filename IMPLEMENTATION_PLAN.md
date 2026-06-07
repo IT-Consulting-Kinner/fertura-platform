@@ -149,8 +149,12 @@ Rolle ist.
 - **API-/Token-Authentifizierung**: `api_tokens`-Tabelle vorhanden, aber kein
   Authenticator/Route/Management → zu klären, ob eine externe API v1-Core-Scope
   ist (Kap. 29 = in-process Modul-Interfaces; externe REST-API evtl. später).
-- **Cron-Status-Widget** (20.3 Soll): keine Lauf-Dauer, keine „>2×-Intervall"-
-  Warnung (nur Heartbeat-Alter).
+- ✅ **Cron-Status-Widget** (20.3, 2026-06-07): Worker schreiben jetzt `duration_ms`
+  + `interval_seconds` in den Heartbeat-`detail`; `HealthService::checkWorkers`
+  nutzt einen **per-Worker-Schwellwert** (überfällig = Alter > 2× Intervall, sonst
+  globaler Max-Alter-Fallback) und liefert Lauf-Dauer + `overdue`; die Admin-
+  Health-Sicht zeigt Dauer-Spalte + „überfällig"-Badge. *(Overdue-Logik per
+  Harness; echter Worker schreibt `duration_ms=6/interval=5s` verifiziert)*
 - **Strukturierte Logs** (20.2.3 Soll): `component/module/correlation_id` nur,
   „sofern am Aufrufort mitgegeben" — kein erzwingender Processor.
 - **Dead-Letter-Admin-Sicht/Retry** (26.9.2): nur Zähler im Health/Dashboard +

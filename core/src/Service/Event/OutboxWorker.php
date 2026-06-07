@@ -192,8 +192,10 @@ class OutboxWorker
 
         while ($this->running) {
             try {
-                // Heartbeat (Kap. 20.3): jeder Zyklus protokolliert seinen Lauf.
-                \App\Service\Health\WorkerHeartbeat::beat('outbox', 'ok');
+                // Heartbeat (Kap. 20.3): jeder Zyklus protokolliert seinen Lauf
+                // inkl. Lauf-Dauer und erwartetem Intervall (für die >2×-Intervall-
+                // Überfälligkeitswarnung im Health/Dashboard, Kap. 20.3).
+                $cycleStart = microtime(true);
                 // Neu aktivierte Modul-Listener nachladbar machen (Step 7).
                 ModuleAutoloader::registerActiveModules();
                 $reclaimed = $this->reclaimStuck();
@@ -201,9 +203,15 @@ class OutboxWorker
                     $this->log("$reclaimed haengende Events zurueckgesetzt.");
                 }
                 // Vorhandene Events vollständig abarbeiten.
-                while ($this->running && $this->processBatch() > 0) {
-                    // weiter, bis nichts mehr fällig ist
+                $processed = 0;
+                while ($this->running && ($n = $this->processBatch()) > 0) {
+                    $processed += $n;
                 }
+                \App\Service\Health\WorkerHeartbeat::beat('outbox', 'ok', [
+                    'duration_ms' => (int)round((microtime(true) - $cycleStart) * 1000),
+                    'interval_seconds' => (int)round($this->pollMs / 1000),
+                    'processed' => $processed,
+                ]);
                 // Auf NOTIFY oder Timeout warten.
                 if ($listenPdo !== null) {
                     $listenPdo->pgsqlGetNotify(PDO::FETCH_ASSOC, $this->pollMs);
