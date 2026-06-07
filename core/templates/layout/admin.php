@@ -22,9 +22,10 @@ $activeArea = $activeArea ?? null;
 <body>
 <nav class="navbar navbar-dark bg-dark px-3">
     <a class="navbar-brand" href="/admin">Fertura <span class="text-secondary">Admin</span></a>
-    <div class="d-flex align-items-center text-light">
+    <div class="d-flex align-items-center text-light gap-2">
+        <?= $this->cell('LocaleSwitcher', [true]) ?>
         <?php if ($currentUser !== null): ?>
-            <span class="me-3 small"><?= h($currentUser->get('username')) ?></span>
+            <span class="ms-1 small"><?= h($currentUser->get('username')) ?></span>
             <a class="btn btn-sm btn-outline-light" href="/logout"><?= __('admin.nav.logout') ?></a>
         <?php endif; ?>
     </div>

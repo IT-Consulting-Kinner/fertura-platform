@@ -125,4 +125,37 @@ class LocaleResolver
 
         return $locales;
     }
+
+    /**
+     * Wählbare Locales für den Umschalter: aktivierte (`locale.enabled`) ∩
+     * verfügbare (Core hat nutzbare Datei). Englisch immer dabei.
+     *
+     * @param list<string> $enabled
+     * @return list<string>
+     */
+    public function selectableLocales(array $enabled, string $coreVersion): array
+    {
+        $available = $this->availableLocales($coreVersion);
+        $sel = array_values(array_filter($enabled, static fn ($l) => in_array($l, $available, true)));
+        if (!in_array('en_US', $sel, true)) {
+            array_unshift($sel, 'en_US');
+        }
+
+        return array_values(array_unique($sel));
+    }
+
+    /** Anzeigename einer Locale (Fallback: der Code selbst). */
+    public static function displayName(string $locale): string
+    {
+        return [
+            'en_US' => 'English',
+            'de_DE' => 'Deutsch',
+            'fr_FR' => 'Français',
+            'es_ES' => 'Español',
+            'it_IT' => 'Italiano',
+            'nl_NL' => 'Nederlands',
+            'pt_PT' => 'Português',
+            'pl_PL' => 'Polski',
+        ][$locale] ?? $locale;
+    }
 }

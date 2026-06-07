@@ -60,6 +60,14 @@ class LocaleMiddleware implements MiddlewareInterface
             }
         }
 
+        // 3b. Accept-Language (v. a. öffentlich/Login ohne Session/Identität).
+        if ($locale === null) {
+            $locale = $this->matchAcceptLanguage(
+                (string)($request->getHeaderLine('Accept-Language')),
+                array_map('strval', $enabled),
+            );
+        }
+
         // 4. System-Default (geht nicht auf eine nicht-aktivierte Locale).
         if ($locale === null) {
             $locale = in_array($default, $enabled, true) ? $default : (string)($enabled[0] ?? 'en_US');
@@ -68,5 +76,47 @@ class LocaleMiddleware implements MiddlewareInterface
         I18n::setLocale($locale);
 
         return $handler->handle($request);
+    }
+
+    /**
+     * Beste aktivierte Locale aus dem Accept-Language-Header (nach q-Gewicht).
+     * Direktes `ll_CC` oder Sprach-Präfix `ll` → erste aktivierte `ll_*`.
+     *
+     * @param list<string> $enabled
+     */
+    private function matchAcceptLanguage(string $header, array $enabled): ?string
+    {
+        if (trim($header) === '') {
+            return null;
+        }
+        $candidates = [];
+        foreach (explode(',', $header) as $part) {
+            $bits = explode(';', trim($part));
+            $tag = trim($bits[0]);
+            if ($tag === '' || $tag === '*') {
+                continue;
+            }
+            $q = 1.0;
+            if (isset($bits[1]) && str_starts_with(trim($bits[1]), 'q=')) {
+                $q = (float)substr(trim($bits[1]), 2);
+            }
+            $candidates[] = [str_replace('-', '_', $tag), $q];
+        }
+        usort($candidates, static fn ($a, $b) => $b[1] <=> $a[1]);
+
+        foreach ($candidates as [$tag, $q]) {
+            if (in_array($tag, $enabled, true)) {
+                return $tag;
+            }
+            // Sprach-Präfix: 'de' → erste aktivierte 'de_*'.
+            $lang = strtolower(explode('_', $tag)[0]);
+            foreach ($enabled as $e) {
+                if (strtolower(explode('_', $e)[0]) === $lang) {
+                    return $e;
+                }
+            }
+        }
+
+        return null;
     }
 }
