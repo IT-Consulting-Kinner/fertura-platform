@@ -203,9 +203,14 @@ Locale `ll_CC`, **flacher** Fallback auf Englisch der Version; jeder Text über
 - `[x]` **i18n-4 — Komponenten-Integration** (verifiziert 2026-06-06): Manifest `locales`; Install kopiert
   Paket-`locales/` in den Store; Aktivierung registriert Domain; Deinstallation
   behält Dateien; Modul-Fixture.
-- `[ ]` **i18n-5 — Auflösung, Versions-Gate & Status:** exakt > Same-Major
-  (Hinweis) > Englisch (Fehler); wählbar = Core hat Datei; berechneter Status;
-  Caching.
+- `[x]` **i18n-5 — Auflösung, Versions-Gate & Status** (verifiziert 2026-06-07):
+  `LocaleResolver` (exakt→clean > Same-Major-höchste→notice > Major-Mismatch→null/
+  Englisch-Fallback/error); `packStatuses` (clean/notice/error je Pack);
+  `availableLocales` (Core-Kataloge resources/locales + nutzbare Core-Store-Packs).
+  `StoreLocaleLoader` nutzt das Gate (beste statt exakter Version); Core-Domain
+  `default` überlagert nachgeladene Core-Store-Packs. *(Gate exakt/notice/error +
+  major0 + packStatuses + availableLocales verifiziert; i18n-4 Exakt-Auflösung
+  unverändert grün.)*
 - `[ ]` **i18n-6 — Sprachverwaltung (Admin-Bereich `localization`, 7.):** Liste
   aktiver Komponenten + inaktiv-mit-Dateien; Import (Signatur nur hier;
   `signed/reviewed/edited`; ungültige Signatur = Hinweis+Review+Abbruch;

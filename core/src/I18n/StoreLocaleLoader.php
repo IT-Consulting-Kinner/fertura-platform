@@ -22,13 +22,22 @@ class StoreLocaleLoader
 {
     public const BASE_LOCALE = 'en_US';
 
-    public static function register(string $domain, string $componentKey, string $version): void
+    public static function register(string $domain, string $componentKey, string $activeVersion): void
     {
-        I18n::config($domain, static function (string $name, string $locale) use ($componentKey, $version, $domain): Package {
+        I18n::config($domain, static function (string $name, string $locale) use ($componentKey, $activeVersion, $domain): Package {
             $store = new LanguagePackStore();
-            $messages = self::load($store, $componentKey, $version, self::BASE_LOCALE, $domain);
+            $resolver = new \App\Service\I18n\LocaleResolver();
+
+            // Englisch-Basis (Versions-Gate: exakt > Same-Major > keine).
+            $en = $resolver->resolveVersion($componentKey, $activeVersion, self::BASE_LOCALE);
+            $messages = $en !== null ? self::load($store, $componentKey, $en['version'], self::BASE_LOCALE, $domain) : [];
+
             if ($locale !== self::BASE_LOCALE) {
-                $messages = array_merge($messages, self::load($store, $componentKey, $version, $locale, $domain));
+                $loc = $resolver->resolveVersion($componentKey, $activeVersion, $locale);
+                if ($loc !== null) {
+                    $messages = array_merge($messages, self::load($store, $componentKey, $loc['version'], $locale, $domain));
+                }
+                // Major-Mismatch (resolveVersion null) → kein Overlay → Englisch.
             }
 
             return new Package('default', null, $messages);

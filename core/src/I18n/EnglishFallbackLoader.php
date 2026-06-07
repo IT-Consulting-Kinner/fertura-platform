@@ -28,7 +28,7 @@ class EnglishFallbackLoader
      */
     public static function register(string $domain): void
     {
-        I18n::config($domain, static function (string $name, string $locale): Package {
+        I18n::config($domain, static function (string $name, string $locale) use ($domain): Package {
             $base = (new MessagesFileLoader($name, self::BASE_LOCALE))();
             if (!$base instanceof Package) {
                 $base = new Package();
@@ -40,9 +40,36 @@ class EnglishFallbackLoader
                     // bleibt der englische Basistext).
                     $base->addMessages($localePkg->getMessages());
                 }
+                // Zusätzlich: nachgeladene Core-Sprachpakete aus dem Store
+                // (i18n-5/6) – z. B. eine später eingespielte Sprache. Versions-
+                // Gate via LocaleResolver; überschreibt die mitgelieferten Texte.
+                $store = self::coreStorePack($domain, $locale);
+                if ($store !== []) {
+                    $base->addMessages($store);
+                }
             }
 
             return $base;
         });
+    }
+
+    /** @return array<string, mixed> */
+    private static function coreStorePack(string $domain, string $locale): array
+    {
+        try {
+            $resolver = new \App\Service\I18n\LocaleResolver();
+            $res = $resolver->resolveVersion('core', \App\Application::CORE_VERSION, $locale);
+            if ($res === null) {
+                return [];
+            }
+            $file = (new \App\Service\I18n\LanguagePackStore())->filePath('core', $res['version'], $locale, $domain);
+            if (!is_file($file)) {
+                return [];
+            }
+
+            return (new \Cake\I18n\Parser\PoFileParser())->parse($file);
+        } catch (\Throwable) {
+            return [];
+        }
     }
 }
