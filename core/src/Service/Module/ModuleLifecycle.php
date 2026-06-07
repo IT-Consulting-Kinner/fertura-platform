@@ -91,6 +91,37 @@ class ModuleLifecycle
         $c->execute("ALTER DEFAULT PRIVILEGES IN SCHEMA $schema GRANT USAGE, SELECT ON SEQUENCES TO $role");
     }
 
+    /**
+     * Übernimmt die Paket-Sprachdateien (`<paket>/locales/<locale>/<domain>.po`)
+     * in den Managed Locale Store (i18n-4). Domain = Manifest-`locales.domain`
+     * (Default Modulschlüssel); signiert -> reviewed (E38). Bei Deinstallation
+     * bleiben die Dateien erhalten (kein Gegenstück hier).
+     */
+    private function importPackageLocales(string $sourcePath, ModuleManifest $manifest, bool $signed): void
+    {
+        $domain = $manifest->locales()['domain'];
+        $base = rtrim($sourcePath, '/') . '/locales';
+        if (!is_dir($base)) {
+            return;
+        }
+        $type = $manifest->type() === 'extension' ? 'extension' : 'module';
+        $store = new \App\Service\I18n\LanguagePackStore();
+        foreach (glob($base . '/*', GLOB_ONLYDIR) ?: [] as $localeDir) {
+            $locale = basename($localeDir);
+            $poFile = $localeDir . '/' . $domain . '.po';
+            if (!is_file($poFile)) {
+                continue;
+            }
+            $store->save($manifest->key(), $manifest->version(), $locale, (string)file_get_contents($poFile), [
+                'type' => $type,
+                'domain' => $domain,
+                'signed' => $signed,
+                'reviewed' => $signed,
+                'source' => 'package',
+            ]);
+        }
+    }
+
     public function modulesBaseDir(): string
     {
         return ROOT . DIRECTORY_SEPARATOR . 'modules';
@@ -193,6 +224,10 @@ class ModuleLifecycle
             // App-Rolle (NOBYPASSRLS) auf das neue Modul-Schema berechtigen,
             // damit der Request-Pfad nach dem Install darauf zugreifen kann (E26).
             $this->grantSchemaToAppRole($schema);
+
+            // Sprachdateien des Pakets in den Managed Locale Store übernehmen
+            // (i18n-4); signiert -> reviewed (E38).
+            $this->importPackageLocales($sourcePath, $manifest, $signatureKeyId !== null);
 
             // contracts_provided als Contract-Definitionen registrieren.
             foreach ($manifest->contractsProvided() as $c) {

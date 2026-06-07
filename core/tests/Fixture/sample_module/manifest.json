@@ -39,6 +39,7 @@
         }
     ],
     "contracts_used": [],
+    "locales": { "domain": "sample_module", "supported": ["en_US", "de_DE"] },
     "events_registered": [
         {
             "contract": "sample_module.event.ping",

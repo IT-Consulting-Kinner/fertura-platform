@@ -132,6 +132,22 @@ class ModuleManifest
         return array_values($this->data['permissions'] ?? []);
     }
 
+    /**
+     * Sprachdateien des Pakets (i18n-4). `domain` = Übersetzungs-Domain (Default
+     * = Modulschlüssel); `supported` = mitgelieferte Locales (mind. en_US).
+     *
+     * @return array{domain: string, supported: list<string>}
+     */
+    public function locales(): array
+    {
+        $l = $this->data['locales'] ?? [];
+
+        return [
+            'domain' => (string)($l['domain'] ?? $this->key()),
+            'supported' => array_values($l['supported'] ?? []),
+        ];
+    }
+
     /** Sicherheitsupdate-Kennzeichnung (Kap. 28.10): `security: true` im Manifest. */
     public function isSecurityUpdate(): bool
     {
