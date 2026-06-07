@@ -33,6 +33,9 @@ services:
       - core_vendor:/var/www/html/vendor
       # Geteilt mit dem Test-Marketplace-Server (signierte Fixtures schreiben).
       - ./marketplace-data:/var/www/html/marketplace-data
+      # Managed Locale Store (i18n) auf persistentem ext4-Volume: atomarer
+      # Rename funktioniert sauber; Sprachdateien ueberleben Recreates.
+      - core_langstore:/var/www/html/language-store
     environment:
       # Privilegierte Connection (Superuser): DDL/Migrationen/Bootstrap/Recovery.
       DATABASE_URL: "postgres://${POSTGRES_USER:-fertura}:${POSTGRES_PASSWORD:-fertura}@db/${POSTGRES_DB:-fertura}?encoding=utf8"
@@ -99,3 +102,4 @@ services:
 volumes:
   db_data:
   core_vendor:
+  core_langstore:
