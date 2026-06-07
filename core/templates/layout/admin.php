@@ -43,6 +43,7 @@ $activeArea = $activeArea ?? null;
                 <?php endforeach; ?>
                 <li class="nav-item mt-3"><a class="nav-link" href="/admin/health"><?= __('admin.nav.health') ?></a></li>
                 <li class="nav-item"><a class="nav-link" href="/admin/audit"><?= __('admin.nav.audit') ?></a></li>
+                <li class="nav-item"><a class="nav-link" href="/admin/tokens"><?= __('admin.nav.api_tokens') ?></a></li>
             </ul>
         </aside>
         <main class="col-md-9 col-lg-10 p-4">

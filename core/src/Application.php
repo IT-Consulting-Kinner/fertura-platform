@@ -134,13 +134,21 @@ class Application extends BaseApplication implements AuthenticationServiceProvid
 
             // Cross Site Request Forgery (CSRF) Protection Middleware
             // https://book.cakephp.org/5/en/security/csrf.html#cross-site-request-forgery-csrf-middleware
-            ->add(new CsrfProtectionMiddleware([
+            ->add((new CsrfProtectionMiddleware([
                 'httponly' => true,
-            ]))
+            ]))->skipCheckCallback(static function (ServerRequestInterface $request): bool {
+                // Externe API nutzt Bearer-Token statt CSRF (Kap. 29).
+                return str_starts_with($request->getUri()->getPath(), '/api/');
+            }))
 
             // Authentifizierung: stellt die Identitaet pro Request bereit.
             // Erzwingt selbst keinen Login; Controller/Adminbereich entscheiden.
             ->add(new AuthenticationMiddleware($this))
+
+            // Externe API: Bearer-Token-Authentifizierung (nur /api/-Pfade);
+            // setzt Identitaet + Scopes, sonst JSON 401. Nach der Session-Auth,
+            // damit die Token-Identitaet fuer API-Requests Vorrang hat.
+            ->add(new \App\Middleware\ApiAuthMiddleware())
 
             // Anzeigesprache pro Request setzen (i18n, E37) – nach der
             // AuthenticationMiddleware, damit user.locale verfuegbar ist.
