@@ -72,6 +72,10 @@ class LicenseService
         if ($anchor === null) {
             return ['ok' => false, 'reason' => "Unbekannter Vertrauensanker: $keyId"];
         }
+        $validity = \App\Service\Security\TrustStore::validity($anchor);
+        if (!$validity['ok']) {
+            return ['ok' => false, 'reason' => "Vertrauensanker $keyId: " . $validity['reason']];
+        }
         if (!$this->signer->verify(self::canonical($data['payload']), (string)$data['signature'], (string)$anchor['public_key'])) {
             return ['ok' => false, 'reason' => 'Lizenzsignatur ungültig.'];
         }

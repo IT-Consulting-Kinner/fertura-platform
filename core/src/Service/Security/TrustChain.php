@@ -66,6 +66,11 @@ class TrustChain
         if (($root['key_type'] ?? '') !== 'root') {
             return ['ok' => false, 'reason' => "Signierender Anker ist kein Root: $signedBy"];
         }
+        // Gültigkeitsfenster des Roots durchsetzen (Kap. 24.9.2).
+        $rootValidity = TrustStore::validity($root);
+        if (!$rootValidity['ok']) {
+            return ['ok' => false, 'reason' => "Signierender Root $signedBy: " . $rootValidity['reason']];
+        }
 
         $statement = self::keyStatement($keyId, $publicKey, $publisher);
         if (!$this->signer->verify($statement, $keySignature, (string)$root['public_key'])) {

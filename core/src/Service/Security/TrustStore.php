@@ -23,15 +23,45 @@ class TrustStore
         ?string $publisher = null,
         ?string $signedBy = null,
         ?string $keySignature = null,
+        ?string $validFrom = null,
+        ?string $validTo = null,
     ): void {
         $this->conn()->execute(
-            'INSERT INTO trust_anchors (key_id, public_key, key_type, publisher, signed_by, key_signature, active) '
-            . 'VALUES (:id, :pk, :t, :pub, :sb, :ks, true) '
+            'INSERT INTO trust_anchors (key_id, public_key, key_type, publisher, signed_by, key_signature, valid_from, valid_to, active) '
+            . 'VALUES (:id, :pk, :t, :pub, :sb, :ks, :vf, :vt, true) '
             . 'ON CONFLICT (key_id) DO UPDATE SET public_key = EXCLUDED.public_key, '
             . 'key_type = EXCLUDED.key_type, publisher = EXCLUDED.publisher, '
-            . 'signed_by = EXCLUDED.signed_by, key_signature = EXCLUDED.key_signature, active = true',
-            ['id' => $keyId, 'pk' => $publicKey, 't' => $type, 'pub' => $publisher, 'sb' => $signedBy, 'ks' => $keySignature],
+            . 'signed_by = EXCLUDED.signed_by, key_signature = EXCLUDED.key_signature, '
+            . 'valid_from = EXCLUDED.valid_from, valid_to = EXCLUDED.valid_to, active = true',
+            [
+                'id' => $keyId, 'pk' => $publicKey, 't' => $type, 'pub' => $publisher,
+                'sb' => $signedBy, 'ks' => $keySignature,
+                'vf' => $validFrom ?: null, 'vt' => $validTo ?: null,
+            ],
         );
+    }
+
+    /**
+     * Prüft das Gültigkeitsfenster eines Ankers (Kap. 24.9.2). NULL-Grenzen sind
+     * unbegrenzt. Wird an allen Verifikationspfaden (Paket, Kette, Lizenz)
+     * durchgesetzt.
+     *
+     * @param array<string, mixed> $anchor
+     * @return array{ok: bool, reason: ?string}
+     */
+    public static function validity(array $anchor, ?int $now = null): array
+    {
+        $now ??= time();
+        $from = $anchor['valid_from'] ?? null;
+        $to = $anchor['valid_to'] ?? null;
+        if ($from !== null && $from !== '' && (int)strtotime((string)$from) > $now) {
+            return ['ok' => false, 'reason' => 'Anker noch nicht gültig (valid_from ' . $from . ')'];
+        }
+        if ($to !== null && $to !== '' && (int)strtotime((string)$to) < $now) {
+            return ['ok' => false, 'reason' => 'Anker abgelaufen (valid_to ' . $to . ')'];
+        }
+
+        return ['ok' => true, 'reason' => null];
     }
 
     /** @return array<string, mixed>|null */
