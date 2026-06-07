@@ -44,6 +44,22 @@ Dateien passen also zueinander. Je Artefakt wird ein **SHA-256** abgelegt
 - **Health:** Subsystem `backup` meldet `degraded`, wenn der Scheduler aktiv ist
   und das jüngste Backup fehlt/fehlschlug/überfällig (> 2× Intervall) ist.
 
+## Weitere Betriebsfunktionen (E57)
+
+- **Unveränderliches Protokoll:** `core.backup_log` ist append-only (DB-Trigger,
+  wie das Audit-Log) — Einträge können nicht geändert/gelöscht werden.
+- **Download aus der GUI:** Jede Sicherung lässt sich als ZIP herunterladen
+  (`/admin/backup/download/<id>`); der Export wird als sensible Aktion
+  **protokolliert** (`operation=download`).
+- **Aufbewahrung nach Alter:** zusätzlich zu „letzte N" (`backup.retention`) per
+  `backup.retention_days` (0 = aus); der Scheduler wendet beide an.
+- **Pre-Flight-Speicherprüfung:** vor dem Dump wird der freie Platz am Zielort
+  geprüft (Schätzung DB-Größe + Stores, mind. `backup.min_free_mb`) → bricht
+  früh ab statt eine halbe Datei zu schreiben.
+- **Alarm bei Fehlschlag:** ist `backup.alert_email` gesetzt, geht bei jedem
+  fehlgeschlagenen Backup (inkl. Pre-Flight, v. a. unbeaufsichtigt im Scheduler)
+  eine E-Mail über den Core-`MailService`.
+
 ## CLI
 
 ```bash

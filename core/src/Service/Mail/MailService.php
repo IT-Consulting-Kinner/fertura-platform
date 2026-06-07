@@ -47,6 +47,12 @@ class MailService
         );
     }
 
+    /** Generische System-Benachrichtigung (z. B. Backup-Alarm). */
+    public function notify(string $to, string $subject, string $body): bool
+    {
+        return $this->send($to, $subject, $body);
+    }
+
     private function send(string $to, string $subject, string $body): bool
     {
         if (!$this->enabled() || $to === '') {

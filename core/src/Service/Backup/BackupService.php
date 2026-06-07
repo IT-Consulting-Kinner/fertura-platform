@@ -115,6 +115,14 @@ class BackupService
         if (!is_dir($dir) && !@mkdir($dir, 0o775, true) && !is_dir($dir)) {
             throw new RuntimeException('Backup-Verzeichnis nicht anlegbar/erreichbar: ' . $dir);
         }
+        // Pre-Flight VOR allem anderen; Fehlschlag wird protokolliert + alarmiert.
+        try {
+            $this->preflightSpace($dir);
+        } catch (\Throwable $e) {
+            $this->log('create', null, 'error', $e->getMessage());
+            $this->alertFailure($e->getMessage());
+            throw $e;
+        }
 
         $id = Uuid::v7()->toRfc4122();
         $ts = gmdate('Ymd-His');
@@ -183,6 +191,7 @@ class BackupService
             @unlink($zip);
             $this->conn()->execute("UPDATE backups SET status = 'failed' WHERE id = :id", ['id' => $id]);
             $this->log('create', $id, 'error', $e->getMessage());
+            $this->alertFailure($e->getMessage());
             throw $e;
         }
 
@@ -313,6 +322,29 @@ class BackupService
         }
 
         return count($old);
+    }
+
+    /** Löscht erfolgreiche Sicherungen, die älter als $days Tage sind. */
+    public function pruneByAge(int $days): int
+    {
+        if ($days < 1) {
+            return 0;
+        }
+        $rows = $this->conn()->execute(
+            "SELECT id FROM backups WHERE status = 'complete' AND created_at < now() - (:d || ' days')::interval",
+            ['d' => (string)$days],
+        )->fetchAll('assoc');
+        foreach ($rows as $r) {
+            $this->delete((string)$r['id']);
+        }
+
+        return count($rows);
+    }
+
+    /** Protokolliert einen Archiv-Download (Datenexport). */
+    public function logDownload(string $id): void
+    {
+        $this->log('download', $id, 'ok', null);
     }
 
     public function delete(string $id): bool
@@ -520,6 +552,66 @@ class BackupService
         $conn = ConnectionManager::get($name);
 
         return [$conn, $name];
+    }
+
+    /** Pre-Flight: bricht VOR dem Dump ab, wenn am Zielort zu wenig Platz ist. */
+    private function preflightSpace(string $dir): void
+    {
+        $free = @disk_free_space($dir);
+        if ($free === false) {
+            return; // nicht ermittelbar → nicht blockieren
+        }
+        $minFree = (int)(new SettingsManager())->get('core', 'backup.min_free_mb', 500) * 1024 * 1024;
+        $required = max($minFree, (int)($this->estimatedSize() * 1.1));
+        if ($free < $required) {
+            throw new RuntimeException(sprintf(
+                'Nicht genug freier Speicher in %s: frei ~%d MB, benötigt ~%d MB.',
+                $dir,
+                (int)($free / 1048576),
+                (int)($required / 1048576),
+            ));
+        }
+    }
+
+    /** Geschätzte Backup-Größe (DB-Größe + Datei-Stores), als Obergrenze. */
+    private function estimatedSize(): int
+    {
+        $size = 0;
+        try {
+            $size += (int)$this->conn()->execute('SELECT pg_database_size(current_database()) AS s')->fetch('assoc')['s'];
+        } catch (\Throwable) {
+        }
+        foreach (self::STORES as $s) {
+            $p = ROOT . '/' . $s;
+            if (!is_dir($p)) {
+                continue;
+            }
+            $out = [];
+            @exec('du -sb ' . escapeshellarg($p) . ' 2>/dev/null', $out);
+            if ($out !== []) {
+                $size += (int)strtok($out[0], "\t ");
+            }
+        }
+
+        return $size;
+    }
+
+    /** Schickt bei konfiguriertem Empfänger einen Alarm bei Backup-Fehlschlag. */
+    private function alertFailure(string $message): void
+    {
+        try {
+            $to = trim((string)(new SettingsManager())->get('core', 'backup.alert_email', ''));
+            if ($to === '') {
+                return;
+            }
+            (new \App\Service\Mail\MailService())->notify(
+                $to,
+                __('mail.backup_failed.subject'),
+                __('mail.backup_failed.body', gmdate('c'), $this->source, $message),
+            );
+        } catch (\Throwable) {
+            // Alarm darf nichts weiter auslösen.
+        }
     }
 
     private function lock(): bool
