@@ -6,20 +6,23 @@ namespace App\Service\Backup;
 use App\Application;
 use App\Audit\AuditLogger;
 use App\Infrastructure\Db;
+use App\Service\Settings\SettingsManager;
 use Cake\Datasource\ConnectionManager;
 use RuntimeException;
 use Symfony\Component\Uid\Uuid;
+use ZipArchive;
 
 /**
- * Konsistente Sicherung & Wiederherstellung (Kap. 20.1, bewusste Abweichung
- * „keine Systemfunktion" auf Nutzer-Wunsch, E53).
+ * Konsistente Daten-Sicherung & -Wiederherstellung (Kap. 20.1.2, E53).
  *
  * Eine Sicherung umfasst die **gesamte Datenbank** (`pg_dump -Fc`) **und** die
- * persistenten Datei-Stores (`language-store`, `marketplace-data`, `modules`).
- * Beides wird unter dem **Lifecycle-Advisory-Lock** erstellt → kein Modul-/
- * Sprachschreibvorgang dazwischen, also DB↔Storage konsistent. Checksummen je
- * Artefakt machen die Sicherung **prüfbar**; `testRestore()` spielt den Dump in
- * eine **Scratch-Datenbank** ein (ohne die Produktion zu berühren).
+ * persistenten Datei-Stores (`language-store`, `marketplace-data`, `modules`) und
+ * wird als **ein einziges ZIP-Archiv** `<id>.zip` abgelegt (alle Daten zusammen).
+ * Erstellung unter dem **Lifecycle-Advisory-Lock** → DB↔Storage konsistent;
+ * SHA-256 je Artefakt (im Manifest + DB) macht sie **prüfbar**.
+ *
+ * Ablageort ist konfigurierbar (`backup.path`, Linux-/Windows-Pfade über
+ * {@see BackupPath}); Restore kann aus einer beliebigen Archivdatei erfolgen.
  */
 class BackupService
 {
@@ -33,7 +36,17 @@ class BackupService
 
     public function __construct(?string $base = null, private ?AuditLogger $audit = null)
     {
-        $this->base = rtrim($base ?? (ROOT . DIRECTORY_SEPARATOR . 'backups'), '/');
+        if ($base === null) {
+            try {
+                $base = (string)(new SettingsManager())->get('core', 'backup.path', ROOT . '/backups');
+            } catch (\Throwable) {
+                $base = ROOT . '/backups';
+            }
+            if (trim($base) === '') {
+                $base = ROOT . '/backups';
+            }
+        }
+        $this->base = BackupPath::normalize($base);
         $this->audit ??= new AuditLogger();
     }
 
@@ -61,7 +74,6 @@ class BackupService
         ];
     }
 
-    /** Führt ein Shell-Kommando aus; wirft bei Fehler mit Ausgabe. */
     private function run(string $cmd): void
     {
         exec($cmd . ' 2>&1', $out, $rc);
@@ -71,38 +83,41 @@ class BackupService
     }
 
     /**
-     * Erstellt eine konsistente Sicherung. Gibt die Backup-ID zurück.
+     * Erstellt eine konsistente Sicherung als `<id>.zip`. Gibt die Backup-ID
+     * zurück. `$targetDir` überschreibt optional den konfigurierten Ablageort.
      */
-    public function create(?string $note, ?string $actorId): string
+    public function create(?string $note, ?string $actorId, ?string $targetDir = null): string
     {
-        if (!is_dir($this->base) && !@mkdir($this->base, 0o775, true) && !is_dir($this->base)) {
-            throw new RuntimeException('Backup-Verzeichnis nicht anlegbar: ' . $this->base);
+        $dir = ($targetDir !== null && trim($targetDir) !== '')
+            ? BackupPath::assertUsable($targetDir)
+            : $this->base;
+        if (!is_dir($dir) && !@mkdir($dir, 0o775, true) && !is_dir($dir)) {
+            throw new RuntimeException('Backup-Verzeichnis nicht anlegbar/erreichbar: ' . $dir);
         }
+
         $id = Uuid::v7()->toRfc4122();
-        $dir = $this->base . '/' . $id;
-        if (!@mkdir($dir, 0o775, true)) {
-            throw new RuntimeException('Backup-Unterverzeichnis nicht anlegbar: ' . $dir);
+        $zip = $dir . '/' . $id . '.zip';
+        $work = $dir . '/' . $id . '.work';
+        if (!@mkdir($work, 0o775, true)) {
+            throw new RuntimeException('Arbeitsverzeichnis nicht anlegbar: ' . $work);
         }
+        $dumpFile = $work . '/database.dump';
+        $filesTar = $work . '/files.tar.gz';
         $pg = $this->pg();
         $env = 'PGPASSWORD=' . escapeshellarg($pg['pass']) . ' ';
-        $dumpFile = $dir . '/database.dump';
-        $filesTar = $dir . '/files.tar.gz';
 
         $this->conn()->execute(
             'INSERT INTO backups (id, core_version, status, path, note, created_by) '
             . "VALUES (:id, :v, 'creating', :p, :n, :cb)",
-            ['id' => $id, 'v' => Application::CORE_VERSION, 'p' => $dir, 'n' => $note, 'cb' => $actorId],
+            ['id' => $id, 'v' => Application::CORE_VERSION, 'p' => $zip, 'n' => $note, 'cb' => $actorId],
         );
 
-        // Konsistenz: unter dem Lifecycle-Lock (kein Install/Lang-Write dazwischen).
         $locked = $this->lock();
         try {
-            // 1. Datenbank (gesamt, custom-format → restorebar).
             $this->run($env . 'pg_dump -h ' . escapeshellarg($pg['host']) . ' -p ' . escapeshellarg($pg['port'])
                 . ' -U ' . escapeshellarg($pg['user']) . ' -d ' . escapeshellarg($pg['db'])
                 . ' -Fc -f ' . escapeshellarg($dumpFile));
 
-            // 2. Datei-Stores (nur vorhandene).
             $present = array_values(array_filter(self::STORES, fn ($s) => is_dir(ROOT . '/' . $s)));
             if ($present !== []) {
                 $this->run('tar czf ' . escapeshellarg($filesTar) . ' -C ' . escapeshellarg(ROOT)
@@ -112,6 +127,7 @@ class BackupService
             }
         } catch (\Throwable $e) {
             $this->conn()->execute("UPDATE backups SET status = 'failed' WHERE id = :id", ['id' => $id]);
+            @exec('rm -rf ' . escapeshellarg($work));
             throw $e;
         } finally {
             if ($locked) {
@@ -127,14 +143,26 @@ class BackupService
             'database' => ['file' => 'database.dump', 'bytes' => filesize($dumpFile), 'sha256' => $dbSha],
             'files' => ['file' => 'files.tar.gz', 'bytes' => filesize($filesTar), 'sha256' => $filesSha, 'stores' => self::STORES],
         ];
-        file_put_contents($dir . '/manifest.json', (string)json_encode($manifest, JSON_PRETTY_PRINT));
+
+        // Alles in ein ZIP packen.
+        $za = new ZipArchive();
+        if ($za->open($zip, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+            $this->conn()->execute("UPDATE backups SET status = 'failed' WHERE id = :id", ['id' => $id]);
+            @exec('rm -rf ' . escapeshellarg($work));
+            throw new RuntimeException('ZIP nicht erstellbar: ' . $zip);
+        }
+        $za->addFile($dumpFile, 'database.dump');
+        $za->addFile($filesTar, 'files.tar.gz');
+        $za->addFromString('manifest.json', (string)json_encode($manifest, JSON_PRETTY_PRINT));
+        $za->close();
+        @exec('rm -rf ' . escapeshellarg($work));
 
         $this->conn()->execute(
             "UPDATE backups SET status = 'complete', db_bytes = :db, files_bytes = :fb, "
             . 'db_sha256 = :ds, files_sha256 = :fs WHERE id = :id',
-            ['db' => filesize($dumpFile), 'fb' => filesize($filesTar), 'ds' => $dbSha, 'fs' => $filesSha, 'id' => $id],
+            ['db' => $manifest['database']['bytes'], 'fb' => $manifest['files']['bytes'], 'ds' => $dbSha, 'fs' => $filesSha, 'id' => $id],
         );
-        $this->audit->log('backup.create', 'backup', $id, ['component' => 'core', 'newValue' => ['note' => $note]]);
+        $this->audit->log('backup.create', 'backup', $id, ['component' => 'core', 'newValue' => ['note' => $note, 'path' => $zip]]);
 
         return $id;
     }
@@ -143,7 +171,7 @@ class BackupService
     public function list(): array
     {
         return $this->conn()->execute(
-            'SELECT id, created_at, core_version, status, db_bytes, files_bytes, note FROM backups ORDER BY created_at DESC',
+            'SELECT id, created_at, core_version, status, db_bytes, files_bytes, path, note FROM backups ORDER BY created_at DESC',
         )->fetchAll('assoc');
     }
 
@@ -156,7 +184,7 @@ class BackupService
     }
 
     /**
-     * Prüft die Integrität: Artefakte vorhanden + Checksummen wie gespeichert.
+     * Prüft die Integrität: ZIP lesbar + innere Artefakt-Prüfsummen wie gespeichert.
      *
      * @return array{ok:bool, db:bool, files:bool, reason:?string}
      */
@@ -166,21 +194,23 @@ class BackupService
         if ($row === null) {
             return ['ok' => false, 'db' => false, 'files' => false, 'reason' => 'Backup unbekannt.'];
         }
-        $dir = (string)$row['path'];
-        $dumpFile = $dir . '/database.dump';
-        $filesTar = $dir . '/files.tar.gz';
-        if (!is_file($dumpFile) || !is_file($filesTar)) {
-            return ['ok' => false, 'db' => false, 'files' => false, 'reason' => 'Artefakt(e) fehlen.'];
+        $zip = (string)$row['path'];
+        if (!is_file($zip)) {
+            return ['ok' => false, 'db' => false, 'files' => false, 'reason' => 'Archivdatei fehlt: ' . $zip];
         }
-        $db = hash_file('sha256', $dumpFile) === (string)$row['db_sha256'];
-        $files = hash_file('sha256', $filesTar) === (string)$row['files_sha256'];
+        $za = new ZipArchive();
+        if ($za->open($zip) !== true) {
+            return ['ok' => false, 'db' => false, 'files' => false, 'reason' => 'ZIP nicht lesbar.'];
+        }
+        $db = $this->entrySha($za, 'database.dump') === (string)$row['db_sha256'];
+        $files = $this->entrySha($za, 'files.tar.gz') === (string)$row['files_sha256'];
+        $za->close();
 
-        return ['ok' => $db && $files, 'db' => $db, 'files' => $files, 'reason' => $db && $files ? null : 'Checksumme abweichend.'];
+        return ['ok' => $db && $files, 'db' => $db, 'files' => $files, 'reason' => $db && $files ? null : 'Prüfsumme abweichend.'];
     }
 
     /**
-     * Spielt den DB-Dump in eine **Scratch-Datenbank** ein und prüft ihn dort
-     * (ohne die Produktion zu berühren). Gibt Erfolg + gefundene Core-Tabellen.
+     * Probe-Restore in eine Scratch-Datenbank (ohne Produktionseingriff).
      *
      * @return array{ok:bool, tables:int, reason:?string}
      */
@@ -190,23 +220,21 @@ class BackupService
         if ($row === null) {
             return ['ok' => false, 'tables' => 0, 'reason' => 'Backup unbekannt.'];
         }
-        $dumpFile = (string)$row['path'] . '/database.dump';
-        if (!is_file($dumpFile)) {
-            return ['ok' => false, 'tables' => 0, 'reason' => 'DB-Dump fehlt.'];
+        $zip = (string)$row['path'];
+        $tmpDump = sys_get_temp_dir() . '/bk_' . substr(md5($zip), 0, 10) . '.dump';
+        if (!$this->extractEntry($zip, 'database.dump', $tmpDump)) {
+            return ['ok' => false, 'tables' => 0, 'reason' => 'DB-Dump nicht extrahierbar.'];
         }
         $pg = $this->pg();
         $env = 'PGPASSWORD=' . escapeshellarg($pg['pass']) . ' ';
         $scratch = 'fertura_verify_' . substr(str_replace('-', '', $id), 0, 12);
         $base = '-h ' . escapeshellarg($pg['host']) . ' -p ' . escapeshellarg($pg['port']) . ' -U ' . escapeshellarg($pg['user']);
-
         $connName = null;
         try {
             $this->run($env . 'dropdb --force --if-exists ' . $base . ' ' . escapeshellarg($scratch));
             $this->run($env . 'createdb ' . $base . ' ' . escapeshellarg($scratch));
-            // pg_restore kann bei Extensions/Owner Warnungen liefern → Fehler tolerieren,
-            // Erfolg über die Sanity-Prüfung unten festmachen.
             exec($env . 'pg_restore --no-owner --no-privileges -d ' . escapeshellarg($scratch) . ' '
-                . $base . ' ' . escapeshellarg($dumpFile) . ' 2>&1', $o, $rc);
+                . $base . ' ' . escapeshellarg($tmpDump) . ' 2>&1', $o, $rc);
 
             [$scratchConn, $connName] = $this->scratchConnection($pg, $scratch);
             $tables = (int)$scratchConn->execute(
@@ -217,67 +245,137 @@ class BackupService
         } catch (\Throwable $e) {
             return ['ok' => false, 'tables' => 0, 'reason' => $e->getMessage()];
         } finally {
-            // Verbindung schließen + Config entfernen, sonst blockiert sie das Drop.
             if ($connName !== null) {
                 try {
                     ConnectionManager::get($connName)->getDriver()->disconnect();
                     ConnectionManager::drop($connName);
                 } catch (\Throwable) {
-                    // ignore
                 }
             }
             @exec($env . 'dropdb --force --if-exists ' . $base . ' ' . escapeshellarg($scratch) . ' 2>&1');
+            @unlink($tmpDump);
         }
     }
 
-    /**
-     * **Destruktive** Wiederherstellung in die Produktion (nur CLI, `--yes`).
-     * Stellt DB (pg_restore --clean) + Datei-Stores wieder her.
-     */
+    /** **Destruktive** Wiederherstellung einer gespeicherten Sicherung. */
     public function restore(string $id): void
     {
         $row = $this->get($id);
         if ($row === null) {
             throw new RuntimeException('Backup unbekannt.');
         }
-        $dir = (string)$row['path'];
-        $dumpFile = $dir . '/database.dump';
-        $filesTar = $dir . '/files.tar.gz';
-        if (!is_file($dumpFile)) {
-            throw new RuntimeException('DB-Dump fehlt.');
-        }
-        $pg = $this->pg();
-        $env = 'PGPASSWORD=' . escapeshellarg($pg['pass']) . ' ';
-        $base = '-h ' . escapeshellarg($pg['host']) . ' -p ' . escapeshellarg($pg['port']) . ' -U ' . escapeshellarg($pg['user']);
-
-        // DB zurückspielen (Objekte vorher droppen). WICHTIG: KEIN
-        // --no-privileges — sonst gingen die GRANTs an die NOBYPASSRLS-App-Rolle
-        // (fertura_app) verloren und die Laufzeit könnte nach dem Restore nicht
-        // mehr auf die Tabellen zugreifen. --no-owner ist unkritisch (Eigentümer
-        // ist ohnehin der wiederherstellende Superuser).
-        exec($env . 'pg_restore --clean --if-exists --no-owner -d ' . escapeshellarg($pg['db'])
-            . ' ' . $base . ' ' . escapeshellarg($dumpFile) . ' 2>&1', $o, $rc);
-
-        // Datei-Stores zurückspielen.
-        if (is_file($filesTar) && filesize($filesTar) > 0) {
-            $this->run('tar xzf ' . escapeshellarg($filesTar) . ' -C ' . escapeshellarg(ROOT));
-        }
+        $this->restoreFromFile((string)$row['path']);
         $this->audit->log('backup.restore', 'backup', $id, ['component' => 'core']);
     }
 
-    /** Löscht eine Sicherung (Dateien + Metadaten). */
+    /**
+     * **Destruktive** Wiederherstellung aus einer beliebigen Archivdatei
+     * (Linux-/Windows-Pfad). Stellt DB (`pg_restore --clean`, **mit** Privilegien
+     * → App-Rollen-GRANTs bleiben erhalten) + Datei-Stores wieder her.
+     */
+    public function restoreFromFile(string $zipPath): void
+    {
+        $zip = BackupPath::normalize($zipPath);
+        if (!is_file($zip)) {
+            throw new RuntimeException('Archivdatei nicht gefunden: ' . $zip);
+        }
+        $tmp = sys_get_temp_dir() . '/bkrestore_' . substr(md5($zip), 0, 10);
+        @exec('rm -rf ' . escapeshellarg($tmp));
+        if (!@mkdir($tmp, 0o775, true)) {
+            throw new RuntimeException('Temp-Verzeichnis nicht anlegbar: ' . $tmp);
+        }
+        try {
+            if (!$this->extractEntry($zip, 'database.dump', $tmp . '/database.dump')) {
+                throw new RuntimeException('database.dump nicht im Archiv.');
+            }
+            $hasFiles = $this->extractEntry($zip, 'files.tar.gz', $tmp . '/files.tar.gz');
+
+            $pg = $this->pg();
+            $env = 'PGPASSWORD=' . escapeshellarg($pg['pass']) . ' ';
+            $base = '-h ' . escapeshellarg($pg['host']) . ' -p ' . escapeshellarg($pg['port']) . ' -U ' . escapeshellarg($pg['user']);
+            // KEIN --no-privileges: sonst gingen die GRANTs an die NOBYPASSRLS-
+            // App-Rolle verloren (Laufzeit hätte keinen Tabellenzugriff mehr).
+            exec($env . 'pg_restore --clean --if-exists --no-owner -d ' . escapeshellarg($pg['db'])
+                . ' ' . $base . ' ' . escapeshellarg($tmp . '/database.dump') . ' 2>&1', $o, $rc);
+
+            if ($hasFiles && (int)filesize($tmp . '/files.tar.gz') > 0) {
+                $this->run('tar xzf ' . escapeshellarg($tmp . '/files.tar.gz') . ' -C ' . escapeshellarg(ROOT));
+            }
+        } finally {
+            @exec('rm -rf ' . escapeshellarg($tmp));
+        }
+    }
+
+    /** Behält die jüngsten $keep Sicherungen, löscht ältere. Anzahl gelöschter zurück. */
+    public function prune(int $keep): int
+    {
+        if ($keep < 1) {
+            return 0;
+        }
+        $old = array_slice($this->list(), $keep);
+        foreach ($old as $b) {
+            $this->delete((string)$b['id']);
+        }
+
+        return count($old);
+    }
+
     public function delete(string $id): bool
     {
         $row = $this->get($id);
         if ($row === null) {
             return false;
         }
-        $dir = (string)$row['path'];
-        if (is_dir($dir)) {
-            @exec('rm -rf ' . escapeshellarg($dir));
+        $zip = (string)$row['path'];
+        if (is_file($zip)) {
+            @unlink($zip);
         }
         $this->conn()->execute('DELETE FROM backups WHERE id = :id', ['id' => $id]);
         $this->audit->log('backup.delete', 'backup', $id, ['component' => 'core']);
+
+        return true;
+    }
+
+    // ---- intern --------------------------------------------------------------
+
+    private function entrySha(ZipArchive $za, string $entry): string
+    {
+        $s = $za->getStream($entry);
+        if ($s === false) {
+            return '';
+        }
+        $ctx = hash_init('sha256');
+        while (!feof($s)) {
+            hash_update($ctx, (string)fread($s, 1 << 16));
+        }
+        fclose($s);
+
+        return hash_final($ctx);
+    }
+
+    private function extractEntry(string $zip, string $entry, string $dest): bool
+    {
+        $za = new ZipArchive();
+        if ($za->open($zip) !== true) {
+            return false;
+        }
+        $s = $za->getStream($entry);
+        if ($s === false) {
+            $za->close();
+
+            return false;
+        }
+        $out = fopen($dest, 'wb');
+        if ($out === false) {
+            fclose($s);
+            $za->close();
+
+            return false;
+        }
+        stream_copy_to_stream($s, $out);
+        fclose($out);
+        fclose($s);
+        $za->close();
 
         return true;
     }
@@ -295,7 +393,6 @@ class BackupService
                 'timezone' => 'UTC', 'cacheMetadata' => false,
             ]);
         }
-
         /** @var \Cake\Database\Connection $conn */
         $conn = ConnectionManager::get($name);
 
