@@ -39,16 +39,22 @@ $render = static function ($detail): string {
 
 <h2 class="h5 mt-4"><?= h(__('admin.health.workers_heading')) ?></h2>
 <table class="table table-sm table-hover align-middle">
-    <thead><tr><th><?= h(__('admin.health.col_worker')) ?></th><th><?= h(__('admin.health.col_last_run')) ?></th><th><?= h(__('admin.health.col_age')) ?></th><th><?= h(__('admin.health.col_status')) ?></th></tr></thead>
+    <thead><tr><th><?= h(__('admin.health.col_worker')) ?></th><th><?= h(__('admin.health.col_last_run')) ?></th><th><?= h(__('admin.health.col_age')) ?></th><th><?= h(__('admin.health.col_duration')) ?></th><th><?= h(__('admin.health.col_status')) ?></th></tr></thead>
     <tbody>
-    <?php foreach ($heartbeats as $hb): $age = (int)$hb['age_seconds']; ?>
+    <?php foreach ($heartbeats as $hb):
+        $age = (int)$hb['age_seconds'];
+        $d = is_string($hb['detail'] ?? null) ? (json_decode((string)$hb['detail'], true) ?: []) : (array)($hb['detail'] ?? []);
+        $interval = (int)($d['interval_seconds'] ?? 0);
+        $overdue = $interval > 0 && $age > 2 * $interval;
+    ?>
         <tr>
-            <td><code><?= h($hb['worker_key']) ?></code></td>
+            <td><code><?= h($hb['worker_key']) ?></code><?php if ($interval > 0): ?> <span class="text-muted small"><?= $interval ?>s</span><?php endif; ?></td>
             <td class="small"><?= h((string)$hb['last_run_at']) ?></td>
-            <td><?= $age ?> s</td>
+            <td><?= $age ?> s<?php if ($overdue): ?> <span class="badge text-bg-warning"><?= h(__('admin.health.overdue')) ?></span><?php endif; ?></td>
+            <td class="small"><?= isset($d['duration_ms']) ? (int)$d['duration_ms'] . ' ms' : '–' ?></td>
             <td><span class="badge text-bg-<?= $hb['last_status'] === 'ok' ? 'success' : ($hb['last_status'] === 'warn' ? 'warning' : 'danger') ?>"><?= h($hb['last_status']) ?></span></td>
         </tr>
     <?php endforeach; ?>
-    <?php if ($heartbeats === []): ?><tr><td colspan="4" class="text-muted"><?= h(__('admin.health.workers_empty')) ?></td></tr><?php endif; ?>
+    <?php if ($heartbeats === []): ?><tr><td colspan="5" class="text-muted"><?= h(__('admin.health.workers_empty')) ?></td></tr><?php endif; ?>
     </tbody>
 </table>

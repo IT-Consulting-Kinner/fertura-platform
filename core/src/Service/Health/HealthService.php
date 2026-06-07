@@ -134,7 +134,13 @@ class HealthService
         $status = 'up';
         foreach ($beats as $b) {
             $age = (int)$b['age_seconds'];
-            $stale = $age > $maxAge;
+            $detail = is_string($b['detail'] ?? null) ? (json_decode((string)$b['detail'], true) ?: []) : (array)($b['detail'] ?? []);
+            $interval = (int)($detail['interval_seconds'] ?? 0);
+            // Überfällig = älter als 2× das erwartete Intervall des Workers
+            // (Kap. 20.3); ohne bekanntes Intervall greift der globale Max-Alter-
+            // Schwellwert.
+            $threshold = $interval > 0 ? 2 * $interval : $maxAge;
+            $stale = $age > $threshold;
             $wStatus = $b['last_status'] === 'error' ? 'down' : ($stale ? 'degraded' : 'up');
             if ($wStatus !== 'up') {
                 $status = $wStatus === 'down' ? 'down' : ($status === 'down' ? 'down' : 'degraded');
@@ -142,7 +148,11 @@ class HealthService
             $workers[(string)$b['worker_key']] = [
                 'age_seconds' => $age,
                 'last_status' => $b['last_status'],
+                'interval_seconds' => $interval ?: null,
+                'overdue_threshold_seconds' => $threshold,
+                'last_duration_ms' => isset($detail['duration_ms']) ? (int)$detail['duration_ms'] : null,
                 'stale' => $stale,
+                'overdue' => $interval > 0 && $age > 2 * $interval,
             ];
         }
 
