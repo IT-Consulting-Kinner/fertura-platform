@@ -194,11 +194,12 @@ Locale `ll_CC`, **flacher** Fallback auf Englisch der Version; jeder Text über
   (kanonisch) + **`de_DE`** (bisherige Texte, keine Regression); Schlüssel-
   konvention `<bereich>.<element>`. ~330 Schlüssel; statische Vollabdeckung
   (328/328) + CLI-Fallback + HTTP-Render de/en verifiziert.
-- `[ ]` **i18n-3 — Managed Locale Store + Metadaten + sicheres Schreiben:**
-  persistentes Volume; Metadaten-Migration (`signed/reviewed/edited`,
-  version, source, file_path, checksum, `write_state/started_at/last_write_error`);
-  `.tmp`+`fsync`→atomarer Rename + MO-Kompilierung; Recovery/Cleaner mit
-  **pg-Advisory-Lock** (in-flight vs. verwaist), Selbstheilung/Bereinigung.
+- `[x]` **i18n-3 — Managed Locale Store + Metadaten + sicheres Schreiben** (verifiziert 2026-06-06):
+  persistentes Volume `core_langstore`; Metadaten-Migration `core.language_packs`;
+  `LanguagePackStore` mit `.tmp`+`fsync`→atomarer Rename (CakePHP liest PO direkt
+  → kein MO nötig); Recovery/Cleaner mit **pg-Advisory-Lock** (in-flight vs.
+  verwaist), Selbstheilung/Bereinigung; CLI `lang recover`. *(save/read/recover
+  clean/promote/in-flight verifiziert)*
 - `[ ]` **i18n-4 — Komponenten-Integration:** Manifest `locales`; Install kopiert
   Paket-`locales/` in den Store; Aktivierung registriert Domain; Deinstallation
   behält Dateien; Modul-Fixture.
