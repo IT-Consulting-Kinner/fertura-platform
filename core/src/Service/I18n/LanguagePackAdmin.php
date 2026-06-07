@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Service\I18n;
 
 use App\Application;
+use App\Audit\AuditLogger;
 use Cake\Datasource\ConnectionManager;
 use RuntimeException;
 
@@ -23,9 +24,27 @@ class LanguagePackAdmin
     public function __construct(
         private ?LanguagePackStore $store = null,
         private ?LocaleResolver $resolver = null,
+        private ?AuditLogger $audit = null,
     ) {
         $this->store ??= new LanguagePackStore();
         $this->resolver ??= new LocaleResolver();
+        $this->audit ??= new AuditLogger();
+    }
+
+    /** Audit-Eintrag für eine Sprachpaket-Aktion (i18n-8). */
+    private function audit(string $action, string $componentKey, string $version, string $locale, mixed $detail = null): void
+    {
+        try {
+            $this->audit->log($action, 'language_pack', $componentKey . ':' . $version . ':' . $locale, [
+                'entityLabel' => $componentKey . '/' . $locale . ' v' . $version,
+                'moduleKey' => $componentKey,
+                'moduleVersion' => $version,
+                'component' => 'core',
+                'newValue' => $detail,
+            ]);
+        } catch (\Throwable) {
+            // Audit darf die Fachaktion nicht scheitern lassen.
+        }
     }
 
     private function conn()
@@ -198,6 +217,7 @@ class LanguagePackAdmin
             'source' => (string)$meta['source'],
             'uploadedBy' => $meta['uploaded_by'] !== null ? (string)$meta['uploaded_by'] : $actorId,
         ]);
+        $this->audit('lang.edit', $componentKey, $version, $locale, ['changed' => count($msgstrByIndex)]);
     }
 
     /** Setzt reviewed=true ohne inhaltliche Änderung. */
@@ -211,6 +231,7 @@ class LanguagePackAdmin
             'UPDATE language_packs SET reviewed = true WHERE component_key = :k AND version = :v AND locale = :l',
             ['k' => $componentKey, 'v' => $version, 'l' => $locale],
         );
+        $this->audit('lang.review', $componentKey, $version, $locale);
     }
 
     /**
@@ -224,6 +245,7 @@ class LanguagePackAdmin
             throw new RuntimeException('Englisch kann bei aktiver Komponente nicht gelöscht werden.');
         }
         $this->store->delete($componentKey, $version, $locale, $domain);
+        $this->audit('lang.delete', $componentKey, $version, $locale, ['component_active' => $active]);
     }
 
     private function isActive(string $componentKey): bool
@@ -286,6 +308,7 @@ class LanguagePackAdmin
             'source' => 'upload',
             'uploadedBy' => $actorId,
         ]);
+        $this->audit('lang.import', $componentKey, $version, $locale, ['type' => $componentType, 'signed' => false]);
     }
 
     /**

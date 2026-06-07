@@ -230,7 +230,13 @@ Locale `ll_CC`, **flacher** Fallback auf Englisch der Version; jeder Text über
   über die Config-GUI editierbar (i18n-1). *(selectable/Accept-Language CLI-grün;
   HTTP: Accept-Language→`html lang`, Switcher Login+Admin, persistenter Wechsel
   → `user.locale=de_DE` + Admin auf Deutsch.)*
-- `[ ]` **i18n-8 — Audit, Health, Entwicklerdoku.**
+- `[x]` **i18n-8 — Audit, Health, Entwicklerdoku** (verifiziert 2026-06-07):
+  Verwaltungsaktionen schreiben Audit (`lang.import/edit/delete/review`,
+  `entity_type=language_pack`); Health-Subsystem `localization` (fehlende
+  Englisch-Basis aktiver Komponenten, Versionsfehler Major-Mismatch, verwaiste/
+  in-flight `.tmp`; read-only, Heilung via `lang recover`); Entwicklerleitfaden
+  `I18N.md`. *(Audit aller 4 Aktionen geschrieben; Health meldet Versionsfehler
+  live + erkennt stray `.tmp`; missing_base korrekt.)*
 
 ## Verifikationsbericht je Schritt
 
