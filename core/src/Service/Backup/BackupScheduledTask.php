@@ -33,7 +33,7 @@ class BackupScheduledTask implements ScheduledTaskInterface
         if (!(bool)$settings->get('core', 'backup.schedule.enabled', false)) {
             return; // Scheduler deaktiviert – kein Backup.
         }
-        $service = new BackupService();
+        $service = (new BackupService())->context('scheduler', null);
         $service->create('scheduled', null);
         $service->prune((int)$settings->get('core', 'backup.retention', 14));
     }

@@ -32,6 +32,7 @@ class BackupCommand extends Command
             ->addOption('note', ['help' => 'Notiz (bei create)'])
             ->addOption('path', ['help' => 'Zielverzeichnis bei create (Linux-/Windows-Pfad; sonst konfigurierter backup.path)'])
             ->addOption('from', ['help' => 'Archivdatei (.zip) bei restore — restauriert aus beliebigem Pfad'])
+            ->addOption('password', ['help' => 'Passwort für verschlüsselte Archive (sonst Setting backup.password)'])
             ->addOption('yes', ['boolean' => true, 'help' => 'Bestätigt die destruktive Wiederherstellung']);
 
         return $parser;
@@ -98,10 +99,11 @@ class BackupCommand extends Command
                     return static::CODE_ERROR;
                 }
                 $from = (string)($args->getOption('from') ?? '');
+                $pw = $args->getOption('password');
                 $io->warning('Stelle Produktion wieder her …');
                 try {
                     if ($from !== '') {
-                        $svc->restoreFromFile($from);
+                        $svc->restoreFromFile($from, $pw);
                     } else {
                         $svc->restore($id);
                     }
