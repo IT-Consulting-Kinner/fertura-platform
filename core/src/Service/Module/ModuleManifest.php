@@ -11,10 +11,16 @@ use Throwable;
 /**
  * Modul-Manifest (manifest.json), Kap. 24.4–24.7.
  *
- * Pflichtfelder: id, name, version, type, edition, core_compatibility, publisher,
- * php_namespace. Extension-Module zusätzlich: extends_main_module,
- * main_module_compatibility. Typregel (24.7.3): Main-Module dürfen kein
- * contracts_used deklarieren.
+ * Pflichtfelder (Kap. 24.4.1): id, name, version, type, edition, description,
+ * core_compatibility, publisher, php_namespace. Extension-Module zusätzlich:
+ * extends_main_module, main_module_compatibility. Typregel (24.7.3): Main-Module
+ * dürfen kein contracts_used deklarieren.
+ *
+ * Hinweis zum Spec-Feld `entrypoint` (24.4.1, „Einstiegsklasse"): in dieser
+ * Implementierung über `php_namespace` realisiert — der Namespace-Wurzelpfad,
+ * aus dem der `ModuleAutoloader` den Modulcode lädt (E46). `signature` ist kein
+ * Manifestfeld, sondern die separate Paketsignatur (`signature.json`,
+ * `PackageVerifier`).
  */
 class ModuleManifest
 {
@@ -168,7 +174,7 @@ class ModuleManifest
     public function validate(string $coreVersion): array
     {
         $errors = [];
-        $required = ['id', 'name', 'version', 'type', 'edition', 'core_compatibility', 'php_namespace'];
+        $required = ['id', 'name', 'version', 'type', 'edition', 'description', 'core_compatibility', 'publisher', 'php_namespace'];
         foreach ($required as $field) {
             if (empty($this->data[$field])) {
                 $errors[] = "Pflichtfeld fehlt: $field";

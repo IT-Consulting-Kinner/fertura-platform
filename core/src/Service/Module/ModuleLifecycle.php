@@ -72,6 +72,42 @@ class ModuleLifecycle
      * Modul-Schema, damit der Request-Pfad (App-Rolle) darauf zugreifen kann.
      * No-op, wenn keine getrennte App-Rolle konfiguriert ist.
      */
+    /**
+     * Durchsetzung der RLS-Pflicht für is_scoped-Ressourcen (Kap. 30.3, E47).
+     * Deklariert das Modul mindestens eine scoped Ressource, muss sein Schema
+     * mindestens eine RLS-aktivierte Tabelle UND mindestens eine Policy
+     * enthalten. Andernfalls LifecycleException (Install-Abbruch/Rollback).
+     */
+    private function assertScopedRls(string $key, string $schema, string $targetPath, ModuleManifest $manifest): void
+    {
+        $scoped = array_filter($manifest->permissions(), static fn ($p) => !empty($p['is_scoped']));
+        if ($scoped === []) {
+            return;
+        }
+        $row = $this->conn()->execute(
+            'SELECT '
+            . '(SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace '
+            . "  WHERE n.nspname = :s1 AND c.relkind = 'r' AND c.relrowsecurity) AS rls_tables, "
+            . '(SELECT count(*) FROM pg_policies WHERE schemaname = :s2) AS policies',
+            ['s1' => $schema, 's2' => $schema],
+        )->fetch('assoc');
+        if ((int)$row['rls_tables'] > 0 && (int)$row['policies'] > 0) {
+            return;
+        }
+        // Sauberer Rückbau der bisher angelegten Install-Artefakte (Schema +
+        // Migrationen + Modul-Stammdaten + kopiertes Verzeichnis), da der Install
+        // nicht transaktional ist.
+        $conn = $this->conn();
+        $conn->execute("DROP SCHEMA IF EXISTS $schema CASCADE");
+        $conn->execute('DELETE FROM modules WHERE module_key = :k', ['k' => $key]);
+        $this->removeDir($targetPath);
+
+        throw new LifecycleException(
+            "Modul deklariert is_scoped-Ressourcen, aber Schema $schema enthält keine "
+            . 'RLS-geschützte Tabelle mit Policy (Kap. 30.3). Installation abgebrochen.',
+        );
+    }
+
     private function grantSchemaToAppRole(string $schema): void
     {
         $role = (string)(env('APP_DB_USER') ?: '');
@@ -220,6 +256,13 @@ class ModuleLifecycle
             }
 
             $this->migrations->runUp($moduleId, $schema, $targetPath . '/migrations');
+
+            // RLS-Pflicht (Kap. 30.3, E47): direkt nach den Migrationen — wer
+            // is_scoped-Ressourcen deklariert, muss im Modul-Schema mind. eine
+            // RLS-geschützte Tabelle mit Policy mitbringen. Schlägt fehl → sauber
+            // zurückbauen (Install ist nicht in einer DB-Transaktion gekapselt),
+            // bevor weitere Registrierungen erfolgen.
+            $this->assertScopedRls($key, $schema, $targetPath, $manifest);
 
             // App-Rolle (NOBYPASSRLS) auf das neue Modul-Schema berechtigen,
             // damit der Request-Pfad nach dem Install darauf zugreifen kann (E26).
