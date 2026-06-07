@@ -27,6 +27,8 @@ echo "[entrypoint] Datenbank erreichbar"
 # Managed Locale Store (i18n) fuer den Laufzeit-Nutzer (www-data) beschreibbar machen.
 mkdir -p /var/www/html/language-store 2>/dev/null || true
 chown -R www-data:www-data /var/www/html/language-store 2>/dev/null || true
+mkdir -p /var/www/html/backups 2>/dev/null || true
+chown -R www-data:www-data /var/www/html/backups 2>/dev/null || true
 
 # 3. Schema-Bootstrap + Migrationen (nur core; geguardet)
 #    Bootstrap-Schritte laufen als Superuser: APP_DATABASE_URL wird geleert,

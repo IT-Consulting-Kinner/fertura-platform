@@ -33,6 +33,8 @@ class EnglishFallbackLoader
             if (!$base instanceof Package) {
                 $base = new Package();
             }
+            // sprintf-Platzhalter (%s) statt ICU ({0}); die Core-Kataloge nutzen %s.
+            $base->setFormatter('sprintf');
             if ($locale !== self::BASE_LOCALE) {
                 $localePkg = (new MessagesFileLoader($name, $locale))();
                 if ($localePkg instanceof Package) {

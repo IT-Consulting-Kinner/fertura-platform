@@ -204,6 +204,16 @@ class OutboxWorker
                 if ($reclaimed > 0) {
                     $this->log("$reclaimed haengende Events zurueckgesetzt.");
                 }
+                // Periodische Modul-Aufgaben (Andock-Punkt, Kap. 20.4) ticken –
+                // fehlerisoliert, damit ein Modul-Job den Worker nicht stoppt.
+                try {
+                    $ran = (new \App\Service\Schedule\ScheduledTaskRunner())->tick();
+                    if ($ran !== []) {
+                        $this->log('Scheduled tasks: ' . implode(', ', $ran));
+                    }
+                } catch (Throwable $e) {
+                    $this->log('Scheduler-Fehler: ' . $e->getMessage());
+                }
                 // Vorhandene Events vollständig abarbeiten.
                 $processed = 0;
                 while ($this->running && ($n = $this->processBatch()) > 0) {

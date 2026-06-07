@@ -28,6 +28,7 @@ NOTES.md
 core/vendor/
 core/tmp/
 core/logs/
+core/backups/
 core/config/app_local.php
 core/config/.env
 # Vom Migrations-Plugin generierter Schema-Cache (kein Quellartefakt)

@@ -28,14 +28,15 @@ class TrustCommand extends Command
     public function buildOptionParser(ConsoleOptionParser $parser): ConsoleOptionParser
     {
         $parser
-            ->addArgument('operation', ['choices' => ['add-anchor', 'revoke', 'list'], 'required' => true])
-            ->addArgument('key_id', ['help' => 'Schlüssel-ID (Root-Anker)'])
-            ->addArgument('public_key', ['help' => 'Public Key (base64, Root-Anker)'])
+            ->addArgument('operation', ['choices' => ['add-anchor', 'revoke', 'rotate', 'list'], 'required' => true])
+            ->addArgument('key_id', ['help' => 'Schlüssel-ID (Root-Anker) / alter Schlüssel bei rotate'])
+            ->addArgument('public_key', ['help' => 'Public Key (base64, Root-Anker) / neuer Schlüssel bei rotate'])
             ->addOption('type', ['choices' => ['root', 'publisher'], 'default' => 'root'])
             ->addOption('publisher', ['help' => 'Publisher (für publisher-Keys)'])
             ->addOption('cert', ['help' => 'Publisher-Zertifikat (JSON aus mp_tool sign-key)'])
             ->addOption('valid-from', ['help' => 'Gültig ab (ISO-8601, optional)'])
             ->addOption('valid-to', ['help' => 'Gültig bis (ISO-8601, optional)'])
+            ->addOption('overlap-days', ['help' => 'Überlappungsfenster bei rotate (Tage, Default 30)', 'default' => '30'])
             ->addOption('reason', ['help' => 'Widerrufsgrund']);
 
         return $parser;
@@ -54,6 +55,9 @@ class TrustCommand extends Command
                 $io->success('Schlüssel widerrufen: ' . $args->getArgument('key_id'));
 
                 return static::CODE_SUCCESS;
+
+            case 'rotate':
+                return $this->rotate($args, $io, $trust);
 
             case 'list':
                 $rows = ConnectionManager::get('default')->execute(
@@ -76,6 +80,47 @@ class TrustCommand extends Command
         }
 
         return static::CODE_ERROR;
+    }
+
+    /**
+     * Gleitende Schlüsselrotation (Kap. 1.4): der neue Anker gilt ab sofort
+     * unbegrenzt, der alte läuft nach einem Überlappungsfenster aus (E45 erzwingt
+     * das `valid_to`). Während des Fensters werden beide akzeptiert → kein
+     * Ausfall. Der neue Anker muss bereits installiert sein (`add-anchor`/`--cert`).
+     */
+    private function rotate(Arguments $args, ConsoleIo $io, TrustStore $trust): int
+    {
+        $old = (string)$args->getArgument('key_id');
+        $new = (string)$args->getArgument('public_key');
+        if ($old === '' || $new === '') {
+            $io->error('rotate benötigt <alte-key-id> <neue-key-id>.');
+
+            return static::CODE_ERROR;
+        }
+        if ($trust->getAnchor($new) === null) {
+            $io->error("Neuer Anker nicht aktiv/vorhanden: $new (zuerst 'trust add-anchor' bzw. '--cert').");
+
+            return static::CODE_ERROR;
+        }
+        $days = max(0, (int)$args->getOption('overlap-days'));
+        $conn = ConnectionManager::get('default');
+        // Neuer Anker: ab jetzt gültig, unbegrenzt.
+        $conn->execute(
+            'UPDATE trust_anchors SET valid_from = COALESCE(valid_from, now()), valid_to = NULL WHERE key_id = :k',
+            ['k' => $new],
+        );
+        // Alter Anker: nach dem Fenster auslaufen lassen.
+        $n = $conn->execute(
+            "UPDATE trust_anchors SET valid_to = now() + (:d || ' days')::interval WHERE key_id = :k",
+            ['d' => (string)$days, 'k' => $old],
+        )->rowCount();
+        if ($n === 0) {
+            $io->warning("Alter Anker '$old' nicht gefunden — nur der neue Anker wurde aktiviert.");
+        } else {
+            $io->success("Rotation: '$new' gilt ab sofort; '$old' läuft in $days Tagen aus (beide bis dahin akzeptiert).");
+        }
+
+        return static::CODE_SUCCESS;
     }
 
     private function addAnchor(Arguments $args, ConsoleIo $io, TrustStore $trust): int

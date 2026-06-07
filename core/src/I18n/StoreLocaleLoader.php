@@ -40,7 +40,7 @@ class StoreLocaleLoader
                 // Major-Mismatch (resolveVersion null) → kein Overlay → Englisch.
             }
 
-            return new Package('default', null, $messages);
+            return new Package('sprintf', null, $messages);
         });
     }
 
