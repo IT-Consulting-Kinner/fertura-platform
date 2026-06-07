@@ -43,6 +43,13 @@ class SettingsCatalog
             'storage.path' => ['type' => 'string', 'default' => null],
             'health.worker_max_age_seconds' => ['type' => 'int', 'default' => 120, 'min' => 10, 'max' => 86400],
             'health_token' => ['type' => 'string', 'default' => null, 'secret' => true],
+
+            // Daten-Backup (Kap. 20.1.2). Pfad als Container-/Linux- bzw.
+            // Windows-Pfad; leer = Standard-Volume. Scheduler läuft im Worker.
+            'backup.path' => ['type' => 'string', 'default' => null],
+            'backup.schedule.enabled' => ['type' => 'bool', 'default' => false],
+            'backup.schedule.interval_hours' => ['type' => 'int', 'default' => 24, 'min' => 1, 'max' => 8760],
+            'backup.retention' => ['type' => 'int', 'default' => 14, 'min' => 1, 'max' => 3650],
         ],
     ];
 

@@ -2,6 +2,10 @@
 /**
  * @var \App\View\AppView $this
  * @var list<array<string,mixed>> $backups
+ * @var string $configuredPath
+ * @var bool $scheduleEnabled
+ * @var int $scheduleHours
+ * @var int $retention
  */
 $human = static function ($b): string {
     $b = (int)$b;
@@ -14,15 +18,43 @@ $human = static function ($b): string {
     return round($b / 1024 ** $i, 1) . $u[$i];
 };
 ?>
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h1 class="h3 mb-0"><?= h(__('admin.backup.title')) ?></h1>
-    <?= $this->Form->create(null, ['url' => ['action' => 'create'], 'class' => 'd-flex gap-2']) ?>
-        <input type="text" name="note" class="form-control form-control-sm" placeholder="<?= h(__('admin.backup.note')) ?>" style="width:220px">
-        <?= $this->Form->button(__('admin.backup.create'), ['class' => 'btn btn-primary btn-sm', 'escapeTitle' => false]) ?>
-    <?= $this->Form->end() ?>
-</div>
+<h1 class="h3 mb-2"><?= h(__('admin.backup.title')) ?></h1>
 <p class="text-muted small"><?= h(__('admin.backup.intro')) ?></p>
-<div class="alert alert-warning small"><?= h(__('admin.backup.restore_note')) ?> <code>bin/cake backup restore &lt;id&gt; --yes</code></div>
+
+<div class="card mb-3" style="max-width:760px">
+    <div class="card-header"><?= h(__('admin.backup.create_heading')) ?></div>
+    <div class="card-body">
+        <?= $this->Form->create(null, ['url' => ['action' => 'create'], 'class' => 'row g-2 align-items-end']) ?>
+        <div class="col-12 col-md-4">
+            <label class="form-label small mb-0"><?= h(__('admin.backup.note')) ?></label>
+            <input type="text" name="note" class="form-control form-control-sm" placeholder="z. B. vor Update 1.1.0">
+        </div>
+        <div class="col-12 col-md-5">
+            <label class="form-label small mb-0"><?= h(__('admin.backup.target_path')) ?></label>
+            <input type="text" name="path" class="form-control form-control-sm" placeholder="<?= h($configuredPath) ?>">
+        </div>
+        <div class="col-12 col-md-3">
+            <?= $this->Form->button(__('admin.backup.create'), ['class' => 'btn btn-primary btn-sm w-100']) ?>
+        </div>
+        <?= $this->Form->end() ?>
+        <div class="form-text mt-2"><?= h(__('admin.backup.path_hint')) ?> <code><?= h($configuredPath) ?></code></div>
+    </div>
+</div>
+
+<div class="d-flex gap-3 mb-3 small flex-wrap">
+    <span><?= h(__('admin.backup.scheduler')) ?>:
+        <?php if ($scheduleEnabled): ?>
+            <span class="badge text-bg-success"><?= h(__('admin.backup.enabled')) ?></span>
+            <span class="text-muted"><?= h(__('admin.backup.every_hours', $scheduleHours)) ?>, <?= h(__('admin.backup.keep_n', $retention)) ?></span>
+        <?php else: ?>
+            <span class="badge text-bg-secondary"><?= h(__('admin.backup.disabled')) ?></span>
+            <span class="text-muted"><?= h(__('admin.backup.scheduler_hint')) ?> <code>backup.schedule.enabled</code></span>
+        <?php endif; ?>
+    </span>
+</div>
+<div class="alert alert-warning small"><?= h(__('admin.backup.restore_note')) ?>
+    <code>bin/cake backup restore &lt;id&gt; --yes</code> ·
+    <code>bin/cake backup restore --from &lt;pfad.zip&gt; --yes</code></div>
 
 <div class="table-responsive">
 <table class="table table-sm align-middle">

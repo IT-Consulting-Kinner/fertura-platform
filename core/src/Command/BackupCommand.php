@@ -30,6 +30,8 @@ class BackupCommand extends Command
             ])
             ->addArgument('id', ['help' => 'Backup-ID'])
             ->addOption('note', ['help' => 'Notiz (bei create)'])
+            ->addOption('path', ['help' => 'Zielverzeichnis bei create (Linux-/Windows-Pfad; sonst konfigurierter backup.path)'])
+            ->addOption('from', ['help' => 'Archivdatei (.zip) bei restore — restauriert aus beliebigem Pfad'])
             ->addOption('yes', ['boolean' => true, 'help' => 'Bestätigt die destruktive Wiederherstellung']);
 
         return $parser;
@@ -44,7 +46,13 @@ class BackupCommand extends Command
         switch ($op) {
             case 'create':
                 $io->out('Erstelle Sicherung (unter Lifecycle-Lock) …');
-                $newId = $svc->create($args->getOption('note'), null);
+                try {
+                    $newId = $svc->create($args->getOption('note'), null, $args->getOption('path'));
+                } catch (\Throwable $e) {
+                    $io->error('Fehlgeschlagen: ' . $e->getMessage());
+
+                    return static::CODE_ERROR;
+                }
                 $io->success('Backup erstellt: ' . $newId);
 
                 return static::CODE_SUCCESS;
@@ -89,8 +97,19 @@ class BackupCommand extends Command
 
                     return static::CODE_ERROR;
                 }
+                $from = (string)($args->getOption('from') ?? '');
                 $io->warning('Stelle Produktion wieder her …');
-                $svc->restore($id);
+                try {
+                    if ($from !== '') {
+                        $svc->restoreFromFile($from);
+                    } else {
+                        $svc->restore($id);
+                    }
+                } catch (\Throwable $e) {
+                    $io->error('Restore fehlgeschlagen: ' . $e->getMessage());
+
+                    return static::CODE_ERROR;
+                }
                 $io->success('Wiederhergestellt. Empfehlung: Dienste neu starten.');
 
                 return static::CODE_SUCCESS;

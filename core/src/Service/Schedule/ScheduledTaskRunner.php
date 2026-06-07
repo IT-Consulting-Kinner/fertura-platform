@@ -22,6 +22,11 @@ class ScheduledTaskRunner
 {
     public const COLLECTOR = 'core.collector.scheduled';
 
+    /** @var list<class-string> Vom Core mitgelieferte periodische Aufgaben. */
+    private const CORE_TASKS = [
+        \App\Service\Backup\BackupScheduledTask::class,
+    ];
+
     public function __construct(private ?ContractRegistry $registry = null)
     {
         $this->registry ??= new ContractRegistry();
@@ -40,7 +45,8 @@ class ScheduledTaskRunner
             $classes = [];
         }
 
-        return $this->tickClasses($classes);
+        // Core-eigene Aufgaben (z. B. automatisches Backup) immer mitführen.
+        return $this->tickClasses([...self::CORE_TASKS, ...$classes]);
     }
 
     /**

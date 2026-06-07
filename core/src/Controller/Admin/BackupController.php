@@ -17,7 +17,12 @@ class BackupController extends AdminController
 
     public function index(): void
     {
+        $settings = new \App\Service\Settings\SettingsManager();
         $this->set('backups', (new BackupService())->list());
+        $this->set('configuredPath', (new BackupService())->base());
+        $this->set('scheduleEnabled', (bool)$settings->get('core', 'backup.schedule.enabled', false));
+        $this->set('scheduleHours', (int)$settings->get('core', 'backup.schedule.interval_hours', 24));
+        $this->set('retention', (int)$settings->get('core', 'backup.retention', 14));
     }
 
     public function create()
@@ -25,7 +30,8 @@ class BackupController extends AdminController
         $this->request->allowMethod('post');
         try {
             $actor = $this->identity() !== null ? (string)$this->identity()->getIdentifier() : null;
-            $id = (new BackupService())->create((string)$this->request->getData('note') ?: null, $actor);
+            $path = (string)$this->request->getData('path') ?: null;
+            $id = (new BackupService())->create((string)$this->request->getData('note') ?: null, $actor, $path);
             $this->Flash->success(__('flash.backup.created', $id));
         } catch (\Throwable $e) {
             $this->Flash->error(__('flash.backup.failed', $e->getMessage()));
