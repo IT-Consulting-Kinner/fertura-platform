@@ -3901,23 +3901,44 @@ plattformweit.
 (Kapitel 1.7) wird hier explizit angewendet, um Muss-Anforderungen an
 die Software klar von Betriebsempfehlungen an den Betreiber zu trennen.
 
-## 20.1 Backup und Wiederherstellung (Empfehlung)
+## 20.1 Backup und Wiederherstellung
 
-Das System speichert Daten in zwei Bereichen, die beide gesichert
-werden müssen. Das Backup selbst ist **keine Systemfunktion**, sondern
-liegt in der Verantwortung des Betreibers:
+Backup und Wiederherstellung erfolgen auf **zwei Ebenen** mit klar getrennter
+Zuständigkeit.
 
--   **Datenbank (PostgreSQL):** Alle Tickets, Einträge, Konfigurationen,
-    Benutzer, Audit-Log. Standard-PostgreSQL-Backup-Verfahren (pg_dump,
-    Streaming-Replikation / Point-in-Time-Recovery) sind anwendbar.
+### 20.1.1 Infrastruktur-Backup/-Restore (Empfehlung, Systemadministrator)
 
--   **Datei-Storage:** Anhänge und Inline-Bilder (lokal oder S3).
-    Der Speicherpfad ist in config/app.php konfiguriert.
+Die Sicherung der **Infrastruktur** liegt **außerhalb von Fertura** in der
+Verantwortung des Betreibers bzw. Systemadministrators: Host- und
+Volume-Snapshots, PostgreSQL-Streaming-Replikation / Point-in-Time-Recovery
+(PITR), die **Off-Site-Ablage** der Sicherungen sowie deren **Scheduling** und
+**Aufbewahrungsdauer**. Hierfür sind die Standard-PostgreSQL- und
+Storage-Verfahren anwendbar.
 
-Für eine konsistente Wiederherstellung müssen Datenbank und
-Datei-Storage zum selben Zeitpunkt gesichert werden. Das System selbst
-bietet keine integrierte Backup-Funktion; die Sicherung liegt in der
-Verantwortung des Betreibers.
+### 20.1.2 Daten-Backup/-Restore (Systemfunktion, Fertura Core)
+
+Die **konsistente Sicherung und Wiederherstellung der Anwendungsdaten** ist eine
+**Systemfunktion** des Core. Eine Sicherung umfasst beide Datenbereiche zum
+selben Zeitpunkt:
+
+-   **Datenbank (PostgreSQL):** Tickets, Einträge, Konfigurationen, Benutzer,
+    Audit-Log u. a. — vollständiger Dump (`pg_dump`, custom-format).
+
+-   **Datei-Storage:** die persistenten Stores (Sprachpakete, Marketplace-Daten,
+    installierter Modulcode; Anhänge/Inline-Bilder, sofern lokal konfiguriert —
+    Speicherpfad in config/app.php).
+
+Die Erstellung ist **konsistent** (Datenbank und Datei-Storage werden unter einem
+Lifecycle-Lock zum selben Zeitpunkt gesichert) und **prüfbar** (Prüfsummen je
+Artefakt; ein Probe-Restore in eine Wegwerf-Datenbank weist die
+Wiederherstellbarkeit nach, ohne die Produktion zu berühren). Der Core stellt
+dafür CLI- **und** GUI-Funktionen bereit: Erstellen, Auflisten, Prüfen,
+Probe-Restore und Löschen sowie eine **destruktive Wiederherstellung** der
+Anwendungsdaten (ausdrücklich zu bestätigen, CLI).
+
+Die so erzeugten Sicherungen werden auf einem persistenten Volume abgelegt; ihre
+Off-Site-Ablage, das Scheduling und die Aufbewahrung sind Teil des
+Infrastruktur-Backups (20.1.1).
 
 ## 20.2 System-Health und Monitoring (Muss: Health-Endpoint und Statusflächen / Empfehlung: Betreiber-Alerting)
 
@@ -4178,6 +4199,7 @@ Diensten komponiert.
 | 6.26 | 03.06.2026 | Datenbank von MySQL/InnoDB auf PostgreSQL umgestellt: Technologiebasis (1.1, 1.3), Update-Scope und Betriebsgrenzen (24.13, 28.2, 28.18, 20.7), Backup (20.1: pg_dump / PITR), Health-Check (20.2.5), Entscheidungen 121/138 angepasst. Migrations-Atomarität über transaktionales DDL geschärft (1.8, 28.14.2: Rollback primär per Transaktion, Wiederherstellungspunkt als pg_dump-Fallback); Entscheidung 155 aktualisiert. Entscheidung 173 (DB-Wahl PostgreSQL) ergänzt |
 | 6.27 | 03.06.2026 | PostgreSQL-Leverage (P2–P10): neues Kapitel 30 Datenbankfundament — Constraint-First/DB-Integrität (partielle Unique-/Check-/Exclusion-Constraints), verpflichtende Row-Level Security für scoped Modultabellen (Defense-in-Depth + Row-Scoping-Hook), JSONB, Outbox + LISTEN/NOTIFY, Advisory-Lock-Lifecycle (mehrknotenfähig), deklarative Partitionierung. Bestandsschärfungen: 1.8 (Constraint-First-Prinzip), 23.14 (Leitregel), 26.7.1 (partielles Unique für Resolver-Slot), 26.9.2 (LISTEN/NOTIFY), 24.18 (Advisory Lock), 25.6.3 (RLS-Verweis), 20.6 (deklarative Partitionierung). Entscheidungen 174–179 ergänzt. P8/P9 folgen im Ticketing-Modul |
 | 6.28 | 04.06.2026 | Kapitel 20.8 Deployment- und Distributionsmodell ergänzt: Core als eigenständiges Container-Image getrennt von PostgreSQL (eigener Dienst), Sofort-Start per docker compose (Core/Web/DB/Worker/Mail), All-in-One nur für Demo/Eval. Konsistent mit Update-Scope (28.2), Backup (20.1), HA/Advisory-Lock (30.7). Entscheidung 180 ergänzt |
+| 6.29 | 07.06.2026 | Kapitel 20.1 Backup/Wiederherstellung in zwei Ebenen mit getrennter Zuständigkeit neu gefasst: **20.1.1 Infrastruktur-Backup/-Restore** (Empfehlung, Systemadministrator: Host-/Volume-Snapshots, PITR/Replikation, Off-Site, Scheduling, Aufbewahrung — außerhalb Fertura) und **20.1.2 Daten-Backup/-Restore als Systemfunktion des Core** (konsistente Sicherung von DB + persistenten Datei-Stores unter Lifecycle-Lock, prüfbar via Prüfsummen + Probe-Restore in Wegwerf-DB; CLI+GUI für Erstellen/Auflisten/Prüfen/Probe-Restore/Löschen; destruktive Daten-Wiederherstellung per CLI). Ersetzt die frühere Aussage „keine Systemfunktion". Entscheidung 181 ergänzt |
 
 ## Anhang B: Entscheidungsprotokoll
 

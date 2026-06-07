@@ -250,8 +250,12 @@ class BackupService
         $env = 'PGPASSWORD=' . escapeshellarg($pg['pass']) . ' ';
         $base = '-h ' . escapeshellarg($pg['host']) . ' -p ' . escapeshellarg($pg['port']) . ' -U ' . escapeshellarg($pg['user']);
 
-        // DB zurückspielen (Objekte vorher droppen).
-        exec($env . 'pg_restore --clean --if-exists --no-owner --no-privileges -d ' . escapeshellarg($pg['db'])
+        // DB zurückspielen (Objekte vorher droppen). WICHTIG: KEIN
+        // --no-privileges — sonst gingen die GRANTs an die NOBYPASSRLS-App-Rolle
+        // (fertura_app) verloren und die Laufzeit könnte nach dem Restore nicht
+        // mehr auf die Tabellen zugreifen. --no-owner ist unkritisch (Eigentümer
+        // ist ohnehin der wiederherstellende Superuser).
+        exec($env . 'pg_restore --clean --if-exists --no-owner -d ' . escapeshellarg($pg['db'])
             . ' ' . $base . ' ' . escapeshellarg($dumpFile) . ' 2>&1', $o, $rc);
 
         // Datei-Stores zurückspielen.

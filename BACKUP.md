@@ -1,8 +1,13 @@
 # Backup & Wiederherstellung (Core-Funktion)
 
-Im Gegensatz zur ursprünglichen Empfehlung (Kap. 20.1: „keine Systemfunktion")
-bringt der Core eine **integrierte, konsistente und prüfbare** Sicherung mit —
-nur so sind DB↔Storage-Konsistenz und die Wiederherstellbarkeit garantierbar.
+Backup/Restore erfolgt zweistufig (Kap. 20.1):
+
+- **Infrastruktur-Backup/-Restore** (20.1.1) — Host-/Volume-Snapshots, PITR/
+  Replikation, Off-Site, Scheduling, Aufbewahrung — liegt **außerhalb von
+  Fertura** beim Systemadministrator.
+- **Daten-Backup/-Restore** (20.1.2) — die **konsistente, prüfbare** Sicherung der
+  Anwendungsdaten (DB + persistente Datei-Stores) ist eine **Core-Systemfunktion**
+  und hier beschrieben.
 
 ## Was wird gesichert
 
