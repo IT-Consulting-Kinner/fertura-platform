@@ -6,6 +6,7 @@
  * @var bool $scheduleEnabled
  * @var int $scheduleHours
  * @var int $retention
+ * @var int $retentionDays
  * @var bool $encryptionOn
  * @var list<array<string,mixed>> $logEntries
  */
@@ -47,7 +48,7 @@ $human = static function ($b): string {
     <span><?= h(__('admin.backup.scheduler')) ?>:
         <?php if ($scheduleEnabled): ?>
             <span class="badge text-bg-success"><?= h(__('admin.backup.enabled')) ?></span>
-            <span class="text-muted"><?= h(__('admin.backup.every_hours', $scheduleHours)) ?>, <?= h(__('admin.backup.keep_n', $retention)) ?></span>
+            <span class="text-muted"><?= h(__('admin.backup.every_hours', $scheduleHours)) ?>, <?= h(__('admin.backup.keep_n', $retention)) ?><?php if ($retentionDays > 0): ?>, <?= h(__('admin.backup.keep_days', $retentionDays)) ?><?php endif; ?></span>
         <?php else: ?>
             <span class="badge text-bg-secondary"><?= h(__('admin.backup.disabled')) ?></span>
             <span class="text-muted"><?= h(__('admin.backup.scheduler_hint')) ?> <code>backup.schedule.enabled</code></span>
@@ -97,6 +98,7 @@ $human = static function ($b): string {
             </td>
             <td class="small"><?= h((string)($b['note'] ?? '')) ?></td>
             <td class="text-end text-nowrap">
+                <?= $this->Html->link(__('admin.backup.download'), ['action' => 'download', $b['id']], ['class' => 'btn btn-outline-primary btn-sm']) ?>
                 <?= $this->Form->postLink(__('admin.backup.verify'), ['action' => 'verify', $b['id']], ['class' => 'btn btn-outline-secondary btn-sm']) ?>
                 <?= $this->Form->postLink(__('admin.backup.test_restore'), ['action' => 'testRestore', $b['id']], ['class' => 'btn btn-outline-info btn-sm']) ?>
                 <?= $this->Form->postLink(__('admin.backup.delete'), ['action' => 'delete', $b['id']],

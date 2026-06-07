@@ -33,6 +33,7 @@ class BackupController extends AdminController
         $this->set('scheduleEnabled', (bool)$settings->get('core', 'backup.schedule.enabled', false));
         $this->set('scheduleHours', (int)$settings->get('core', 'backup.schedule.interval_hours', 24));
         $this->set('retention', (int)$settings->get('core', 'backup.retention', 14));
+        $this->set('retentionDays', (int)$settings->get('core', 'backup.retention_days', 0));
         $this->set('encryptionOn', trim((string)$settings->get('core', 'backup.password', '')) !== '');
     }
 
@@ -75,5 +76,22 @@ class BackupController extends AdminController
         $this->service()->delete($id) ? $this->Flash->success(__('flash.backup.deleted')) : $this->Flash->error(__('flash.backup.not_found'));
 
         return $this->redirect(['action' => 'index']);
+    }
+
+    /** Lädt das Archiv herunter (Datenexport) und protokolliert ihn. */
+    public function download(string $id)
+    {
+        $row = (new BackupService())->get($id);
+        if ($row === null || !is_file((string)$row['path'])) {
+            $this->Flash->error(__('flash.backup.not_found'));
+
+            return $this->redirect(['action' => 'index']);
+        }
+        $this->service()->logDownload($id);
+
+        return $this->response->withFile((string)$row['path'], [
+            'download' => true,
+            'name' => basename((string)$row['path']),
+        ]);
     }
 }

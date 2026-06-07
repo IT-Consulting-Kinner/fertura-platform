@@ -56,6 +56,12 @@ class SettingsCatalog
             // Vor dem Abschluss zusätzlich Probe-Restore in eine Scratch-DB fahren
             // (garantiert Wiederherstellbarkeit). Integritätsprüfung läuft immer.
             'backup.verify_on_create' => ['type' => 'bool', 'default' => true],
+            // Aufbewahrung zusätzlich nach Alter (Tage); 0 = aus.
+            'backup.retention_days' => ['type' => 'int', 'default' => 0, 'min' => 0, 'max' => 3650],
+            // Mindestens freier Speicher am Zielort vor dem Backup (MB, Pre-Flight).
+            'backup.min_free_mb' => ['type' => 'int', 'default' => 500, 'min' => 0, 'max' => 10485760],
+            // Alarm-Empfänger bei fehlgeschlagenem Backup (E-Mail). Leer = aus.
+            'backup.alert_email' => ['type' => 'string', 'default' => null],
         ],
     ];
 

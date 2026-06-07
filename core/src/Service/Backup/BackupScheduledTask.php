@@ -36,5 +36,6 @@ class BackupScheduledTask implements ScheduledTaskInterface
         $service = (new BackupService())->context('scheduler', null);
         $service->create('scheduled', null);
         $service->prune((int)$settings->get('core', 'backup.retention', 14));
+        $service->pruneByAge((int)$settings->get('core', 'backup.retention_days', 0));
     }
 }
