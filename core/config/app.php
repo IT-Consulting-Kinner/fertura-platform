@@ -385,7 +385,7 @@ return [
             'url' => env('LOG_DEBUG_URL', null),
             'scopes' => null,
             'levels' => ['notice', 'info', 'debug'],
-            'formatter' => ['className' => \Cake\Log\Formatter\JsonFormatter::class],
+            'formatter' => ['className' => \App\Log\ContextJsonFormatter::class],
         ],
         'error' => [
             'className' => FileLog::class,
@@ -394,7 +394,7 @@ return [
             'url' => env('LOG_ERROR_URL', null),
             'scopes' => null,
             'levels' => ['warning', 'error', 'critical', 'alert', 'emergency'],
-            'formatter' => ['className' => \Cake\Log\Formatter\JsonFormatter::class],
+            'formatter' => ['className' => \App\Log\ContextJsonFormatter::class],
         ],
         // To enable this dedicated query log, you need to set your datasource's log flag to true
         'queries' => [

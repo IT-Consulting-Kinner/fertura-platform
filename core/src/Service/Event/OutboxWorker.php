@@ -190,6 +190,8 @@ class OutboxWorker
             $this->log('Kein LISTEN möglich -> reiner Poll-Modus.');
         }
 
+        \App\Log\LogContext::put('component', 'worker');
+
         while ($this->running) {
             try {
                 // Heartbeat (Kap. 20.3): jeder Zyklus protokolliert seinen Lauf
