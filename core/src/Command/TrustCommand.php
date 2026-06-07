@@ -34,6 +34,8 @@ class TrustCommand extends Command
             ->addOption('type', ['choices' => ['root', 'publisher'], 'default' => 'root'])
             ->addOption('publisher', ['help' => 'Publisher (für publisher-Keys)'])
             ->addOption('cert', ['help' => 'Publisher-Zertifikat (JSON aus mp_tool sign-key)'])
+            ->addOption('valid-from', ['help' => 'Gültig ab (ISO-8601, optional)'])
+            ->addOption('valid-to', ['help' => 'Gültig bis (ISO-8601, optional)'])
             ->addOption('reason', ['help' => 'Widerrufsgrund']);
 
         return $parser;
@@ -55,11 +57,15 @@ class TrustCommand extends Command
 
             case 'list':
                 $rows = ConnectionManager::get('default')->execute(
-                    'SELECT key_id, key_type, publisher, signed_by, active FROM trust_anchors ORDER BY key_id',
+                    'SELECT key_id, key_type, publisher, signed_by, valid_from, valid_to, active FROM trust_anchors ORDER BY key_id',
                 )->fetchAll('assoc');
                 foreach ($rows as $r) {
                     $chain = $r['key_type'] === 'publisher' ? ' <- ' . ($r['signed_by'] ?? '?') : '';
-                    $io->out(sprintf('  %-16s %-10s %s%s%s', $r['key_id'], $r['key_type'], $r['publisher'] ?? '-', $chain, $r['active'] ? '' : ' [inaktiv]'));
+                    $window = ($r['valid_from'] || $r['valid_to'])
+                        ? ' [' . ($r['valid_from'] ?? '…') . ' … ' . ($r['valid_to'] ?? '…') . ']'
+                        : '';
+                    $expired = !TrustStore::validity($r)['ok'] ? ' <warning>UNGUELTIG</warning>' : '';
+                    $io->out(sprintf('  %-16s %-10s %s%s%s%s%s', $r['key_id'], $r['key_type'], $r['publisher'] ?? '-', $chain, $window, $expired, $r['active'] ? '' : ' [inaktiv]'));
                 }
                 $revoked = ConnectionManager::get('default')->execute('SELECT key_id FROM revoked_keys')->fetchAll('assoc');
                 foreach ($revoked as $r) {
@@ -101,6 +107,8 @@ class TrustCommand extends Command
                 $cert['publisher'] ?? null,
                 (string)$cert['signed_by'],
                 (string)$cert['key_signature'],
+                $args->getOption('valid-from') ?: ($cert['valid_from'] ?? null),
+                $args->getOption('valid-to') ?: ($cert['valid_to'] ?? null),
             );
             $io->success('Publisher-Anker (Kette geprüft) hinzugefügt: ' . $cert['key_id']);
 
@@ -120,7 +128,16 @@ class TrustCommand extends Command
 
             return static::CODE_ERROR;
         }
-        $trust->addAnchor($keyId, $publicKey, 'root');
+        $trust->addAnchor(
+            $keyId,
+            $publicKey,
+            'root',
+            null,
+            null,
+            null,
+            $args->getOption('valid-from') ?: null,
+            $args->getOption('valid-to') ?: null,
+        );
         $io->success('Root-Vertrauensanker hinzugefügt: ' . $keyId);
 
         return static::CODE_SUCCESS;

@@ -84,6 +84,11 @@ class PackageVerifier
         if ($anchor === null) {
             throw new PackageVerificationException("Unbekannter/inaktiver Vertrauensanker: $keyId");
         }
+        // Gültigkeitsfenster des Ankers durchsetzen (Kap. 24.9.2).
+        $validity = TrustStore::validity($anchor);
+        if (!$validity['ok']) {
+            throw new PackageVerificationException("Vertrauensanker $keyId: " . $validity['reason']);
+        }
         // Publisher-Bindung (Kap. 24.9.2): Publisher-Schlüssel müssen zum
         // Manifest-Publisher passen.
         if ($anchor['key_type'] === 'publisher'
