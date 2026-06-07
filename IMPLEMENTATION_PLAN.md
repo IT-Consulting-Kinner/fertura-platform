@@ -211,11 +211,16 @@ Locale `ll_CC`, **flacher** Fallback auf Englisch der Version; jeder Text über
   `default` überlagert nachgeladene Core-Store-Packs. *(Gate exakt/notice/error +
   major0 + packStatuses + availableLocales verifiziert; i18n-4 Exakt-Auflösung
   unverändert grün.)*
-- `[ ]` **i18n-6 — Sprachverwaltung (Admin-Bereich `localization`, 7.):** Liste
-  aktiver Komponenten + inaktiv-mit-Dateien; Import (Signatur nur hier;
-  `signed/reviewed/edited`; ungültige Signatur = Hinweis+Review+Abbruch;
-  Re-Import-Warnung bei `edited`); Löschregeln; **Feld-Editor** (verlustfrei,
-  sicheres Schreiben; edit→reviewed=yes/edited=yes); Review.
+- `[x]` **i18n-6 — Sprachverwaltung (Admin-Bereich `localization`, 7.)** (verifiziert
+  2026-06-07): 7. Admin-Bereich (Migration + NAV); `LocalizationController` +
+  `LanguagePackAdmin` + `PoDocument` (verlustfreier Parser/Serializer). Übersicht
+  (aktiv/inaktiv, Status clean/notice/error, Flags signed/reviewed/edited);
+  **Feld-Editor** (nur msgstr, Struktur erhalten; Save→edited=yes/reviewed=yes via
+  atomarem Store-Write); Import = unsignierter `.po`-Upload (Review-Vorschau,
+  Re-Import-Warnung bei `edited`, Commit→signed=no/reviewed=no/source=upload, E42);
+  Löschregeln (aktiv: nicht Englisch; inaktiv: alles); Review. *(PO-Roundtrip 402
+  Einträge verlustfrei; overview/edit/delete-Regeln/import CLI-verifiziert; GUI-
+  Smoke index/edit/import je HTTP 200, kein Raw-Key-Leak.)*
 - `[ ]` **i18n-7 — Umschalter, Benutzer-/Session-Locale, Einstellungen.**
 - `[ ]` **i18n-8 — Audit, Health, Entwicklerdoku.**
 
@@ -775,6 +780,8 @@ Worker (Superuser-Pfad) + `/health` gesund; Fresh-Clone-Pfad über
 | E15 | 2 | Anmeldeschutz-Defaults: 10 Fehlversuche / 15-min-Fenster, dann temporäre Sperre (`LoginThrottle`, persistiert in `auth_failures`). | Entscheidung 162 fordert „sicheren Vorgabewert ohne Konfiguration". Konkrete Schwellen doku-offen → autonom; ab Step 4 DB-konfigurierbar. |
 | E16 | 3 | Audit-Log-Design: (a) **Personen per auflösbarer UUID** (kein denormalisierter Klartext-Name/E-Mail) → Anonymisierung wirkt ohne Log-Mutation; **textuelle Schnappschüsse nur für nicht-personenbezogene** Entitäten (Module/Config) = referenzrobust. (b) **Unveränderlichkeit per Trigger** (UPDATE/DELETE blockiert; Bypass nur via `SET LOCAL app.allow_audit_mutation`). (c) **Monats-RANGE-Partitionierung** + DEFAULT-Partition; `audit_partition`-Command stellt Monatspartitionen im Entrypoint sicher. (d) `AuditLogger`-Service schreibt transaktional. | Vereint Referenzrobustheit (24.16.1) und DSGVO-Anonymisierung (27.15.3) ohne Konflikt mit der Unveränderlichkeit (20.6). Partitionierung gem. 30.8/Entscheidung 179. Konkrete Felder/Platzhalter doku-offen → autonom. |
 | E17 | 3 | nginx löst den Upstream `core` zur Laufzeit über den Docker-Resolver (`127.0.0.11`) + Variable im `fastcgi_pass` auf, statt die IP beim Start zu cachen. | Behebt 502 „Connection refused" nach `docker compose up -d --force-recreate core` (neue Container-IP). Robustheit für Recreate/Autostart. Verifiziert. |
+| E43 | i18n (5) | **Core-Kataloge bleiben in `resources/locales`** (mitgeliefert, immer aktuelle Core-Version) — **nicht** in den Store dupliziert. Der `EnglishFallbackLoader` (Core-Domain `default`) überlagert zusätzlich **nachgeladene** Core-Sprachpakete aus dem Store (Versions-Gate via `LocaleResolver`). Das Versions-Gate greift damit für Store-Packs (Module + nachgeladene Core-Sprachen); die mitgelieferten Core-Sprachen brauchen kein Gate (per Definition aktuell). `availableLocales` = `resources/locales`-Sprachen ∪ nutzbare Core-Store-Packs. | Vermeidet doppelte Quelle/Seed-Logik beim Boot; eine kanonische Quelle je Fall. Offener Punkt aus i18n-5 entschieden; ggf. korrigierbar. |
+| E42 | i18n (6) | **GUI-Import von Sprachpaketen = unsignierter `.po`-Upload** (`source=upload`, `signed=false`): immer Review-vor-Import (Hinweis „unsigniert", Vorschau, Abbruch möglich; Re-Import warnt bei `edited`). **Signierte** Packs gelangen ausschließlich über die **Komponenten-Paketinstallation** (i18n-4, `PackageVerifier` gegen Trust-Anker) in den Store. Damit existiert **eine** Signatur-/PKI-Strecke (Pakete); der Fall „ungültige Signatur" ist eine Installations-, keine GUI-Upload-Sorge. | Eine `.po`-Datei trägt keine Paket-`signature.json`; eine parallele Lang-Pack-PKI wäre Overhead. Hält E38 (Signatur nur beim Import) ein, ohne zweite Vertrauensstrecke. Selbst entschieden (Standing Instruction); ggf. korrigierbar. |
 | E41 | i18n | **Sprachverwaltung** als eigener fester Admin-Bereich (`localization`, 7.). **Feld-basierter, verlustfreier Editor** (msgctxt/Plural/Kommentare bleiben); nur Admins editieren. Löschregeln: aktive Komponente alles außer Englisch; inaktive inkl. Englisch (keine Leichen); inaktive nur sichtbar solange Dateien existieren; Löschen markiert die Komponente. Deinstallation behält Sprachdateien. | Saubere Trennung + Governance; verhindert kaputte Dateien per Konstruktion. Mit dem Nutzer finalisiert. |
 | E40 | i18n | **Sicheres Schreiben + Recovery:** `.tmp`+`fsync`→**atomarer Rename** (kein Lösch-Fenster); Store auf persistentem Volume. **pg-Advisory-Lock** je Datei unterscheidet *in-flight* (Lock gehalten) von *verwaist* (Lock frei). Recovery (Start/periodisch/lazy): Original fehlt + valide `.tmp` → promoten (Selbstheilung); sonst verwaiste `.tmp` löschen + Fehlerhinweis (Audit/Health). Idempotent, lock-serialisiert. | Korrektheit unter Absturz/Concurrency; konsistent mit Lifecycle-Lock (E21). Mit dem Nutzer finalisiert. |
 | E39 | i18n | **Versions-Gate** je Sprachdatei gegen aktive Komponentenversion: identisch = sauber; Major gleich, Minor/Patch abweichend = **genutzt + Hinweis**; Major abweichend = **nicht genutzt + Fehler** → Englisch. **Auflösung:** exakt > Same-Major-höchste (Hinweis) > Englisch. **Wählbar** = Locales, für die der **Core** eine Datei hat (Mismatch → Englisch der Version). Status wird berechnet, nicht gespeichert. | Robuster, vorhersagbarer Fallback; Major als Bruchgrenze (Key-Änderungen). Mit dem Nutzer finalisiert. |

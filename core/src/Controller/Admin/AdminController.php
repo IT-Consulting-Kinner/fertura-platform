@@ -49,6 +49,10 @@ class AdminController extends AppController
             'label' => 'admin.nav.config',
             'items' => [['admin.nav.settings', '/admin/config']],
         ],
+        'localization' => [
+            'label' => 'admin.nav.localization',
+            'items' => [['admin.nav.language_packs', '/admin/localization']],
+        ],
     ];
 
     public function initialize(): void
