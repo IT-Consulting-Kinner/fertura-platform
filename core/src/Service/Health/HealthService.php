@@ -60,6 +60,7 @@ class HealthService
             'licenses' => $this->checkLicenses(),
             'marketplace' => $this->checkMarketplace(),
             'localization' => $this->checkLocalization(),
+            'backup' => $this->checkBackup(),
             'module_contributions' => $this->collectModuleHealth(),
         ];
 
@@ -336,6 +337,57 @@ class HealthService
             ];
         } catch (Throwable $e) {
             return ['status' => 'down', 'detail' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Daten-Backup (Kap. 20.1.2): bei aktivem Scheduler degraded, wenn das
+     * jüngste Backup fehlte, fehlschlug oder älter als 2× Intervall ist; meldet
+     * Alter/Anzahl/Verschlüsselung.
+     */
+    private function checkBackup(): array
+    {
+        try {
+            $conn = ConnectionManager::get('default');
+            $settings = $this->settings;
+            $enabled = (bool)$settings->get('core', 'backup.schedule.enabled', false);
+            $interval = (int)$settings->get('core', 'backup.schedule.interval_hours', 24) * 3600;
+            $encrypted = trim((string)$settings->get('core', 'backup.password', '')) !== '';
+
+            $row = $conn->execute(
+                "SELECT count(*) FILTER (WHERE status='complete') AS ok, "
+                . "count(*) FILTER (WHERE status='failed') AS failed, "
+                . "EXTRACT(EPOCH FROM (now() - max(created_at) FILTER (WHERE status='complete')))::int AS age "
+                . 'FROM backups',
+            )->fetch('assoc');
+            $okCount = (int)$row['ok'];
+            $age = $row['age'] !== null ? (int)$row['age'] : null;
+
+            $status = 'up';
+            $reason = null;
+            if ($enabled) {
+                if ($okCount === 0 || $age === null) {
+                    $status = 'degraded';
+                    $reason = 'kein erfolgreiches Backup';
+                } elseif ($age > 2 * $interval) {
+                    $status = 'degraded';
+                    $reason = 'jüngstes Backup überfällig';
+                }
+            }
+
+            return [
+                'status' => $status,
+                'detail' => [
+                    'scheduler_enabled' => $enabled,
+                    'encrypted' => $encrypted,
+                    'complete_backups' => $okCount,
+                    'failed_backups' => (int)$row['failed'],
+                    'newest_age_seconds' => $age,
+                    'reason' => $reason,
+                ],
+            ];
+        } catch (Throwable $e) {
+            return ['status' => 'degraded', 'detail' => $e->getMessage()];
         }
     }
 

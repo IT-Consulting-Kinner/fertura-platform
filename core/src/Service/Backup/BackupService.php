@@ -13,26 +13,28 @@ use Symfony\Component\Uid\Uuid;
 use ZipArchive;
 
 /**
- * Konsistente Daten-Sicherung & -Wiederherstellung (Kap. 20.1.2, E53).
+ * Konsistente Daten-Sicherung & -Wiederherstellung (Kap. 20.1.2, E53/E55/E56).
  *
  * Eine Sicherung umfasst die **gesamte Datenbank** (`pg_dump -Fc`) **und** die
- * persistenten Datei-Stores (`language-store`, `marketplace-data`, `modules`) und
- * wird als **ein einziges ZIP-Archiv** `<id>.zip` abgelegt (alle Daten zusammen).
- * Erstellung unter dem **Lifecycle-Advisory-Lock** → DB↔Storage konsistent;
- * SHA-256 je Artefakt (im Manifest + DB) macht sie **prüfbar**.
+ * persistenten Datei-Stores und wird als **ein ZIP-Archiv** abgelegt, dessen
+ * Name den **UTC-Zeitstempel** trägt (`<YYYYMMDD-HHMMSS>_<id>.zip`). Erstellung
+ * unter dem **Lifecycle-Lock** (DB↔Storage konsistent); je Artefakt SHA-256.
  *
- * Ablageort ist konfigurierbar (`backup.path`, Linux-/Windows-Pfade über
- * {@see BackupPath}); Restore kann aus einer beliebigen Archivdatei erfolgen.
+ * Härtung (E56): optionale **AES-256-Verschlüsselung** des Archivinhalts
+ * (`backup.password`, Segregation of Duty), **Verifikation vor Abschluss**
+ * (Integrität immer, Probe-Restore optional) und ein **Operationsprotokoll**
+ * (`backup_log`) über Backups *und* Restores.
  */
 class BackupService
 {
-    /** Muss zum Wert in ModuleLifecycle::LIFECYCLE_LOCK passen. */
     private const LIFECYCLE_LOCK = 778899001;
 
     /** @var list<string> Persistente Datei-Stores relativ zu ROOT. */
     private const STORES = ['language-store', 'marketplace-data', 'modules'];
 
     private string $base;
+    private string $source = 'cli';
+    private ?string $actor = null;
 
     public function __construct(?string $base = null, private ?AuditLogger $audit = null)
     {
@@ -50,6 +52,15 @@ class BackupService
         $this->audit ??= new AuditLogger();
     }
 
+    /** Setzt Herkunft (cli|gui|scheduler) + Akteur für das Protokoll. */
+    public function context(string $source, ?string $actor = null): self
+    {
+        $this->source = $source;
+        $this->actor = $actor;
+
+        return $this;
+    }
+
     public function base(): string
     {
         return $this->base;
@@ -58,6 +69,15 @@ class BackupService
     private function conn()
     {
         return ConnectionManager::get('default');
+    }
+
+    private function password(): string
+    {
+        try {
+            return (string)(new SettingsManager())->get('core', 'backup.password', '');
+        } catch (\Throwable) {
+            return '';
+        }
     }
 
     /** @return array{host:string,port:string,user:string,pass:string,db:string} */
@@ -83,11 +103,12 @@ class BackupService
     }
 
     /**
-     * Erstellt eine konsistente Sicherung als `<id>.zip`. Gibt die Backup-ID
-     * zurück. `$targetDir` überschreibt optional den konfigurierten Ablageort.
+     * Erstellt eine konsistente, verifizierte (ggf. verschlüsselte) Sicherung.
+     * Gibt die Backup-ID zurück. `$targetDir` überschreibt optional den Ort.
      */
     public function create(?string $note, ?string $actorId, ?string $targetDir = null): string
     {
+        $this->actor ??= $actorId;
         $dir = ($targetDir !== null && trim($targetDir) !== '')
             ? BackupPath::assertUsable($targetDir)
             : $this->base;
@@ -96,7 +117,8 @@ class BackupService
         }
 
         $id = Uuid::v7()->toRfc4122();
-        $zip = $dir . '/' . $id . '.zip';
+        $ts = gmdate('Ymd-His');
+        $zip = $dir . '/' . $ts . '_' . $id . '.zip';
         $work = $dir . '/' . $id . '.work';
         if (!@mkdir($work, 0o775, true)) {
             throw new RuntimeException('Arbeitsverzeichnis nicht anlegbar: ' . $work);
@@ -105,64 +127,72 @@ class BackupService
         $filesTar = $work . '/files.tar.gz';
         $pg = $this->pg();
         $env = 'PGPASSWORD=' . escapeshellarg($pg['pass']) . ' ';
+        $pw = $this->password();
+        $encrypted = $pw !== '';
 
         $this->conn()->execute(
-            'INSERT INTO backups (id, core_version, status, path, note, created_by) '
-            . "VALUES (:id, :v, 'creating', :p, :n, :cb)",
-            ['id' => $id, 'v' => Application::CORE_VERSION, 'p' => $zip, 'n' => $note, 'cb' => $actorId],
+            'INSERT INTO backups (id, core_version, status, path, note, created_by, encrypted) '
+            . "VALUES (:id, :v, 'creating', :p, :n, :cb, :enc)",
+            ['id' => $id, 'v' => Application::CORE_VERSION, 'p' => $zip, 'n' => $note, 'cb' => $actorId, 'enc' => $encrypted ? 'true' : 'false'],
         );
 
-        $locked = $this->lock();
         try {
-            $this->run($env . 'pg_dump -h ' . escapeshellarg($pg['host']) . ' -p ' . escapeshellarg($pg['port'])
-                . ' -U ' . escapeshellarg($pg['user']) . ' -d ' . escapeshellarg($pg['db'])
-                . ' -Fc -f ' . escapeshellarg($dumpFile));
+            $locked = $this->lock();
+            try {
+                $this->run($env . 'pg_dump -h ' . escapeshellarg($pg['host']) . ' -p ' . escapeshellarg($pg['port'])
+                    . ' -U ' . escapeshellarg($pg['user']) . ' -d ' . escapeshellarg($pg['db'])
+                    . ' -Fc -f ' . escapeshellarg($dumpFile));
+                $present = array_values(array_filter(self::STORES, fn ($s) => is_dir(ROOT . '/' . $s)));
+                if ($present !== []) {
+                    $this->run('tar czf ' . escapeshellarg($filesTar) . ' -C ' . escapeshellarg(ROOT)
+                        . ' ' . implode(' ', array_map('escapeshellarg', $present)));
+                } else {
+                    $this->run('tar czf ' . escapeshellarg($filesTar) . ' -C ' . escapeshellarg(ROOT) . ' --files-from /dev/null');
+                }
+            } finally {
+                if ($locked) {
+                    $this->unlock();
+                }
+            }
 
-            $present = array_values(array_filter(self::STORES, fn ($s) => is_dir(ROOT . '/' . $s)));
-            if ($present !== []) {
-                $this->run('tar czf ' . escapeshellarg($filesTar) . ' -C ' . escapeshellarg(ROOT)
-                    . ' ' . implode(' ', array_map('escapeshellarg', $present)));
-            } else {
-                $this->run('tar czf ' . escapeshellarg($filesTar) . ' -C ' . escapeshellarg(ROOT) . ' --files-from /dev/null');
+            $dbSha = hash_file('sha256', $dumpFile) ?: '';
+            $filesSha = hash_file('sha256', $filesTar) ?: '';
+            $manifest = [
+                'id' => $id, 'core_version' => Application::CORE_VERSION, 'created_utc' => gmdate('c'),
+                'encrypted' => $encrypted,
+                'database' => ['file' => 'database.dump', 'bytes' => filesize($dumpFile), 'sha256' => $dbSha],
+                'files' => ['file' => 'files.tar.gz', 'bytes' => filesize($filesTar), 'sha256' => $filesSha, 'stores' => self::STORES],
+            ];
+
+            $this->buildZip($zip, $dumpFile, $filesTar, (string)json_encode($manifest, JSON_PRETTY_PRINT), $pw);
+            @exec('rm -rf ' . escapeshellarg($work));
+
+            // --- Verifikation VOR dem Abschluss (E56) ---
+            if (!$this->archiveIntact($zip, $dbSha, $filesSha, $pw)) {
+                throw new RuntimeException('Integritätsprüfung des Archivs fehlgeschlagen.');
+            }
+            $deep = (bool)(new SettingsManager())->get('core', 'backup.verify_on_create', true);
+            if ($deep) {
+                $probe = $this->probeRestore($zip, $pw);
+                if (!$probe['ok']) {
+                    throw new RuntimeException('Probe-Restore fehlgeschlagen: ' . ($probe['reason'] ?? ''));
+                }
             }
         } catch (\Throwable $e) {
-            $this->conn()->execute("UPDATE backups SET status = 'failed' WHERE id = :id", ['id' => $id]);
             @exec('rm -rf ' . escapeshellarg($work));
+            @unlink($zip);
+            $this->conn()->execute("UPDATE backups SET status = 'failed' WHERE id = :id", ['id' => $id]);
+            $this->log('create', $id, 'error', $e->getMessage());
             throw $e;
-        } finally {
-            if ($locked) {
-                $this->unlock();
-            }
         }
-
-        $dbSha = hash_file('sha256', $dumpFile) ?: '';
-        $filesSha = hash_file('sha256', $filesTar) ?: '';
-        $manifest = [
-            'id' => $id,
-            'core_version' => Application::CORE_VERSION,
-            'database' => ['file' => 'database.dump', 'bytes' => filesize($dumpFile), 'sha256' => $dbSha],
-            'files' => ['file' => 'files.tar.gz', 'bytes' => filesize($filesTar), 'sha256' => $filesSha, 'stores' => self::STORES],
-        ];
-
-        // Alles in ein ZIP packen.
-        $za = new ZipArchive();
-        if ($za->open($zip, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
-            $this->conn()->execute("UPDATE backups SET status = 'failed' WHERE id = :id", ['id' => $id]);
-            @exec('rm -rf ' . escapeshellarg($work));
-            throw new RuntimeException('ZIP nicht erstellbar: ' . $zip);
-        }
-        $za->addFile($dumpFile, 'database.dump');
-        $za->addFile($filesTar, 'files.tar.gz');
-        $za->addFromString('manifest.json', (string)json_encode($manifest, JSON_PRETTY_PRINT));
-        $za->close();
-        @exec('rm -rf ' . escapeshellarg($work));
 
         $this->conn()->execute(
-            "UPDATE backups SET status = 'complete', db_bytes = :db, files_bytes = :fb, "
+            "UPDATE backups SET status = 'complete', verified = true, db_bytes = :db, files_bytes = :fb, "
             . 'db_sha256 = :ds, files_sha256 = :fs WHERE id = :id',
             ['db' => $manifest['database']['bytes'], 'fb' => $manifest['files']['bytes'], 'ds' => $dbSha, 'fs' => $filesSha, 'id' => $id],
         );
-        $this->audit->log('backup.create', 'backup', $id, ['component' => 'core', 'newValue' => ['note' => $note, 'path' => $zip]]);
+        $this->audit->log('backup.create', 'backup', $id, ['component' => 'core', 'newValue' => ['note' => $note, 'path' => $zip, 'encrypted' => $encrypted]]);
+        $this->log('create', $id, 'ok', ($encrypted ? 'verschlüsselt' : 'unverschlüsselt') . ($deep ? ', probe-restore ok' : ''));
 
         return $id;
     }
@@ -171,7 +201,23 @@ class BackupService
     public function list(): array
     {
         return $this->conn()->execute(
-            'SELECT id, created_at, core_version, status, db_bytes, files_bytes, path, note FROM backups ORDER BY created_at DESC',
+            'SELECT id, created_at, core_version, status, db_bytes, files_bytes, path, note, encrypted, verified '
+            . 'FROM backups ORDER BY created_at DESC',
+        )->fetchAll('assoc');
+    }
+
+    /**
+     * Operationsprotokoll (Backups + Restores), neueste zuerst.
+     *
+     * @return list<array<string,mixed>>
+     */
+    public function logEntries(int $limit = 100): array
+    {
+        return $this->conn()->execute(
+            'SELECT l.occurred_at, l.operation, l.backup_id, l.source, l.result, l.message, u.username AS actor '
+            . 'FROM backup_log l LEFT JOIN users u ON u.id = l.actor_user_id '
+            . 'ORDER BY l.occurred_at DESC LIMIT :lim',
+            ['lim' => $limit],
         )->fetchAll('assoc');
     }
 
@@ -184,7 +230,7 @@ class BackupService
     }
 
     /**
-     * Prüft die Integrität: ZIP lesbar + innere Artefakt-Prüfsummen wie gespeichert.
+     * Prüft Integrität (ZIP lesbar + innere Prüfsummen wie gespeichert).
      *
      * @return array{ok:bool, db:bool, files:bool, reason:?string}
      */
@@ -198,19 +244,15 @@ class BackupService
         if (!is_file($zip)) {
             return ['ok' => false, 'db' => false, 'files' => false, 'reason' => 'Archivdatei fehlt: ' . $zip];
         }
-        $za = new ZipArchive();
-        if ($za->open($zip) !== true) {
-            return ['ok' => false, 'db' => false, 'files' => false, 'reason' => 'ZIP nicht lesbar.'];
-        }
-        $db = $this->entrySha($za, 'database.dump') === (string)$row['db_sha256'];
-        $files = $this->entrySha($za, 'files.tar.gz') === (string)$row['files_sha256'];
-        $za->close();
+        $pw = $this->bool($row['encrypted']) ? $this->password() : '';
+        $db = $this->entrySha($zip, 'database.dump', $pw) === (string)$row['db_sha256'];
+        $files = $this->entrySha($zip, 'files.tar.gz', $pw) === (string)$row['files_sha256'];
 
-        return ['ok' => $db && $files, 'db' => $db, 'files' => $files, 'reason' => $db && $files ? null : 'Prüfsumme abweichend.'];
+        return ['ok' => $db && $files, 'db' => $db, 'files' => $files, 'reason' => $db && $files ? null : 'Prüfsumme abweichend (ggf. falsches Passwort).'];
     }
 
     /**
-     * Probe-Restore in eine Scratch-Datenbank (ohne Produktionseingriff).
+     * Probe-Restore einer gespeicherten Sicherung in eine Scratch-DB.
      *
      * @return array{ok:bool, tables:int, reason:?string}
      */
@@ -220,41 +262,9 @@ class BackupService
         if ($row === null) {
             return ['ok' => false, 'tables' => 0, 'reason' => 'Backup unbekannt.'];
         }
-        $zip = (string)$row['path'];
-        $tmpDump = sys_get_temp_dir() . '/bk_' . substr(md5($zip), 0, 10) . '.dump';
-        if (!$this->extractEntry($zip, 'database.dump', $tmpDump)) {
-            return ['ok' => false, 'tables' => 0, 'reason' => 'DB-Dump nicht extrahierbar.'];
-        }
-        $pg = $this->pg();
-        $env = 'PGPASSWORD=' . escapeshellarg($pg['pass']) . ' ';
-        $scratch = 'fertura_verify_' . substr(str_replace('-', '', $id), 0, 12);
-        $base = '-h ' . escapeshellarg($pg['host']) . ' -p ' . escapeshellarg($pg['port']) . ' -U ' . escapeshellarg($pg['user']);
-        $connName = null;
-        try {
-            $this->run($env . 'dropdb --force --if-exists ' . $base . ' ' . escapeshellarg($scratch));
-            $this->run($env . 'createdb ' . $base . ' ' . escapeshellarg($scratch));
-            exec($env . 'pg_restore --no-owner --no-privileges -d ' . escapeshellarg($scratch) . ' '
-                . $base . ' ' . escapeshellarg($tmpDump) . ' 2>&1', $o, $rc);
+        $pw = $this->bool($row['encrypted']) ? $this->password() : '';
 
-            [$scratchConn, $connName] = $this->scratchConnection($pg, $scratch);
-            $tables = (int)$scratchConn->execute(
-                "SELECT count(*) AS n FROM information_schema.tables WHERE table_schema = 'core'",
-            )->fetch('assoc')['n'];
-
-            return ['ok' => $tables > 0, 'tables' => $tables, 'reason' => $tables > 0 ? null : 'Keine core-Tabellen im Restore.'];
-        } catch (\Throwable $e) {
-            return ['ok' => false, 'tables' => 0, 'reason' => $e->getMessage()];
-        } finally {
-            if ($connName !== null) {
-                try {
-                    ConnectionManager::get($connName)->getDriver()->disconnect();
-                    ConnectionManager::drop($connName);
-                } catch (\Throwable) {
-                }
-            }
-            @exec($env . 'dropdb --force --if-exists ' . $base . ' ' . escapeshellarg($scratch) . ' 2>&1');
-            @unlink($tmpDump);
-        }
+        return $this->probeRestore((string)$row['path'], $pw);
     }
 
     /** **Destruktive** Wiederherstellung einer gespeicherten Sicherung. */
@@ -264,49 +274,34 @@ class BackupService
         if ($row === null) {
             throw new RuntimeException('Backup unbekannt.');
         }
-        $this->restoreFromFile((string)$row['path']);
+        $pw = $this->bool($row['encrypted']) ? $this->password() : '';
+        try {
+            $this->restoreArchive((string)$row['path'], $pw);
+        } catch (\Throwable $e) {
+            $this->log('restore', $id, 'error', $e->getMessage());
+            throw $e;
+        }
         $this->audit->log('backup.restore', 'backup', $id, ['component' => 'core']);
+        $this->log('restore', $id, 'ok', null);
     }
 
     /**
      * **Destruktive** Wiederherstellung aus einer beliebigen Archivdatei
-     * (Linux-/Windows-Pfad). Stellt DB (`pg_restore --clean`, **mit** Privilegien
-     * → App-Rollen-GRANTs bleiben erhalten) + Datei-Stores wieder her.
+     * (Linux-/Windows-Pfad). `$password` überschreibt das konfigurierte Passwort.
      */
-    public function restoreFromFile(string $zipPath): void
+    public function restoreFromFile(string $zipPath, ?string $password = null): void
     {
-        $zip = BackupPath::normalize($zipPath);
-        if (!is_file($zip)) {
-            throw new RuntimeException('Archivdatei nicht gefunden: ' . $zip);
-        }
-        $tmp = sys_get_temp_dir() . '/bkrestore_' . substr(md5($zip), 0, 10);
-        @exec('rm -rf ' . escapeshellarg($tmp));
-        if (!@mkdir($tmp, 0o775, true)) {
-            throw new RuntimeException('Temp-Verzeichnis nicht anlegbar: ' . $tmp);
-        }
+        $pw = $password ?? $this->password();
         try {
-            if (!$this->extractEntry($zip, 'database.dump', $tmp . '/database.dump')) {
-                throw new RuntimeException('database.dump nicht im Archiv.');
-            }
-            $hasFiles = $this->extractEntry($zip, 'files.tar.gz', $tmp . '/files.tar.gz');
-
-            $pg = $this->pg();
-            $env = 'PGPASSWORD=' . escapeshellarg($pg['pass']) . ' ';
-            $base = '-h ' . escapeshellarg($pg['host']) . ' -p ' . escapeshellarg($pg['port']) . ' -U ' . escapeshellarg($pg['user']);
-            // KEIN --no-privileges: sonst gingen die GRANTs an die NOBYPASSRLS-
-            // App-Rolle verloren (Laufzeit hätte keinen Tabellenzugriff mehr).
-            exec($env . 'pg_restore --clean --if-exists --no-owner -d ' . escapeshellarg($pg['db'])
-                . ' ' . $base . ' ' . escapeshellarg($tmp . '/database.dump') . ' 2>&1', $o, $rc);
-
-            if ($hasFiles && (int)filesize($tmp . '/files.tar.gz') > 0) {
-                $this->run('tar xzf ' . escapeshellarg($tmp . '/files.tar.gz') . ' -C ' . escapeshellarg(ROOT));
-            }
-        } finally {
-            @exec('rm -rf ' . escapeshellarg($tmp));
+            $this->restoreArchive(BackupPath::normalize($zipPath), $pw);
+        } catch (\Throwable $e) {
+            $this->log('restore_from', null, 'error', $e->getMessage() . ' (' . $zipPath . ')');
+            throw $e;
         }
+        $this->log('restore_from', null, 'ok', $zipPath);
     }
 
-    /** Behält die jüngsten $keep Sicherungen, löscht ältere. Anzahl gelöschter zurück. */
+    /** Behält die jüngsten $keep Sicherungen, löscht ältere. */
     public function prune(int $keep): int
     {
         if ($keep < 1) {
@@ -332,16 +327,122 @@ class BackupService
         }
         $this->conn()->execute('DELETE FROM backups WHERE id = :id', ['id' => $id]);
         $this->audit->log('backup.delete', 'backup', $id, ['component' => 'core']);
+        $this->log('delete', $id, 'ok', null);
 
         return true;
     }
 
     // ---- intern --------------------------------------------------------------
 
-    private function entrySha(ZipArchive $za, string $entry): string
+    private function buildZip(string $zip, string $dump, string $tar, string $manifestJson, string $pw): void
     {
+        $za = new ZipArchive();
+        if ($za->open($zip, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+            throw new RuntimeException('ZIP nicht erstellbar: ' . $zip);
+        }
+        if ($pw !== '') {
+            $za->setPassword($pw);
+        }
+        $za->addFile($dump, 'database.dump');
+        $za->addFile($tar, 'files.tar.gz');
+        $za->addFromString('manifest.json', $manifestJson);
+        if ($pw !== '' && defined('ZipArchive::EM_AES_256')) {
+            foreach (['database.dump', 'files.tar.gz', 'manifest.json'] as $e) {
+                $za->setEncryptionName($e, ZipArchive::EM_AES_256);
+            }
+        }
+        $za->close();
+    }
+
+    private function archiveIntact(string $zip, string $dbSha, string $filesSha, string $pw): bool
+    {
+        return $this->entrySha($zip, 'database.dump', $pw) === $dbSha
+            && $this->entrySha($zip, 'files.tar.gz', $pw) === $filesSha;
+    }
+
+    /**
+     * Probe-Restore einer Archivdatei in eine Scratch-DB.
+     *
+     * @return array{ok:bool, tables:int, reason:?string}
+     */
+    private function probeRestore(string $zip, string $pw): array
+    {
+        $tmpDump = sys_get_temp_dir() . '/bk_' . substr(md5($zip), 0, 10) . '.dump';
+        if (!$this->extractEntry($zip, 'database.dump', $tmpDump, $pw)) {
+            return ['ok' => false, 'tables' => 0, 'reason' => 'DB-Dump nicht extrahierbar (ggf. falsches Passwort).'];
+        }
+        $pg = $this->pg();
+        $env = 'PGPASSWORD=' . escapeshellarg($pg['pass']) . ' ';
+        $scratch = 'fertura_verify_' . substr(md5($zip . microtime()), 0, 12);
+        $base = '-h ' . escapeshellarg($pg['host']) . ' -p ' . escapeshellarg($pg['port']) . ' -U ' . escapeshellarg($pg['user']);
+        $connName = null;
+        try {
+            $this->run($env . 'dropdb --force --if-exists ' . $base . ' ' . escapeshellarg($scratch));
+            $this->run($env . 'createdb ' . $base . ' ' . escapeshellarg($scratch));
+            exec($env . 'pg_restore --no-owner --no-privileges -d ' . escapeshellarg($scratch) . ' '
+                . $base . ' ' . escapeshellarg($tmpDump) . ' 2>&1', $o, $rc);
+            [$scratchConn, $connName] = $this->scratchConnection($pg, $scratch);
+            $tables = (int)$scratchConn->execute(
+                "SELECT count(*) AS n FROM information_schema.tables WHERE table_schema = 'core'",
+            )->fetch('assoc')['n'];
+
+            return ['ok' => $tables > 0, 'tables' => $tables, 'reason' => $tables > 0 ? null : 'Keine core-Tabellen im Restore.'];
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'tables' => 0, 'reason' => $e->getMessage()];
+        } finally {
+            if ($connName !== null) {
+                try {
+                    ConnectionManager::get($connName)->getDriver()->disconnect();
+                    ConnectionManager::drop($connName);
+                } catch (\Throwable) {
+                }
+            }
+            @exec($env . 'dropdb --force --if-exists ' . $base . ' ' . escapeshellarg($scratch) . ' 2>&1');
+            @unlink($tmpDump);
+        }
+    }
+
+    private function restoreArchive(string $zip, string $pw): void
+    {
+        if (!is_file($zip)) {
+            throw new RuntimeException('Archivdatei nicht gefunden: ' . $zip);
+        }
+        $tmp = sys_get_temp_dir() . '/bkrestore_' . substr(md5($zip), 0, 10);
+        @exec('rm -rf ' . escapeshellarg($tmp));
+        if (!@mkdir($tmp, 0o775, true)) {
+            throw new RuntimeException('Temp-Verzeichnis nicht anlegbar: ' . $tmp);
+        }
+        try {
+            if (!$this->extractEntry($zip, 'database.dump', $tmp . '/database.dump', $pw)) {
+                throw new RuntimeException('database.dump nicht extrahierbar (ggf. falsches Passwort).');
+            }
+            $hasFiles = $this->extractEntry($zip, 'files.tar.gz', $tmp . '/files.tar.gz', $pw);
+            $pg = $this->pg();
+            $env = 'PGPASSWORD=' . escapeshellarg($pg['pass']) . ' ';
+            $base = '-h ' . escapeshellarg($pg['host']) . ' -p ' . escapeshellarg($pg['port']) . ' -U ' . escapeshellarg($pg['user']);
+            exec($env . 'pg_restore --clean --if-exists --no-owner -d ' . escapeshellarg($pg['db'])
+                . ' ' . $base . ' ' . escapeshellarg($tmp . '/database.dump') . ' 2>&1', $o, $rc);
+            if ($hasFiles && (int)filesize($tmp . '/files.tar.gz') > 0) {
+                $this->run('tar xzf ' . escapeshellarg($tmp . '/files.tar.gz') . ' -C ' . escapeshellarg(ROOT));
+            }
+        } finally {
+            @exec('rm -rf ' . escapeshellarg($tmp));
+        }
+    }
+
+    private function entrySha(string $zip, string $entry, string $pw): string
+    {
+        $za = new ZipArchive();
+        if ($za->open($zip) !== true) {
+            return '';
+        }
+        if ($pw !== '') {
+            $za->setPassword($pw);
+        }
         $s = $za->getStream($entry);
         if ($s === false) {
+            $za->close();
+
             return '';
         }
         $ctx = hash_init('sha256');
@@ -349,15 +450,19 @@ class BackupService
             hash_update($ctx, (string)fread($s, 1 << 16));
         }
         fclose($s);
+        $za->close();
 
         return hash_final($ctx);
     }
 
-    private function extractEntry(string $zip, string $entry, string $dest): bool
+    private function extractEntry(string $zip, string $entry, string $dest, string $pw): bool
     {
         $za = new ZipArchive();
         if ($za->open($zip) !== true) {
             return false;
+        }
+        if ($pw !== '') {
+            $za->setPassword($pw);
         }
         $s = $za->getStream($entry);
         if ($s === false) {
@@ -376,8 +481,26 @@ class BackupService
         fclose($out);
         fclose($s);
         $za->close();
+        // Bei AES + falschem Passwort liefert getStream ggf. leere/kaputte Daten.
+        return filesize($dest) > 0;
+    }
 
-        return true;
+    private function log(string $operation, ?string $backupId, string $result, ?string $message): void
+    {
+        try {
+            $this->conn()->execute(
+                'INSERT INTO backup_log (operation, backup_id, source, actor_user_id, result, message) '
+                . 'VALUES (:op, :bid, :src, :actor, :res, :msg)',
+                ['op' => $operation, 'bid' => $backupId, 'src' => $this->source, 'actor' => $this->actor, 'res' => $result, 'msg' => $message],
+            );
+        } catch (\Throwable) {
+            // Protokoll darf die Fachaktion nicht scheitern lassen.
+        }
+    }
+
+    private function bool(mixed $v): bool
+    {
+        return $v === true || $v === 't' || $v === '1' || $v === 1;
     }
 
     /** @return array{0:\Cake\Database\Connection,1:string} */

@@ -6,6 +6,8 @@
  * @var bool $scheduleEnabled
  * @var int $scheduleHours
  * @var int $retention
+ * @var bool $encryptionOn
+ * @var list<array<string,mixed>> $logEntries
  */
 $human = static function ($b): string {
     $b = (int)$b;
@@ -51,7 +53,17 @@ $human = static function ($b): string {
             <span class="text-muted"><?= h(__('admin.backup.scheduler_hint')) ?> <code>backup.schedule.enabled</code></span>
         <?php endif; ?>
     </span>
+    <span class="ms-3"><?= h(__('admin.backup.encryption')) ?>:
+        <?php if ($encryptionOn): ?>
+            <span class="badge text-bg-success"><?= h(__('admin.backup.encrypted')) ?></span>
+        <?php else: ?>
+            <span class="badge text-bg-warning"><?= h(__('admin.backup.unencrypted')) ?></span>
+        <?php endif; ?>
+    </span>
 </div>
+<?php if (!$encryptionOn): ?>
+    <div class="alert alert-warning small"><?= h(__('admin.backup.encrypt_hint')) ?> <code>backup.password</code></div>
+<?php endif; ?>
 <div class="alert alert-warning small"><?= h(__('admin.backup.restore_note')) ?>
     <code>bin/cake backup restore &lt;id&gt; --yes</code> ·
     <code>bin/cake backup restore --from &lt;pfad.zip&gt; --yes</code></div>
@@ -64,17 +76,25 @@ $human = static function ($b): string {
         <th><?= h(__('admin.backup.col_status')) ?></th>
         <th><?= h(__('admin.backup.col_db')) ?></th>
         <th><?= h(__('admin.backup.col_files')) ?></th>
+        <th><?= h(__('admin.backup.col_protection')) ?></th>
         <th><?= h(__('admin.backup.col_note')) ?></th>
         <th class="text-end"><?= h(__('admin.backup.col_actions')) ?></th>
     </tr></thead>
     <tbody>
-    <?php foreach ($backups as $b): ?>
+    <?php foreach ($backups as $b):
+        $enc = $b['encrypted'] === true || $b['encrypted'] === 't';
+        $ver = $b['verified'] === true || $b['verified'] === 't';
+    ?>
         <tr>
             <td class="small text-muted"><?= h((string)$b['created_at']) ?></td>
             <td><code class="small"><?= h(substr((string)$b['id'], 0, 18)) ?>…</code></td>
             <td><span class="badge text-bg-<?= $b['status'] === 'complete' ? 'success' : ($b['status'] === 'failed' ? 'danger' : 'secondary') ?>"><?= h((string)$b['status']) ?></span></td>
             <td class="small"><?= h($human($b['db_bytes'])) ?></td>
             <td class="small"><?= h($human($b['files_bytes'])) ?></td>
+            <td class="small">
+                <?php if ($enc): ?><span class="badge text-bg-dark" title="AES-256">🔒</span><?php else: ?><span class="badge text-bg-light border text-muted"><?= h(__('admin.backup.plain')) ?></span><?php endif; ?>
+                <?php if ($ver): ?><span class="badge text-bg-success" title="<?= h(__('admin.backup.verified')) ?>">✓</span><?php endif; ?>
+            </td>
             <td class="small"><?= h((string)($b['note'] ?? '')) ?></td>
             <td class="text-end text-nowrap">
                 <?= $this->Form->postLink(__('admin.backup.verify'), ['action' => 'verify', $b['id']], ['class' => 'btn btn-outline-secondary btn-sm']) ?>
@@ -84,7 +104,36 @@ $human = static function ($b): string {
             </td>
         </tr>
     <?php endforeach; ?>
-    <?php if ($backups === []): ?><tr><td colspan="7" class="text-muted"><?= h(__('admin.backup.empty')) ?></td></tr><?php endif; ?>
+    <?php if ($backups === []): ?><tr><td colspan="8" class="text-muted"><?= h(__('admin.backup.empty')) ?></td></tr><?php endif; ?>
+    </tbody>
+</table>
+</div>
+
+<h2 class="h5 mt-4"><?= h(__('admin.backup.log_heading')) ?></h2>
+<div class="table-responsive">
+<table class="table table-sm align-middle">
+    <thead><tr>
+        <th><?= h(__('admin.backup.log_time')) ?></th>
+        <th><?= h(__('admin.backup.log_operation')) ?></th>
+        <th><?= h(__('admin.backup.log_result')) ?></th>
+        <th><?= h(__('admin.backup.log_source')) ?></th>
+        <th><?= h(__('admin.backup.log_actor')) ?></th>
+        <th><?= h(__('admin.backup.col_id')) ?></th>
+        <th><?= h(__('admin.backup.log_message')) ?></th>
+    </tr></thead>
+    <tbody>
+    <?php foreach ($logEntries as $l): ?>
+        <tr>
+            <td class="small text-muted text-nowrap"><?= h((string)$l['occurred_at']) ?></td>
+            <td><span class="badge text-bg-light border"><?= h((string)$l['operation']) ?></span></td>
+            <td><span class="badge text-bg-<?= $l['result'] === 'ok' ? 'success' : 'danger' ?>"><?= h((string)$l['result']) ?></span></td>
+            <td class="small"><?= h((string)$l['source']) ?></td>
+            <td class="small"><?= h((string)($l['actor'] ?? '–')) ?></td>
+            <td><code class="small"><?= $l['backup_id'] !== null ? h(substr((string)$l['backup_id'], 0, 13)) . '…' : '–' ?></code></td>
+            <td class="small text-muted"><?= h((string)($l['message'] ?? '')) ?></td>
+        </tr>
+    <?php endforeach; ?>
+    <?php if ($logEntries === []): ?><tr><td colspan="7" class="text-muted"><?= h(__('admin.backup.log_empty')) ?></td></tr><?php endif; ?>
     </tbody>
 </table>
 </div>

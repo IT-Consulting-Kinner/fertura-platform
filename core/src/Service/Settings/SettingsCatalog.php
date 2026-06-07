@@ -50,6 +50,12 @@ class SettingsCatalog
             'backup.schedule.enabled' => ['type' => 'bool', 'default' => false],
             'backup.schedule.interval_hours' => ['type' => 'int', 'default' => 24, 'min' => 1, 'max' => 8760],
             'backup.retention' => ['type' => 'int', 'default' => 14, 'min' => 1, 'max' => 3650],
+            // Passwort verschlüsselt den Archivinhalt (AES-256). Secret: nie im
+            // Klartext angezeigt. Leer = unverschlüsselt (Warnung).
+            'backup.password' => ['type' => 'string', 'default' => null, 'secret' => true],
+            // Vor dem Abschluss zusätzlich Probe-Restore in eine Scratch-DB fahren
+            // (garantiert Wiederherstellbarkeit). Integritätsprüfung läuft immer.
+            'backup.verify_on_create' => ['type' => 'bool', 'default' => true],
         ],
     ];
 

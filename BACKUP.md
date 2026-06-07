@@ -16,13 +16,33 @@ Backup/Restore erfolgt zweistufig (Kap. 20.1):
 - **Persistente Datei-Stores:** `language-store` (Sprachpakete), `marketplace-data`,
   `modules` (installierter Modulcode).
 
-**Format:** **ein ZIP-Archiv** `<id>.zip` mit `database.dump`, `files.tar.gz` und
+**Format:** **ein ZIP-Archiv** `<YYYYMMDD-HHMMSS>_<id>.zip` (UTC-Zeitstempel im
+Namen → gezielt identifizierbar) mit `database.dump`, `files.tar.gz` und
 `manifest.json` — alle Daten zusammen in einer Datei.
 
 **Konsistenz:** Erstellung läuft unter dem **Lifecycle-Advisory-Lock** — während
 des Snapshots gibt es keine Modul-Installation/-Sprachschreibvorgänge, DB und
 Dateien passen also zueinander. Je Artefakt wird ein **SHA-256** abgelegt
 (Manifest + DB) → prüfbar.
+
+## Schutz, Verifikation & Protokoll (E56)
+
+- **Verschlüsselung (Segregation of Duty):** Ist `backup.password` gesetzt, wird
+  der **Archivinhalt AES-256-verschlüsselt** (DB-Dump, Stores, Manifest). Ohne
+  Passwort ist nichts lesbar. Das Passwort ist ein **Secret-Setting** (nie im
+  Klartext angezeigt); ohne Passwort warnt die GUI. **Wichtig:** Geht das
+  Passwort verloren, sind die Backups unwiederbringlich — Passwort **getrennt**
+  vom Backup verwahren (idealerweise ein anderer Verantwortlicher als der
+  System-Admin → echte SoD). Restore: `--password` überschreibt das Setting.
+- **Verifikation vor Abschluss:** Nach dem Schreiben prüft der Core **immer** die
+  Integrität (Prüfsummen) und — bei `backup.verify_on_create=true` (Default) —
+  zusätzlich einen **Probe-Restore in eine Scratch-DB**. Schlägt etwas fehl, wird
+  das Backup als `failed` verworfen → nur **verifizierte** Backups zählen.
+- **Protokoll:** Jede Operation (Backup, Restore, Restore-from, Löschen) wird in
+  `core.backup_log` mit Zeit, Herkunft (cli/gui/scheduler), Benutzer und Ergebnis
+  festgehalten und in der GUI gelistet.
+- **Health:** Subsystem `backup` meldet `degraded`, wenn der Scheduler aktiv ist
+  und das jüngste Backup fehlt/fehlschlug/überfällig (> 2× Intervall) ist.
 
 ## CLI
 
