@@ -36,6 +36,8 @@ services:
       # Managed Locale Store (i18n) auf persistentem ext4-Volume: atomarer
       # Rename funktioniert sauber; Sprachdateien ueberleben Recreates.
       - core_langstore:/var/www/html/language-store
+      # Core-Backups (DB-Dump + Datei-Stores) auf persistentem Volume (E53).
+      - core_backups:/var/www/html/backups
     environment:
       # Privilegierte Connection (Superuser): DDL/Migrationen/Bootstrap/Recovery.
       DATABASE_URL: "postgres://${POSTGRES_USER:-fertura}:${POSTGRES_PASSWORD:-fertura}@db/${POSTGRES_DB:-fertura}?encoding=utf8"
@@ -103,3 +105,4 @@ volumes:
   db_data:
   core_vendor:
   core_langstore:
+  core_backups:

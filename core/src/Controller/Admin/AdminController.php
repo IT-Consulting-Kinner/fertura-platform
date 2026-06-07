@@ -47,7 +47,7 @@ class AdminController extends AppController
         ],
         'core_config' => [
             'label' => 'admin.nav.config',
-            'items' => [['admin.nav.settings', '/admin/config'], ['admin.nav.outbox', '/admin/outbox']],
+            'items' => [['admin.nav.settings', '/admin/config'], ['admin.nav.outbox', '/admin/outbox'], ['admin.nav.backup', '/admin/backup']],
         ],
         'localization' => [
             'label' => 'admin.nav.localization',
