@@ -200,7 +200,7 @@ Locale `ll_CC`, **flacher** Fallback auf Englisch der Version; jeder Text über
   → kein MO nötig); Recovery/Cleaner mit **pg-Advisory-Lock** (in-flight vs.
   verwaist), Selbstheilung/Bereinigung; CLI `lang recover`. *(save/read/recover
   clean/promote/in-flight verifiziert)*
-- `[ ]` **i18n-4 — Komponenten-Integration:** Manifest `locales`; Install kopiert
+- `[x]` **i18n-4 — Komponenten-Integration** (verifiziert 2026-06-06): Manifest `locales`; Install kopiert
   Paket-`locales/` in den Store; Aktivierung registriert Domain; Deinstallation
   behält Dateien; Modul-Fixture.
 - `[ ]` **i18n-5 — Auflösung, Versions-Gate & Status:** exakt > Same-Major
