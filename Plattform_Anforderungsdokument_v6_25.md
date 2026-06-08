@@ -2433,6 +2433,8 @@ Administrationsbereichen gegliedert:
 -   Registry und Contracts
 -   Update-Manager (inkl. Signatur- und Kompatibilitätsprüfung)
 -   Core-Konfiguration
+-   Sprachverwaltung (Sprachpakete für Core, Module und Extensions; Import,
+    Feld-Editor, Review, Löschen)
 
 Einem Benutzer werden ein oder mehrere Administrationsbereiche
 zugewiesen:
@@ -2758,13 +2760,15 @@ gebundene, serverseitig widerrufbare Zugangstoken. Das konkrete
 Token-Verfahren ist nicht vorgeschrieben.
 
 **Rechteprüfung.** Für API-Aufrufe gilt dasselbe Berechtigungsmodell wie
-für die GUI. Ein Zugangstoken trägt keine eigenen Rechte und keine
-eigenen Scopes; die effektiven Rechte werden bei jedem Aufruf live gegen
-die aktuell hinterlegten BREAD-Rechte und Zusatzaktionen des Benutzers
-geprüft (Kapitel 25 und 27). Es existiert keine separate, schwächere
-oder im Token eingefrorene Rechteprüfung für den API-Kontext; eine
-Rechteänderung (z.B. Gruppenentzug) wirkt damit unmittelbar auch auf
-bestehende Token.
+für die GUI. Ein Zugangstoken trägt **keine eigenen, erweiternden Rechte**:
+Die effektiven Rechte werden bei jedem Aufruf live gegen die aktuell
+hinterlegten BREAD-Rechte und Zusatzaktionen des Benutzers geprüft
+(Kapitel 25 und 27); eine Rechteänderung (z.B. Gruppenentzug) wirkt damit
+unmittelbar auch auf bestehende Token. Ein Token kann jedoch **Scopes**
+tragen, die den Zugriff **zusätzlich einschränken** (Least Privilege /
+Defense-in-Depth) — ein Scope kann nie mehr gewähren als die Live-Rechte
+des Benutzers, sondern nur weniger. Es existiert keine im Token
+eingefrorene oder erweiternde Rechteprüfung für den API-Kontext.
 
 **Token-Lebenszyklus.** Zugangstoken können erstellt, eingesehen (ohne
 erneute Anzeige des Geheimnisses) und widerrufen werden. Ein
@@ -3795,6 +3799,10 @@ nicht bei einem fehlenden Filter in GUI, API, CLI, Reporting oder Export.
     (`ENABLE ROW LEVEL SECURITY`, `FORCE ROW LEVEL SECURITY`).
 -   Das Modul liefert seine RLS-Policies als Bestandteil seiner
     Migrationen mit (analog zu Tabellen und Indizes).
+-   Der Core **erzwingt** dies bei der Installation: Deklariert ein Modul
+    scoped (`is_scoped`) Ressourcen, muss sein Schema nach den Migrationen
+    mindestens eine RLS-aktivierte Tabelle **mit Policy** enthalten — sonst
+    wird die Installation abgebrochen (Rückbau).
 -   Der Zugriffskontext (aktueller Benutzer und seine effektiven Gruppen)
     wird pro Transaktion über eine Session-Variable gesetzt
     (`SET LOCAL`), kompatibel mit Connection-Pooling.
@@ -3935,6 +3943,24 @@ Wiederherstellbarkeit nach, ohne die Produktion zu berühren). Der Core stellt
 dafür CLI- **und** GUI-Funktionen bereit: Erstellen, Auflisten, Prüfen,
 Probe-Restore und Löschen sowie eine **destruktive Wiederherstellung** der
 Anwendungsdaten (ausdrücklich zu bestätigen, CLI).
+
+Jede Sicherung ist **ein ZIP-Archiv** mit UTC-Zeitstempel im Namen (gezielt
+identifizierbar). Weitere Eigenschaften:
+
+-   **Verifikation vor Abschluss:** Integritätsprüfung immer, optional zusätzlich
+    ein Probe-Restore; nur verifizierte Sicherungen gelten als gültig.
+-   **Verschlüsselung (optional, Segregation of Duty):** AES-256 des
+    Archivinhalts über ein Secret-Passwort — ohne Passwort nichts lesbar.
+-   **Planung & Aufbewahrung:** konfigurierbarer Zeitplan (Frequenz) + Retention
+    nach Anzahl **und** Alter; konfigurierbarer Ablageort (Linux-/Windows-Pfad).
+-   **Protokoll:** unveränderliches (append-only) Operationsprotokoll über
+    Backups und Restores (inkl. Download/Export) in der GUI.
+-   **Robustheit/Betrieb:** Pre-Flight-Speicherprüfung, E-Mail-Alarm bei
+    Fehlschlag, Download des Archivs aus der GUI, Health-Subsystem `backup`.
+
+Hinweis: Die Backup-Strategie ist damit eine Core-Systemfunktion (nicht mehr nur
+Empfehlung); Off-Site-Ablage/Scheduling der erzeugten Archive bleibt
+Infrastruktur-Aufgabe (20.1.1).
 
 Die so erzeugten Sicherungen werden auf einem persistenten Volume abgelegt; ihre
 Off-Site-Ablage, das Scheduling und die Aufbewahrung sind Teil des
@@ -4200,6 +4226,7 @@ Diensten komponiert.
 | 6.27 | 03.06.2026 | PostgreSQL-Leverage (P2–P10): neues Kapitel 30 Datenbankfundament — Constraint-First/DB-Integrität (partielle Unique-/Check-/Exclusion-Constraints), verpflichtende Row-Level Security für scoped Modultabellen (Defense-in-Depth + Row-Scoping-Hook), JSONB, Outbox + LISTEN/NOTIFY, Advisory-Lock-Lifecycle (mehrknotenfähig), deklarative Partitionierung. Bestandsschärfungen: 1.8 (Constraint-First-Prinzip), 23.14 (Leitregel), 26.7.1 (partielles Unique für Resolver-Slot), 26.9.2 (LISTEN/NOTIFY), 24.18 (Advisory Lock), 25.6.3 (RLS-Verweis), 20.6 (deklarative Partitionierung). Entscheidungen 174–179 ergänzt. P8/P9 folgen im Ticketing-Modul |
 | 6.28 | 04.06.2026 | Kapitel 20.8 Deployment- und Distributionsmodell ergänzt: Core als eigenständiges Container-Image getrennt von PostgreSQL (eigener Dienst), Sofort-Start per docker compose (Core/Web/DB/Worker/Mail), All-in-One nur für Demo/Eval. Konsistent mit Update-Scope (28.2), Backup (20.1), HA/Advisory-Lock (30.7). Entscheidung 180 ergänzt |
 | 6.29 | 07.06.2026 | Kapitel 20.1 Backup/Wiederherstellung in zwei Ebenen mit getrennter Zuständigkeit neu gefasst: **20.1.1 Infrastruktur-Backup/-Restore** (Empfehlung, Systemadministrator: Host-/Volume-Snapshots, PITR/Replikation, Off-Site, Scheduling, Aufbewahrung — außerhalb Fertura) und **20.1.2 Daten-Backup/-Restore als Systemfunktion des Core** (konsistente Sicherung von DB + persistenten Datei-Stores unter Lifecycle-Lock, prüfbar via Prüfsummen + Probe-Restore in Wegwerf-DB; CLI+GUI für Erstellen/Auflisten/Prüfen/Probe-Restore/Löschen; destruktive Daten-Wiederherstellung per CLI). Ersetzt die frühere Aussage „keine Systemfunktion". Entscheidung 181 ergänzt |
+| 6.30 | 07.06.2026 | Doku-Software-Abgleich nach Umsetzung: (a) **7. Administrationsbereich „Sprachverwaltung"** in 27.3.1 + Entscheidung 170 ergänzt (zuvor 6); (b) **API-Token tragen Scopes** (zusätzliche Einschränkung, nie erweiternd) in 27.16.3 + Entscheidung 162 korrigiert (zuvor „keine eigenen Scopes"); (c) **20.1.2 um den realen Backup-Funktionsumfang erweitert** (ZIP+Zeitstempel, Verifikation-vor-Abschluss, optionale AES-256-Verschlüsselung, Zeitplan/Retention nach Anzahl+Alter, append-only-Protokoll, Pre-Flight, Mail-Alarm, Download, Health-Subsystem); (d) **30.3.1**: Core **erzwingt** RLS für `is_scoped`-Module bei der Installation (Abbruch sonst). Hinweis: Mehrsprachigkeit/Locale-Verwaltung ist als eigener Subsystem implementiert, im Anforderungsdokument bislang nur als Technologie-Zeile geführt (eigene Kapitel-Ausarbeitung offen). |
 
 ## Anhang B: Entscheidungsprotokoll
 
@@ -4263,7 +4290,7 @@ getroffen.
 | 159 | Modul-Konfiguration und -Geheimnisse | Modulspezifische Konfiguration und Geheimnisse gehören nicht in config/app.php, sondern in den Konfigurationsspeicher des Core; Geheimnisse werden verschlüsselt abgelegt (AES-256-GCM mit Core-Schlüssel). In app.php verbleiben nur infrastrukturelle Basiseinstellungen. Betrifft u.a. CAPTCHA-Schlüssel (Gastportal-CAPTCHA) und Gast-Session-Timeout (Ticketing-Gastzugang) (siehe Kapitel 1.4) |
 | 160 | DSGVO-Löschung durch Anonymisierung | Aktivierte Benutzer werden nicht physisch gelöscht, sondern auf Antrag irreversibel anonymisiert (Identitätsfelder durch nicht rückführbaren Platzhalter ersetzt, technische ID und historische Referenzen bleiben). Pseudonymisierung (umkehrbar) ist für diesen Zweck unzulässig. Audit-Log behält Vorgänge, ersetzt Personenbezug durch anonymisierte Referenz. Einladungs-Accounts (Status "eingeladen") werden weiterhin physisch gelöscht. Identitäts-Anonymisierung = Muss (v1); Freitext-Bereinigung = Spätere Version (siehe Kapitel 27.15.3) |
 | 161 | Modul-UI: View-Models und Ausgabesicherheit | UI-Beiträge (Collector-UI, ui_extensions) werden als strukturierte View-Models bzw. deklarative Deskriptoren bereitgestellt; das Markup erzeugt der Core (kein modulübergreifendes Roh-HTML als Regelfall, konsistentes Bootstrap-Styling). Dynamische Werte werden vom Core kontextkorrekt kodiert; die Absicherung obliegt der einbettenden Core-Renderschicht (Empfänger), Modulwerte gelten als nicht vertrauenswürdig. Roh-HTML nur per explizitem, dokumentiertem Opt-out (abgeraten). CSP als Betreiber-Empfehlung (siehe Kapitel 26.8.2) |
-| 162 | API-Authentifizierung und Anmeldeschutz | REST-API serverseitig authentifiziert, jeder Aufruf an eine Core-Identität gebunden (kein anonymer Zugriff außer modulverantworteten Ausnahmen). Mechanismus-offene, an den Benutzer gebundene, widerrufbare Zugangstoken ohne eigene Scopes; effektive Rechte werden je Aufruf live gegen die aktuellen BREAD-Rechte/Zusatzaktionen geprüft. Deaktivierter/anonymisierter Benutzer → Token sofort ungültig. Anmeldeschutz per Rate-Limiting/temporäre Sperre, Schwellen in DB/GUI konfigurierbar (analog Passwort-Policy) mit sicherem Vorgabewert. Auth-Grundsatz und gemeinsames Rechtemodell = Muss; Token-Lebenszyklus und Anmeldeschutz-Schwellen = Soll (siehe Kapitel 27.16.3) |
+| 162 | API-Authentifizierung und Anmeldeschutz | REST-API serverseitig authentifiziert, jeder Aufruf an eine Core-Identität gebunden (kein anonymer Zugriff außer modulverantworteten Ausnahmen). Mechanismus-offene, an den Benutzer gebundene, widerrufbare Zugangstoken; effektive Rechte werden je Aufruf live gegen die aktuellen BREAD-Rechte/Zusatzaktionen geprüft (Token-Scopes können zusätzlich einschränken, nie erweitern). Deaktivierter/anonymisierter Benutzer → Token sofort ungültig. Anmeldeschutz per Rate-Limiting/temporäre Sperre, Schwellen in DB/GUI konfigurierbar (analog Passwort-Policy) mit sicherem Vorgabewert. Auth-Grundsatz und gemeinsames Rechtemodell = Muss; Token-Lebenszyklus und Anmeldeschutz-Schwellen = Soll (siehe Kapitel 27.16.3) |
 | 163 | Referenzrobustheit der Audit-Einträge | Audit-Einträge werden selbsterklärend gespeichert (Modul-ID, Name, Version, Objektkennung als textuelle Kopie, nicht nur als Fremdschlüssel). Nach Modullöschung und Datenentfernung bleiben Audit-Einträge vollständig lesbar und weisen das Modul als entfernt aus; das Log wird nicht bereinigt. Nachvollziehbarkeit hängt nicht von der Existenz des auslösenden Moduls oder betroffenen Objekts ab (siehe Kapitel 24.16.1) |
 | 164 | Schlüsselrotation verschlüsselter Werte | Keine routinemäßige/automatische Key-Rotation in v1 (für on-prem mit kleinem, änderungsarmem Geheimnis-Bestand nicht gerechtfertigt). CLI-Re-Encryption-Command für den Bedarfsfall (Schlüsselkompromittierung/Compliance), Ausführung im Wartungsfenster = Soll. Periodische Rotation = Betreiber-/Compliance-Empfehlung. Gleitende, unterbrechungsfreie Rotation mit Key-ID = Spätere Version (siehe Kapitel 1.4) |
 | 165 | Serialisierung von Lifecycle-Operationen | Installation, Aktivierung, Deaktivierung, Update und Löschung (Core/Module) laufen nie nebenläufig; exklusiver Lifecycle-Lock pro Plattforminstanz. Konkurrierende Operation wird mit klarem Hinweis abgewiesen; Lock wird bei Abbruch/Fehler kontrolliert freigegeben. Reguläre fachliche Modulnutzung unbetroffen. Höchstens eine lifecycle-verändernde Operation gleichzeitig (konsistent mit 28.13, siehe Kapitel 24.18) |
@@ -4271,7 +4298,7 @@ getroffen.
 | 167 | Einheitliches Capability-Modell, vier Contract-Typen | Resolver/Collector/Event und öffentliche Modul-Interfaces sind Ausprägungen eines einzigen Contract-Begriffs. Modell = Richtung (wer stellt bereit) × Kardinalität. Vierter Typ Request/Response (Service): Owner-Modul stellt bereit, andere konsumieren (Rückgabewert); öffentliche Modul-Interfaces (Kap. 29) sind dessen Integrations-Anwendung. Gemeinsame Registry (26.12), Versionierung (26.6) und Manifestfelder (contracts_provided/used); public_interfaces_* entfällt. Entscheidungen 110 und 144 entsprechend aktualisiert (siehe Kapitel 26.3.4) |
 | 168 | Events asynchron über transaktionalen Outbox | Events werden nicht synchron zugestellt, sondern über einen transaktionalen Outbox (Event-Datensatz in derselben DB-Transaktion wie die fachliche Änderung) und einen Worker (CLI/Cron) asynchron verarbeitet. Mindestens-einmal-Zustellung, Listener müssen idempotent sein. Listener-Fehler sind strukturell vom Auslöser entkoppelt; Retry mit Backoff, danach sichtbarer Fehler-/Dead-Letter-Zustand. Synchrone Reaktion im Request → Resolver/Service, nicht Event (siehe Kapitel 26.9.2) |
 | 169 | Observability als Core-Funktion | Der Core stellt einen Health-Endpoint (HTTP GET /health, Muss) bereit: minimaler öffentlicher Liveness + token-/authgeschützter Detailstatus (DB, Storage, Worker-Aktualität inkl. Outbox, Registry/Modulzustand, Dead-Letter, Lizenz). Modul-Health über Health-Collector-Contract aggregiert (z.B. Ticketing-Mailbox). Strukturierte Logs (Soll) und Admin-Statusfläche (Soll). Externes Alerting/Dashboards bleiben Betreibersache. 20.2 von "keine Monitoring-Endpunkte" auf Core-Funktion umgestellt (siehe Kapitel 20.2) |
-| 170 | Core-Administrationsbereiche (scoped admin) | Core-Administration in eine feste Menge von Administrationsbereichen gegliedert (Benutzer-/Gruppenverwaltung, Modul-/Lifecycle, Marketplace/Lizenz, Registry/Contracts, Update-Manager, Core-Konfiguration). Volladministrator = alle Bereiche; delegierter Administrator = Teilmenge. Bereichs-/rollenbasiert, kein BREAD, keine Gruppen; innerhalb eines Bereichs voller Zugriff. Auditierbar (siehe Kapitel 27.3.1) |
+| 170 | Core-Administrationsbereiche (scoped admin) | Core-Administration in eine feste Menge von Administrationsbereichen gegliedert (Benutzer-/Gruppenverwaltung, Modul-/Lifecycle, Marketplace/Lizenz, Registry/Contracts, Update-Manager, Core-Konfiguration, Sprachverwaltung). Volladministrator = alle Bereiche; delegierter Administrator = Teilmenge. Bereichs-/rollenbasiert, kein BREAD, keine Gruppen; innerhalb eines Bereichs voller Zugriff. Auditierbar (siehe Kapitel 27.3.1) |
 | 171 | Pluggable Authentifizierung (Resolver-Slot) | Authentifizierungsmethode über Resolver-Slot austauschbar; Default = lokale Passwort-Authentifizierung. Extension-Modul kann OIDC/SAML-Provider registrieren (genau ein aktiver Provider, Resolver-Regeln Kap. 26.7). Benutzer bleiben Core-Identitäten (JIT-Provisioning/Verknüpfung möglich); Autorisierung unabhängig von der Authentifizierungsmethode (siehe Kapitel 27.2.2) |
 | 172 | Ausschlüsse über Ressourcen-Schnitt | Da das BREAD-Modell keine Deny-Regeln kennt, werden Ausschlüsse nicht über Entzug, sondern durch Modellierung gelöst: sensible Teilmengen werden als eigene Ressource (z.B. eigene Queue) geführt und nur berechtigten Gruppen zugeordnet. Additive Aggregation (25.6) bleibt unverändert (siehe Kapitel 25.6.3) |
 | 173 | Datenbank: PostgreSQL | Die Plattform verwendet PostgreSQL (statt MySQL/InnoDB). Vorteile: transaktionales DDL (atomare Migrationen, Entscheidung 155), JSONB, deklarative Partitionierung (Audit-Log) und Row-Level-Security (Option für künftiges Row-Scoping, vgl. 25.6.3). Backup via pg_dump / PITR. CakePHP-ORM ist DB-agnostisch; betroffene Doku-Stellen (1.1, 1.3, 20.1, 20.2, 20.7, 24.13, 28.2/28.18) angepasst (siehe Kapitel 1.3) |
