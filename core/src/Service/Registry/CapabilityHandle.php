@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace App\Service\Registry;
 
+use Cake\Datasource\ConnectionManager;
+
 /**
  * Laufzeit-Handle für eine gebundene Capability (Entscheidung 151).
  *
@@ -58,6 +60,13 @@ final class CapabilityHandle
             );
         }
 
+        // Out-of-Process-Anbieter (Kap. 23.16): transparent über RPC an den
+        // isolierten Modulprozess statt In-Process-Instanziierung.
+        $remoteKey = $this->outOfProcessProvider();
+        if ($remoteKey !== null) {
+            return (new \App\Service\Module\RemoteInvoker())->invoke($remoteKey, $this->contractName, $input);
+        }
+
         $class = $this->registry->resolveProviderClass($this->contractName);
         if ($class === null) {
             // Anbieter deaktiviert/entfernt -> Interface nicht verfügbar (Kap. 29.14).
@@ -77,6 +86,25 @@ final class CapabilityHandle
         }
 
         return $impl->handle($input);
+    }
+
+    /**
+     * Liefert den Modul-Schlüssel des Anbieters, wenn dieser im Modus
+     * `out_of_process` läuft (Kap. 23.16) und aktiv ist – sonst null.
+     *
+     * Der Aufruf wird dann transparent über {@see RemoteInvoker} an den
+     * isolierten Modulprozess geleitet, statt In-Process zu instanziieren.
+     */
+    private function outOfProcessProvider(): ?string
+    {
+        $row = ConnectionManager::get('default')->execute(
+            'SELECT m.module_key FROM core.contracts c '
+            . 'JOIN core.modules m ON m.module_key = c.owner_module_key '
+            . "WHERE c.name = :name AND m.isolation = 'out_of_process' AND m.status = 'active'",
+            ['name' => $this->contractName],
+        )->fetch('assoc');
+
+        return $row === false ? null : (string)$row['module_key'];
     }
 
     /** Aktiver Provider (Resolver/Service) oder null (-> Default greift). */

@@ -632,10 +632,10 @@ Empfehlungen (Empfehlung):
     Rechten (Least Privilege).
 -   Begrenzung von Ressourcen (Speicher, Laufzeit, Dateisystemzugriff)
     auf Betriebssystem- oder Webserver-Ebene.
--   Bewusstsein, dass In-Process-Module nicht voneinander isoliert sind:
-    Eine echte Isolation einzelner Module erfordert eine
-    Out-of-Process-Ausführung und ist nicht Teil von v1 (spätere
-    Version).
+-   Bewusstsein, dass In-Process-Module nicht voneinander isoliert sind.
+    Für eine echte technische Isolationsgrenze kann ein solches Modul auf
+    den Modus `out_of_process` gesetzt werden (eigener Prozess, bereinigte
+    Umgebung, eigene eingeschränkte DB-Rolle; Kapitel 23.16.2).
 
 Die Plattform kennzeichnet ungeprüfte, nicht kuratierte Module im
 Admin-Bereich deutlich als solche.
@@ -831,6 +831,42 @@ welcher Code überhaupt ausgeführt wird. Im Standardbetrieb dürfen nur
 kuratierte oder betreiber-verantwortete Module installiert werden; das
 Zulassen ungeprüfter Module ist eine bewusste Betreiberentscheidung auf
 eigenes Risiko (Kapitel 23.9.3).
+
+### 23.16.2 Optionale Out-of-Process-Isolation (technische Grenze)
+
+Über die Vertrauenskette hinaus kann ein Modul je Installation auf den
+Isolationsmodus **`out_of_process`** gesetzt werden (Standard:
+`in_process`). In diesem Modus stellt die Plattform eine **echte
+technische Isolationsgrenze** bereit:
+
+-   **Eigener Prozess.** Der Modulcode läuft nicht im Core-Prozess,
+    sondern in einem vom Core verwalteten **Subprozess** (Managed
+    Subprocess). Nur der Modul-Namespace wird dort geladen.
+-   **Bereinigte Umgebung.** Der Modulprozess startet mit einer
+    **gesäuberten Umgebung** ohne die privilegierten Core-Geheimnisse —
+    insbesondere ohne die Superuser-`DATABASE_URL` und ohne das
+    Backup-Verschlüsselungspasswort. Der Modulcode kann diese damit nicht
+    aus der Prozessumgebung lesen.
+-   **Eigene, eingeschränkte Datenbankrolle.** Der Modulprozess verbindet
+    sich ausschließlich über eine **eigene DB-Rolle** (`mod_<key>`,
+    `LOGIN`, `NOBYPASSRLS`) mit Rechten nur auf das eigene
+    Modul-Schema. Ein Zugriff auf Core-Tabellen (z. B. `core.users`) ist
+    dadurch technisch unterbunden, nicht nur per Disziplin.
+-   **Transparenter Aufruf über RPC.** Der Core ruft die Service-
+    Contracts des Moduls über eine schmale Inter-Prozess-Schnittstelle
+    (Unix-Domain-Socket, JSON-Zeilen) auf. Ein- und Ausgabe sind dieselben
+    serialisierbaren Contract-Strukturen wie beim In-Process-Aufruf
+    (Kapitel 29.8); der Aufrufpfad (`CapabilityHandle`) bleibt für das
+    nutzende Modul unverändert. Die Grenze ist damit aufwärtskompatibel zu
+    einer späteren Container- oder Host-getrennten Ausführung.
+
+Der Modus ist **opt-in** und ergänzt die Vertrauenskette, ersetzt sie
+nicht: Signatur/Anker/Widerruf bleiben die maßgebliche Zulassungsgrenze
+(23.16.1); die Out-of-Process-Isolation begrenzt zusätzlich, was bereits
+zugelassener Modulcode zur Laufzeit technisch erreichen kann. Weitere
+Härtungsstufen (eigener Betriebssystem-Benutzer bzw. Container,
+Dateisystem-/Kernel-Begrenzung, Capability-Tokens je Aufruf) sind als
+spätere Ausbaustufen vorgesehen.
 
 # 24. Modul-Manifest, Paketstruktur und Installations-/Updatefluss
 
@@ -4361,6 +4397,7 @@ Komponente neu auszuliefern.
 | 6.30 | 07.06.2026 | Doku-Software-Abgleich nach Umsetzung: (a) **7. Administrationsbereich „Sprachverwaltung"** in 27.3.1 + Entscheidung 170 ergänzt (zuvor 6); (b) **API-Token tragen Scopes** (zusätzliche Einschränkung, nie erweiternd) in 27.16.3 + Entscheidung 162 korrigiert (zuvor „keine eigenen Scopes"); (c) **20.1.2 um den realen Backup-Funktionsumfang erweitert** (ZIP+Zeitstempel, Verifikation-vor-Abschluss, optionale AES-256-Verschlüsselung, Zeitplan/Retention nach Anzahl+Alter, append-only-Protokoll, Pre-Flight, Mail-Alarm, Download, Health-Subsystem); (d) **30.3.1**: Core **erzwingt** RLS für `is_scoped`-Module bei der Installation (Abbruch sonst). Hinweis: Mehrsprachigkeit/Locale-Verwaltung ist als eigener Subsystem implementiert, im Anforderungsdokument bislang nur als Technologie-Zeile geführt (eigene Kapitel-Ausarbeitung offen). |
 | 6.31 | 07.06.2026 | Doku-Software-Abgleich (Fortsetzung): (a) **Neues Kapitel 31 „Mehrsprachigkeit und Lokalisierung"** ausgearbeitet (Grundsatz/symbolische Schlüssel, Mitlieferung, Managed Locale Store mit ausfallsicherem Schreiben, Versions-Gate, Sprachverwaltungs-Admin-Bereich mit Status-Trio + verlustfreiem Editor, Laufzeit-Sprachwahl, Audit/Health). (b) Bestehende Kapitel um umgesetzte Mechanismen ergänzt: **20.2.1** Health-Subsysteme `localization` + `backup`; **20.3** Andock-Punkt für periodische Modul-Aufgaben (`core.collector.scheduled`); **24.9.2** Durchsetzung des Anker-Gültigkeitsfensters + gleitende Rotation; **26.9.2** Dead-Letter-Retry/Verwerfen-GUI; **28.14.2** automatischer Wiederherstellungspunkt auch bei Boot-Migrationen. |
 | 6.32 | 08.06.2026 | (a) **Mehrere Worker-Instanzen** explizit unterstützt (20.3): periodische Aufgaben werden je Aufgabe über einen PostgreSQL-Advisory-Lock serialisiert (kein Doppellauf bei >1 Worker); Outbox bleibt über SKIP LOCKED kollisionsfrei. Einzelinstanz = Standard. (b) **Backup-Verschlüsselung DR-tauglich** (20.1.2): Passwort aus Env/Secret (`BACKUP_PASSWORD_FILE`/`BACKUP_PASSWORD`) mit Vorrang vor dem DB-Setting — out-of-band, damit ein verschlüsseltes Backup nicht über das im Dump enthaltene Passwort entschlüsselt werden müsste (Henne-Ei). |
+| 6.33 | 08.06.2026 | **Opt-in Out-of-Process-Modulisolation, Phase 1** (neues Kapitel 23.16.2; 23.9.3.1 aktualisiert): Ein Modul kann je Installation auf `isolation = out_of_process` gesetzt werden und läuft dann als vom Core verwalteter Subprozess mit **bereinigter Umgebung** (kein Core-`DATABASE_URL`/`BACKUP_PASSWORD`) und **eigener, eingeschränkter DB-Rolle** (`mod_<key>`, nur eigenes Schema). Der Core ruft die Service-Contracts transparent über Unix-Domain-Socket-RPC auf (`CapabilityHandle` routet automatisch); Ein-/Ausgabe bleiben die serialisierbaren Contract-Strukturen aus 29.8. Erste echte technische Isolationsgrenze über die Vertrauenskette (23.16.1) hinaus; weitere Härtungsstufen (OS-Benutzer/Container, Capability-Tokens) als spätere Ausbaustufen. Verifiziert per Isolations-Harness. |
 
 ## Anhang B: Entscheidungsprotokoll
 

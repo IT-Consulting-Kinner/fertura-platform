@@ -131,3 +131,23 @@ Breaking-Änderungen an Scoping/Schlüsseln die **Major-Version** erhöhen.
 - Deinstallation entfernt Schema + Registrierungen, **behält** aber Sprachdateien.
 - Signatur wird **bei der Installation** geprüft (Trust-Anker, Gültigkeitsfenster,
   Vertrauenskette); Widerruf wirkt nachträglich (Kennzeichnung in Modul-Liste/Health).
+
+## 6. Optionale Out-of-Process-Isolation (Kap. 23.16.2)
+
+Standardmäßig laufen Module **in-process** (`isolation = in_process`). Für eine
+echte technische Isolationsgrenze kann ein Modul je Installation auf
+`out_of_process` gesetzt werden:
+
+- Der Modulcode läuft in einem vom Core verwalteten **Subprozess**
+  (`bin/module-host.php`) mit **bereinigter Umgebung** (kein Core-`DATABASE_URL`,
+  kein `BACKUP_PASSWORD`) und einer **eigenen, eingeschränkten DB-Rolle**
+  (`mod_<key>`, nur eigenes Schema, keine Core-Grants).
+- Der Core ruft die **Service-Contracts** (`services_registered`) transparent
+  über einen Unix-Domain-Socket (JSON-Zeilen-RPC, `RemoteInvoker`) auf;
+  `CapabilityHandle::invoke()` routet automatisch dorthin. **Voraussetzung:** Die
+  Modul-Interfaces müssen ohne geteilten In-Process-Zustand auskommen
+  (Ein-/Ausgabe = serialisierbare Contract-Arrays, Kap. 29.8) — das gilt für
+  korrekt entworfene Service-Contracts ohnehin.
+- Events/Collectors/Health über RPC sowie Auto-Spawn/Supervision sind spätere
+  Ausbaustufen; aktuell betrifft die Isolation die Service-Contract-Aufrufe.
+- Verifikation der Grenze: `core/tests/scripts/module_isolation_check.sh`.
