@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Middleware;
 
 use App\Service\Settings\SettingsManager;
+use App\Service\System\MaintenanceMode;
 use Cake\Http\Response;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -20,11 +21,14 @@ class MaintenanceMiddleware implements MiddlewareInterface
 {
     public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
     {
-        $active = false;
-        try {
-            $active = (bool)(new SettingsManager())->get('core', 'maintenance_mode', false);
-        } catch (Throwable) {
-            $active = false;
+        // Datei-Flag (Restore-Cutover, überlebt einen DB-Restore) ODER DB-Setting.
+        $active = MaintenanceMode::isFileActive();
+        if (!$active) {
+            try {
+                $active = (bool)(new SettingsManager())->get('core', 'maintenance_mode', false);
+            } catch (Throwable) {
+                $active = false;
+            }
         }
 
         if ($active) {

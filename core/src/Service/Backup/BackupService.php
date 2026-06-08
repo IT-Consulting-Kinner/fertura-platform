@@ -7,6 +7,7 @@ use App\Application;
 use App\Audit\AuditLogger;
 use App\Infrastructure\Db;
 use App\Service\Settings\SettingsManager;
+use App\Service\System\MaintenanceMode;
 use Cake\Datasource\ConnectionManager;
 use RuntimeException;
 use Symfony\Component\Uid\Uuid;
@@ -309,11 +310,19 @@ class BackupService
             throw new RuntimeException('Backup unbekannt.');
         }
         $pw = $this->bool($row['encrypted']) ? $this->password() : '';
+        // Kontrollierter Cutover: Wartungsmodus (503) für die Dauer des
+        // destruktiven Restores, damit kein Request auf eine halb-restaurierte
+        // DB trifft (Kap. 20.1.2). Datei-Flag überlebt den DB-Restore.
+        $engaged = MaintenanceMode::engage('restore');
         try {
             $this->restoreArchive((string)$row['path'], $pw);
         } catch (\Throwable $e) {
             $this->log('restore', $id, 'error', $e->getMessage());
             throw $e;
+        } finally {
+            if ($engaged) {
+                MaintenanceMode::release();
+            }
         }
         $this->audit->log('backup.restore', 'backup', $id, ['component' => 'core']);
         $this->log('restore', $id, 'ok', null);
@@ -326,11 +335,16 @@ class BackupService
     public function restoreFromFile(string $zipPath, ?string $password = null): void
     {
         $pw = $password ?? $this->password();
+        $engaged = MaintenanceMode::engage('restore');
         try {
             $this->restoreArchive(BackupPath::normalize($zipPath), $pw);
         } catch (\Throwable $e) {
             $this->log('restore_from', null, 'error', $e->getMessage() . ' (' . $zipPath . ')');
             throw $e;
+        } finally {
+            if ($engaged) {
+                MaintenanceMode::release();
+            }
         }
         $this->log('restore_from', null, 'ok', $zipPath);
     }

@@ -29,9 +29,10 @@ mkdir -p /var/www/html/language-store 2>/dev/null || true
 chown -R www-data:www-data /var/www/html/language-store 2>/dev/null || true
 mkdir -p /var/www/html/backups 2>/dev/null || true
 chown -R www-data:www-data /var/www/html/backups 2>/dev/null || true
-# Wiederherstellungspunkte (pg_dump vor Migrationen) — auch fuer den GUI-Pfad.
-mkdir -p /var/www/html/tmp/recovery 2>/dev/null || true
-chown -R www-data:www-data /var/www/html/tmp/recovery 2>/dev/null || true
+# Wiederherstellungspunkte (pg_dump vor Migrationen) liegen jetzt auf dem
+# PERSISTENTEN Backup-Volume (ueberleben Recreate), nicht im fluechtigen tmp/.
+mkdir -p /var/www/html/backups/recovery 2>/dev/null || true
+chown -R www-data:www-data /var/www/html/backups/recovery 2>/dev/null || true
 
 # 3. Schema-Bootstrap + Migrationen (nur core; geguardet)
 #    Bootstrap-Schritte laufen als Superuser: APP_DATABASE_URL wird geleert,

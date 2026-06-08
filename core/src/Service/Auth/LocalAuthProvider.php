@@ -23,24 +23,30 @@ class LocalAuthProvider implements AuthProviderInterface
 
     public function configure(AuthenticationService $service): void
     {
-        $service->loadIdentifier('Authentication.Password', [
-            'fields' => [
-                'username' => 'username',
-                'password' => 'password_hash',
-            ],
-            'resolver' => [
-                'className' => 'Authentication.Orm',
-                'userModel' => 'Users',
-                'finder' => 'active',
-            ],
-            'passwordHasher' => [
-                'className' => 'Authentication.Fallback',
-                'hashers' => [
-                    ['className' => 'Authentication.Default', 'hashType' => PASSWORD_ARGON2ID],
-                    ['className' => 'Authentication.Default'],
+        // Identifier-Konfiguration direkt am Authenticator (statt des seit
+        // authentication 3.3.0 veralteten AuthenticationService::loadIdentifier()).
+        // Nur der Form-Authenticator verifiziert Benutzer/Passwort; die Session
+        // stellt die Identität ohne erneute DB-Prüfung wieder her.
+        $identifier = [
+            'Authentication.Password' => [
+                'fields' => [
+                    'username' => 'username',
+                    'password' => 'password_hash',
+                ],
+                'resolver' => [
+                    'className' => 'Authentication.Orm',
+                    'userModel' => 'Users',
+                    'finder' => 'active',
+                ],
+                'passwordHasher' => [
+                    'className' => 'Authentication.Fallback',
+                    'hashers' => [
+                        ['className' => 'Authentication.Default', 'hashType' => PASSWORD_ARGON2ID],
+                        ['className' => 'Authentication.Default'],
+                    ],
                 ],
             ],
-        ]);
+        ];
 
         $service->loadAuthenticator('Authentication.Session');
         $service->loadAuthenticator('Authentication.Form', [
@@ -49,6 +55,7 @@ class LocalAuthProvider implements AuthProviderInterface
                 'password' => 'password',
             ],
             'loginUrl' => '/login',
+            'identifier' => $identifier,
         ]);
     }
 }

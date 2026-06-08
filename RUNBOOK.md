@@ -38,6 +38,11 @@ bin/cake backup delete <id>
   `backup.retention` (älteste werden gekappt). Läuft im Core-Worker.
 - **GUI:** `Admin → Core-Konfiguration → Backup` (Erstellen/Prüfen/Probe-Restore/
   Löschen). Die destruktive Wiederherstellung bleibt CLI-only.
+- **Restore-Cutover:** `restore`/`restore --from` schalten für die Dauer
+  **automatisch den Wartungsmodus** (HTTP 503) über ein Datei-Flag (`tmp/
+  maintenance.flag`), das den DB-Restore übersteht, und geben ihn danach wieder
+  frei — kein Request trifft eine halb-restaurierte DB. (War der Wartungsmodus
+  schon vorher aktiv, bleibt er nach dem Restore bestehen.)
 
 ## Ablauf: Core-Update
 
@@ -45,7 +50,7 @@ bin/cake backup delete <id>
 |---|---|
 | **Vor Update** | Infra-Snapshot **+** `backup create --note "vor vX"` = Paar „vAlt". (Fertura erzeugt zusätzlich automatisch einen Wiederherstellungspunkt, 28.14.2.) |
 | **Update** | Core aktualisieren (neues Image, `up -d`). Beim Start zieht der Entrypoint **automatisch einen Wiederherstellungspunkt** (`pg_dump`), **falls** Migrationen ausstehen, und migriert dann (Kap. 28.14.2). |
-| **Fehlschlag** | Infra(vAlt) zurück **→ danach** Datenbackup(vAlt) zurück → Stand vor Update. (Migrationsfehler werden transaktional zurückgerollt; der Boot-Wiederherstellungspunkt liegt zusätzlich in `tmp/recovery/`.) |
+| **Fehlschlag** | Infra(vAlt) zurück **→ danach** Datenbackup(vAlt) zurück → Stand vor Update. (Migrationsfehler werden transaktional zurückgerollt; der Boot-Wiederherstellungspunkt liegt zusätzlich auf dem persistenten Backup-Volume unter `backups/recovery/`, Aufbewahrung der jüngsten N, `RECOVERY_KEEP`.) |
 | **Erfolg** | **sofort** Infra-Snapshot **und** `backup create` = Paar „vNeu"; Image-Tag vNeu festhalten |
 
 ## Ablauf: laufender Betrieb
