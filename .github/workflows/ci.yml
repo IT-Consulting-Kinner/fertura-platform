@@ -36,8 +36,21 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.3'
-          extensions: intl, pdo_pgsql, zip, mbstring, ctype
+          # sodium: Ed25519-Signaturen (Trust); zip: AES-256-Backups.
+          extensions: intl, pdo_pgsql, zip, mbstring, ctype, sodium
           coverage: none
+
+      - name: PostgreSQL-17-Client (pg_dump/pg_restore für Backup-Roundtrip)
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+            https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
 
       - name: Composer-Cache
         uses: actions/cache@v4
