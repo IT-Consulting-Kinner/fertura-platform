@@ -135,19 +135,34 @@ Breaking-Änderungen an Scoping/Schlüsseln die **Major-Version** erhöhen.
 ## 6. Optionale Out-of-Process-Isolation (Kap. 23.16.2)
 
 Standardmäßig laufen Module **in-process** (`isolation = in_process`). Für eine
-echte technische Isolationsgrenze kann ein Modul je Installation auf
+echte, **automatisch verwaltete** technische Isolationsgrenze kann ein Modul auf
 `out_of_process` gesetzt werden:
 
+```bash
+bin/cake module install /pfad/zum/modul --isolation out_of_process
+bin/cake module isolate <key> out_of_process   # nachträglich umschalten
+bin/cake module host status                     # laufende Hosts anzeigen
+```
+
+- Der Core legt **automatisch** eine **eigene, eingeschränkte DB-Rolle**
+  (`mod_<key>`, `LOGIN`, `NOBYPASSRLS`) mit zufälligem, **verschlüsselt**
+  gespeichertem Passwort an — Rechte nur auf das eigene Schema, kein Core-
+  Tabellenzugriff.
+- Die **Modul-Migrationen laufen unter dieser Rolle** (kein Superuser-Code);
+  danach erzwingt der Core `FORCE ROW LEVEL SECURITY`, damit RLS auch für die
+  modul-eigenen Tabellen greift.
 - Der Modulcode läuft in einem vom Core verwalteten **Subprozess**
   (`bin/module-host.php`) mit **bereinigter Umgebung** (kein Core-`DATABASE_URL`,
-  kein `BACKUP_PASSWORD`) und einer **eigenen, eingeschränkten DB-Rolle**
-  (`mod_<key>`, nur eigenes Schema, keine Core-Grants).
+  kein `BACKUP_PASSWORD`). Ein **Supervisor** startet ihn beim Aktivieren, stoppt
+  ihn beim Deaktivieren/Löschen und startet abgestürzte Hosts neu (der Worker
+  überwacht periodisch).
 - Der Core ruft die **Service-Contracts** (`services_registered`) transparent
   über einen Unix-Domain-Socket (JSON-Zeilen-RPC, `RemoteInvoker`) auf;
-  `CapabilityHandle::invoke()` routet automatisch dorthin. **Voraussetzung:** Die
-  Modul-Interfaces müssen ohne geteilten In-Process-Zustand auskommen
-  (Ein-/Ausgabe = serialisierbare Contract-Arrays, Kap. 29.8) — das gilt für
-  korrekt entworfene Service-Contracts ohnehin.
-- Events/Collectors/Health über RPC sowie Auto-Spawn/Supervision sind spätere
-  Ausbaustufen; aktuell betrifft die Isolation die Service-Contract-Aufrufe.
-- Verifikation der Grenze: `core/tests/scripts/module_isolation_check.sh`.
+  `CapabilityHandle::invoke()` routet automatisch dorthin. Ein-/Ausgabe sind
+  serialisierbare Contract-Arrays (Kap. 29.8).
+- **Einschränkung (bewusst):** Isolierte Module dürfen **nur Service-Contracts**
+  anbieten. Deklariert ein Modul Resolver/Collector/Event-Listener, wird die
+  Isolation **abgelehnt** (diese Erweiterungspunkte laufen noch nicht über RPC
+  und würden sonst still in-process ausgeführt).
+- Verifikation: `OutOfProcessIsolationTest` (E2E) und
+  `core/tests/scripts/module_isolation_check.sh` (manuell).

@@ -847,11 +847,23 @@ technische Isolationsgrenze** bereit:
     insbesondere ohne die Superuser-`DATABASE_URL` und ohne das
     Backup-Verschlüsselungspasswort. Der Modulcode kann diese damit nicht
     aus der Prozessumgebung lesen.
--   **Eigene, eingeschränkte Datenbankrolle.** Der Modulprozess verbindet
-    sich ausschließlich über eine **eigene DB-Rolle** (`mod_<key>`,
-    `LOGIN`, `NOBYPASSRLS`) mit Rechten nur auf das eigene
-    Modul-Schema. Ein Zugriff auf Core-Tabellen (z. B. `core.users`) ist
-    dadurch technisch unterbunden, nicht nur per Disziplin.
+-   **Eigene, eingeschränkte Datenbankrolle (automatisch).** Der Core legt
+    je isoliertem Modul **automatisch** eine **eigene DB-Rolle**
+    (`mod_<key>`, `LOGIN`, `NOBYPASSRLS`) mit einem zufälligen, **AES-256-
+    GCM-verschlüsselt** abgelegten Passwort an (für die Modul-Rolle selbst
+    unlesbar). Die Rolle hat Rechte **nur auf das eigene Modul-Schema** und
+    EXECUTE auf wenige Core-Hilfsfunktionen; ein Zugriff auf Core-Tabellen
+    (z. B. `core.users`) ist technisch unterbunden, nicht nur per Disziplin.
+-   **Modul-Migrationen ohne Superuser-Rechte.** Die Schema-Migrationen
+    eines isolierten Moduls laufen **unter dessen eingeschränkter Rolle**
+    statt als Superuser — eine bösartige Migration kann den Core damit nicht
+    beschädigen. Damit die Zeilen-Sicherheit (RLS) auch für die
+    modul-eigenen Tabellen greift, erzwingt der Core anschließend
+    `FORCE ROW LEVEL SECURITY`.
+-   **Verwalteter Lebenszyklus.** Beim Aktivieren startet der Core den
+    isolierten Host automatisch, beim Deaktivieren/Deinstallieren stoppt er
+    ihn (und entfernt die DB-Rolle). Ein Supervisor im Hintergrundprozess
+    **überwacht** die Hosts und startet abgestürzte neu (Selbstheilung).
 -   **Transparenter Aufruf über RPC.** Der Core ruft die Service-
     Contracts des Moduls über eine schmale Inter-Prozess-Schnittstelle
     (Unix-Domain-Socket, JSON-Zeilen) auf. Ein- und Ausgabe sind dieselben
@@ -863,10 +875,16 @@ technische Isolationsgrenze** bereit:
 Der Modus ist **opt-in** und ergänzt die Vertrauenskette, ersetzt sie
 nicht: Signatur/Anker/Widerruf bleiben die maßgebliche Zulassungsgrenze
 (23.16.1); die Out-of-Process-Isolation begrenzt zusätzlich, was bereits
-zugelassener Modulcode zur Laufzeit technisch erreichen kann. Weitere
-Härtungsstufen (eigener Betriebssystem-Benutzer bzw. Container,
-Dateisystem-/Kernel-Begrenzung, Capability-Tokens je Aufruf) sind als
-spätere Ausbaustufen vorgesehen.
+zugelassener Modulcode zur Laufzeit technisch erreichen kann.
+
+**Geltungsbereich (bewusst eng).** Isolierte Module dürfen derzeit **nur
+Service-Contracts** anbieten. Erweiterungspunkte, die noch nicht über RPC
+laufen (Resolver, Collector, Event-Listener, Health-Checks, periodische
+Aufgaben), werden bei der Isolation **abgelehnt** statt still in-process
+ausgeführt — die Grenze ist damit ehrlich (keine unbemerkte Lücke). Deren
+Ausführung über RPC sowie weitere Härtungsstufen (eigener Betriebssystem-
+Benutzer bzw. Container, Dateisystem-/Kernel-Begrenzung, Capability-Tokens
+je Aufruf) sind spätere Ausbaustufen.
 
 # 24. Modul-Manifest, Paketstruktur und Installations-/Updatefluss
 
@@ -4397,6 +4415,7 @@ Komponente neu auszuliefern.
 | 6.30 | 07.06.2026 | Doku-Software-Abgleich nach Umsetzung: (a) **7. Administrationsbereich „Sprachverwaltung"** in 27.3.1 + Entscheidung 170 ergänzt (zuvor 6); (b) **API-Token tragen Scopes** (zusätzliche Einschränkung, nie erweiternd) in 27.16.3 + Entscheidung 162 korrigiert (zuvor „keine eigenen Scopes"); (c) **20.1.2 um den realen Backup-Funktionsumfang erweitert** (ZIP+Zeitstempel, Verifikation-vor-Abschluss, optionale AES-256-Verschlüsselung, Zeitplan/Retention nach Anzahl+Alter, append-only-Protokoll, Pre-Flight, Mail-Alarm, Download, Health-Subsystem); (d) **30.3.1**: Core **erzwingt** RLS für `is_scoped`-Module bei der Installation (Abbruch sonst). Hinweis: Mehrsprachigkeit/Locale-Verwaltung ist als eigener Subsystem implementiert, im Anforderungsdokument bislang nur als Technologie-Zeile geführt (eigene Kapitel-Ausarbeitung offen). |
 | 6.31 | 07.06.2026 | Doku-Software-Abgleich (Fortsetzung): (a) **Neues Kapitel 31 „Mehrsprachigkeit und Lokalisierung"** ausgearbeitet (Grundsatz/symbolische Schlüssel, Mitlieferung, Managed Locale Store mit ausfallsicherem Schreiben, Versions-Gate, Sprachverwaltungs-Admin-Bereich mit Status-Trio + verlustfreiem Editor, Laufzeit-Sprachwahl, Audit/Health). (b) Bestehende Kapitel um umgesetzte Mechanismen ergänzt: **20.2.1** Health-Subsysteme `localization` + `backup`; **20.3** Andock-Punkt für periodische Modul-Aufgaben (`core.collector.scheduled`); **24.9.2** Durchsetzung des Anker-Gültigkeitsfensters + gleitende Rotation; **26.9.2** Dead-Letter-Retry/Verwerfen-GUI; **28.14.2** automatischer Wiederherstellungspunkt auch bei Boot-Migrationen. |
 | 6.32 | 08.06.2026 | (a) **Mehrere Worker-Instanzen** explizit unterstützt (20.3): periodische Aufgaben werden je Aufgabe über einen PostgreSQL-Advisory-Lock serialisiert (kein Doppellauf bei >1 Worker); Outbox bleibt über SKIP LOCKED kollisionsfrei. Einzelinstanz = Standard. (b) **Backup-Verschlüsselung DR-tauglich** (20.1.2): Passwort aus Env/Secret (`BACKUP_PASSWORD_FILE`/`BACKUP_PASSWORD`) mit Vorrang vor dem DB-Setting — out-of-band, damit ein verschlüsseltes Backup nicht über das im Dump enthaltene Passwort entschlüsselt werden müsste (Henne-Ei). |
+| 6.36 | 08.06.2026 | **Out-of-Process-Isolation, Phase 2 — Finalisierung** (Kap. 23.16.2 erweitert): Die Isolationsgrenze ist jetzt **automatisch und selbstverwaltet**. Pro isoliertem Modul legt der Core automatisch eine **eigene, eingeschränkte DB-Rolle** (verschlüsseltes Passwort) an; die **Modul-Migrationen laufen unter dieser Rolle** statt als Superuser (schließt das Rest-Risiko „Install-Migration mit Superuser-Rechten"), mit anschließend **erzwungener RLS** (`FORCE ROW LEVEL SECURITY`). Ein **Supervisor** startet/stoppt/heilt die Hosts (Aktivieren startet, Deaktivieren/Löschen stoppt + entfernt die Rolle; der Worker überwacht periodisch). **Geltungsbereich bewusst eng:** isolierte Module dürfen nur Service-Contracts anbieten; nicht-RPC-fähige Erweiterungspunkte werden **abgelehnt** statt still in-process ausgeführt. CLI `module install --isolation`, `module isolate`, `module host`. Verifiziert per E2E-Integrationstest. |
 | 6.35 | 08.06.2026 | **Betriebs-Härtung (drei Restposten)**: (a) **Restore-Cutover** (20.1.2/28.11): Die destruktive Daten-Wiederherstellung schaltet für ihre Dauer automatisch den **Wartungsmodus (HTTP 503)** über ein **datei-basiertes Flag**, das den DB-Restore übersteht (ein DB-Setting würde mitten im Vorgang überschrieben), und gibt ihn danach wieder frei. (b) **Wiederherstellungspunkte** (28.14.2) liegen auf dem **persistenten Backup-Volume** (`backups/recovery/`) statt im flüchtigen `tmp/` und werden nach Anzahl aufbewahrt (`RECOVERY_KEEP`). (c) Reversibilität: die down-Migration der Backup-Log-Härtung bereinigt vor dem Zurücksetzen die neu hinzugekommene `download`-Operation. Keine Spezifikationsänderung; Umsetzungs-/Reifegrad-Härtung. |
 | 6.34 | 08.06.2026 | **Integrationstest-Abdeckung der kritischen Pfade** (Reifegrad, keine Spezifikationsänderung): DB-gestützte PHPUnit-Integrationstests gegen eine echte PostgreSQL-Test-DB für Modul-Lifecycle **inkl. RLS-Durchsetzung** (Kap. 24/30.3), Signatur-/Vertrauenskette (Kap. 24.9.2), Backup/Restore-Roundtrip mit Probe-Restore und AES-256 (Kap. 20.1.2), i18n-Versions-Gate (Kap. 31) und API-Token-/Bearer-Authentifizierung (Kap. 29). Suite auf 46 Tests erweitert; CI um PostgreSQL-17-Client + sodium ergänzt; `TESTING.md` neu. Schließt den im internen Architektur-Review benannten dominanten Reifegrad-Blocker (zuvor nur Smoke-Tests). |
 | 6.33 | 08.06.2026 | **Opt-in Out-of-Process-Modulisolation, Phase 1** (neues Kapitel 23.16.2; 23.9.3.1 aktualisiert): Ein Modul kann je Installation auf `isolation = out_of_process` gesetzt werden und läuft dann als vom Core verwalteter Subprozess mit **bereinigter Umgebung** (kein Core-`DATABASE_URL`/`BACKUP_PASSWORD`) und **eigener, eingeschränkter DB-Rolle** (`mod_<key>`, nur eigenes Schema). Der Core ruft die Service-Contracts transparent über Unix-Domain-Socket-RPC auf (`CapabilityHandle` routet automatisch); Ein-/Ausgabe bleiben die serialisierbaren Contract-Strukturen aus 29.8. Erste echte technische Isolationsgrenze über die Vertrauenskette (23.16.1) hinaus; weitere Härtungsstufen (OS-Benutzer/Container, Capability-Tokens) als spätere Ausbaustufen. Verifiziert per Isolations-Harness. |

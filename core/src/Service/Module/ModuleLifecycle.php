@@ -165,10 +165,15 @@ class ModuleLifecycle
 
     // ---- öffentliche Operationen --------------------------------------------
 
-    /** @return array<string, mixed> */
-    public function install(string $sourcePath): array
+    /**
+     * @param string $isolation 'in_process' (Standard) oder 'out_of_process'
+     *   (Kap. 23.16.2): eigene DB-Rolle, Migrationen unter dieser Rolle, RLS
+     *   erzwungen, Aufruf über RPC.
+     * @return array<string, mixed>
+     */
+    public function install(string $sourcePath, string $isolation = 'in_process'): array
     {
-        return $this->withLock(function () use ($sourcePath): array {
+        return $this->withLock(function () use ($sourcePath, $isolation): array {
             $sourcePath = rtrim($sourcePath, '/');
             $manifestFile = $sourcePath . '/manifest.json';
             if (!is_file($manifestFile)) {
@@ -194,6 +199,12 @@ class ModuleLifecycle
             }
             if ($this->findModule($key) !== null) {
                 throw new LifecycleException("Modul bereits installiert: $key");
+            }
+
+            // Out-of-Process früh ablehnen (vor jedem Seiteneffekt), wenn das
+            // Modul nicht ausschließlich Service-Contracts anbietet (Kap. 23.16.2).
+            if ($isolation === 'out_of_process') {
+                $this->assertIsolatable($manifest);
             }
 
             // Abhängigkeitsprüfung.
@@ -255,7 +266,19 @@ class ModuleLifecycle
                 ModuleAutoloader::register($manifest->phpNamespace(), $targetPath . '/src');
             }
 
-            $this->migrations->runUp($moduleId, $schema, $targetPath . '/migrations');
+            // Out-of-Process-Isolation (Kap. 23.16.2): eigene DB-Rolle anlegen und
+            // die Migrationen UNTER dieser Rolle ausführen (kein Modulcode mit
+            // Superuser-Rechten). Nur Service-Contracts sind erlaubt.
+            $asRole = null;
+            if ($isolation === 'out_of_process') {
+                $conn->execute("UPDATE modules SET isolation = 'out_of_process' WHERE module_key = :k", ['k' => $key]);
+                $role = new ModuleDbRole();
+                $role->provision($key);
+                $role->grantSchemaCreate($key);
+                $asRole = $role->roleName($key);
+            }
+
+            $this->migrations->runUp($moduleId, $schema, $targetPath . '/migrations', $asRole);
 
             // RLS-Pflicht (Kap. 30.3, E47): direkt nach den Migrationen — wer
             // is_scoped-Ressourcen deklariert, muss im Modul-Schema mind. eine
@@ -263,6 +286,12 @@ class ModuleLifecycle
             // zurückbauen (Install ist nicht in einer DB-Transaktion gekapselt),
             // bevor weitere Registrierungen erfolgen.
             $this->assertScopedRls($key, $schema, $targetPath, $manifest);
+
+            // Isolierte Module: RLS auch für den Tabelleneigentümer (die Modul-
+            // Rolle) erzwingen, sonst umginge sie ihre eigene Policy.
+            if ($asRole !== null) {
+                (new ModuleDbRole())->forceRls($key);
+            }
 
             // App-Rolle (NOBYPASSRLS) auf das neue Modul-Schema berechtigen,
             // damit der Request-Pfad nach dem Install darauf zugreifen kann (E26).
@@ -334,6 +363,11 @@ class ModuleLifecycle
             $errors = $manifest->validate($this->coreVersion);
             if ($errors !== []) {
                 throw new LifecycleException('Aktivierung blockiert: ' . implode(' ', $errors));
+            }
+            // Isolierte Module dürfen nur Service-Contracts anbieten (Kap. 23.16.2),
+            // sonst würden Erweiterungspunkte still in-process ausgeführt.
+            if (($mod['isolation'] ?? 'in_process') === 'out_of_process') {
+                $this->assertIsolatable($manifest);
             }
             foreach ($manifest->dependencies() as $dep) {
                 $depKey = (string)($dep['module'] ?? $dep['id'] ?? '');
@@ -420,6 +454,18 @@ class ModuleLifecycle
                 'moduleVersion' => (string)$mod['version'],
             ]);
 
+            // Out-of-Process: isolierten Host starten (Worker heilt bei Bedarf nach).
+            if (($mod['isolation'] ?? 'in_process') === 'out_of_process') {
+                try {
+                    (new ModuleHostSupervisor())->ensureRunning($key);
+                } catch (\Throwable $e) {
+                    $this->audit->log('module.host_start_failed', 'module', $key, [
+                        'newValue' => ['error' => $e->getMessage()],
+                        'moduleKey' => $key,
+                    ]);
+                }
+            }
+
             return $this->findModule($key) ?? [];
         });
     }
@@ -436,6 +482,15 @@ class ModuleLifecycle
                 "UPDATE modules SET status = 'inactive', deactivated_at = now() WHERE module_key = :k",
                 ['k' => $key],
             );
+            // Out-of-Process: isolierten Host stoppen.
+            if (($mod['isolation'] ?? 'in_process') === 'out_of_process') {
+                try {
+                    (new ModuleHostSupervisor())->stop($key);
+                } catch (\Throwable) {
+                    // best effort
+                }
+            }
+
             $this->audit->log('module.deactivate', 'module', $key, [
                 'oldValue' => ['status' => 'active'],
                 'newValue' => ['status' => 'inactive'],
@@ -458,6 +513,17 @@ class ModuleLifecycle
             )->fetch('assoc');
             if ((int)($dependents['c'] ?? 0) > 0) {
                 throw new LifecycleException("Löschen blockiert: andere Module hängen von $key ab.");
+            }
+
+            // Out-of-Process: Host stoppen + eigene DB-Rolle entfernen
+            // (DROP OWNED löst die Rollen-Objekte/-Rechte, bevor das Schema fällt).
+            if (($mod['isolation'] ?? 'in_process') === 'out_of_process') {
+                try {
+                    (new ModuleHostSupervisor())->stop($key);
+                } catch (\Throwable) {
+                    // best effort
+                }
+                (new ModuleDbRole())->drop($key);
             }
 
             if ($mod['status'] === 'active') {
@@ -497,11 +563,96 @@ class ModuleLifecycle
     public function listModules(): array
     {
         return $this->conn()->execute(
-            'SELECT module_key, name, version, type, status FROM modules ORDER BY module_key',
+            'SELECT module_key, name, version, type, status, isolation FROM modules ORDER BY module_key',
         )->fetchAll('assoc');
     }
 
+    /**
+     * Schaltet den Isolationsmodus eines bereits installierten Moduls um
+     * (Kap. 23.16.2). out_of_process: eigene DB-Rolle provisionieren + Laufzeit-
+     * Rechte auf das (bestehende) Schema erteilen; bei aktivem Modul Host starten.
+     * in_process: Host stoppen + Rolle entfernen.
+     *
+     * @return array<string, mixed>
+     */
+    public function setIsolation(string $key, string $mode): array
+    {
+        if (!in_array($mode, ['in_process', 'out_of_process'], true)) {
+            throw new LifecycleException("Ungültiger Isolationsmodus: $mode");
+        }
+
+        return $this->withLock(function () use ($key, $mode): array {
+            $mod = $this->findModuleOrFail($key);
+            if ((string)$mod['isolation'] === $mode) {
+                return $mod;
+            }
+
+            if ($mode === 'out_of_process') {
+                $manifest = new ModuleManifest(json_decode((string)$mod['manifest'], true) ?: []);
+                $this->assertIsolatable($manifest);
+                $role = new ModuleDbRole();
+                $role->provision($key);
+                // Bestehende Tabellen bleiben Superuser-Eigentum -> Laufzeit-CRUD
+                // an die Rolle, RLS greift natürlich (Rolle = NOBYPASSRLS, nicht Eigentümer).
+                $role->grantSchemaCrud($key);
+                $this->conn()->execute("UPDATE modules SET isolation = 'out_of_process' WHERE module_key = :k", ['k' => $key]);
+                if ($mod['status'] === 'active') {
+                    try {
+                        (new ModuleHostSupervisor())->ensureRunning($key);
+                    } catch (\Throwable) {
+                        // Worker heilt nach
+                    }
+                }
+            } else {
+                try {
+                    (new ModuleHostSupervisor())->stop($key);
+                } catch (\Throwable) {
+                    // best effort
+                }
+                (new ModuleDbRole())->drop($key);
+                $this->conn()->execute(
+                    "UPDATE modules SET isolation = 'in_process', db_role = NULL, db_role_secret = NULL WHERE module_key = :k",
+                    ['k' => $key],
+                );
+            }
+            $this->audit->log('module.set_isolation', 'module', $key, [
+                'newValue' => ['isolation' => $mode],
+                'moduleKey' => $key,
+                'moduleName' => (string)$mod['name'],
+                'moduleVersion' => (string)$mod['version'],
+            ]);
+
+            return $this->findModule($key) ?? [];
+        });
+    }
+
     // ---- intern --------------------------------------------------------------
+
+    /**
+     * Out-of-Process unterstützt derzeit nur Service-Contracts. Deklariert ein
+     * Modul Resolver/Collector/Event-Listener, würden diese still in-process
+     * laufen — daher wird die Isolation abgelehnt (keine stille Lücke).
+     */
+    private function assertIsolatable(ModuleManifest $manifest): void
+    {
+        $bad = [];
+        if ($manifest->resolversRegistered() !== []) {
+            $bad[] = 'Resolver';
+        }
+        if ($manifest->collectorsRegistered() !== []) {
+            $bad[] = 'Collector';
+        }
+        if ($manifest->eventsRegistered() !== []) {
+            $bad[] = 'Event-Listener';
+        }
+        if ($bad !== []) {
+            throw new LifecycleException(
+                'Out-of-Process unterstützt derzeit nur Service-Contracts, nicht: '
+                . implode(', ', $bad) . '. Diese Erweiterungspunkte laufen noch nicht über RPC '
+                . 'und würden sonst still in-process ausgeführt.',
+            );
+        }
+    }
 
     private function deactivateRegistrations(string $key): void
     {

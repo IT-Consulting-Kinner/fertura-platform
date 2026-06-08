@@ -19,9 +19,13 @@ use Throwable;
 class ModuleMigrationRunner
 {
     /**
+     * @param ?string $asRole Wenn gesetzt, läuft die Migrations-DDL unter dieser
+     *   (eingeschränkten) Rolle statt als Superuser (Out-of-Process-Isolation,
+     *   Kap. 23.16.2) — so kann eine bösartige Modul-Migration den Core nicht
+     *   beschädigen. Der Tracking-Insert läuft weiter als Superuser.
      * @return list<string> Namen der ausgeführten Migrationen.
      */
-    public function runUp(string $moduleId, string $schema, string $migrationsDir): array
+    public function runUp(string $moduleId, string $schema, string $migrationsDir, ?string $asRole = null): array
     {
         if (!is_dir($migrationsDir)) {
             return [];
@@ -45,10 +49,19 @@ class ModuleMigrationRunner
             $up = $this->upPart((string)file_get_contents($file));
 
             try {
-                $connection->transactional(function () use ($connection, $schema, $up, $moduleId, $name): void {
+                $connection->transactional(function () use ($connection, $schema, $up, $moduleId, $name, $asRole): void {
                     $connection->execute("SET LOCAL search_path TO $schema, core, public");
+                    // Isolierte Module: DDL unter der eingeschränkten Modul-Rolle
+                    // (kann nur das eigene Schema verändern), danach zurück zum
+                    // Superuser für den Tracking-Insert in core.*.
+                    if ($asRole !== null) {
+                        $connection->execute("SET LOCAL ROLE $asRole");
+                    }
                     foreach ($this->statements($up) as $stmt) {
                         $connection->execute($stmt);
+                    }
+                    if ($asRole !== null) {
+                        $connection->execute('RESET ROLE');
                     }
                     $connection->execute(
                         "INSERT INTO core.module_migrations_log (module_id, migration_name, status) "

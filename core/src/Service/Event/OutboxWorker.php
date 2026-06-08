@@ -214,6 +214,18 @@ class OutboxWorker
                 } catch (Throwable $e) {
                     $this->log('Scheduler-Fehler: ' . $e->getMessage());
                 }
+                // Out-of-Process-Modulhosts überwachen (Selbstheilung, Kap. 23.16.2):
+                // abgestürzte Hosts neu starten, verwaiste stoppen.
+                try {
+                    $sup = new \App\Service\Module\ModuleHostSupervisor();
+                    $started = $sup->ensureAll();
+                    $sup->reapStale();
+                    if ($started !== []) {
+                        $this->log('Modulhosts gestartet: ' . implode(', ', $started));
+                    }
+                } catch (Throwable $e) {
+                    $this->log('Modulhost-Supervision-Fehler: ' . $e->getMessage());
+                }
                 // Vorhandene Events vollständig abarbeiten.
                 $processed = 0;
                 while ($this->running && ($n = $this->processBatch()) > 0) {
