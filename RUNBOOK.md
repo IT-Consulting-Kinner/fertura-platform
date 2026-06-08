@@ -44,8 +44,8 @@ bin/cake backup delete <id>
 | Phase | Aktion |
 |---|---|
 | **Vor Update** | Infra-Snapshot **+** `backup create --note "vor vX"` = Paar „vAlt". (Fertura erzeugt zusätzlich automatisch einen Wiederherstellungspunkt, 28.14.2.) |
-| **Update** | Core aktualisieren |
-| **Fehlschlag** | Infra(vAlt) zurück **→ danach** Datenbackup(vAlt) zurück → Stand vor Update |
+| **Update** | Core aktualisieren (neues Image, `up -d`). Beim Start zieht der Entrypoint **automatisch einen Wiederherstellungspunkt** (`pg_dump`), **falls** Migrationen ausstehen, und migriert dann (Kap. 28.14.2). |
+| **Fehlschlag** | Infra(vAlt) zurück **→ danach** Datenbackup(vAlt) zurück → Stand vor Update. (Migrationsfehler werden transaktional zurückgerollt; der Boot-Wiederherstellungspunkt liegt zusätzlich in `tmp/recovery/`.) |
 | **Erfolg** | **sofort** Infra-Snapshot **und** `backup create` = Paar „vNeu"; Image-Tag vNeu festhalten |
 
 ## Ablauf: laufender Betrieb

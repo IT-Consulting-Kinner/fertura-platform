@@ -29,6 +29,9 @@ mkdir -p /var/www/html/language-store 2>/dev/null || true
 chown -R www-data:www-data /var/www/html/language-store 2>/dev/null || true
 mkdir -p /var/www/html/backups 2>/dev/null || true
 chown -R www-data:www-data /var/www/html/backups 2>/dev/null || true
+# Wiederherstellungspunkte (pg_dump vor Migrationen) — auch fuer den GUI-Pfad.
+mkdir -p /var/www/html/tmp/recovery 2>/dev/null || true
+chown -R www-data:www-data /var/www/html/tmp/recovery 2>/dev/null || true
 
 # 3. Schema-Bootstrap + Migrationen (nur core; geguardet)
 #    Bootstrap-Schritte laufen als Superuser: APP_DATABASE_URL wird geleert,
@@ -40,8 +43,12 @@ if [ "$ROLE" = "core" ]; then
     # core-Schema bereitstellen, BEVOR der Runner seine Trackingtabelle anlegt.
     echo "[entrypoint] schema_init"
     env APP_DATABASE_URL= bin/cake schema_init || echo "[entrypoint] WARN: schema_init fehlgeschlagen"
-    echo "[entrypoint] migrations migrate"
-    env APP_DATABASE_URL= bin/cake migrations migrate || echo "[entrypoint] WARN: migrate fehlgeschlagen"
+    # Migrationen mit verpflichtendem Wiederherstellungspunkt: zieht VOR dem
+    # Migrieren automatisch einen pg_dump, falls Migrationen ausstehen (Kap.
+    # 28.14.2) — der Betreiber muss nicht daran denken. Ohne Schemaaenderung
+    # entsteht kein unnoetiger Dump.
+    echo "[entrypoint] core_migrate (Wiederherstellungspunkt + Migration)"
+    env APP_DATABASE_URL= bin/cake core_migrate || echo "[entrypoint] WARN: core_migrate fehlgeschlagen"
     # NOBYPASSRLS-App-Rolle + Rechte (idempotent; nur wenn APP_DB_PASSWORD gesetzt).
     echo "[entrypoint] db_provision_app_role"
     env APP_DATABASE_URL= bin/cake db_provision_app_role || echo "[entrypoint] WARN: provisioning fehlgeschlagen"
