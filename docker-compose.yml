@@ -57,6 +57,9 @@ services:
       DATABASE_TEST_URL: "${DATABASE_TEST_URL:-postgres://${POSTGRES_USER:-fertura}:${POSTGRES_PASSWORD:-fertura}@db/fertura_test?encoding=utf8}"
       SECURITY_SALT: "${SECURITY_SALT:-dev-salt-change-me-0123456789abcdef0123456789abcdef}"
       APP_ENCRYPTION_KEY: "${APP_ENCRYPTION_KEY:-dev-encryption-key-change-me-fedcba9876543210}"
+      # Session-Speicher: 'database' (core.sessions) ist instanzuebergreifend
+      # (Mehrinstanz-/HA-faehig) und ueberlebt Container-Recreates; 'php' = lokal.
+      SESSION_DEFAULTS: "${SESSION_DEFAULTS:-database}"
     depends_on:
       db:
         condition: service_healthy

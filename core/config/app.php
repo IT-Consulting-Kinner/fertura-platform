@@ -455,7 +455,10 @@ return [
      * To use database sessions, load the SQL file located at config/schema/sessions.sql
      */
     'Session' => [
-        'defaults' => 'php',
+        // Datei-basiert (Standard, Einzelinstanz) ODER 'database' -> core.sessions
+        // (CakePHP DatabaseSession): instanzübergreifend für Mehrinstanz-/HA-Betrieb
+        // der Web-Schicht und überlebt Container-Recreates (kein Zwangs-Logout).
+        'defaults' => env('SESSION_DEFAULTS', 'php'),
     ],
 
     /**
