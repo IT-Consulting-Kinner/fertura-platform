@@ -1105,8 +1105,13 @@ Herausgeber (publisher) muss mit dem signierenden Herausgeberschlüssel
 übereinstimmen.
 
 **Schlüsselrotation.** Wurzel- und Herausgeberschlüssel besitzen eine
-Gültigkeitsdauer. Aktualisierte Vertrauensanker bezieht der Core über
-einen signierten Marketplace-Kanal (analog zum Metadatenabruf, Kapitel
+Gültigkeitsdauer (`valid_from`/`valid_to`). Dieses **Gültigkeitsfenster wird an
+allen Verifikationspfaden durchgesetzt** (Paketinstallation, Vertrauenskette,
+Lizenzprüfung): Ein Anker außerhalb seines Fensters wird abgewiesen. Eine
+**gleitende Rotation** ist möglich — der neue Anker gilt ab sofort, der alte
+läuft nach einem Überlappungsfenster aus, sodass beide während der Überlappung
+akzeptiert werden (kein Ausfall). Aktualisierte Vertrauensanker bezieht der Core
+über einen signierten Marketplace-Kanal (analog zum Metadatenabruf, Kapitel
 28.5). Ein Schlüsselwechsel macht bereits installierte Module nicht
 ungültig; maßgeblich ist die Gültigkeit der Signaturkette zum Zeitpunkt
 der Installation oder des Updates.
@@ -2106,7 +2111,10 @@ verarbeitet.
     weder die übrigen Listener noch den auslösenden Prozess.
     Fehlgeschlagene Zustellungen werden mit Backoff wiederholt; nach
     Ausschöpfung der Versuche gehen sie in einen Fehler- bzw.
-    Dead-Letter-Zustand über, der im Admin-Bereich sichtbar ist.
+    Dead-Letter-Zustand über. Der Admin-Bereich zeigt die Dead-Letter-Events
+    nicht nur an, sondern erlaubt pro Event ein **erneutes Einstellen** (Retry)
+    oder ein **Verwerfen** (sowie „alle wiedereinstellen"); diese Aktionen werden
+    auditiert.
 
 ### 26.9.3 Grundregel
 
@@ -3217,7 +3225,11 @@ sie nicht (z.B. fehlender Speicherplatz oder fehlende Rechte), wird das
 Update vor dem Einspielen abgebrochen. Diese Regel gilt einheitlich für
 Core- und Modul-Updates. Es gibt keine Unterscheidung nach Update-Art,
 Modultyp oder Risikoeinschätzung; einziger Anknüpfungspunkt ist, ob das
-Update Migrationen enthält.
+Update Migrationen enthält. Diese Regel greift auch **außerhalb** des
+Update-Managers: Werden Migrationen beim **Containerstart** angewendet (neues
+Core-Image), zieht der Start-Vorgang ebenfalls zuerst automatisch einen
+Wiederherstellungspunkt, sofern Migrationen ausstehen — der Betreiber muss nicht
+daran denken. Stehen keine Migrationen aus, entsteht kein unnötiger Dump.
 
 **Rollback bei Fehlschlag.** Schlägt eine Migration fehl, wird die
 laufende Migrationstransaktion atomar zurückgerollt (transaktionales
@@ -3978,7 +3990,9 @@ Der Core stellt einen Health-Endpoint HTTP GET /health bereit, der den
 Status der Subsysteme als JSON liefert. Aggregiert werden mindestens:
 Datenbank, Datei-Storage, Aktualität der CLI-Worker (inkl.
 Outbox-Worker, Kapitel 26.9.2), Registry- und Modulzustand,
-Dead-Letter-Zähler und Lizenzstatus.
+Dead-Letter-Zähler, Lizenzstatus, Lokalisierung (Sprachpakete: fehlende
+Englisch-Basis, Versionsfehler) und Daten-Backup (fehlendes/fehlgeschlagenes/
+überfälliges Backup bei aktivem Zeitplan).
 
 Zugriffsschutz: Ein minimaler Liveness-Check (nur "up"/"down" ohne
 Detail) ist ohne Authentifizierung erreichbar; der detaillierte
@@ -4044,12 +4058,21 @@ Fällt ein Cronjob aus, hat das direkte Auswirkungen:
 | send_followup_reminders | Wiedervorlage-Erinnerungen bleiben aus |
 
 Protokollierung (Muss): Jeder CLI-Command protokolliert seinen letzten
-erfolgreichen Lauf mit Zeitstempel in der Tabelle system_settings.
+erfolgreichen Lauf mit Zeitstempel (Heartbeat).
 
 Dashboard-Widget (Soll): Ein Admin-Dashboard-Widget zeigt den Status
 aller Commands an (letzte Ausführung, Dauer, Ergebnis). Bei
 Überschreitung des erwarteten Intervalls um mehr als das Doppelte wird
 ein visueller Warnhinweis im Admin-Dashboard angezeigt.
+
+**Andock-Punkt für periodische Modul-Aufgaben.** Der Core bietet einen
+Collector (`core.collector.scheduled`), über den Module periodische Aufgaben
+(z.B. `fetch_mails`, `check_escalations`) deklarieren. Der Core-Worker führt sie
+im angegebenen Intervall **fehlerisoliert** aus, protokolliert je Aufgabe einen
+Heartbeat (erscheint damit in der Worker-Aktualität inkl. Überfälligkeitswarnung)
+und hält den Fehler eines Jobs vom Rest fern. Die fachliche Logik bleibt im
+Modul; der Core stellt nur die Ausführungs- und Überwachungsinfrastruktur bereit
+(Alternative zu einem separaten Modul-Cron).
 
 ## 20.4 E-Mail-Betriebsüberwachung (Muss: Logging und Statusanzeige / Empfehlung: aktives Monitoring)
 
@@ -4184,6 +4207,103 @@ nie in das produktive Core-Image eingebettet (Ausnahme: klar
 gekennzeichnete Demo-Images). Die Laufzeitumgebung wird aus getrennten
 Diensten komponiert.
 
+# 31. Mehrsprachigkeit und Lokalisierung
+
+Der Core, Module und Extensions sind mehrsprachig. Die Anzeigesprache ist
+umschaltbar; Sprachpakete sind unabhängig von der Komponenten-Auslieferung
+nachladbar und verwaltbar. Grundlage ist die I18n-Funktionalität des Frameworks
+(CakePHP I18n).
+
+## 31.1 Grundsatz
+
+-   **Basissprache Englisch.** Englisch ist die kanonische Sprache; fehlt eine
+    Übersetzung in der gewählten Sprache, wird **flach** auf Englisch
+    zurückgefallen (kein regionaler Zwischen-Fallback wie `de_AT→de`).
+-   **Symbolische Schlüssel.** Übersetzbare Texte werden über stabile
+    symbolische Schlüssel (`<bereich>.<sache>.<variante>`) referenziert, nicht
+    über den Klartext. Das hält die Schlüssel versions- und editierstabil.
+-   **Domain je Komponente.** Jede Komponente nutzt eine eigene Übersetzungs-
+    Domain (Core: `default`; Module/Extensions: ihr technischer Schlüssel).
+-   **Locale-Format** `ll_CC` (z.B. `en_US`, `de_DE`).
+
+## 31.2 Mitlieferung von Sprachdateien
+
+Jede Komponente bringt für ihre installierte Version **mindestens Englisch** mit.
+Sprachdateien liegen als GNU-`.po`-Dateien im Paket (`locales/<locale>/<domain>.po`)
+und werden im Manifest deklariert (unterstützte Locales + Domain). Bei der
+Installation übernimmt der Core die Paket-Sprachdateien in den verwalteten
+Sprachspeicher; ihr Herkunfts-/Signaturstatus wird dabei festgehalten (31.5).
+
+## 31.3 Verwalteter Sprachspeicher (Managed Locale Store)
+
+Der Katalog-Inhalt liegt in Dateien (PO) in einem persistenten Speicher; die
+Datenbank hält nur **Verwaltungs-Metadaten** je Sprachdatei (Komponente,
+Version, Locale, Domain, Status, Prüfsumme). Das Schreiben ist **ausfallsicher**:
+Es wird zunächst in eine temporäre Datei geschrieben und dann atomar umbenannt
+(kein Lösch-Fenster); ein abgebrochener Schreibvorgang wird zur Laufzeit erkannt
+und bereinigt bzw. geheilt.
+
+## 31.4 Versionierung und Versions-Gate
+
+Sprachdateien folgen der Version der zugehörigen Komponente (keine eigene
+Pack-Versionierung; ein Fehler wird durch Überschreiben derselben Version
+korrigiert). Bei der Auflösung je (Komponente, Locale) gegen die **aktive**
+Komponentenversion gilt:
+
+| Pack-Version vs. aktive Version | Verhalten | Status |
+| --- | --- | --- |
+| identisch | genutzt | sauber |
+| gleiche Major, abweichende Minor/Patch | genutzt (höchste passende) | **Hinweis** |
+| abweichende Major / keine passende | nicht genutzt → Englisch | **Fehler** |
+
+Major gilt als Bruchgrenze (Schlüsseländerungen). **Wählbar** sind nur die
+Sprachen, für die der **Core** eine nutzbare Datei besitzt; der Status wird
+berechnet, nicht gespeichert.
+
+## 31.5 Sprachverwaltung (Administrationsbereich)
+
+Die Verwaltung der Sprachpakete ist ein eigener fester Administrationsbereich
+(Kapitel 27.3.1). Sie zeigt aktive Komponenten mit Version und darunter
+gruppiert deren Sprachdateien (inkl. berechnetem Status). Funktionen:
+
+-   **Import** zusätzlicher Sprachpakete (unabhängig vom Komponentenpaket) mit
+    Vorschau vor der Übernahme.
+-   **Status-Trio** je Sprachdatei: `signed` (Herkunft, **nur beim Import**
+    geprüft), `reviewed`, `edited`. Ein Admin-Edit setzt `edited=ja` und
+    `reviewed=ja` (Admin-Edit = Review); die Signatur wird durch Editieren
+    **nicht** invalidiert. Ein **Review** kann ohne Edit erfolgen.
+-   **Feld-basierter, verlustfreier Editor:** Es wird nur der Übersetzungstext
+    bearbeitet; Schlüssel, Kontext, Plurale und Kommentare bleiben erhalten. Das
+    Speichern nutzt das ausfallsichere Schreiben (31.3). Nur Administratoren
+    editieren.
+-   **Löschregeln:** Bei aktiver Komponente kann alles außer **Englisch**
+    gelöscht werden; bei inaktiver Komponente alles (inkl. Englisch). Eine
+    Deinstallation **behält** Sprachdateien.
+
+## 31.6 Anzeigesprache zur Laufzeit
+
+Die Sprache wird pro Request bestimmt. Präzedenz (jeweils nur für **aktivierte**
+Sprachen): expliziter Wechsel (`?lang`) → Session-Wahl → Benutzer-Präferenz
+(`user.locale`) → `Accept-Language` → System-Default. Der Umschalter steht in
+der GUI bereit; für angemeldete Benutzer wird die Wahl persistent (`user.locale`)
+gespeichert, anonym/öffentlich nur in der Session. Zur Auswahl stehen nur
+Sprachen, für die der Core eine nutzbare Datei hat (31.4), eingeschränkt auf die
+vom Betreiber **aktivierten** Sprachen (Einstellungen `locale.default` /
+`locale.enabled`).
+
+## 31.7 Audit und Health
+
+Import, Edit, Review und Löschen werden **auditiert**. Das Health-Subsystem
+`localization` (Kapitel 20.2.1) meldet fehlende Englisch-Basis aktiver
+Komponenten, Versionsfehler und verwaiste temporäre Schreibdateien.
+
+## 31.8 Grundregel
+
+Texte werden ausschließlich über symbolische Schlüssel mit Englisch als Basis
+geführt; Sprachpakete sind versioniert an die Komponente gebunden, prüfbar
+(Status) und über die Sprachverwaltung unabhängig pflegbar — ohne die
+Komponente neu auszuliefern.
+
 ## Anhang A: Versionshistorie
 
 | **Version** | **Datum** | **Änderung** |
@@ -4227,6 +4347,7 @@ Diensten komponiert.
 | 6.28 | 04.06.2026 | Kapitel 20.8 Deployment- und Distributionsmodell ergänzt: Core als eigenständiges Container-Image getrennt von PostgreSQL (eigener Dienst), Sofort-Start per docker compose (Core/Web/DB/Worker/Mail), All-in-One nur für Demo/Eval. Konsistent mit Update-Scope (28.2), Backup (20.1), HA/Advisory-Lock (30.7). Entscheidung 180 ergänzt |
 | 6.29 | 07.06.2026 | Kapitel 20.1 Backup/Wiederherstellung in zwei Ebenen mit getrennter Zuständigkeit neu gefasst: **20.1.1 Infrastruktur-Backup/-Restore** (Empfehlung, Systemadministrator: Host-/Volume-Snapshots, PITR/Replikation, Off-Site, Scheduling, Aufbewahrung — außerhalb Fertura) und **20.1.2 Daten-Backup/-Restore als Systemfunktion des Core** (konsistente Sicherung von DB + persistenten Datei-Stores unter Lifecycle-Lock, prüfbar via Prüfsummen + Probe-Restore in Wegwerf-DB; CLI+GUI für Erstellen/Auflisten/Prüfen/Probe-Restore/Löschen; destruktive Daten-Wiederherstellung per CLI). Ersetzt die frühere Aussage „keine Systemfunktion". Entscheidung 181 ergänzt |
 | 6.30 | 07.06.2026 | Doku-Software-Abgleich nach Umsetzung: (a) **7. Administrationsbereich „Sprachverwaltung"** in 27.3.1 + Entscheidung 170 ergänzt (zuvor 6); (b) **API-Token tragen Scopes** (zusätzliche Einschränkung, nie erweiternd) in 27.16.3 + Entscheidung 162 korrigiert (zuvor „keine eigenen Scopes"); (c) **20.1.2 um den realen Backup-Funktionsumfang erweitert** (ZIP+Zeitstempel, Verifikation-vor-Abschluss, optionale AES-256-Verschlüsselung, Zeitplan/Retention nach Anzahl+Alter, append-only-Protokoll, Pre-Flight, Mail-Alarm, Download, Health-Subsystem); (d) **30.3.1**: Core **erzwingt** RLS für `is_scoped`-Module bei der Installation (Abbruch sonst). Hinweis: Mehrsprachigkeit/Locale-Verwaltung ist als eigener Subsystem implementiert, im Anforderungsdokument bislang nur als Technologie-Zeile geführt (eigene Kapitel-Ausarbeitung offen). |
+| 6.31 | 07.06.2026 | Doku-Software-Abgleich (Fortsetzung): (a) **Neues Kapitel 31 „Mehrsprachigkeit und Lokalisierung"** ausgearbeitet (Grundsatz/symbolische Schlüssel, Mitlieferung, Managed Locale Store mit ausfallsicherem Schreiben, Versions-Gate, Sprachverwaltungs-Admin-Bereich mit Status-Trio + verlustfreiem Editor, Laufzeit-Sprachwahl, Audit/Health). (b) Bestehende Kapitel um umgesetzte Mechanismen ergänzt: **20.2.1** Health-Subsysteme `localization` + `backup`; **20.3** Andock-Punkt für periodische Modul-Aufgaben (`core.collector.scheduled`); **24.9.2** Durchsetzung des Anker-Gültigkeitsfensters + gleitende Rotation; **26.9.2** Dead-Letter-Retry/Verwerfen-GUI; **28.14.2** automatischer Wiederherstellungspunkt auch bei Boot-Migrationen. |
 
 ## Anhang B: Entscheidungsprotokoll
 
