@@ -60,6 +60,11 @@ services:
       # Session-Speicher: 'database' (core.sessions) ist instanzuebergreifend
       # (Mehrinstanz-/HA-faehig) und ueberlebt Container-Recreates; 'php' = lokal.
       SESSION_DEFAULTS: "${SESSION_DEFAULTS:-database}"
+      # Deployment-Feature-Flags (Kap. 23.3): optionale Subsysteme je Installation
+      # abschalten (kleinere Angriffs-/Wartungsflaeche). Standard: alle aktiv.
+      # FEATURE_API: "false"            # externe API v1 (/api/v1) abschalten
+      # FEATURE_MARKETPLACE: "false"    # Marketplace-Client/-Sync abschalten
+      # FEATURE_BACKUP_SCHEDULER: "false" # automatische Backups abschalten
     depends_on:
       db:
         condition: service_healthy

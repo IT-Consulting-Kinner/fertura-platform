@@ -151,8 +151,12 @@ class Application extends BaseApplication implements AuthenticationServiceProvid
 
             // Externe API: Bearer-Token-Authentifizierung (nur /api/-Pfade);
             // setzt Identitaet + Scopes, sonst JSON 401. Nach der Session-Auth,
-            // damit die Token-Identitaet fuer API-Requests Vorrang hat.
-            ->add(new \App\Middleware\ApiAuthMiddleware())
+            // damit die Token-Identitaet fuer API-Requests Vorrang hat. Nur
+            // geladen, wenn die externe API aktiv ist (FEATURE_API); sonst
+            // No-op (leeres Array wird nicht eingereiht).
+            ->add(\App\Service\System\FeatureFlags::enabled('api')
+                ? new \App\Middleware\ApiAuthMiddleware()
+                : [])
 
             // Anzeigesprache pro Request setzen (i18n, E37) – nach der
             // AuthenticationMiddleware, damit user.locale verfuegbar ist.

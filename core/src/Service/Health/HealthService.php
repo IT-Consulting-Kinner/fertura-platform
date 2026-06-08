@@ -46,10 +46,11 @@ class HealthService
     /**
      * Voller Subsystem-Status (auth-/token-geschützt, Kap. 20.2.1).
      *
-     * @return array{status: string, subsystems: array<string, mixed>}
+     * @return array{status: string, subsystems: array<string, mixed>, features: array<string, bool>}
      */
     public function report(): array
     {
+        $features = \App\Service\System\FeatureFlags::all();
         $subsystems = [
             'database' => $this->checkDatabase(),
             'storage' => $this->checkStorage(),
@@ -58,7 +59,9 @@ class HealthService
             'modules' => $this->checkModules(),
             'outbox' => $this->checkOutbox(),
             'licenses' => $this->checkLicenses(),
-            'marketplace' => $this->checkMarketplace(),
+            // Abgeschaltete optionale Subsysteme nicht prüfen (kein Netz, kein
+            // falsches „degraded") – nur als deaktiviert ausweisen.
+            'marketplace' => $features['marketplace'] ? $this->checkMarketplace() : ['status' => 'up', 'detail' => 'deaktiviert'],
             'localization' => $this->checkLocalization(),
             'backup' => $this->checkBackup(),
             'module_contributions' => $this->collectModuleHealth(),
@@ -76,7 +79,7 @@ class HealthService
             }
         }
 
-        return ['status' => $status, 'subsystems' => $subsystems];
+        return ['status' => $status, 'subsystems' => $subsystems, 'features' => $features];
     }
 
     private function checkDatabase(): array

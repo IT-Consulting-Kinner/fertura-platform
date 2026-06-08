@@ -22,19 +22,27 @@ class MarketplaceController extends AdminController
         $baseUrl = (string)$settings->get('core', 'marketplace.base_url', '');
         $metadata = null;
         $error = null;
-        if ($baseUrl !== '') {
+        // Marketplace-Client per Deployment abschaltbar (FEATURE_MARKETPLACE);
+        // die Lizenzverwaltung dieses Bereichs bleibt davon unberührt.
+        $marketplaceEnabled = \App\Service\System\FeatureFlags::enabled('marketplace');
+        if ($marketplaceEnabled && $baseUrl !== '') {
             try {
                 $metadata = (new MarketplaceClient())->metadata();
             } catch (\Throwable $e) {
                 $error = $e->getMessage();
             }
         }
-        $this->set(compact('baseUrl', 'metadata', 'error'));
+        $this->set(compact('baseUrl', 'metadata', 'error', 'marketplaceEnabled'));
     }
 
     public function sync()
     {
         $this->request->allowMethod('post');
+        if (!\App\Service\System\FeatureFlags::enabled('marketplace')) {
+            $this->Flash->error(__('flash.marketplace.disabled'));
+
+            return $this->redirect(['action' => 'index']);
+        }
         try {
             $result = (new MarketplaceClient())->sync();
             $this->Flash->success(__(

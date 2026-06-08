@@ -34,6 +34,11 @@ class MarketplaceCommand extends Command
     public function execute(Arguments $args, ConsoleIo $io): int
     {
         if ($args->getArgument('operation') === 'sync') {
+            if (!\App\Service\System\FeatureFlags::enabled('marketplace')) {
+                $io->error('Marketplace-Client ist in diesem Deployment deaktiviert (FEATURE_MARKETPLACE).');
+
+                return static::CODE_ERROR;
+            }
             $r = (new MarketplaceClient())->sync();
             $io->success("Sync: {$r['revoked']} widerrufen, {$r['anchors']} Anker.");
 

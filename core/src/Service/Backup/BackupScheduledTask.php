@@ -29,6 +29,11 @@ class BackupScheduledTask implements ScheduledTaskInterface
 
     public function run(): void
     {
+        // Harter Deployment-Schalter: schaltet automatische Backups ganz ab
+        // (manuelles Backup bleibt über CLI/GUI verfügbar).
+        if (!\App\Service\System\FeatureFlags::enabled('backup_scheduler')) {
+            return;
+        }
         $settings = new SettingsManager();
         if (!(bool)$settings->get('core', 'backup.schedule.enabled', false)) {
             return; // Scheduler deaktiviert – kein Backup.

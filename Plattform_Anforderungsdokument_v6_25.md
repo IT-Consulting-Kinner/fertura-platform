@@ -4291,6 +4291,28 @@ nie in das produktive Core-Image eingebettet (Ausnahme: klar
 gekennzeichnete Demo-Images). Die Laufzeitumgebung wird aus getrennten
 Diensten komponiert.
 
+### 20.8.5 Optionale Subsysteme abschaltbar (Feature-Flags)
+
+Der Plattform-Core deckt bewusst eine breite, aber legitime Fläche ab
+(Identität, Module, Registry, Eventing, Observability, Updates, Backup,
+i18n). Damit je Installation **nur das Nötige** läuft (kleinere Angriffs-
+und Wartungsfläche), lassen sich **optionale Subsysteme pro Deployment
+über Umgebungsvariablen abschalten** (`FEATURE_<NAME>=false`):
+
+-   **`FEATURE_API`** — die externe API v1 (`/api/v1`, Bearer-Token). Aus:
+    keine `/api`-Routen, kein API-Auth-Middleware geladen.
+-   **`FEATURE_MARKETPLACE`** — der Marketplace-Client (ausgehende Sync-
+    Aufrufe). Aus: kein Sync über CLI/GUI; die **Lizenzverwaltung bleibt**
+    verfügbar (Lizenzdateien werden offline eingespielt).
+-   **`FEATURE_BACKUP_SCHEDULER`** — automatische (geplante) Backups. Aus:
+    kein Scheduler-Lauf; **manuelles** Backup/Restore bleibt verfügbar.
+
+Die Flags sind bewusst **env-basiert** (harter Betreiber-Schalter, nicht
+über eine kompromittierte Admin-Sitzung reaktivierbar); Standard ist
+**alle aktiv** (kompatibel). Der Zustand wird unter `/health` (`features`)
+ausgewiesen. Kernfunktionen (Identität, Datenmodell, Lifecycle, RLS,
+Observability-Grundlage) sind nicht abschaltbar.
+
 # 31. Mehrsprachigkeit und Lokalisierung
 
 Der Core, Module und Extensions sind mehrsprachig. Die Anzeigesprache ist
@@ -4433,6 +4455,7 @@ Komponente neu auszuliefern.
 | 6.30 | 07.06.2026 | Doku-Software-Abgleich nach Umsetzung: (a) **7. Administrationsbereich „Sprachverwaltung"** in 27.3.1 + Entscheidung 170 ergänzt (zuvor 6); (b) **API-Token tragen Scopes** (zusätzliche Einschränkung, nie erweiternd) in 27.16.3 + Entscheidung 162 korrigiert (zuvor „keine eigenen Scopes"); (c) **20.1.2 um den realen Backup-Funktionsumfang erweitert** (ZIP+Zeitstempel, Verifikation-vor-Abschluss, optionale AES-256-Verschlüsselung, Zeitplan/Retention nach Anzahl+Alter, append-only-Protokoll, Pre-Flight, Mail-Alarm, Download, Health-Subsystem); (d) **30.3.1**: Core **erzwingt** RLS für `is_scoped`-Module bei der Installation (Abbruch sonst). Hinweis: Mehrsprachigkeit/Locale-Verwaltung ist als eigener Subsystem implementiert, im Anforderungsdokument bislang nur als Technologie-Zeile geführt (eigene Kapitel-Ausarbeitung offen). |
 | 6.31 | 07.06.2026 | Doku-Software-Abgleich (Fortsetzung): (a) **Neues Kapitel 31 „Mehrsprachigkeit und Lokalisierung"** ausgearbeitet (Grundsatz/symbolische Schlüssel, Mitlieferung, Managed Locale Store mit ausfallsicherem Schreiben, Versions-Gate, Sprachverwaltungs-Admin-Bereich mit Status-Trio + verlustfreiem Editor, Laufzeit-Sprachwahl, Audit/Health). (b) Bestehende Kapitel um umgesetzte Mechanismen ergänzt: **20.2.1** Health-Subsysteme `localization` + `backup`; **20.3** Andock-Punkt für periodische Modul-Aufgaben (`core.collector.scheduled`); **24.9.2** Durchsetzung des Anker-Gültigkeitsfensters + gleitende Rotation; **26.9.2** Dead-Letter-Retry/Verwerfen-GUI; **28.14.2** automatischer Wiederherstellungspunkt auch bei Boot-Migrationen. |
 | 6.32 | 08.06.2026 | (a) **Mehrere Worker-Instanzen** explizit unterstützt (20.3): periodische Aufgaben werden je Aufgabe über einen PostgreSQL-Advisory-Lock serialisiert (kein Doppellauf bei >1 Worker); Outbox bleibt über SKIP LOCKED kollisionsfrei. Einzelinstanz = Standard. (b) **Backup-Verschlüsselung DR-tauglich** (20.1.2): Passwort aus Env/Secret (`BACKUP_PASSWORD_FILE`/`BACKUP_PASSWORD`) mit Vorrang vor dem DB-Setting — out-of-band, damit ein verschlüsseltes Backup nicht über das im Dump enthaltene Passwort entschlüsselt werden müsste (Henne-Ei). |
+| 6.38 | 08.06.2026 | **Deployment-Feature-Flags für optionale Subsysteme (Kap. 20.8.5 neu)**: Optionale Subsysteme lassen sich je Installation per Umgebungsvariable abschalten — `FEATURE_API` (externe API v1: keine `/api`-Routen + kein API-Middleware), `FEATURE_MARKETPLACE` (Marketplace-Client/-Sync; Lizenzverwaltung bleibt), `FEATURE_BACKUP_SCHEDULER` (automatische Backups; manuelles Backup bleibt). Bewusst env-basiert (harter Betreiber-Schalter), Standard alle aktiv; Zustand unter `/health` (`features`). Setzt den im internen Review benannten Hebel zur Reduktion der Angriffs-/Wartungsfläche um (Kern-Subsysteme bleiben nicht abschaltbar). |
 | 6.37 | 08.06.2026 | **Instanzübergreifender Session-Speicher (HA-Voraussetzung, Kap. 30.7.1 neu)**: DB-gestützte Sessions (`core.sessions`, CakePHP `DatabaseSession`, eigene `SessionsTable`) als instanzübergreifender Speicher, aktivierbar über `SESSION_DEFAULTS=database` (Referenz-Compose: an). Schließt die zweite (von zwei) Voraussetzung für einen Mehrinstanz-Betrieb der Web-Schicht — die erste (mehrknotenfähiger Scheduler-Lock) war bereits erfüllt. Sessions überleben zudem Container-Recreates. Einzelinstanz bleibt Standard; HA ist ein bewusster Betreiber-Schritt (zusätzlich geteilte Volumes + Lastverteiler = Infrastruktur). |
 | 6.36 | 08.06.2026 | **Out-of-Process-Isolation, Phase 2 — Finalisierung** (Kap. 23.16.2 erweitert): Die Isolationsgrenze ist jetzt **automatisch und selbstverwaltet**. Pro isoliertem Modul legt der Core automatisch eine **eigene, eingeschränkte DB-Rolle** (verschlüsseltes Passwort) an; die **Modul-Migrationen laufen unter dieser Rolle** statt als Superuser (schließt das Rest-Risiko „Install-Migration mit Superuser-Rechten"), mit anschließend **erzwungener RLS** (`FORCE ROW LEVEL SECURITY`). Ein **Supervisor** startet/stoppt/heilt die Hosts (Aktivieren startet, Deaktivieren/Löschen stoppt + entfernt die Rolle; der Worker überwacht periodisch). **Geltungsbereich bewusst eng:** isolierte Module dürfen nur Service-Contracts anbieten; nicht-RPC-fähige Erweiterungspunkte werden **abgelehnt** statt still in-process ausgeführt. CLI `module install --isolation`, `module isolate`, `module host`. Verifiziert per E2E-Integrationstest. |
 | 6.35 | 08.06.2026 | **Betriebs-Härtung (drei Restposten)**: (a) **Restore-Cutover** (20.1.2/28.11): Die destruktive Daten-Wiederherstellung schaltet für ihre Dauer automatisch den **Wartungsmodus (HTTP 503)** über ein **datei-basiertes Flag**, das den DB-Restore übersteht (ein DB-Setting würde mitten im Vorgang überschrieben), und gibt ihn danach wieder frei. (b) **Wiederherstellungspunkte** (28.14.2) liegen auf dem **persistenten Backup-Volume** (`backups/recovery/`) statt im flüchtigen `tmp/` und werden nach Anzahl aufbewahrt (`RECOVERY_KEEP`). (c) Reversibilität: die down-Migration der Backup-Log-Härtung bereinigt vor dem Zurücksetzen die neu hinzugekommene `download`-Operation. Keine Spezifikationsänderung; Umsetzungs-/Reifegrad-Härtung. |

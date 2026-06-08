@@ -70,13 +70,16 @@ return function (RouteBuilder $routes): void {
         });
 
         // Externe API v1 (Kap. 29): Bearer-Token (ApiAuthMiddleware), JSON.
-        $builder->prefix('Api', function (RouteBuilder $api): void {
-            $api->prefix('V1', function (RouteBuilder $v1): void {
-                $v1->connect('/health', ['controller' => 'Health', 'action' => 'index']);
-                $v1->connect('/me', ['controller' => 'Me', 'action' => 'index']);
-                $v1->connect('/modules', ['controller' => 'Modules', 'action' => 'index']);
+        // Per Deployment abschaltbar (FEATURE_API=false) -> keine /api-Routen.
+        if (\App\Service\System\FeatureFlags::enabled('api')) {
+            $builder->prefix('Api', function (RouteBuilder $api): void {
+                $api->prefix('V1', function (RouteBuilder $v1): void {
+                    $v1->connect('/health', ['controller' => 'Health', 'action' => 'index']);
+                    $v1->connect('/me', ['controller' => 'Me', 'action' => 'index']);
+                    $v1->connect('/modules', ['controller' => 'Modules', 'action' => 'index']);
+                });
             });
-        });
+        }
 
         $builder->connect('/pages/*', 'Pages::display');
 
