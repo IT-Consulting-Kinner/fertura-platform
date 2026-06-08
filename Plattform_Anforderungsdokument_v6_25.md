@@ -3962,7 +3962,10 @@ identifizierbar). Weitere Eigenschaften:
 -   **Verifikation vor Abschluss:** Integritätsprüfung immer, optional zusätzlich
     ein Probe-Restore; nur verifizierte Sicherungen gelten als gültig.
 -   **Verschlüsselung (optional, Segregation of Duty):** AES-256 des
-    Archivinhalts über ein Secret-Passwort — ohne Passwort nichts lesbar.
+    Archivinhalts über ein Secret-Passwort — ohne Passwort nichts lesbar. Für
+    **Desaster-Recovery** muss das Passwort **out-of-band** bereitgestellt
+    werden (Umgebungsvariable bzw. Secret-Datei), **nicht** über ein DB-Setting:
+    Letzteres läge im Dump und wäre auf einem frischen System nicht verfügbar.
 -   **Planung & Aufbewahrung:** konfigurierbarer Zeitplan (Frequenz) + Retention
     nach Anzahl **und** Alter; konfigurierbarer Ablageort (Linux-/Windows-Pfad).
 -   **Protokoll:** unveränderliches (append-only) Operationsprotokoll über
@@ -4073,6 +4076,15 @@ Heartbeat (erscheint damit in der Worker-Aktualität inkl. Überfälligkeitswarn
 und hält den Fehler eines Jobs vom Rest fern. Die fachliche Logik bleibt im
 Modul; der Core stellt nur die Ausführungs- und Überwachungsinfrastruktur bereit
 (Alternative zu einem separaten Modul-Cron).
+
+**Mehrere Worker-Instanzen.** Der Hintergrundprozess (Outbox-Verarbeitung +
+Scheduler) darf mehrfach betrieben werden. Die Event-Verarbeitung ist über
+`FOR UPDATE SKIP LOCKED` kollisionsfrei (Kapitel 26.9.2); die periodischen
+Aufgaben werden je Aufgabe über einen **PostgreSQL-Advisory-Lock** serialisiert,
+sodass auch bei mehreren Worker-Instanzen **keine** Aufgabe doppelt läuft (kein
+doppeltes geplantes Backup o.ä.). Einzelinstanz bleibt der Standard; mehrere
+Instanzen dienen Durchsatz/Resilienz des Async-Tiers (unabhängig von der
+HA-Frage des Web-Tiers).
 
 ## 20.4 E-Mail-Betriebsüberwachung (Muss: Logging und Statusanzeige / Empfehlung: aktives Monitoring)
 
@@ -4348,6 +4360,7 @@ Komponente neu auszuliefern.
 | 6.29 | 07.06.2026 | Kapitel 20.1 Backup/Wiederherstellung in zwei Ebenen mit getrennter Zuständigkeit neu gefasst: **20.1.1 Infrastruktur-Backup/-Restore** (Empfehlung, Systemadministrator: Host-/Volume-Snapshots, PITR/Replikation, Off-Site, Scheduling, Aufbewahrung — außerhalb Fertura) und **20.1.2 Daten-Backup/-Restore als Systemfunktion des Core** (konsistente Sicherung von DB + persistenten Datei-Stores unter Lifecycle-Lock, prüfbar via Prüfsummen + Probe-Restore in Wegwerf-DB; CLI+GUI für Erstellen/Auflisten/Prüfen/Probe-Restore/Löschen; destruktive Daten-Wiederherstellung per CLI). Ersetzt die frühere Aussage „keine Systemfunktion". Entscheidung 181 ergänzt |
 | 6.30 | 07.06.2026 | Doku-Software-Abgleich nach Umsetzung: (a) **7. Administrationsbereich „Sprachverwaltung"** in 27.3.1 + Entscheidung 170 ergänzt (zuvor 6); (b) **API-Token tragen Scopes** (zusätzliche Einschränkung, nie erweiternd) in 27.16.3 + Entscheidung 162 korrigiert (zuvor „keine eigenen Scopes"); (c) **20.1.2 um den realen Backup-Funktionsumfang erweitert** (ZIP+Zeitstempel, Verifikation-vor-Abschluss, optionale AES-256-Verschlüsselung, Zeitplan/Retention nach Anzahl+Alter, append-only-Protokoll, Pre-Flight, Mail-Alarm, Download, Health-Subsystem); (d) **30.3.1**: Core **erzwingt** RLS für `is_scoped`-Module bei der Installation (Abbruch sonst). Hinweis: Mehrsprachigkeit/Locale-Verwaltung ist als eigener Subsystem implementiert, im Anforderungsdokument bislang nur als Technologie-Zeile geführt (eigene Kapitel-Ausarbeitung offen). |
 | 6.31 | 07.06.2026 | Doku-Software-Abgleich (Fortsetzung): (a) **Neues Kapitel 31 „Mehrsprachigkeit und Lokalisierung"** ausgearbeitet (Grundsatz/symbolische Schlüssel, Mitlieferung, Managed Locale Store mit ausfallsicherem Schreiben, Versions-Gate, Sprachverwaltungs-Admin-Bereich mit Status-Trio + verlustfreiem Editor, Laufzeit-Sprachwahl, Audit/Health). (b) Bestehende Kapitel um umgesetzte Mechanismen ergänzt: **20.2.1** Health-Subsysteme `localization` + `backup`; **20.3** Andock-Punkt für periodische Modul-Aufgaben (`core.collector.scheduled`); **24.9.2** Durchsetzung des Anker-Gültigkeitsfensters + gleitende Rotation; **26.9.2** Dead-Letter-Retry/Verwerfen-GUI; **28.14.2** automatischer Wiederherstellungspunkt auch bei Boot-Migrationen. |
+| 6.32 | 08.06.2026 | (a) **Mehrere Worker-Instanzen** explizit unterstützt (20.3): periodische Aufgaben werden je Aufgabe über einen PostgreSQL-Advisory-Lock serialisiert (kein Doppellauf bei >1 Worker); Outbox bleibt über SKIP LOCKED kollisionsfrei. Einzelinstanz = Standard. (b) **Backup-Verschlüsselung DR-tauglich** (20.1.2): Passwort aus Env/Secret (`BACKUP_PASSWORD_FILE`/`BACKUP_PASSWORD`) mit Vorrang vor dem DB-Setting — out-of-band, damit ein verschlüsseltes Backup nicht über das im Dump enthaltene Passwort entschlüsselt werden müsste (Henne-Ei). |
 
 ## Anhang B: Entscheidungsprotokoll
 

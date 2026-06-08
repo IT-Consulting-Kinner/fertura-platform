@@ -66,13 +66,38 @@ class BackupService
         return $this->base;
     }
 
+    /** Ob Backups verschlüsselt werden (Passwort aus Env/Secret/DB-Setting gesetzt). */
+    public function encryptionEnabled(): bool
+    {
+        return $this->password() !== '';
+    }
+
     private function conn()
     {
         return ConnectionManager::get('default');
     }
 
+    /**
+     * Backup-Passwort. Präzedenz für **Desaster-Recovery-Tauglichkeit**:
+     *   1. Secret-Datei `BACKUP_PASSWORD_FILE` (out-of-band, nicht im Backup)
+     *   2. Umgebungsvariable `BACKUP_PASSWORD`
+     *   3. DB-Setting `backup.password` (Komfort-Fallback)
+     *
+     * **Wichtig:** Das DB-Setting liegt selbst im Datenbank-Dump — ein damit
+     * verschlüsseltes Backup ließe sich auf einem frischen System nicht
+     * entschlüsseln (Henne-Ei). Für DR muss das Passwort daher über
+     * Env/Secret (1./2.) bereitgestellt werden, nicht über das DB-Setting.
+     */
     private function password(): string
     {
+        $file = (string)\Cake\Core\env('BACKUP_PASSWORD_FILE');
+        if ($file !== '' && is_file($file)) {
+            return trim((string)file_get_contents($file));
+        }
+        $env = (string)\Cake\Core\env('BACKUP_PASSWORD');
+        if ($env !== '') {
+            return $env;
+        }
         try {
             return (string)(new SettingsManager())->get('core', 'backup.password', '');
         } catch (\Throwable) {

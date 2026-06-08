@@ -27,13 +27,21 @@ Dateien passen also zueinander. Je Artefakt wird ein **SHA-256** abgelegt
 
 ## Schutz, Verifikation & Protokoll (E56)
 
-- **Verschlüsselung (Segregation of Duty):** Ist `backup.password` gesetzt, wird
-  der **Archivinhalt AES-256-verschlüsselt** (DB-Dump, Stores, Manifest). Ohne
-  Passwort ist nichts lesbar. Das Passwort ist ein **Secret-Setting** (nie im
-  Klartext angezeigt); ohne Passwort warnt die GUI. **Wichtig:** Geht das
-  Passwort verloren, sind die Backups unwiederbringlich — Passwort **getrennt**
-  vom Backup verwahren (idealerweise ein anderer Verantwortlicher als der
-  System-Admin → echte SoD). Restore: `--password` überschreibt das Setting.
+- **Verschlüsselung (Segregation of Duty + Desaster-Recovery):** Ist ein
+  Passwort gesetzt, wird der **Archivinhalt AES-256-verschlüsselt** (DB-Dump,
+  Stores, Manifest). Ohne Passwort ist nichts lesbar. **Quelle des Passworts**
+  (Präzedenz):
+  1. Secret-Datei `BACKUP_PASSWORD_FILE` (Pfad),
+  2. Umgebungsvariable `BACKUP_PASSWORD`,
+  3. DB-Setting `backup.password` (Komfort-Fallback, Secret, nie im Klartext).
+
+  **Für Desaster-Recovery zwingend Env/Secret (1./2.), nicht das DB-Setting:**
+  Das DB-Setting liegt **im Datenbank-Dump** — ein damit verschlüsseltes Backup
+  ließe sich auf einem frischen System **nicht** entschlüsseln (Henne-Ei). Das
+  Passwort muss **out-of-band** und **getrennt vom Backup** verwahrt werden
+  (idealerweise bei einem anderen Verantwortlichen als dem System-Admin → echte
+  SoD). **Passwortverlust = Datenverlust.** Restore: `--password` überschreibt
+  alles.
 - **Verifikation vor Abschluss:** Nach dem Schreiben prüft der Core **immer** die
   Integrität (Prüfsummen) und — bei `backup.verify_on_create=true` (Default) —
   zusätzlich einen **Probe-Restore in eine Scratch-DB**. Schlägt etwas fehl, wird

@@ -34,7 +34,7 @@ class BackupController extends AdminController
         $this->set('scheduleHours', (int)$settings->get('core', 'backup.schedule.interval_hours', 24));
         $this->set('retention', (int)$settings->get('core', 'backup.retention', 14));
         $this->set('retentionDays', (int)$settings->get('core', 'backup.retention_days', 0));
-        $this->set('encryptionOn', trim((string)$settings->get('core', 'backup.password', '')) !== '');
+        $this->set('encryptionOn', $svc->encryptionEnabled());
     }
 
     public function create()

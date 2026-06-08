@@ -17,6 +17,11 @@ use Throwable;
  * anhand des letzten Laufs (Heartbeat `sched:<key>`), ob das Intervall abgelaufen
  * ist, und führt sie fehlerisoliert aus. Die Aufgaben erscheinen dadurch auch in
  * der Worker-Health-Übersicht.
+ *
+ * **Mehrinstanz-sicher:** Jede Aufgabe wird über einen PostgreSQL-Advisory-Lock
+ * je Aufgaben-Schlüssel serialisiert — laufen mehrere Worker-Instanzen, führt
+ * trotzdem nur **eine** dieselbe Aufgabe gleichzeitig aus (kein Doppellauf, z. B.
+ * doppelte geplante Backups). Der Fälligkeits-Check liegt **innerhalb** des Locks.
  */
 class ScheduledTaskRunner
 {
@@ -65,17 +70,29 @@ class ScheduledTaskRunner
                 continue;
             }
             $hbKey = 'sched:' . $task->key();
-            $age = $this->ageSeconds($hbKey);
-            if ($age !== null && $age < $task->intervalSeconds()) {
-                continue; // noch nicht fällig
+
+            // Mehrinstanz-Sicherheit: nur ein Worker bearbeitet eine Aufgabe
+            // gleichzeitig. Bekommt ein anderer Worker den Lock nicht, überspringt
+            // er die Aufgabe. Fälligkeits-Check liegt im Lock (kein Race).
+            $lockKey = $this->lockKey($hbKey);
+            if (!$this->tryLock($lockKey)) {
+                continue;
             }
             try {
-                $task->run();
-                WorkerHeartbeat::beat($hbKey, 'ok', ['interval_seconds' => $task->intervalSeconds()]);
-                $ran[] = $task->key();
-            } catch (Throwable $e) {
-                WorkerHeartbeat::beat($hbKey, 'error', ['interval_seconds' => $task->intervalSeconds(), 'error' => $e->getMessage()]);
-                Log::error('Scheduled task failed: ' . $task->key(), ['module' => $task->key(), 'exception' => $e->getMessage()]);
+                $age = $this->ageSeconds($hbKey);
+                if ($age !== null && $age < $task->intervalSeconds()) {
+                    continue; // noch nicht fällig
+                }
+                try {
+                    $task->run();
+                    WorkerHeartbeat::beat($hbKey, 'ok', ['interval_seconds' => $task->intervalSeconds()]);
+                    $ran[] = $task->key();
+                } catch (Throwable $e) {
+                    WorkerHeartbeat::beat($hbKey, 'error', ['interval_seconds' => $task->intervalSeconds(), 'error' => $e->getMessage()]);
+                    Log::error('Scheduled task failed: ' . $task->key(), ['module' => $task->key(), 'exception' => $e->getMessage()]);
+                }
+            } finally {
+                $this->unlock($lockKey);
             }
         }
 
@@ -90,5 +107,24 @@ class ScheduledTaskRunner
         )->fetch('assoc');
 
         return $row === false ? null : (int)$row['age'];
+    }
+
+    private function lockKey(string $s): int
+    {
+        $row = ConnectionManager::get('default')->execute('SELECT hashtext(:p)::bigint AS k', ['p' => $s])->fetch('assoc');
+
+        return (int)$row['k'];
+    }
+
+    private function tryLock(int $key): bool
+    {
+        $row = ConnectionManager::get('default')->execute('SELECT pg_try_advisory_lock(:k) AS ok', ['k' => $key])->fetch('assoc');
+
+        return $row['ok'] === true || $row['ok'] === 't';
+    }
+
+    private function unlock(int $key): void
+    {
+        ConnectionManager::get('default')->execute('SELECT pg_advisory_unlock(:k)', ['k' => $key]);
     }
 }

@@ -49,6 +49,10 @@ services:
       EMAIL_TRANSPORT_DEFAULT_URL: "${EMAIL_TRANSPORT_DEFAULT_URL:-smtp://mail:1025}"
       DEBUG: "true"
       ROLE: core
+      # Backup-Verschluesselung: Passwort OUT-OF-BAND (nicht im DB-Dump), damit
+      # Desaster-Recovery moeglich ist. Vorrang: BACKUP_PASSWORD_FILE > BACKUP_PASSWORD.
+      # BACKUP_PASSWORD: "${BACKUP_PASSWORD:-}"
+      # BACKUP_PASSWORD_FILE: /run/secrets/backup_password
       SECURITY_SALT: "${SECURITY_SALT:-dev-salt-change-me-0123456789abcdef0123456789abcdef}"
       APP_ENCRYPTION_KEY: "${APP_ENCRYPTION_KEY:-dev-encryption-key-change-me-fedcba9876543210}"
     depends_on:
@@ -81,6 +85,11 @@ services:
       ROLE: worker
       SECURITY_SALT: "${SECURITY_SALT:-dev-salt-change-me-0123456789abcdef0123456789abcdef}"
       APP_ENCRYPTION_KEY: "${APP_ENCRYPTION_KEY:-dev-encryption-key-change-me-fedcba9876543210}"
+      # Geplante (verschluesselte) Backups laufen im Worker -> selbes Passwort wie core.
+      # BACKUP_PASSWORD: "${BACKUP_PASSWORD:-}"
+      # BACKUP_PASSWORD_FILE: /run/secrets/backup_password
+      # Mehrere Worker-Instanzen sind moeglich (Outbox via SKIP LOCKED, Scheduler
+      # via Advisory-Lock serialisiert) -> docker compose up -d --scale worker=N.
     depends_on:
       db:
         condition: service_healthy
