@@ -73,16 +73,27 @@ class ApplicationTest extends TestCase
     public function testMiddleware()
     {
         $app = new Application(dirname(__DIR__, 2) . '/config');
-        $middleware = new MiddlewareQueue();
+        $queue = $app->middleware(new MiddlewareQueue());
 
-        $middleware = $app->middleware($middleware);
+        $classes = [];
+        for ($i = 0, $n = count($queue); $i < $n; $i++) {
+            $queue->seek($i);
+            $classes[] = $queue->current()::class;
+        }
 
-        $this->assertInstanceOf(ErrorHandlerMiddleware::class, $middleware->current());
-        $middleware->seek(1);
-        $this->assertInstanceOf(HostHeaderMiddleware::class, $middleware->current());
-        $middleware->seek(2);
-        $this->assertInstanceOf(AssetMiddleware::class, $middleware->current());
-        $middleware->seek(3);
-        $this->assertInstanceOf(RoutingMiddleware::class, $middleware->current());
+        // LogContext ist outermost, damit auch ErrorHandler-Logs den Kontext tragen.
+        $this->assertSame(\App\Middleware\LogContextMiddleware::class, $classes[0]);
+        $this->assertContains(ErrorHandlerMiddleware::class, $classes);
+        $this->assertContains(RoutingMiddleware::class, $classes);
+
+        $idx = static fn (string $c): int|false => array_search($c, $classes, true);
+        $auth = $idx(\Authentication\Middleware\AuthenticationMiddleware::class);
+        $api = $idx(\App\Middleware\ApiAuthMiddleware::class);
+        $rls = $idx(\App\Middleware\TransactionRlsMiddleware::class);
+        $this->assertNotFalse($auth);
+        // API-Token-Auth nach der Session-Auth (Token-Identität hat Vorrang).
+        $this->assertGreaterThan($auth, $api);
+        // RLS-Transaktion (SET LOCAL) nach der Authentifizierung.
+        $this->assertGreaterThan($auth, $rls);
     }
 }

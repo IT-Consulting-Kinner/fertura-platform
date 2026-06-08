@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  tests:
+    name: PHPUnit (PostgreSQL)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: fertura
+          POSTGRES_PASSWORD: fertura
+          POSTGRES_DB: fertura_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fertura"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 15
+
+    env:
+      # Test-DB wird vom Migrator (tests/bootstrap.php) aus den Migrationen gebaut.
+      DATABASE_TEST_URL: "postgres://fertura:fertura@127.0.0.1/fertura_test?encoding=utf8"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: PHP einrichten
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: intl, pdo_pgsql, zip, mbstring, ctype
+          coverage: none
+
+      - name: Composer-Cache
+        uses: actions/cache@v4
+        with:
+          path: core/vendor
+          key: composer-${{ hashFiles('core/composer.lock') }}
+
+      - name: Abhängigkeiten installieren
+        working-directory: core
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Tests ausführen
+        working-directory: core
+        run: vendor/bin/phpunit

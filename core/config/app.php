@@ -368,6 +368,10 @@ return [
             // setSchema, behaelt also core+public fuer Laufzeit & Migrationen.
             'schema' => 'core',
             'init' => ['SET search_path TO core, public'],
+            // Ziel-Test-DB: per DATABASE_TEST_URL überschreibbar; Default = eigene
+            // Datenbank `fertura_test` als Superuser (Migrator legt Schema/
+            // Extensions/Trigger an). In CI/Prod via Env setzen.
+            'url' => env('DATABASE_TEST_URL', 'postgres://fertura:fertura@db/fertura_test?encoding=utf8'),
         ],
     ],
 

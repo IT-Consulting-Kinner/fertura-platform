@@ -53,6 +53,8 @@ services:
       # Desaster-Recovery moeglich ist. Vorrang: BACKUP_PASSWORD_FILE > BACKUP_PASSWORD.
       # BACKUP_PASSWORD: "${BACKUP_PASSWORD:-}"
       # BACKUP_PASSWORD_FILE: /run/secrets/backup_password
+      # Test-DB fuer `vendor/bin/phpunit` (eigene DB, vom Migrator gebaut).
+      DATABASE_TEST_URL: "${DATABASE_TEST_URL:-postgres://${POSTGRES_USER:-fertura}:${POSTGRES_PASSWORD:-fertura}@db/fertura_test?encoding=utf8}"
       SECURITY_SALT: "${SECURITY_SALT:-dev-salt-change-me-0123456789abcdef0123456789abcdef}"
       APP_ENCRYPTION_KEY: "${APP_ENCRYPTION_KEY:-dev-encryption-key-change-me-fedcba9876543210}"
     depends_on:
