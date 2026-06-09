@@ -87,6 +87,17 @@ return function (RouteBuilder $routes): void {
                     $v1->connect('/health', ['controller' => 'Health', 'action' => 'index']);
                     $v1->connect('/me', ['controller' => 'Me', 'action' => 'index']);
                     $v1->connect('/modules', ['controller' => 'Modules', 'action' => 'index']);
+                    // OpenAPI-Spezifikation (P07).
+                    $v1->connect('/openapi.json', ['controller' => 'OpenApi', 'action' => 'index']);
+                    // Modul-registrierte Endpunkte (P07): /api/v1/m/<key>[/<pfad>].
+                    $v1->connect('/m/{moduleKey}', ['controller' => 'Module', 'action' => 'dispatch'])
+                        ->setPass(['moduleKey'])
+                        ->setPatterns(['moduleKey' => '[a-z0-9_]+'])
+                        ->setMethods(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
+                    $v1->connect('/m/{moduleKey}/{path}', ['controller' => 'Module', 'action' => 'dispatch'])
+                        ->setPass(['moduleKey', 'path'])
+                        ->setPatterns(['moduleKey' => '[a-z0-9_]+', 'path' => '.*'])
+                        ->setMethods(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
                 });
             });
         }

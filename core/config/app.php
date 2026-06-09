@@ -161,6 +161,18 @@ return [
             'duration' => '+5 minutes',
             'url' => env('CACHE_APP_URL', null),
         ],
+
+        /*
+         * Rate-Limit-Zähler (P07): kurzlebige Fenster-Buckets (Minute) für die
+         * externe API. Engine via CACHE_APP_URL (Redis empfohlen für atomare
+         * INCR im Mehrinstanzbetrieb).
+         */
+        '_app_ratelimit_' => [
+            'className' => FileEngine::class,
+            'prefix' => 'fertura_rl_',
+            'duration' => '+2 minutes',
+            'url' => env('CACHE_APP_URL', null),
+        ],
     ],
 
     /*

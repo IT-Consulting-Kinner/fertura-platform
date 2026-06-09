@@ -162,6 +162,12 @@ class Application extends BaseApplication implements AuthenticationServiceProvid
                 ? new \App\Middleware\ApiAuthMiddleware()
                 : [])
 
+            // API-Rate-Limiting (P07): nach der Token-Auth, damit pro Token
+            // begrenzt werden kann (sonst pro IP). Nur bei aktiver API.
+            ->add(\App\Service\System\FeatureFlags::enabled('api')
+                ? new \App\Middleware\ApiRateLimitMiddleware()
+                : [])
+
             // Anzeigesprache pro Request setzen (i18n, E37) – nach der
             // AuthenticationMiddleware, damit user.locale verfuegbar ist.
             ->add(new \App\Middleware\LocaleMiddleware())

@@ -1,0 +1,34 @@
+<?php
+declare(strict_types=1);
+
+namespace App\Test\TestCase\Service\Api;
+
+use App\Service\Api\ApiRouteRegistry;
+use Cake\TestSuite\TestCase;
+
+/**
+ * Test des Pfad-Matchings für Modul-API-Routen (P07).
+ */
+class ApiRouteRegistryTest extends TestCase
+{
+    public function testStaticPathMatches(): void
+    {
+        $this->assertSame([], ApiRouteRegistry::matchPath('/things', '/things'));
+        $this->assertNull(ApiRouteRegistry::matchPath('/things', '/things/1'));
+    }
+
+    public function testParameterExtraction(): void
+    {
+        $params = ApiRouteRegistry::matchPath('/things/{id}', '/things/42');
+        $this->assertSame(['id' => '42'], $params);
+
+        $multi = ApiRouteRegistry::matchPath('/orgs/{org}/items/{item}', '/orgs/acme/items/7');
+        $this->assertSame(['org' => 'acme', 'item' => '7'], $multi);
+    }
+
+    public function testNonMatchingReturnsNull(): void
+    {
+        $this->assertNull(ApiRouteRegistry::matchPath('/things/{id}', '/things/1/extra'));
+        $this->assertNull(ApiRouteRegistry::matchPath('/a/{x}', '/b/1'));
+    }
+}

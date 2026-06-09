@@ -74,6 +74,35 @@ class CacheStore
         }
     }
 
+    /**
+     * Erhöht einen Zähler atomar (sofern die Engine es unterstützt) und legt ihn
+     * bei Bedarf an. Gibt den neuen Wert zurück; bei nicht verfügbarem Cache 0
+     * (fail-open, z. B. für Rate-Limiting → Verfügbarkeit vor strikter Grenze).
+     */
+    public function increment(string $key, int $offset = 1): int
+    {
+        $k = $this->key($key);
+        // Bevorzugt atomar (Redis/APCu). FileEngine kann nicht atomar erhöhen
+        // (wirft) -> Fallback per read-modify-write (best-effort, nicht atomar;
+        // für Rate-Limiting ausreichend, Redis im Mehrinstanzbetrieb empfohlen).
+        try {
+            $n = @Cache::increment($k, $offset, $this->config);
+            if (is_int($n)) {
+                return $n;
+            }
+        } catch (Throwable) {
+            // Engine ohne atomares increment -> Fallback unten.
+        }
+        try {
+            $new = (int)(@Cache::read($k, $this->config) ?: 0) + $offset;
+            @Cache::write($k, $new, $this->config);
+
+            return $new;
+        } catch (Throwable) {
+            return 0; // Cache aus -> fail-open
+        }
+    }
+
     /** Normalisiert Schlüssel auf cache-sichere Zeichen. */
     private function key(string $key): string
     {

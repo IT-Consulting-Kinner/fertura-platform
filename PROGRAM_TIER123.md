@@ -46,7 +46,8 @@ Tests, Doku (Anforderungsdokument-Kapitel + Changelog) und eigenem Commit/Push
   onelogin/php-saml; CLI `sso`; Admin-GUI später._ First-Party-Provider am `core.auth.provider`-Slot
   (Authorization-Code + PKCE), JWT/JWKS-Validierung, Account-Linking,
   Break-Glass-Fallback. SAML als spätere Folgestufe vermerkt.
-- [ ] **P07 — Plattform-API-Reife.** OpenAPI-Generierung, **Rate-Limiting** (über
+- [x] **P07 — Plattform-API-Reife** (E82). Rate-Limiting (Cache/P02), OpenAPI-3.1-
+  Generierung, Modul-Endpunkt-Registrierung via `core.api.route`. OpenAPI-Generierung, **Rate-Limiting** (über
   P02), Modul-Endpunkt-Registrierung (Contract `core.api.route`), API-Versionierung.
 
 ### Phase C — Nutzer-Interaktion
@@ -92,7 +93,8 @@ Abgeschlossene Punkte werden oben abgehakt und hier mit E-Nummer + Commit notier
 | P04 Metrics + Tracing | E79 | (folgt) | fertig — 115 Tests grün, /metrics live |
 
 | P05 Outbound-Webhooks | E80 | 2eb291d | fertig — 119 Tests grün |
-| P06 OIDC + SAML SSO | E81 | (folgt) | fertig — 130 Tests grün, Login-Buttons live |
+| P06 OIDC + SAML SSO | E81 | fc8cf76 | fertig — 130 Tests grün, Login-Buttons live |
+| P07 API-Reife | E82 | (folgt) | fertig — 136 Tests grün, /openapi.json + Rate-Limit live |
 
-**Phase A abgeschlossen** (P01–P04). Phase B läuft: P05 fertig, als Nächstes
-P06 OIDC, P07 API-Reife.
+**Phase A abgeschlossen** (P01–P04). **Phase B abgeschlossen** (P05–P07).
+Nächster Halt: Zwischenstand, dann Phase C (P08 SSE, P09 Notifications).

@@ -94,6 +94,9 @@ class SettingsCatalog
             // Hostnamen/IP-Literale, die trotz privater Auflösung erlaubt sind (interne Integrationen).
             'http.egress.allowlist' => ['type' => 'json', 'default' => []],
             'http.egress.user_agent' => ['type' => 'string', 'default' => 'Fertura/1.0 (+egress)'],
+            // API-Rate-Limiting (P07): pro Token (bzw. IP) und Minute.
+            'api.rate_limit.enabled' => ['type' => 'bool', 'default' => true],
+            'api.rate_limit.per_minute' => ['type' => 'int', 'default' => 120, 'min' => 1, 'max' => 100000],
         ],
     ];
 
