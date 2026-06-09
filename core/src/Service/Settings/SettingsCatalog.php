@@ -81,6 +81,16 @@ class SettingsCatalog
             //   Worker-Benutzer ausführen (Shell-Prefix) — auf dieselbe Vertrauensstufe
             //   wie Shell-Zugriff beschränken. Siehe MODULE_DEVELOPMENT / 23.16.2.
             'module.host.launcher' => ['type' => 'string', 'default' => null],
+            // Gehärtetes Outbound-HTTP (P01): gemeinsamer Egress für Webhooks/OIDC/AI.
+            'http.egress.enabled' => ['type' => 'bool', 'default' => true],
+            'http.egress.timeout_seconds' => ['type' => 'int', 'default' => 10, 'min' => 1, 'max' => 120],
+            // Max. Antwortgröße in Bytes (0 = unbegrenzt); Default 5 MiB.
+            'http.egress.max_response_bytes' => ['type' => 'int', 'default' => 5000000, 'min' => 0, 'max' => 104857600],
+            // SSRF-Schutz aufheben (private/reservierte Ziele erlauben) — nur bewusst setzen.
+            'http.egress.allow_private' => ['type' => 'bool', 'default' => false],
+            // Hostnamen/IP-Literale, die trotz privater Auflösung erlaubt sind (interne Integrationen).
+            'http.egress.allowlist' => ['type' => 'json', 'default' => []],
+            'http.egress.user_agent' => ['type' => 'string', 'default' => 'Fertura/1.0 (+egress)'],
         ],
     ];
 
