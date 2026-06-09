@@ -33,7 +33,7 @@ Tests, Doku (Anforderungsdokument-Kapitel + Changelog) und eigenem Commit/Push
   mit TTL + Invalidierung bei Änderung. *Fundament für P07-Rate-Limit, P10.*
 - [x] **P03 — Objekt-Storage-Abstraktion** (E78). Flysystem + S3-kompatibler Adapter
   (lokal als Default), einheitliche `StorageManager`-API. *Fundament für P13/P14.*
-- [ ] **P04 — Metrics + Tracing.** Prometheus-`/metrics` (auth/Token-geschützt),
+- [x] **P04 — Metrics + Tracing** (E79). Prometheus-`/metrics` (auth/Token-geschützt),
   OpenTelemetry-kompatible Trace-/Span-IDs (Wiederverwendung `correlation_id`),
   Counters/Histogramme für HTTP/Worker/Outbox/RPC. *Instrumentiert alles Spätere.*
 
@@ -86,4 +86,8 @@ Abgeschlossene Punkte werden oben abgehakt und hier mit E-Nummer + Commit notier
 | —    | —     | —      | Programm angelegt |
 | P01 HTTP-Egress-Primitiv | E76 | a8ec0bd | fertig — 98 Tests grün |
 | P02 Cache-Abstraktion | E77 | 4ac3006 | fertig — 102 Tests grün |
-| P03 Objekt-Storage | E78 | (folgt) | fertig — Flysystem lokal+S3 |
+| P03 Objekt-Storage | E78 | e347265 | fertig — Flysystem lokal+S3 |
+| P04 Metrics + Tracing | E79 | (folgt) | fertig — 115 Tests grün, /metrics live |
+
+**Phase A abgeschlossen** (P01–P04). Nächster Halt: Zwischenstand, dann Phase B
+(P05 Webhooks, P06 OIDC, P07 API-Reife).

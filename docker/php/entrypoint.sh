@@ -61,5 +61,14 @@ if [ "$ROLE" = "core" ]; then
   fi
 fi
 
+# Cache-Verzeichnis (P02) fuer den Laufzeit-Nutzer (www-data) beschreibbar
+# machen: die CLI-Bootstrap-Schritte oben laufen als root und legen
+# /tmp/cake_cache sonst root-eigen (0755) an -> php-fpm (www-data) koennte den
+# Settings-/App-Cache nicht schreiben. CacheStore degradiert zwar still, aber so
+# funktioniert das Caching auch im Request-Pfad.
+mkdir -p /tmp/cake_cache/persistent /tmp/cake_cache/models 2>/dev/null || true
+chown -R www-data:www-data /tmp/cake_cache 2>/dev/null || true
+chmod -R 0775 /tmp/cake_cache 2>/dev/null || true
+
 echo "[entrypoint] starte: $*"
 exec "$@"

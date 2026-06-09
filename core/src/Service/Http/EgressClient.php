@@ -51,12 +51,18 @@ class EgressClient
         }
         $this->assertUrlAllowed($url);
 
+        $headers = array_merge(
+            ['User-Agent' => (string)$this->config['user_agent']],
+            (array)($options['headers'] ?? []),
+        );
+        // Trace fortführen (P04), falls ein Kontext gesetzt und nicht überschrieben.
+        $traceparent = \App\Log\Trace::traceparent();
+        if ($traceparent !== null && !isset($headers['traceparent'])) {
+            $headers['traceparent'] = $traceparent;
+        }
         $opts = [
             'timeout' => (int)$this->config['timeout_seconds'],
-            'headers' => array_merge(
-                ['User-Agent' => (string)$this->config['user_agent']],
-                (array)($options['headers'] ?? []),
-            ),
+            'headers' => $headers,
         ];
         if (isset($options['type'])) {
             $opts['type'] = $options['type'];

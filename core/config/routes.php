@@ -63,6 +63,9 @@ return function (RouteBuilder $routes): void {
         $builder->connect('/health', ['controller' => 'Health', 'action' => 'index']);
         $builder->connect('/health/detail', ['controller' => 'Health', 'action' => 'detail']);
 
+        // Prometheus-Metriken (P04): geschützt wie der Health-Detailpfad.
+        $builder->connect('/metrics', ['controller' => 'Metrics', 'action' => 'index']);
+
         // Admin-Bereich (scoped admin, Kap. 27.3.1).
         $builder->prefix('Admin', function (RouteBuilder $admin): void {
             $admin->connect('/', ['controller' => 'Dashboard', 'action' => 'index']);

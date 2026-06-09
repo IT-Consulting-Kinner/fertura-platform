@@ -25,10 +25,13 @@ class CacheStore
 
     public function get(string $key, mixed $default = null): mixed
     {
+        // @ unterdrückt umgebungsbedingte FileEngine-Warnungen (z. B. Cache-Pfad
+        // nicht beschreibbar) — ein nicht verfügbarer Cache darf NIE eine Anfrage
+        // stören (graceful degradation); die Quelle bleibt maßgeblich.
         try {
-            $value = Cache::read($this->key($key), $this->config);
+            $value = @Cache::read($this->key($key), $this->config);
 
-            return $value === null ? $default : $value;
+            return $value === null || $value === false ? $default : $value;
         } catch (Throwable) {
             return $default;
         }
@@ -37,7 +40,7 @@ class CacheStore
     public function set(string $key, mixed $value): void
     {
         try {
-            Cache::write($this->key($key), $value, $this->config);
+            @Cache::write($this->key($key), $value, $this->config);
         } catch (Throwable) {
             // Cache nicht verfügbar -> ignorieren (Quelle bleibt maßgeblich).
         }
@@ -46,7 +49,7 @@ class CacheStore
     public function delete(string $key): void
     {
         try {
-            Cache::delete($this->key($key), $this->config);
+            @Cache::delete($this->key($key), $this->config);
         } catch (Throwable) {
         }
     }
@@ -54,7 +57,7 @@ class CacheStore
     public function clear(): void
     {
         try {
-            Cache::clear($this->config);
+            @Cache::clear($this->config);
         } catch (Throwable) {
         }
     }
@@ -65,7 +68,7 @@ class CacheStore
     public function remember(string $key, callable $compute): mixed
     {
         try {
-            return Cache::remember($this->key($key), $compute, $this->config);
+            return @Cache::remember($this->key($key), $compute, $this->config);
         } catch (Throwable) {
             return $compute();
         }
