@@ -93,7 +93,10 @@ class ModuleHostSupervisor
             if ($mod === false) {
                 throw new \RuntimeException("Kein aktives out_of_process-Modul: $key");
             }
-            $dsn = (new ModuleDbRole())->dsn($key);
+            // CakePHP-Connection-URL der Modul-Rolle für die ConnectionManager-
+            // Konfiguration im Host (Phase 3: Beitragsklassen nutzen die ORM-
+            // Connection, nicht nur rohes PDO).
+            $dsn = (new ModuleDbRole())->cakeUrl($key);
             if ($dsn === null) {
                 throw new \RuntimeException("Keine DB-Rolle provisioniert für: $key");
             }

@@ -289,6 +289,44 @@ class ContractRegistry
         return $this->activeImplClasses($contractName, ContractRegistration::TYPE_LISTENER);
     }
 
+    /**
+     * Wie {@see collectContributionClasses()}, aber mit dem beitragenden Modul
+     * je Klasse (für die Out-of-Process-Weiche, Kap. 23.16.2).
+     *
+     * @return list<array{class: string, module_key: string}>
+     */
+    public function collectContributions(string $contractName): array
+    {
+        return $this->activeContributions($contractName, ContractRegistration::TYPE_COLLECTOR);
+    }
+
+    /** @return list<array{class: string, module_key: string}> */
+    public function listenerContributions(string $contractName): array
+    {
+        return $this->activeContributions($contractName, ContractRegistration::TYPE_LISTENER);
+    }
+
+    /** @return list<array{class: string, module_key: string}> */
+    private function activeContributions(string $contractName, string $registrationType): array
+    {
+        $c = $this->findContract($contractName);
+        if ($c === null || !$c->active) {
+            return [];
+        }
+        $rows = $this->registrations()->find()
+            ->where(['contract_id' => $c->id, 'registration_type' => $registrationType, 'active' => true])
+            ->orderBy(['priority' => 'DESC', 'created_at' => 'ASC'])
+            ->all();
+        $out = [];
+        foreach ($rows as $row) {
+            if ($row->implementation_class !== null) {
+                $out[] = ['class' => (string)$row->implementation_class, 'module_key' => (string)$row->module_key];
+            }
+        }
+
+        return $out;
+    }
+
     /** @return list<string> */
     private function activeImplClasses(string $contractName, string $registrationType): array
     {

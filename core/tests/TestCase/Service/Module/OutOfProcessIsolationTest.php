@@ -202,18 +202,32 @@ class OutOfProcessIsolationTest extends TestCase
         $this->assertSame('out_of_process', $rec['isolation']);
     }
 
-    public function testEnforcementRejectsNonServiceModule(): void
+    public function testEnforcementRejectsResolverModule(): void
     {
-        // sample_module deklariert einen Event-Listener -> nicht isolierbar.
+        // Resolver laufen (noch) nicht über RPC -> out_of_process abgelehnt
+        // (Service/Collector/Event sind seit Phase 3 erlaubt).
+        $dir = sys_get_temp_dir() . '/fertura_res_' . bin2hex(random_bytes(5));
+        @mkdir($dir, 0o775, true);
+        file_put_contents($dir . '/manifest.json', json_encode([
+            'id' => 'ztest_res', 'name' => 'Resolver', 'version' => '1.0.0', 'type' => 'main',
+            'edition' => 'free', 'description' => 'Resolver-Anbieter.', 'publisher' => 'Fertura Test',
+            'php_namespace' => 'ZtestRes', 'core_compatibility' => '>=1.0.0 <2.0.0',
+            'requires_license' => false, 'dependencies' => [], 'permissions' => [],
+            'resolvers_registered' => [
+                ['contract' => 'core.auth.provider', 'version' => '>=1.0.0 <2.0.0', 'class' => 'ZtestRes\\Provider'],
+            ],
+        ]));
         try {
-            (new ModuleLifecycle())->install($this->fixture('sample_module'), 'out_of_process');
-            $this->fail('Erwartete LifecycleException wegen nicht-isolierbarer Erweiterungspunkte.');
+            (new ModuleLifecycle())->install($dir, 'out_of_process');
+            $this->fail('Erwartete LifecycleException wegen Resolver.');
         } catch (LifecycleException $e) {
-            $this->assertMatchesRegularExpression('/Service-Contracts|Event-Listener/', $e->getMessage());
+            $this->assertMatchesRegularExpression('/Resolver|RPC/', $e->getMessage());
+        } finally {
+            $this->rrmdir($dir);
         }
         // Keine Seiteneffekte: kein Schema, keine Modulzeile.
         $exists = ConnectionManager::get('default')->execute(
-            "SELECT 1 FROM information_schema.schemata WHERE schema_name = 'mod_sample_module'",
+            "SELECT 1 FROM information_schema.schemata WHERE schema_name = 'mod_ztest_res'",
         )->fetch();
         $this->assertFalse($exists, 'Abgelehnte Isolation darf kein Schema hinterlassen.');
     }

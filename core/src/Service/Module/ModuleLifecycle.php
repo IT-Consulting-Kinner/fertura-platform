@@ -725,21 +725,25 @@ class ModuleLifecycle
      */
     private function assertIsolatable(ModuleManifest $manifest): void
     {
+        // Phase 3 (Kap. 23.16.2): Service-Contracts, Collector (Health/Anonymize
+        // u. a.) und Event-Listener laufen über RPC. Noch NICHT über RPC und daher
+        // bei Isolation abgelehnt: Resolver und periodische Aufgaben
+        // (Collector `core.collector.scheduled`) — beide würden sonst still
+        // in-process ausgeführt.
         $bad = [];
         if ($manifest->resolversRegistered() !== []) {
             $bad[] = 'Resolver';
         }
-        if ($manifest->collectorsRegistered() !== []) {
-            $bad[] = 'Collector';
-        }
-        if ($manifest->eventsRegistered() !== []) {
-            $bad[] = 'Event-Listener';
+        foreach ($manifest->collectorsRegistered() as $c) {
+            if ((string)($c['contract'] ?? '') === \App\Service\Schedule\ScheduledTaskRunner::COLLECTOR) {
+                $bad[] = 'periodische Aufgabe (core.collector.scheduled)';
+                break;
+            }
         }
         if ($bad !== []) {
             throw new LifecycleException(
-                'Out-of-Process unterstützt derzeit nur Service-Contracts, nicht: '
-                . implode(', ', $bad) . '. Diese Erweiterungspunkte laufen noch nicht über RPC '
-                . 'und würden sonst still in-process ausgeführt.',
+                'Out-of-Process unterstützt diese Erweiterungspunkte noch nicht über RPC: '
+                . implode(', ', $bad) . '. Sie würden sonst still in-process ausgeführt.',
             );
         }
     }

@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Service\Privacy;
 
+use App\Service\Module\ContributionRuntime;
 use App\Service\Registry\ContractRegistry;
 use Cake\Database\Connection;
 use Throwable;
@@ -34,29 +35,25 @@ class AnonymizationService
      */
     public function run(string $userId, Connection $conn): int
     {
+        $runtime = new ContributionRuntime($this->registry);
         try {
-            $classes = $this->registry->collectContributionClasses(self::COLLECTOR);
+            $contribs = $runtime->collectors(self::COLLECTOR);
         } catch (Throwable) {
             // Contract (noch) nicht vorhanden -> keine Modul-Beiträge.
             return 0;
         }
-        if ($classes === []) {
+        if ($contribs === []) {
             return 0;
         }
 
+        // In-Process-Beiträge nutzen den ambienten Kontext dieser Connection ->
+        // hier bypass setzen; Out-of-Process-Beiträge erhalten bypass über RPC.
         $prev = (string)($conn->execute("SELECT current_setting('app.bypass_rls', true) AS v")->fetch('assoc')['v'] ?? '');
         $conn->execute("SELECT set_config('app.bypass_rls', 'true', true)");
         try {
             $total = 0;
-            foreach ($classes as $class) {
-                if (!is_string($class) || !class_exists($class)) {
-                    continue;
-                }
-                $impl = new $class();
-                if (!$impl instanceof AnonymizeContributorInterface) {
-                    continue;
-                }
-                $total += $impl->anonymizeUser($userId);
+            foreach ($contribs as $contrib) {
+                $total += (int)$runtime->call($contrib, 'anonymizeUser', [$userId], ['bypass' => true]);
             }
 
             return $total;

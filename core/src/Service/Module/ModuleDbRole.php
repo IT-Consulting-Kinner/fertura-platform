@@ -166,6 +166,32 @@ class ModuleDbRole
         );
     }
 
+    /**
+     * Baut die CakePHP-Connection-URL der Modul-Rolle (für die ConnectionManager-
+     * Konfiguration im isolierten Host, Phase 3). Null, wenn nicht provisioniert.
+     */
+    public function cakeUrl(string $key): ?string
+    {
+        $row = $this->conn()->execute(
+            'SELECT db_role, db_role_secret FROM modules WHERE module_key = :k',
+            ['k' => $key],
+        )->fetch('assoc');
+        if ($row === false || empty($row['db_role']) || empty($row['db_role_secret'])) {
+            return null;
+        }
+        $password = (new SecretCipher())->decrypt((string)$row['db_role_secret']);
+        $c = ConnectionManager::get('default')->config();
+
+        return sprintf(
+            'postgres://%s:%s@%s:%s/%s?encoding=utf8',
+            rawurlencode((string)$row['db_role']),
+            rawurlencode($password),
+            (string)($c['host'] ?? 'db'),
+            (string)($c['port'] ?? '5432'),
+            (string)($c['database'] ?? 'fertura'),
+        );
+    }
+
     /** Entfernt die Rolle samt ihrer Rechte (bei Deinstallation). */
     public function drop(string $key): void
     {

@@ -422,26 +422,20 @@ class HealthService
         $contributions = [];
         $status = 'up';
         try {
-            $classes = $this->registry->collectContributionClasses(self::HEALTH_COLLECTOR);
+            $contribs = (new \App\Service\Module\ContributionRuntime($this->registry))->collectors(self::HEALTH_COLLECTOR);
         } catch (Throwable) {
-            $classes = [];
+            $contribs = [];
         }
-        foreach ($classes as $class) {
+        foreach ($contribs as $contrib) {
             try {
-                if (!class_exists($class)) {
-                    continue;
-                }
-                $impl = new $class();
-                if (!$impl instanceof HealthCheckInterface) {
-                    continue;
-                }
-                $result = $impl->check();
+                // In-Process lokal, out_of_process über den isolierten Host (RPC).
+                $result = (array)(new \App\Service\Module\ContributionRuntime($this->registry))->call($contrib, 'check', []);
                 $contributions[] = $result;
                 if (($result['status'] ?? 'up') !== 'up') {
                     $status = 'degraded';
                 }
             } catch (Throwable $e) {
-                $contributions[] = ['component' => $class, 'status' => 'down', 'detail' => $e->getMessage()];
+                $contributions[] = ['component' => $contrib['class'], 'status' => 'down', 'detail' => $e->getMessage()];
                 $status = 'degraded';
             }
         }

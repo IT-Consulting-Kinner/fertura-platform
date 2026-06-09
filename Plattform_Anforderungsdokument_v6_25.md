@@ -881,22 +881,26 @@ nicht: Signatur/Anker/Widerruf bleiben die maßgebliche Zulassungsgrenze
 (23.16.1); die Out-of-Process-Isolation begrenzt zusätzlich, was bereits
 zugelassener Modulcode zur Laufzeit technisch erreichen kann.
 
-**Geltungsbereich (bewusst eng).** Isolierte Module dürfen derzeit **nur
-Service-Contracts** anbieten. Erweiterungspunkte, die noch nicht über RPC
-laufen (Resolver, Collector, Event-Listener, Health-Checks, periodische
-Aufgaben), werden bei der Isolation **abgelehnt** statt still in-process
-ausgeführt — die Grenze ist damit ehrlich (keine unbemerkte Lücke).
+**Geltungsbereich (Phase 3).** Isolierte Module dürfen **Service-Contracts,
+Collector-Beiträge** (Health, Anonymisierung u. a.) **und Event-Listener**
+anbieten — diese laufen über RPC im Host. Der **RLS-Zeilenkontext**
+(`app.current_user_id`/`-group_ids`/`-bypass`) wird dabei über die RPC-Grenze
+mitgereicht und im Host transaktionslokal gesetzt, sodass Modul-Beiträge
+benutzer-/gruppen-scoped arbeiten. Beitragsklassen nutzen im Host eine
+CakePHP-`default`-Connection auf die Modul-Rolle (Search-Path auf das
+Modul-Schema). **Noch nicht über RPC** und daher bei Isolation **abgelehnt**
+(statt still in-process ausgeführt — die Grenze bleibt ehrlich): **Resolver**
+und **periodische Aufgaben** (`core.collector.scheduled`).
 
-**Bewusst spätere Ausbaustufen** (ehrlich benannt): Ausführung der übrigen
-Erweiterungspunkte über RPC; **Propagierung des RLS-Zeilenkontexts**
-(`app.current_user_id`) über die RPC-Grenze in die Modul-Sitzung (heute setzt
-der Core den Kontext nicht in der Modul-Verbindung — isolierte Module sehen in
-ihren eigenen Tabellen daher nur kontextfreie/öffentliche Zeilen; ein Modul
-könnte zudem die GUC `app.bypass_rls` in seiner **eigenen** Sitzung setzen, was
-nur seine eigenen Tabellen betrifft); **echte Same-User-Trennung** über einen
-eigenen Betriebssystem-Benutzer bzw. Container (das RPC-Token schützt vor
-fremden, nicht vor gleich-UID-Prozessen); Dateisystem-/Kernel-Begrenzung und
-Capability-Tokens je Aufruf.
+**Bewusst spätere Ausbaustufen** (ehrlich benannt): Resolver und periodische
+Aufgaben über RPC; **echte Same-User-Trennung** über einen eigenen
+Betriebssystem-Benutzer bzw. Container (das RPC-Token schützt vor fremden,
+nicht vor gleich-UID-Prozessen); Dateisystem-/Kernel-Begrenzung und
+Capability-Tokens je Aufruf. **Hinweis Transaktionsgrenze:** Ein
+Out-of-Process-Beitrag committet in **seiner** Sitzung; die Core-Operation
+(z. B. Anonymisierung) und der Modul-Beitrag bilden daher **keine** verteilte
+Transaktion — bei der irreversiblen Anonymisierung ist „über-bereinigt" jedoch
+unkritisch.
 
 # 24. Modul-Manifest, Paketstruktur und Installations-/Updatefluss
 
@@ -4477,6 +4481,7 @@ Komponente neu auszuliefern.
 | 6.30 | 07.06.2026 | Doku-Software-Abgleich nach Umsetzung: (a) **7. Administrationsbereich „Sprachverwaltung"** in 27.3.1 + Entscheidung 170 ergänzt (zuvor 6); (b) **API-Token tragen Scopes** (zusätzliche Einschränkung, nie erweiternd) in 27.16.3 + Entscheidung 162 korrigiert (zuvor „keine eigenen Scopes"); (c) **20.1.2 um den realen Backup-Funktionsumfang erweitert** (ZIP+Zeitstempel, Verifikation-vor-Abschluss, optionale AES-256-Verschlüsselung, Zeitplan/Retention nach Anzahl+Alter, append-only-Protokoll, Pre-Flight, Mail-Alarm, Download, Health-Subsystem); (d) **30.3.1**: Core **erzwingt** RLS für `is_scoped`-Module bei der Installation (Abbruch sonst). Hinweis: Mehrsprachigkeit/Locale-Verwaltung ist als eigener Subsystem implementiert, im Anforderungsdokument bislang nur als Technologie-Zeile geführt (eigene Kapitel-Ausarbeitung offen). |
 | 6.31 | 07.06.2026 | Doku-Software-Abgleich (Fortsetzung): (a) **Neues Kapitel 31 „Mehrsprachigkeit und Lokalisierung"** ausgearbeitet (Grundsatz/symbolische Schlüssel, Mitlieferung, Managed Locale Store mit ausfallsicherem Schreiben, Versions-Gate, Sprachverwaltungs-Admin-Bereich mit Status-Trio + verlustfreiem Editor, Laufzeit-Sprachwahl, Audit/Health). (b) Bestehende Kapitel um umgesetzte Mechanismen ergänzt: **20.2.1** Health-Subsysteme `localization` + `backup`; **20.3** Andock-Punkt für periodische Modul-Aufgaben (`core.collector.scheduled`); **24.9.2** Durchsetzung des Anker-Gültigkeitsfensters + gleitende Rotation; **26.9.2** Dead-Letter-Retry/Verwerfen-GUI; **28.14.2** automatischer Wiederherstellungspunkt auch bei Boot-Migrationen. |
 | 6.32 | 08.06.2026 | (a) **Mehrere Worker-Instanzen** explizit unterstützt (20.3): periodische Aufgaben werden je Aufgabe über einen PostgreSQL-Advisory-Lock serialisiert (kein Doppellauf bei >1 Worker); Outbox bleibt über SKIP LOCKED kollisionsfrei. Einzelinstanz = Standard. (b) **Backup-Verschlüsselung DR-tauglich** (20.1.2): Passwort aus Env/Secret (`BACKUP_PASSWORD_FILE`/`BACKUP_PASSWORD`) mit Vorrang vor dem DB-Setting — out-of-band, damit ein verschlüsseltes Backup nicht über das im Dump enthaltene Passwort entschlüsselt werden müsste (Henne-Ei). |
+| 6.44 | 09.06.2026 | **Out-of-Process-Isolation Phase 3 (Kap. 23.16.2 erweitert)**: Isolierte Module dürfen jetzt nicht nur Service-Contracts, sondern auch **Collector-Beiträge** (Health, Anonymisierung) und **Event-Listener** anbieten — diese laufen über RPC im isolierten Host. Der **RLS-Zeilenkontext** (`app.current_user_id`/`-group_ids`/`-bypass`) wird über die RPC-Grenze mitgereicht und im Host gesetzt; Beitragsklassen nutzen dort eine CakePHP-Connection auf die Modul-Rolle. **Resolver** und **periodische Aufgaben** (`core.collector.scheduled`) bleiben bei Isolation abgelehnt (noch nicht über RPC — keine stille In-Process-Ausführung). Transaktionsgrenze dokumentiert (Out-of-Process-Beitrag committet eigenständig). |
 | 6.43 | 09.06.2026 | **Anonymisierungs-Hook für Module (Kap. 27.15.3 aktualisiert)**: Der Core stellt jetzt den Collector-Contract `core.collector.anonymize` bereit, über den Module beim irreversiblen Anonymisieren eines Benutzers **in derselben Transaktion** ihre eigenen personenbezogenen (Freitext-)Daten zu dem Benutzer mit-bereinigen (Interface `AnonymizeContributorInterface`). All-or-Nothing; für die Beiträge wird RLS-Bypass gesetzt und danach wiederhergestellt. Damit ist die zuvor als „spätere Version/Betreiberprozess" markierte Freitext-Bereinigung über Modulgrenzen **Core-seitig orchestriert** — die fachliche Bereinigung bleibt Modul-Sache. |
 | 6.42 | 09.06.2026 | **Peer-Review-Härtung der Modul-Installation (Kap. 24)**: Bestand-Befund M7 behoben (Korrektheits-Härtung, keine Spezifikationsänderung). Der `install()`-Vorgang lässt sich nicht in eine DB-Transaktion kapseln (CREATE ROLE/Schema und das Kopieren des Pakets sind teils nicht-transaktional); zuvor räumte nur der RLS-Pflicht-Abbruch (E47) einen Teil der Artefakte ab — schlug ein **späterer** Schritt fehl (Schema-Grant an die App-Rolle, Sprachpaket-Import oder eine `RegistryException` beim Registrieren der Contracts), blieben Schema, Modulzeile, kopiertes Verzeichnis und — bei `out_of_process` — die provisionierte DB-Rolle `mod_<key>` zurück, sodass ein erneuter Install an „Modul bereits installiert" scheiterte. Jetzt umschließt ein zentraler manueller Rückbau **alle** Schritte ab Beginn der Seiteneffekte: bei jedem Fehlschlag wird der isolierte Host gestoppt, die DB-Rolle entfernt, das Schema gedroppt, Modulzeile/Registrierungen/Contracts/Ressourcen/Sprachpakete gelöscht und das kopierte Verzeichnis (samt Sprachpaket-Dateien) entfernt. Verifiziert per Integrationstest (erzwungener Fehlschlag nach der Schema-Erzeugung → nichts bleibt zurück, anschließender Install gelingt). |
 | 6.41 | 09.06.2026 | **Peer-Review-Härtung der Daten-Wiederherstellung (Kap. 20.1.2)**: Zwei Bestand-Befunde im Backup-Subsystem behoben (Korrektheits-Härtung, keine Spezifikationsänderung). (a) **Restore-Erfolg wird jetzt geprüft**: Die destruktive Wiederherstellung wertet Exitcode **und** Ausgabe von `pg_restore` aus und schlägt bei echten Fehlern fehl — zuvor wurde beides ignoriert, sodass ein fehlgeschlagener Restore still durchlief, der Wartungsmodus (HTTP 503) wieder freigegeben und „erfolgreich" protokolliert wurde, obwohl eine halb-wiederhergestellte Datenbank online ging. Harmlose `--clean`-Notices („existiert nicht, übersprungen") bleiben bewusst toleriert (kein Fehlalarm). (b) **Konsistenz-Lock ist Pflicht**: Lässt sich der Lifecycle-Lock beim Sichern nicht erhalten (eine parallele Update-/Restore-/Backup-Operation hält ihn), bricht die Sicherung jetzt klar ab, statt still ohne Lock einen DB↔Storage-inkonsistenten Snapshot zu erzeugen. Verifiziert per Integrationstest (gehaltener Lock → Abbruch). |

@@ -1,0 +1,28 @@
+{
+    "id": "isolated_anon_module",
+    "name": "Isolated Anon Module",
+    "version": "1.0.0",
+    "type": "main",
+    "edition": "free",
+    "description": "Out-of-Process-Modul mit Anonymisierungs-Collector (Phase-3-E2E).",
+    "publisher": "Fertura",
+    "php_namespace": "IsolatedAnon",
+    "core_compatibility": ">=1.0.0 <2.0.0",
+    "requires_license": false,
+    "dependencies": [],
+    "contracts_used": [],
+    "collectors_registered": [
+        {
+            "contract": "core.collector.anonymize",
+            "version": ">=1.0.0 <2.0.0",
+            "class": "IsolatedAnon\\AnonContributor"
+        }
+    ],
+    "permissions": [
+        {
+            "resource_type": "data",
+            "name": "isolated_anon_module.data",
+            "is_scoped": true
+        }
+    ]
+}

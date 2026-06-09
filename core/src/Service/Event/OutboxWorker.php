@@ -109,21 +109,15 @@ class OutboxWorker
         ];
 
         $errors = [];
-        foreach ($this->registry->listenerClasses((string)$event['contract_name']) as $class) {
+        $runtime = new \App\Service\Module\ContributionRuntime($this->registry);
+        foreach ($runtime->listeners((string)$event['contract_name']) as $listener) {
             try {
-                if (!class_exists($class)) {
-                    $errors[] = "Listener-Klasse fehlt: $class";
-                    continue;
-                }
-                $listener = new $class();
-                if (!$listener instanceof EventListenerInterface) {
-                    $errors[] = "$class implementiert EventListenerInterface nicht";
-                    continue;
-                }
-                $listener->handle($payload, $context);
+                // In-Process lokal, out_of_process über den isolierten Host (RPC).
+                // Worker-Kontext ohne laufenden Benutzer -> Bypass für den Listener.
+                $runtime->call($listener, 'handle', [$payload, $context], ['bypass' => true]);
             } catch (Throwable $e) {
                 // Isolation: Fehler eines Listeners stoppt die anderen nicht.
-                $errors[] = "$class: " . $e->getMessage();
+                $errors[] = $listener['class'] . ': ' . $e->getMessage();
             }
         }
 

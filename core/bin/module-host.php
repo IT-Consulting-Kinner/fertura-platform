@@ -2,19 +2,31 @@
 declare(strict_types=1);
 
 /**
- * Isolierter Out-of-Process-Modul-Host (Kap. 23.16, Phase 1).
+ * Isolierter Out-of-Process-Modul-Host (Kap. 23.16.2, Phase 3).
  *
  * Läuft als **separater Prozess** mit **bereinigter Umgebung** (kein Core-
- * `DATABASE_URL`/`BACKUP_PASSWORD`) und **eigener, eingeschränkter DB-Rolle**
- * (`MODULE_DB_URL`). Lädt nur den Modulcode (sein `php_namespace`) und stellt
- * dessen Service-Contracts über einen Unix-Domain-Socket (JSON-Zeilen) bereit.
- * Der Core ruft ausschließlich über diesen Socket auf ({@see RemoteInvoker}).
+ * `DATABASE_URL`/`BACKUP_PASSWORD`) und **eigener, eingeschränkter DB-Rolle**.
+ * Lädt nur den Modulcode (sein `php_namespace`) und konfiguriert eine
+ * CakePHP-`default`-Connection auf die Modul-Rolle, sodass Modul-Beitragsklassen
+ * (Service/Resolver/Collector/Event) wie in-process über `ConnectionManager`
+ * arbeiten — aber isoliert. Der Core ruft ausschließlich über den
+ * token-gesicherten Unix-Domain-Socket auf ({@see RemoteInvoker}).
+ *
+ * Protokoll (JSON-Zeilen): {token, op}
+ *   - op='probe'                                  -> Isolationsdiagnose
+ *   - op='call', class, method, args[], rls{}     -> $impl->$method(...$args)
+ *   - {contract, input}            (Alt-Service)  -> map[contract]->handle(input)
+ *
+ * RLS: Der Aufrufer reicht seinen Zeilenkontext (`rls`) mit; der Host setzt ihn
+ * je Aufruf transaktionslokal auf der Modul-Connection (set_config).
  *
  * Erwartete Umgebung: MODULE_KEY, MODULE_SOCKET, MODULE_SRC, MODULE_NAMESPACE,
- * MODULE_MANIFEST, MODULE_DB_URL (PDO-DSN der Modul-Rolle, optional).
+ * MODULE_MANIFEST, MODULE_DB_URL (CakePHP-URL der Modul-Rolle), MODULE_RPC_TOKEN.
  */
 
 require dirname(__DIR__) . '/vendor/autoload.php';
+
+use Cake\Datasource\ConnectionManager;
 
 $key = (string)($argv[1] ?? getenv('MODULE_KEY'));
 $socket = (string)getenv('MODULE_SOCKET');
@@ -22,6 +34,7 @@ $src = (string)getenv('MODULE_SRC');
 $namespace = (string)getenv('MODULE_NAMESPACE');
 $manifest = (string)getenv('MODULE_MANIFEST');
 $dbUrl = (string)getenv('MODULE_DB_URL');
+$rpcToken = (string)getenv('MODULE_RPC_TOKEN');
 
 if ($key === '' || $socket === '' || $src === '' || $namespace === '') {
     fwrite(STDERR, "module-host: MODULE_KEY/SOCKET/SRC/NAMESPACE erforderlich\n");
@@ -29,7 +42,7 @@ if ($key === '' || $socket === '' || $src === '' || $namespace === '') {
 }
 
 // Nur den Modul-Namespace autoloaden (Modul-src). Die Contract-SDK
-// (App\Service\Registry\ServiceInterface) kommt über den Composer-Autoloader.
+// (App\Service\...) kommt über den Composer-Autoloader.
 $ns = rtrim($namespace, '\\') . '\\';
 $baseDir = rtrim($src, '/') . '/';
 spl_autoload_register(static function (string $class) use ($ns, $baseDir): void {
@@ -41,47 +54,86 @@ spl_autoload_register(static function (string $class) use ($ns, $baseDir): void 
     }
 });
 
-// Contract -> Implementierungsklasse aus dem Manifest (services_registered).
-$map = [];
+// Alt-Service-Map (Contract -> Klasse) aus dem Manifest (Abwärtskompatibilität).
+$serviceMap = [];
 if ($manifest !== '' && is_file($manifest)) {
     $m = json_decode((string)file_get_contents($manifest), true) ?: [];
     foreach ($m['services_registered'] ?? [] as $s) {
         if (isset($s['contract'], $s['class'])) {
-            $map[(string)$s['contract']] = (string)$s['class'];
+            $serviceMap[(string)$s['contract']] = (string)$s['class'];
         }
     }
 }
 
-// DB ausschließlich über die eingeschränkte Modul-Rolle.
-$pdo = null;
-$pdoErr = null;
+// CakePHP-`default`-Connection ausschließlich über die eingeschränkte Modul-Rolle.
+// Search-Path auf das eigene Schema, damit Modulcode unqualifiziert darauf zugreift.
+$dbReady = false;
 if ($dbUrl !== '') {
     try {
-        $pdo = new PDO($dbUrl);
-        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        ConnectionManager::setConfig('default', [
+            'url' => $dbUrl,
+            'timezone' => 'UTC',
+            'quoteIdentifiers' => true,
+            'init' => ["SET search_path TO mod_$key, core, public"],
+        ]);
+        ConnectionManager::get('default')->execute('SELECT 1');
+        $dbReady = true;
     } catch (Throwable $e) {
-        $pdoErr = $e->getMessage();
+        fwrite(STDERR, "module-host[$key]: DB nicht verbunden (" . $e->getMessage() . ")\n");
     }
 }
 
-$rpcToken = (string)getenv('MODULE_RPC_TOKEN');
+/** Ruft $class::$method(...$args) im RLS-Kontext $rls auf (transaktionslokal). */
+$invoke = static function (string $class, string $method, array $args, array $rls) use ($ns, $dbReady): array {
+    if (!str_starts_with($class, $ns)) {
+        return ['error' => "Klasse außerhalb des Modul-Namespace: $class"];
+    }
+    if (!class_exists($class)) {
+        return ['error' => "Klasse nicht ladbar: $class"];
+    }
+    if (!method_exists($class, $method)) {
+        return ['error' => "Methode fehlt: $class::$method"];
+    }
+    if (!$dbReady) {
+        // Ohne DB-Connection keine RLS-Transaktion -> direkt aufrufen.
+        try {
+            return ['output' => (new $class())->$method(...$args)];
+        } catch (Throwable $e) {
+            return ['error' => $e->getMessage()];
+        }
+    }
+    $conn = ConnectionManager::get('default');
+    $conn->begin();
+    try {
+        // RLS-Zeilenkontext der aufrufenden Anfrage anwenden (Kap. 30.3).
+        $conn->execute("SELECT set_config('app.current_user_id', :u, true)", ['u' => (string)($rls['user_id'] ?? '')]);
+        $conn->execute("SELECT set_config('app.current_group_ids', :g, true)", ['g' => implode(',', array_map('strval', (array)($rls['group_ids'] ?? [])))]);
+        $conn->execute("SELECT set_config('app.bypass_rls', :b, true)", ['b' => !empty($rls['bypass']) ? 'true' : 'false']);
+        $out = (new $class())->$method(...$args);
+        $conn->commit();
 
-$dispatch = static function (array $req) use ($map, $pdo, $pdoErr, $key, $rpcToken): array {
-    // Authentifizierung: ist ein Token gesetzt, muss jede Anfrage es mitführen
-    // (Kap. 23.16.2) -> der Socket ist nicht anonym ansprechbar.
+        return ['output' => $out];
+    } catch (Throwable $e) {
+        $conn->rollback();
+
+        return ['error' => $e->getMessage()];
+    }
+};
+
+$dispatch = static function (array $req) use ($serviceMap, $key, $rpcToken, $dbReady, $invoke): array {
+    // Authentifizierung: gesetztes Token muss jede Anfrage mitführen (Kap. 23.16.2).
     if ($rpcToken !== '' && !hash_equals($rpcToken, (string)($req['token'] ?? ''))) {
         return ['error' => 'nicht autorisiert'];
     }
-    $contract = (string)($req['contract'] ?? '');
-    $input = (array)($req['input'] ?? []);
+    $op = (string)($req['op'] ?? '');
 
-    if ($contract === '__probe') {
-        $tryRead = static function (?PDO $pdo, string $sql): ?bool {
-            if ($pdo === null) {
+    if ($op === 'probe' || ($req['contract'] ?? '') === '__probe') {
+        $tryRead = static function (string $sql) use ($dbReady): ?bool {
+            if (!$dbReady) {
                 return null;
             }
             try {
-                $pdo->query($sql);
+                ConnectionManager::get('default')->execute($sql);
 
                 return true;
             } catch (Throwable) {
@@ -93,29 +145,28 @@ $dispatch = static function (array $req) use ($map, $pdo, $pdoErr, $key, $rpcTok
             'module' => $key,
             'sees_core_database_url' => getenv('DATABASE_URL') !== false && getenv('DATABASE_URL') !== '',
             'sees_backup_password' => getenv('BACKUP_PASSWORD') !== false && getenv('BACKUP_PASSWORD') !== '',
-            'can_read_core_users' => $tryRead($pdo, 'SELECT count(*) FROM core.users'),
-            'can_read_own_schema' => $tryRead($pdo, 'SELECT count(*) FROM mod_' . $key . '.ping_log'),
-            // Nur boolesch, kein roher Treiberfehler (Info-Leak vermeiden).
-            'db_connected' => $pdoErr === null && $pdo !== null,
+            'can_read_core_users' => $tryRead('SELECT count(*) FROM core.users'),
+            'can_read_own_schema' => $tryRead('SELECT count(*) FROM mod_' . $key . '.ping_log'),
+            'db_connected' => $dbReady,
         ]];
     }
 
-    if (!isset($map[$contract])) {
+    if ($op === 'call') {
+        return $invoke(
+            (string)($req['class'] ?? ''),
+            (string)($req['method'] ?? ''),
+            array_values((array)($req['args'] ?? [])),
+            (array)($req['rls'] ?? []),
+        );
+    }
+
+    // Alt-Pfad: Service-Contract über die Manifest-Map.
+    $contract = (string)($req['contract'] ?? '');
+    if (!isset($serviceMap[$contract])) {
         return ['error' => "Unbekannter Service-Contract: $contract"];
     }
-    $class = $map[$contract];
-    if (!class_exists($class)) {
-        return ['error' => "Anbieterklasse nicht ladbar: $class"];
-    }
-    $impl = new $class();
-    if (!$impl instanceof \App\Service\Registry\ServiceInterface) {
-        return ['error' => "Kein ServiceInterface: $class"];
-    }
-    try {
-        return ['output' => $impl->handle($input)];
-    } catch (Throwable $e) {
-        return ['error' => $e->getMessage()];
-    }
+
+    return $invoke($serviceMap[$contract], 'handle', [(array)($req['input'] ?? [])], (array)($req['rls'] ?? []));
 };
 
 // Binden, OHNE einen evtl. lebenden Vorgänger-Socket blind zu stehlen.
@@ -153,6 +204,7 @@ while ($running) {
     if ($conn === false) {
         continue; // Timeout -> Signal-Check
     }
+    stream_set_timeout($conn, 30);
     $line = fgets($conn);
     if ($line !== false) {
         $req = json_decode(trim($line), true);

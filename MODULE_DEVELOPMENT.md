@@ -156,13 +156,16 @@ bin/cake module host status                     # laufende Hosts anzeigen
   kein `BACKUP_PASSWORD`). Ein **Supervisor** startet ihn beim Aktivieren, stoppt
   ihn beim Deaktivieren/Löschen und startet abgestürzte Hosts neu (der Worker
   überwacht periodisch).
-- Der Core ruft die **Service-Contracts** (`services_registered`) transparent
-  über einen Unix-Domain-Socket (JSON-Zeilen-RPC, `RemoteInvoker`) auf;
-  `CapabilityHandle::invoke()` routet automatisch dorthin. Ein-/Ausgabe sind
-  serialisierbare Contract-Arrays (Kap. 29.8).
-- **Einschränkung (bewusst):** Isolierte Module dürfen **nur Service-Contracts**
-  anbieten. Deklariert ein Modul Resolver/Collector/Event-Listener, wird die
-  Isolation **abgelehnt** (diese Erweiterungspunkte laufen noch nicht über RPC
-  und würden sonst still in-process ausgeführt).
-- Verifikation: `OutOfProcessIsolationTest` (E2E) und
+- Der Core ruft **Service-Contracts** (`services_registered`), **Collector-
+  Beiträge** (`collectors_registered`, z. B. Health/Anonymisierung) und
+  **Event-Listener** (`events_registered`) transparent über RPC im Host auf
+  (`RemoteInvoker`/`ContributionRuntime`). Der **RLS-Zeilenkontext** der Anfrage
+  wird mitgereicht; Beitragsklassen nutzen im Host `ConnectionManager::get('default')`
+  auf die Modul-Rolle (Search-Path aufs Modul-Schema).
+- **Einschränkung (bewusst, Phase 3):** **Resolver** und **periodische Aufgaben**
+  (`core.collector.scheduled`) laufen noch nicht über RPC → die Isolation wird
+  bei deren Deklaration **abgelehnt** (statt still in-process auszuführen).
+- **Transaktionsgrenze:** Ein Out-of-Process-Beitrag committet in seiner eigenen
+  Sitzung — Core-Operation und Modul-Beitrag bilden keine verteilte Transaktion.
+- Verifikation: `OutOfProcessIsolationTest` + `OutOfProcessPhase3Test` (E2E) und
   `core/tests/scripts/module_isolation_check.sh` (manuell).
