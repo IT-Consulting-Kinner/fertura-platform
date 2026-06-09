@@ -855,22 +855,26 @@ technische Isolationsgrenze** bereit:
     EXECUTE auf wenige Core-Hilfsfunktionen; ein Zugriff auf Core-Tabellen
     (z. B. `core.users`) ist technisch unterbunden, nicht nur per Disziplin.
 -   **Modul-Migrationen ohne Superuser-Rechte.** Die Schema-Migrationen
-    eines isolierten Moduls laufen **unter dessen eingeschränkter Rolle**
-    statt als Superuser — eine bösartige Migration kann den Core damit nicht
-    beschädigen. Damit die Zeilen-Sicherheit (RLS) auch für die
-    modul-eigenen Tabellen greift, erzwingt der Core anschließend
-    `FORCE ROW LEVEL SECURITY`.
+    eines isolierten Moduls laufen über eine **als die eingeschränkte
+    Login-Rolle authentifizierte Verbindung** (nicht per `SET ROLE` auf einer
+    Superuser-Sitzung) — eine bösartige Migration kann sich daher **nicht**
+    per `RESET ROLE`/`SET ROLE` wieder Superuser verschaffen und den Core
+    beschädigen. Damit die Zeilen-Sicherheit (RLS) auch für die modul-eigenen
+    Tabellen greift, erzwingt der Core anschließend `FORCE ROW LEVEL
+    SECURITY`. Gilt für Installation **und** Update.
 -   **Verwalteter Lebenszyklus.** Beim Aktivieren startet der Core den
     isolierten Host automatisch, beim Deaktivieren/Deinstallieren stoppt er
     ihn (und entfernt die DB-Rolle). Ein Supervisor im Hintergrundprozess
     **überwacht** die Hosts und startet abgestürzte neu (Selbstheilung).
--   **Transparenter Aufruf über RPC.** Der Core ruft die Service-
+-   **Authentifizierter Aufruf über RPC.** Der Core ruft die Service-
     Contracts des Moduls über eine schmale Inter-Prozess-Schnittstelle
-    (Unix-Domain-Socket, JSON-Zeilen) auf. Ein- und Ausgabe sind dieselben
-    serialisierbaren Contract-Strukturen wie beim In-Process-Aufruf
-    (Kapitel 29.8); der Aufrufpfad (`CapabilityHandle`) bleibt für das
-    nutzende Modul unverändert. Die Grenze ist damit aufwärtskompatibel zu
-    einer späteren Container- oder Host-getrennten Ausführung.
+    (Unix-Domain-Socket, JSON-Zeilen) auf, abgesichert durch ein **pro Host
+    erzeugtes Token** (nur der Core kennt es) — der Socket ist nicht anonym
+    ansprechbar. Ein- und Ausgabe sind dieselben serialisierbaren
+    Contract-Strukturen wie beim In-Process-Aufruf (Kapitel 29.8); der
+    Aufrufpfad (`CapabilityHandle`) bleibt für das nutzende Modul unverändert.
+    Die Grenze ist damit aufwärtskompatibel zu einer späteren Container- oder
+    Host-getrennten Ausführung.
 
 Der Modus ist **opt-in** und ergänzt die Vertrauenskette, ersetzt sie
 nicht: Signatur/Anker/Widerruf bleiben die maßgebliche Zulassungsgrenze
@@ -881,10 +885,18 @@ zugelassener Modulcode zur Laufzeit technisch erreichen kann.
 Service-Contracts** anbieten. Erweiterungspunkte, die noch nicht über RPC
 laufen (Resolver, Collector, Event-Listener, Health-Checks, periodische
 Aufgaben), werden bei der Isolation **abgelehnt** statt still in-process
-ausgeführt — die Grenze ist damit ehrlich (keine unbemerkte Lücke). Deren
-Ausführung über RPC sowie weitere Härtungsstufen (eigener Betriebssystem-
-Benutzer bzw. Container, Dateisystem-/Kernel-Begrenzung, Capability-Tokens
-je Aufruf) sind spätere Ausbaustufen.
+ausgeführt — die Grenze ist damit ehrlich (keine unbemerkte Lücke).
+
+**Bewusst spätere Ausbaustufen** (ehrlich benannt): Ausführung der übrigen
+Erweiterungspunkte über RPC; **Propagierung des RLS-Zeilenkontexts**
+(`app.current_user_id`) über die RPC-Grenze in die Modul-Sitzung (heute setzt
+der Core den Kontext nicht in der Modul-Verbindung — isolierte Module sehen in
+ihren eigenen Tabellen daher nur kontextfreie/öffentliche Zeilen; ein Modul
+könnte zudem die GUC `app.bypass_rls` in seiner **eigenen** Sitzung setzen, was
+nur seine eigenen Tabellen betrifft); **echte Same-User-Trennung** über einen
+eigenen Betriebssystem-Benutzer bzw. Container (das RPC-Token schützt vor
+fremden, nicht vor gleich-UID-Prozessen); Dateisystem-/Kernel-Begrenzung und
+Capability-Tokens je Aufruf.
 
 # 24. Modul-Manifest, Paketstruktur und Installations-/Updatefluss
 
@@ -4455,6 +4467,7 @@ Komponente neu auszuliefern.
 | 6.30 | 07.06.2026 | Doku-Software-Abgleich nach Umsetzung: (a) **7. Administrationsbereich „Sprachverwaltung"** in 27.3.1 + Entscheidung 170 ergänzt (zuvor 6); (b) **API-Token tragen Scopes** (zusätzliche Einschränkung, nie erweiternd) in 27.16.3 + Entscheidung 162 korrigiert (zuvor „keine eigenen Scopes"); (c) **20.1.2 um den realen Backup-Funktionsumfang erweitert** (ZIP+Zeitstempel, Verifikation-vor-Abschluss, optionale AES-256-Verschlüsselung, Zeitplan/Retention nach Anzahl+Alter, append-only-Protokoll, Pre-Flight, Mail-Alarm, Download, Health-Subsystem); (d) **30.3.1**: Core **erzwingt** RLS für `is_scoped`-Module bei der Installation (Abbruch sonst). Hinweis: Mehrsprachigkeit/Locale-Verwaltung ist als eigener Subsystem implementiert, im Anforderungsdokument bislang nur als Technologie-Zeile geführt (eigene Kapitel-Ausarbeitung offen). |
 | 6.31 | 07.06.2026 | Doku-Software-Abgleich (Fortsetzung): (a) **Neues Kapitel 31 „Mehrsprachigkeit und Lokalisierung"** ausgearbeitet (Grundsatz/symbolische Schlüssel, Mitlieferung, Managed Locale Store mit ausfallsicherem Schreiben, Versions-Gate, Sprachverwaltungs-Admin-Bereich mit Status-Trio + verlustfreiem Editor, Laufzeit-Sprachwahl, Audit/Health). (b) Bestehende Kapitel um umgesetzte Mechanismen ergänzt: **20.2.1** Health-Subsysteme `localization` + `backup`; **20.3** Andock-Punkt für periodische Modul-Aufgaben (`core.collector.scheduled`); **24.9.2** Durchsetzung des Anker-Gültigkeitsfensters + gleitende Rotation; **26.9.2** Dead-Letter-Retry/Verwerfen-GUI; **28.14.2** automatischer Wiederherstellungspunkt auch bei Boot-Migrationen. |
 | 6.32 | 08.06.2026 | (a) **Mehrere Worker-Instanzen** explizit unterstützt (20.3): periodische Aufgaben werden je Aufgabe über einen PostgreSQL-Advisory-Lock serialisiert (kein Doppellauf bei >1 Worker); Outbox bleibt über SKIP LOCKED kollisionsfrei. Einzelinstanz = Standard. (b) **Backup-Verschlüsselung DR-tauglich** (20.1.2): Passwort aus Env/Secret (`BACKUP_PASSWORD_FILE`/`BACKUP_PASSWORD`) mit Vorrang vor dem DB-Setting — out-of-band, damit ein verschlüsseltes Backup nicht über das im Dump enthaltene Passwort entschlüsselt werden müsste (Henne-Ei). |
+| 6.40 | 08.06.2026 | **Peer-Review-Härtung der Out-of-Process-Isolation (Kap. 23.16.2 präzisiert)**: Ein interner Peer-Review deckte auf, dass die „Migrationen-als-Rolle"-Zusage über `RESET ROLE` umgehbar war (`SET LOCAL ROLE` auf einer Superuser-Sitzung) und Updates ohnehin als Superuser migrierten. Behoben: Modul-Migrationen laufen jetzt über eine **als Login-Rolle authentifizierte Verbindung** (Install + Update; `RESET ROLE` führt nicht mehr zu Superuser), der RPC-Socket ist durch ein **pro-Host-Token** abgesichert (nicht mehr anonym aufrufbar), Katalog-Bezeichner werden gequotet. Ehrlich benannte Restposten ergänzt: RLS-Zeilenkontext über RPC und Same-User-Trennung (eigener OS-Benutzer) sind spätere Phasen. Keine Spezifikationsänderung; Korrektheits-/Sicherheits-Härtung. |
 | 6.39 | 08.06.2026 | **Upgrade-Pfad abgesichert (Kap. 24.13/28.14.2)**: Down-Reversibilität **aller** Core-Migrationen per Wegwerf-DB-Harness nachgewiesen (migrate → rollback -t 0); Modul-Update-Integrationstest für Migrationsvorschau, Wiederherstellungspunkt (nur bei ausstehenden Migrationen) und die Rollback-Kaskade. Begleitend **Bugfix**: die Update-Rollback-Kaskade rollte bei einem Fehlschlag fälschlich auch beim Install angewendete Migrationen zurück (Datenverlust) — jetzt nur noch die im fehlgeschlagenen Update neu angewendeten. Keine Spezifikationsänderung; Reifegrad-/Korrektheits-Härtung. |
 | 6.38 | 08.06.2026 | **Deployment-Feature-Flags für optionale Subsysteme (Kap. 20.8.5 neu)**: Optionale Subsysteme lassen sich je Installation per Umgebungsvariable abschalten — `FEATURE_API` (externe API v1: keine `/api`-Routen + kein API-Middleware), `FEATURE_MARKETPLACE` (Marketplace-Client/-Sync; Lizenzverwaltung bleibt), `FEATURE_BACKUP_SCHEDULER` (automatische Backups; manuelles Backup bleibt). Bewusst env-basiert (harter Betreiber-Schalter), Standard alle aktiv; Zustand unter `/health` (`features`). Setzt den im internen Review benannten Hebel zur Reduktion der Angriffs-/Wartungsfläche um (Kern-Subsysteme bleiben nicht abschaltbar). |
 | 6.37 | 08.06.2026 | **Instanzübergreifender Session-Speicher (HA-Voraussetzung, Kap. 30.7.1 neu)**: DB-gestützte Sessions (`core.sessions`, CakePHP `DatabaseSession`, eigene `SessionsTable`) als instanzübergreifender Speicher, aktivierbar über `SESSION_DEFAULTS=database` (Referenz-Compose: an). Schließt die zweite (von zwei) Voraussetzung für einen Mehrinstanz-Betrieb der Web-Schicht — die erste (mehrknotenfähiger Scheduler-Lock) war bereits erfüllt. Sessions überleben zudem Container-Recreates. Einzelinstanz bleibt Standard; HA ist ein bewusster Betreiber-Schritt (zusätzlich geteilte Volumes + Lastverteiler = Infrastruktur). |
