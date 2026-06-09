@@ -28,6 +28,9 @@ class OpenApiGenerator
             ['GET', '/api/v1/health', null, 'Liveness/Health der Plattform'],
             ['GET', '/api/v1/me', 'me:read', 'Aktueller Benutzer (Token-Inhaber)'],
             ['GET', '/api/v1/modules', 'modules:read', 'Installierte Module'],
+            ['GET', '/api/v1/notifications', 'me:read', 'Ungelesene Benachrichtigungen'],
+            ['POST', '/api/v1/notifications/{id}/read', 'me:read', 'Benachrichtigung als gelesen markieren'],
+            ['POST', '/api/v1/notifications/read-all', 'me:read', 'Alle als gelesen markieren'],
             ['GET', '/api/v1/openapi.json', null, 'Diese OpenAPI-Spezifikation'],
         ];
         foreach ($core as [$method, $path, $scope, $summary]) {

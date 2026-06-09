@@ -196,7 +196,7 @@ class WebhookService
         $row = $this->conn()->execute(
             'INSERT INTO webhook_subscriptions (name, url, event_filter, secret, active) '
             . 'VALUES (:n, :u, :f, :s, :a) RETURNING id',
-            ['n' => $name, 'u' => $url, 'f' => $filter, 's' => $secret, 'a' => $active],
+            ['n' => $name, 'u' => $url, 'f' => $filter, 's' => $secret, 'a' => $active ? 'true' : 'false'],
         )->fetch('assoc');
 
         $this->audit()->log('webhook.create', 'webhook_subscription', (string)$row['id'], [
@@ -212,7 +212,7 @@ class WebhookService
     {
         $this->conn()->execute(
             'UPDATE webhook_subscriptions SET active = :a WHERE id = :id',
-            ['a' => $active, 'id' => $id],
+            ['a' => $active ? 'true' : 'false', 'id' => $id],
         );
         $this->audit()->log($active ? 'webhook.activate' : 'webhook.deactivate', 'webhook_subscription', $id, []);
     }

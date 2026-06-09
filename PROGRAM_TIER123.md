@@ -53,7 +53,8 @@ Tests, Doku (Anforderungsdokument-Kapitel + Changelog) und eigenem Commit/Push
 ### Phase C — Nutzer-Interaktion
 - [x] **P08 — Echtzeit (SSE)** (E83). Server-Sent-Events über `LISTEN/NOTIFY`,
   token-/session-authentifiziert, je-Nutzer-Kanal. *Basis für In-App-Notifs.*
-- [ ] **P09 — Notification-Framework.** Bus mit Kanälen (Mail / In-App via P08 /
+- [x] **P09 — Notification-Framework** (E84). _In-App (SSE) + E-Mail + Modul-Kanäle
+  (`core.collector.notification_channel`) + Webhook-Event; API + Präferenzen._ Bus mit Kanälen (Mail / In-App via P08 /
   Webhook via P05), Nutzer-**Präferenzen**, Templating, Digest/Bündelung,
   Collector-Contract für Modul-Benachrichtigungen.
 
@@ -96,5 +97,8 @@ Abgeschlossene Punkte werden oben abgehakt und hier mit E-Nummer + Commit notier
 | P06 OIDC + SAML SSO | E81 | fc8cf76 | fertig — 130 Tests grün, Login-Buttons live |
 | P07 API-Reife | E82 | (folgt) | fertig — 136 Tests grün, /openapi.json + Rate-Limit live |
 
-**Phase A abgeschlossen** (P01–P04). **Phase B abgeschlossen** (P05–P07).
-Nächster Halt: Zwischenstand, dann Phase C (P08 SSE, P09 Notifications).
+| P08 Echtzeit (SSE) | E83 | 38cb836 | fertig — 138 Tests grün, Stream live |
+| P09 Notification-Framework | E84 | (folgt) | fertig — 142 Tests grün, API live |
+
+**Phasen A–C abgeschlossen** (P01–P09). Nächster Halt: Zwischenstand, dann
+Phase D (P10 Volltext-Suche, P11 AI/LLM, P12 Workflow-Engine).

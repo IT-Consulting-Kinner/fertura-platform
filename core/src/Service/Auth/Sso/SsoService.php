@@ -112,7 +112,10 @@ class SsoService
 
     public function setActive(string $id, bool $active): void
     {
-        $this->conn()->execute('UPDATE sso_providers SET active = :a WHERE id = :id', ['a' => $active, 'id' => $id]);
+        $this->conn()->execute(
+            'UPDATE sso_providers SET active = :a WHERE id = :id',
+            ['a' => $active ? 'true' : 'false', 'id' => $id],
+        );
     }
 
     public function deleteProvider(string $id): void
