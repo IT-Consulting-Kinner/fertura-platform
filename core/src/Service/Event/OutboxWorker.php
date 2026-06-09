@@ -118,6 +118,17 @@ class OutboxWorker
         } catch (Throwable $e) {
             $errors[] = 'webhook-enqueue: ' . $e->getMessage();
         }
+        // Automations-Regeln (P12) NUR beim ersten Versuch auswerten (Aktionen
+        // sind nicht idempotent -> keine Doppel-Aktionen bei Retries). Fehler
+        // sind in der Engine isoliert und beeinflussen den Event-Status nicht.
+        if ((int)$event['attempt_count'] === 1) {
+            try {
+                (new \App\Service\Automation\AutomationEngine())
+                    ->onEvent((string)$event['contract_name'], $payload);
+            } catch (Throwable $e) {
+                $this->log('Automation-Fehler: ' . $e->getMessage());
+            }
+        }
         $runtime = new \App\Service\Module\ContributionRuntime($this->registry);
         foreach ($runtime->listeners((string)$event['contract_name']) as $listener) {
             try {

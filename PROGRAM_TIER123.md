@@ -66,7 +66,7 @@ Tests, Doku (Anforderungsdokument-Kapitel + Changelog) und eigenem Commit/Push
   agnostisches **LLM-Gateway** (über P01) für OpenAI/Anthropic/xAI/Google;
   semantische Suche; Capabilities `core.ai.complete`/`core.ai.embed`. DB-Image →
   `pgvector/pgvector:pg17`.
-- [ ] **P12 — Workflow-/Automations-Engine.** Deklarative Event-Condition-Action-
+- [x] **P12 — Workflow-/Automations-Engine** (E87). Deklarative Event-Condition-Action-
   Regeln + State-Machines auf Events (P-Outbox) mit Aktionen (Notify/Webhook/
   Service-Call), Admin-UI, Audit.
 
@@ -103,7 +103,11 @@ Abgeschlossene Punkte werden oben abgehakt und hier mit E-Nummer + Commit notier
 | P09 Notification-Framework | E84 | (folgt) | fertig — 142 Tests grün, API live |
 
 | P10 Volltext-Suche | E85 | 228d025 | fertig — 145 Tests grün, /search live |
-| P11 AI/LLM (pgvector) | E86 | (folgt) | fertig — 153 Tests grün, 4 Provider |
+| P11 AI/LLM (pgvector) | E86 | 8f6b199 | fertig — 153 Tests grün, 4 Provider |
+| P12 Workflow-Engine | E87 | (folgt) | fertig — 160 Tests grün |
+
+**Phasen A–D abgeschlossen** (P01–P12). Nächster Halt: Zwischenstand, dann
+Phase E (P13 Reporting/Export, P14 Off-Site-Backup/PITR, P15 Zero-Downtime).
 
 **Phasen A–C abgeschlossen** (P01–P09). Phase D läuft: P10 fertig, als Nächstes
 P11 AI/LLM (Provider: OpenAI/Anthropic/xAI/Google), P12 Workflow-Engine.
