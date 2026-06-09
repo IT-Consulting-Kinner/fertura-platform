@@ -2790,20 +2790,30 @@ Einladungs-Accounts (Status "eingeladen") haben keine Fachdaten oder
 Referenzen erzeugt und dürfen beim Widerruf physisch gelöscht werden
 (Kapitel 1.6 und 23.3.1). Für sie ist keine Anonymisierung erforderlich.
 
-**Grenze: personenbezogene Daten in Freitext.** Personenbezogene Daten,
-die in Inhalten enthalten sind (z.B. Freitext in Ticket-Texten,
-Signaturen oder Kommentaren), werden durch die Identitäts-Anonymisierung
-nicht erfasst. Ihre Bereinigung ist ein eigener fachlicher Prozess und
-nicht Teil der automatischen Account-Anonymisierung (Spätere Version
-bzw. Betreiberprozess).
+**Personenbezogene Daten in Freitext (Modul-Teilnahme).** Personenbezogene
+Daten, die in Modul-Inhalten enthalten sind (z.B. Freitext in
+Ticket-Texten, Signaturen oder Kommentaren), kennt der Core nicht — nur
+das jeweilige Modul kennt sein Datenmodell. Der Core stellt dafür einen
+**Teilnahme-Hook** bereit: den Collector-Contract
+`core.collector.anonymize`. Beim irreversiblen Anonymisieren eines
+Benutzers ruft der Core **in derselben Transaktion** jedes Modul auf, das
+einen Beitrag (`App\Service\Privacy\AnonymizeContributorInterface`)
+registriert hat, damit es seine eigenen personenbezogenen Daten zu dem
+Benutzer bereinigt. Das ist eine **atomare All-or-Nothing**-Operation
+(scheitert ein Beitrag, scheitert die gesamte Anonymisierung). Die
+**Orchestrierung ist Core-Funktion**; die fachliche Bereinigung liegt beim
+jeweiligen Modul.
 
 #### 27.15.3.1 Grundregel
 
 Aktivierte Benutzer werden nicht gelöscht, sondern irreversibel
 anonymisiert. Die technische ID und historische Referenzen bleiben
 erhalten; der Personenbezug wird vollständig und unumkehrbar entfernt.
-Die Anonymisierung der Identitätsfelder ist eine Muss-Anforderung; die
-Bereinigung personenbezogener Freitextinhalte ist eine spätere Version.
+Die Anonymisierung der Identitätsfelder (Core) ist eine Muss-Anforderung;
+die Bereinigung personenbezogener Freitextinhalte erfolgt über den
+Core-Hook `core.collector.anonymize`, an dem die Module ihre eigenen Daten
+mit-bereinigen (Core stellt die Orchestrierung, das Modul die fachliche
+Bereinigung).
 
 ## 27.16 Rechteprüfung zur Laufzeit
 
@@ -4467,6 +4477,7 @@ Komponente neu auszuliefern.
 | 6.30 | 07.06.2026 | Doku-Software-Abgleich nach Umsetzung: (a) **7. Administrationsbereich „Sprachverwaltung"** in 27.3.1 + Entscheidung 170 ergänzt (zuvor 6); (b) **API-Token tragen Scopes** (zusätzliche Einschränkung, nie erweiternd) in 27.16.3 + Entscheidung 162 korrigiert (zuvor „keine eigenen Scopes"); (c) **20.1.2 um den realen Backup-Funktionsumfang erweitert** (ZIP+Zeitstempel, Verifikation-vor-Abschluss, optionale AES-256-Verschlüsselung, Zeitplan/Retention nach Anzahl+Alter, append-only-Protokoll, Pre-Flight, Mail-Alarm, Download, Health-Subsystem); (d) **30.3.1**: Core **erzwingt** RLS für `is_scoped`-Module bei der Installation (Abbruch sonst). Hinweis: Mehrsprachigkeit/Locale-Verwaltung ist als eigener Subsystem implementiert, im Anforderungsdokument bislang nur als Technologie-Zeile geführt (eigene Kapitel-Ausarbeitung offen). |
 | 6.31 | 07.06.2026 | Doku-Software-Abgleich (Fortsetzung): (a) **Neues Kapitel 31 „Mehrsprachigkeit und Lokalisierung"** ausgearbeitet (Grundsatz/symbolische Schlüssel, Mitlieferung, Managed Locale Store mit ausfallsicherem Schreiben, Versions-Gate, Sprachverwaltungs-Admin-Bereich mit Status-Trio + verlustfreiem Editor, Laufzeit-Sprachwahl, Audit/Health). (b) Bestehende Kapitel um umgesetzte Mechanismen ergänzt: **20.2.1** Health-Subsysteme `localization` + `backup`; **20.3** Andock-Punkt für periodische Modul-Aufgaben (`core.collector.scheduled`); **24.9.2** Durchsetzung des Anker-Gültigkeitsfensters + gleitende Rotation; **26.9.2** Dead-Letter-Retry/Verwerfen-GUI; **28.14.2** automatischer Wiederherstellungspunkt auch bei Boot-Migrationen. |
 | 6.32 | 08.06.2026 | (a) **Mehrere Worker-Instanzen** explizit unterstützt (20.3): periodische Aufgaben werden je Aufgabe über einen PostgreSQL-Advisory-Lock serialisiert (kein Doppellauf bei >1 Worker); Outbox bleibt über SKIP LOCKED kollisionsfrei. Einzelinstanz = Standard. (b) **Backup-Verschlüsselung DR-tauglich** (20.1.2): Passwort aus Env/Secret (`BACKUP_PASSWORD_FILE`/`BACKUP_PASSWORD`) mit Vorrang vor dem DB-Setting — out-of-band, damit ein verschlüsseltes Backup nicht über das im Dump enthaltene Passwort entschlüsselt werden müsste (Henne-Ei). |
+| 6.43 | 09.06.2026 | **Anonymisierungs-Hook für Module (Kap. 27.15.3 aktualisiert)**: Der Core stellt jetzt den Collector-Contract `core.collector.anonymize` bereit, über den Module beim irreversiblen Anonymisieren eines Benutzers **in derselben Transaktion** ihre eigenen personenbezogenen (Freitext-)Daten zu dem Benutzer mit-bereinigen (Interface `AnonymizeContributorInterface`). All-or-Nothing; für die Beiträge wird RLS-Bypass gesetzt und danach wiederhergestellt. Damit ist die zuvor als „spätere Version/Betreiberprozess" markierte Freitext-Bereinigung über Modulgrenzen **Core-seitig orchestriert** — die fachliche Bereinigung bleibt Modul-Sache. |
 | 6.42 | 09.06.2026 | **Peer-Review-Härtung der Modul-Installation (Kap. 24)**: Bestand-Befund M7 behoben (Korrektheits-Härtung, keine Spezifikationsänderung). Der `install()`-Vorgang lässt sich nicht in eine DB-Transaktion kapseln (CREATE ROLE/Schema und das Kopieren des Pakets sind teils nicht-transaktional); zuvor räumte nur der RLS-Pflicht-Abbruch (E47) einen Teil der Artefakte ab — schlug ein **späterer** Schritt fehl (Schema-Grant an die App-Rolle, Sprachpaket-Import oder eine `RegistryException` beim Registrieren der Contracts), blieben Schema, Modulzeile, kopiertes Verzeichnis und — bei `out_of_process` — die provisionierte DB-Rolle `mod_<key>` zurück, sodass ein erneuter Install an „Modul bereits installiert" scheiterte. Jetzt umschließt ein zentraler manueller Rückbau **alle** Schritte ab Beginn der Seiteneffekte: bei jedem Fehlschlag wird der isolierte Host gestoppt, die DB-Rolle entfernt, das Schema gedroppt, Modulzeile/Registrierungen/Contracts/Ressourcen/Sprachpakete gelöscht und das kopierte Verzeichnis (samt Sprachpaket-Dateien) entfernt. Verifiziert per Integrationstest (erzwungener Fehlschlag nach der Schema-Erzeugung → nichts bleibt zurück, anschließender Install gelingt). |
 | 6.41 | 09.06.2026 | **Peer-Review-Härtung der Daten-Wiederherstellung (Kap. 20.1.2)**: Zwei Bestand-Befunde im Backup-Subsystem behoben (Korrektheits-Härtung, keine Spezifikationsänderung). (a) **Restore-Erfolg wird jetzt geprüft**: Die destruktive Wiederherstellung wertet Exitcode **und** Ausgabe von `pg_restore` aus und schlägt bei echten Fehlern fehl — zuvor wurde beides ignoriert, sodass ein fehlgeschlagener Restore still durchlief, der Wartungsmodus (HTTP 503) wieder freigegeben und „erfolgreich" protokolliert wurde, obwohl eine halb-wiederhergestellte Datenbank online ging. Harmlose `--clean`-Notices („existiert nicht, übersprungen") bleiben bewusst toleriert (kein Fehlalarm). (b) **Konsistenz-Lock ist Pflicht**: Lässt sich der Lifecycle-Lock beim Sichern nicht erhalten (eine parallele Update-/Restore-/Backup-Operation hält ihn), bricht die Sicherung jetzt klar ab, statt still ohne Lock einen DB↔Storage-inkonsistenten Snapshot zu erzeugen. Verifiziert per Integrationstest (gehaltener Lock → Abbruch). |
 | 6.40 | 08.06.2026 | **Peer-Review-Härtung der Out-of-Process-Isolation (Kap. 23.16.2 präzisiert)**: Ein interner Peer-Review deckte auf, dass die „Migrationen-als-Rolle"-Zusage über `RESET ROLE` umgehbar war (`SET LOCAL ROLE` auf einer Superuser-Sitzung) und Updates ohnehin als Superuser migrierten. Behoben: Modul-Migrationen laufen jetzt über eine **als Login-Rolle authentifizierte Verbindung** (Install + Update; `RESET ROLE` führt nicht mehr zu Superuser), der RPC-Socket ist durch ein **pro-Host-Token** abgesichert (nicht mehr anonym aufrufbar), Katalog-Bezeichner werden gequotet. Ehrlich benannte Restposten ergänzt: RLS-Zeilenkontext über RPC und Same-User-Trennung (eigener OS-Benutzer) sind spätere Phasen. Keine Spezifikationsänderung; Korrektheits-/Sicherheits-Härtung. |

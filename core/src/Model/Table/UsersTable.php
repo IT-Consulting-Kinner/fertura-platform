@@ -108,11 +108,17 @@ class UsersTable extends AppTable
                 ['uid' => $id],
             );
 
+            // Module ihre eigenen personenbezogenen Daten bereinigen lassen
+            // (Kap. 27.15.3, Collector core.collector.anonymize) — in derselben
+            // Transaktion (atomar). Scheitert ein Beitrag, scheitert die gesamte
+            // Anonymisierung.
+            $scrubbed = (new \App\Service\Privacy\AnonymizationService())->run((string)$id, $this->getConnection());
+
             // Audit (Kap. 27.18): Anonymisierung protokollieren. Keine PII im
             // Payload (E16); Benutzer per UUID referenziert.
             (new AuditLogger())->log('user.anonymize', 'user', $id, [
                 'oldValue' => ['status' => $previousStatus],
-                'newValue' => ['status' => User::STATUS_ANONYMIZED],
+                'newValue' => ['status' => User::STATUS_ANONYMIZED, 'module_records_scrubbed' => $scrubbed],
             ]);
 
             return true;
