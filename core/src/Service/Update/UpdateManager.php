@@ -202,6 +202,10 @@ class UpdateManager
             if ($hasMigrations) {
                 $recoveryPath = $this->recovery->create("update_module_$key");
             }
+            // Bereits angewendete Migrationen merken: bei einem Fehlschlag dürfen
+            // NUR die in DIESEM Update neu angewendeten zurückgerollt werden — die
+            // bereits beim Install angewendeten bleiben (sonst Datenverlust).
+            $preApplied = $this->appliedMigrations($moduleId, $newSourcePath . '/migrations');
 
             $backupPath = $targetPath . '.bak';
             $this->removeDir($backupPath);
@@ -254,7 +258,8 @@ class UpdateManager
                     rsort($files);
                     foreach ($files as $f) {
                         $name = basename($f);
-                        if ($this->migrations->isApplied($moduleId, $name)) {
+                        // Nur in diesem Update neu angewendete Migrationen zurückrollen.
+                        if ($this->migrations->isApplied($moduleId, $name) && !in_array($name, $preApplied, true)) {
                             $this->migrations->runDown($moduleId, $schema, $newSourcePath . '/migrations', $name);
                         }
                     }
@@ -402,6 +407,25 @@ class UpdateManager
         } catch (PackageVerificationException $e) {
             throw new LifecycleException('Signaturprüfung fehlgeschlagen: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Basenamen der im Verzeichnis enthaltenen, **bereits angewendeten**
+     * Migrationen (für die korrekte Eingrenzung des Update-Rückbaus).
+     *
+     * @return list<string>
+     */
+    private function appliedMigrations(string $moduleId, string $dir): array
+    {
+        $out = [];
+        foreach (glob($dir . '/*.sql') ?: [] as $f) {
+            $name = basename($f);
+            if ($this->migrations->isApplied($moduleId, $name)) {
+                $out[] = $name;
+            }
+        }
+
+        return $out;
     }
 
     private function hasPendingMigrations(string $moduleId, string $dir): bool
