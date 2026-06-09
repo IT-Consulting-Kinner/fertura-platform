@@ -73,6 +73,9 @@ return function (RouteBuilder $routes): void {
         // Prometheus-Metriken (P04): geschützt wie der Health-Detailpfad.
         $builder->connect('/metrics', ['controller' => 'Metrics', 'action' => 'index']);
 
+        // Echtzeit-Stream (P08, SSE) für den angemeldeten Benutzer.
+        $builder->connect('/events/stream', ['controller' => 'Sse', 'action' => 'stream']);
+
         // Admin-Bereich (scoped admin, Kap. 27.3.1).
         $builder->prefix('Admin', function (RouteBuilder $admin): void {
             $admin->connect('/', ['controller' => 'Dashboard', 'action' => 'index']);

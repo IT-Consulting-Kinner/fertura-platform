@@ -51,7 +51,7 @@ Tests, Doku (Anforderungsdokument-Kapitel + Changelog) und eigenem Commit/Push
   P02), Modul-Endpunkt-Registrierung (Contract `core.api.route`), API-Versionierung.
 
 ### Phase C — Nutzer-Interaktion
-- [ ] **P08 — Echtzeit (SSE).** Server-Sent-Events über `LISTEN/NOTIFY`,
+- [x] **P08 — Echtzeit (SSE)** (E83). Server-Sent-Events über `LISTEN/NOTIFY`,
   token-/session-authentifiziert, je-Nutzer-Kanal. *Basis für In-App-Notifs.*
 - [ ] **P09 — Notification-Framework.** Bus mit Kanälen (Mail / In-App via P08 /
   Webhook via P05), Nutzer-**Präferenzen**, Templating, Digest/Bündelung,
