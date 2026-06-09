@@ -62,6 +62,18 @@ class SettingsCatalog
             'backup.min_free_mb' => ['type' => 'int', 'default' => 500, 'min' => 0, 'max' => 10485760],
             // Alarm-Empfänger bei fehlgeschlagenem Backup (E-Mail). Leer = aus.
             'backup.alert_email' => ['type' => 'string', 'default' => null],
+            // Optionales Launcher-Prefix für isolierte Modul-Hosts (Kap. 23.16.2):
+            // Befehl(+Argumente), der VOR `php` gesetzt wird, um den Host-Prozess
+            // zusätzlich vom Betriebssystem zu isolieren — z. B.
+            //   "setpriv --reuid=1001 --regid=1001 --clear-groups --"  (eigener OS-Benutzer),
+            //   "bwrap --unshare-all --ro-bind / / --proc /proc --dev /dev --die-with-parent"  (FS/Kernel-Sandbox),
+            //   "firejail --quiet --private".
+            // Wird unverändert (NICHT als ein Argument gequotet) eingesetzt, läuft
+            // also in der bereits bereinigten `env -i`-Umgebung und exec/wrapped `php`.
+            // Leer = kein Prefix (Default, In-Process-UID). Nur durch Betreiber/Admin
+            // setzbar; der Befehl muss das Image bereitstellen und Argumente an `php`
+            // durchreichen. Siehe MODULE_DEVELOPMENT / 23.16.2.
+            'module.host.launcher' => ['type' => 'string', 'default' => null],
         ],
     ];
 

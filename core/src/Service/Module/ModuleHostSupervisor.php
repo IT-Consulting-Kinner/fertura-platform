@@ -57,6 +57,20 @@ class ModuleHostSupervisor
         return ROOT . DIRECTORY_SEPARATOR . 'bin' . DIRECTORY_SEPARATOR . 'module-host.php';
     }
 
+    /**
+     * Optionales Launcher-Prefix (`core.module.host.launcher`) für zusätzliche
+     * OS-Isolation der Hosts (eigener Benutzer/Sandbox). Leer = kein Prefix.
+     */
+    private function launcherPrefix(): string
+    {
+        try {
+            return (string)(new \App\Service\Settings\SettingsManager())
+                ->get('core', 'module.host.launcher', '');
+        } catch (Throwable) {
+            return ''; // Settings nicht verfügbar (z. B. früher Boot) -> kein Prefix
+        }
+    }
+
     public function isRunning(string $key): bool
     {
         $sock = @stream_socket_client('unix://' . $this->socketPath($key), $errno, $errstr, 1);
@@ -124,8 +138,15 @@ class ModuleHostSupervisor
                 $assign .= $k . '=' . escapeshellarg($v) . ' ';
             }
             $log = $this->logDir . '/' . $key . '.log';
+            // Optionales Launcher-Prefix (Kap. 23.16.2): zusätzliche OS-Isolation
+            // (eigener Benutzer via setpriv/sudo, FS/Kernel-Sandbox via bwrap/
+            // firejail, …) ohne Core-Codeänderung. Wird zwischen `env -i <vars>`
+            // und `php` gesetzt, läuft also in der bereinigten Umgebung und
+            // wrapt/exec't `php`. Leer = kein Prefix (Default).
+            $launcher = trim((string)$this->launcherPrefix());
+            $prefix = $launcher === '' ? '' : $launcher . ' ';
             // Bereinigte Umgebung (env -i), losgelöst (nohup &), PID einfangen.
-            $cmd = 'nohup env -i ' . $assign . ' php ' . escapeshellarg($this->hostScript())
+            $cmd = 'nohup env -i ' . $assign . $prefix . 'php ' . escapeshellarg($this->hostScript())
                 . ' ' . escapeshellarg($key) . ' > ' . escapeshellarg($log) . ' 2>&1 & echo $!';
             $pid = trim((string)shell_exec('/bin/sh -c ' . escapeshellarg($cmd)));
             if ($pid !== '') {
@@ -166,16 +187,26 @@ class ModuleHostSupervisor
         @unlink($this->tokenPath($key));
     }
 
-    /** Prüft, ob $pid tatsächlich der Modul-Host dieses Keys ist (PID-Recycling-Schutz). */
+    /**
+     * Prüft, ob $pid tatsächlich der Modul-Host dieses Keys ist (PID-Recycling-Schutz).
+     *
+     * Wrapper-tolerant: ein Launcher-Prefix (setpriv/bwrap/firejail/…) erscheint
+     * in der `/proc/<pid>/cmdline` vor `php module-host.php <key>` und kann die
+     * Argumente entweder einzeln (exec-artige Wrapper) oder als kombinierten
+     * String (`sh -c "…"`) führen. Wir prüfen daher auf das **Vorkommen** von
+     * Host-Skript UND Modul-Key in der zusammengesetzten Kommandozeile statt auf
+     * ein exaktes argv-Token — beides zusammen ist für einen fremden, recycelten
+     * PID praktisch unmöglich, bleibt also recycling-sicher.
+     */
     private function isOurHost(int $pid, string $key): bool
     {
         $cmdline = @file_get_contents('/proc/' . $pid . '/cmdline');
         if ($cmdline === false || $cmdline === '') {
             return false; // Prozess weg / nicht lesbar -> nicht killen
         }
-        $args = explode("\0", $cmdline);
+        $joined = str_replace("\0", ' ', $cmdline);
 
-        return str_contains(implode(' ', $args), 'module-host.php') && in_array($key, $args, true);
+        return str_contains($joined, 'module-host.php') && str_contains($joined, $key);
     }
 
     /** Startet den Host, falls das Modul aktiv+isoliert ist und nicht läuft. */

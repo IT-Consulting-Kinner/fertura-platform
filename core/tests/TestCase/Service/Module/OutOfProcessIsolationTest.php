@@ -107,6 +107,47 @@ class OutOfProcessIsolationTest extends TestCase
         $this->assertFalse($sup->isRunning(self::KEY), 'Deaktivierung muss den Host stoppen.');
     }
 
+    public function testLauncherPrefixWrapsHostProcess(): void
+    {
+        // Konfigurierbares Launcher-Prefix (Kap. 23.16.2): erlaubt zusätzliche
+        // OS-Isolation (eigener Benutzer/Sandbox) ohne Core-Codeänderung. Hier
+        // ein transparenter Test-Launcher, der einen Marker schreibt und dann
+        // `php` exec't (Argumente werden durchgereicht).
+        $marker = sys_get_temp_dir() . '/fertura_launch_marker_' . bin2hex(random_bytes(5));
+        $wrapper = sys_get_temp_dir() . '/fertura_launch_wrap_' . bin2hex(random_bytes(5)) . '.sh';
+        file_put_contents(
+            $wrapper,
+            "#!/bin/sh\n" . 'echo wrapped > ' . escapeshellarg($marker) . "\n" . 'exec "$@"' . "\n",
+        );
+        @chmod($wrapper, 0o755);
+
+        $sm = new SettingsManager();
+        $prevLauncher = (string)$sm->get('core', 'module.host.launcher', '');
+        $sm->set('core', 'module.host.launcher', $wrapper);
+
+        try {
+            $lc = new ModuleLifecycle();
+            $lc->install($this->fixture(self::KEY), 'out_of_process');
+            $lc->activate(self::KEY); // -> spawn() setzt das Launcher-Prefix vor `php`
+
+            $sup = new ModuleHostSupervisor();
+            $this->assertTrue($sup->isRunning(self::KEY), 'Host muss trotz Launcher-Prefix hochkommen.');
+            $this->assertFileExists($marker, 'Das Launcher-Prefix muss vor `php` ausgeführt worden sein.');
+
+            // Argumente korrekt durchgereicht -> echter Service-Aufruf funktioniert.
+            $echo = (new RemoteInvoker())->invoke(self::KEY, 'isolated_module.service.echo', ['msg' => 'hi']);
+            $this->assertSame('hi', $echo['echo']);
+
+            // stop() erkennt den (gewrappten) Host weiterhin und beendet ihn sauber.
+            $lc->deactivate(self::KEY);
+            $this->assertFalse($sup->isRunning(self::KEY), 'Deaktivierung muss den gewrappten Host stoppen.');
+        } finally {
+            $sm->set('core', 'module.host.launcher', $prevLauncher);
+            @unlink($marker);
+            @unlink($wrapper);
+        }
+    }
+
     public function testMaliciousMigrationCannotEscalateViaResetRole(): void
     {
         // Eine bösartige Migration versucht per `RESET ROLE` wieder Superuser zu
@@ -204,8 +245,10 @@ class OutOfProcessIsolationTest extends TestCase
 
     public function testEnforcementRejectsResolverModule(): void
     {
-        // Resolver laufen (noch) nicht über RPC -> out_of_process abgelehnt
-        // (Service/Collector/Event sind seit Phase 3 erlaubt).
+        // Der config-artige Auth-Provider-Slot (core.auth.provider) liefert ein
+        // In-Process-Authenticator-Objekt und ist daher nicht über RPC reichbar
+        // -> out_of_process abgelehnt. (Daten-Resolver/Service/Collector/Event/
+        // Scheduled sind seit Phase 3 erlaubt.)
         $dir = sys_get_temp_dir() . '/fertura_res_' . bin2hex(random_bytes(5));
         @mkdir($dir, 0o775, true);
         file_put_contents($dir . '/manifest.json', json_encode([

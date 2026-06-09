@@ -156,15 +156,27 @@ bin/cake module host status                     # laufende Hosts anzeigen
   kein `BACKUP_PASSWORD`). Ein **Supervisor** startet ihn beim Aktivieren, stoppt
   ihn beim Deaktivieren/Löschen und startet abgestürzte Hosts neu (der Worker
   überwacht periodisch).
-- Der Core ruft **Service-Contracts** (`services_registered`), **Collector-
-  Beiträge** (`collectors_registered`, z. B. Health/Anonymisierung) und
-  **Event-Listener** (`events_registered`) transparent über RPC im Host auf
-  (`RemoteInvoker`/`ContributionRuntime`). Der **RLS-Zeilenkontext** der Anfrage
-  wird mitgereicht; Beitragsklassen nutzen im Host `ConnectionManager::get('default')`
-  auf die Modul-Rolle (Search-Path aufs Modul-Schema).
-- **Einschränkung (bewusst, Phase 3):** **Resolver** und **periodische Aufgaben**
-  (`core.collector.scheduled`) laufen noch nicht über RPC → die Isolation wird
-  bei deren Deklaration **abgelehnt** (statt still in-process auszuführen).
+- Der Core ruft **alle gängigen Erweiterungspunkte** transparent über RPC im Host
+  auf (`RemoteInvoker`/`ContributionRuntime`): **Service-Contracts**
+  (`services_registered`), **Collector-Beiträge** (`collectors_registered`, z. B.
+  Health/Anonymisierung **und periodische Aufgaben** `core.collector.scheduled`),
+  **Event-Listener** (`events_registered`) und **Daten-Resolver**
+  (`resolvers_registered`). Der **RLS-Zeilenkontext** der Anfrage wird mitgereicht;
+  Beitragsklassen nutzen im Host `ConnectionManager::get('default')` auf die
+  Modul-Rolle (Search-Path aufs Modul-Schema). Bei **periodischen Aufgaben**
+  bleiben Fälligkeits-Prüfung (Heartbeat) und der Mehrinstanz-Advisory-Lock im
+  Core; nur `run()` reist über RPC (Systemkontext, RLS-Bypass).
+- **Einzige Ausnahme:** der **Auth-Provider-Slot** (`core.auth.provider`) — er ist
+  config-artig (liefert ein In-Process-Authenticator-Objekt, das nicht über RPC
+  reichbar ist) und wird bei Isolation **abgelehnt** (statt still in-process).
+- **Optionale OS-Härtung (Launcher-Prefix):** Das Setting
+  `core.module.host.launcher` setzt ein Befehls-Prefix vor `php`, um den
+  Host-Prozess zusätzlich vom OS zu isolieren — **ohne Core-Codeänderung**. Z. B.
+  `setpriv --reuid=1001 --regid=1001 --clear-groups --` (eigener OS-Benutzer;
+  erfordert OS-Rechte), `bwrap --unshare-all --ro-bind / / --proc /proc --dev /dev
+  --die-with-parent` (FS-/Kernel-Sandbox) oder `firejail`. Der Befehl muss das
+  Image bereitstellen und Argumente an `php` durchreichen. Leer = kein Prefix
+  (Default). Capability-Tokens je Aufruf sind eine spätere Protokoll-Erweiterung.
 - **Transaktionsgrenze:** Ein Out-of-Process-Beitrag committet in seiner eigenen
   Sitzung — Core-Operation und Modul-Beitrag bilden keine verteilte Transaktion.
 - Verifikation: `OutOfProcessIsolationTest` + `OutOfProcessPhase3Test` (E2E) und
