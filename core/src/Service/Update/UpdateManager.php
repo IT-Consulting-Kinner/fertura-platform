@@ -7,6 +7,7 @@ use App\Application;
 use App\Audit\AuditLogger;
 use App\Model\Entity\ContractRegistration;
 use App\Service\Module\LifecycleException;
+use App\Service\Module\ModuleDbRole;
 use App\Service\Module\ModuleManifest;
 use App\Service\Module\ModuleMigrationRunner;
 use App\Service\Registry\ContractRegistry;
@@ -196,6 +197,11 @@ class UpdateManager
             $schema = 'mod_' . $key;
             $targetPath = (string)$mod['source_path'];
             $wasActive = $mod['status'] === 'active';
+            // Isolierte Module: Migrationen über die Login-Rolle ausführen (kein
+            // Superuser-Code, Kap. 23.16.2) — sonst liefe ein Update privilegiert.
+            $roleDsn = ((string)($mod['isolation'] ?? 'in_process')) === 'out_of_process'
+                ? (new ModuleDbRole())->dsn($key)
+                : null;
 
             $hasMigrations = $this->hasPendingMigrations($moduleId, $newSourcePath . '/migrations');
             $recoveryPath = null;
@@ -225,7 +231,11 @@ class UpdateManager
                     ['v' => $newVersion, 'm' => json_encode($manifest->data), 'k' => $key],
                 );
 
-                $this->migrations->runUp($moduleId, $schema, $targetPath . '/migrations');
+                $this->migrations->runUp($moduleId, $schema, $targetPath . '/migrations', $roleDsn);
+                // Isolierte Module: RLS auf neuen Tabellen erzwingen.
+                if ($roleDsn !== null) {
+                    (new ModuleDbRole())->forceRls($key);
+                }
 
                 // Contracts neu aufbauen (vom Modul definierte).
                 $this->conn()->execute('DELETE FROM contracts WHERE owner_module_key = :k', ['k' => $key]);
@@ -260,7 +270,7 @@ class UpdateManager
                         $name = basename($f);
                         // Nur in diesem Update neu angewendete Migrationen zurückrollen.
                         if ($this->migrations->isApplied($moduleId, $name) && !in_array($name, $preApplied, true)) {
-                            $this->migrations->runDown($moduleId, $schema, $newSourcePath . '/migrations', $name);
+                            $this->migrations->runDown($moduleId, $schema, $newSourcePath . '/migrations', $name, $roleDsn);
                         }
                     }
 

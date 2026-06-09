@@ -19,13 +19,17 @@ use Throwable;
 class ModuleMigrationRunner
 {
     /**
-     * @param ?string $asRole Wenn gesetzt, läuft die Migrations-DDL unter dieser
-     *   (eingeschränkten) Rolle statt als Superuser (Out-of-Process-Isolation,
-     *   Kap. 23.16.2) — so kann eine bösartige Modul-Migration den Core nicht
-     *   beschädigen. Der Tracking-Insert läuft weiter als Superuser.
+     * @param ?string $roleDsn Wenn gesetzt, läuft die Migrations-DDL über eine als
+     *   **eingeschränkte Modul-Login-Rolle** authentifizierte Verbindung (PDO-DSN)
+     *   statt als Superuser (Out-of-Process-Isolation, Kap. 23.16.2). Als echte
+     *   Login-Rolle kann eine bösartige Migration den Core **nicht** beschädigen:
+     *   `RESET ROLE`/`SET ROLE`/`SET SESSION AUTHORIZATION` führen nicht zu
+     *   Superuser zurück (kein `SET LOCAL ROLE` auf einer Superuser-Session). Der
+     *   Tracking-Insert läuft auf der Superuser-Verbindung (die Rolle hat keinen
+     *   Zugriff auf core.*).
      * @return list<string> Namen der ausgeführten Migrationen.
      */
-    public function runUp(string $moduleId, string $schema, string $migrationsDir, ?string $asRole = null): array
+    public function runUp(string $moduleId, string $schema, string $migrationsDir, ?string $roleDsn = null): array
     {
         if (!is_dir($migrationsDir)) {
             return [];
@@ -34,6 +38,7 @@ class ModuleMigrationRunner
         sort($files);
 
         $connection = \App\Infrastructure\Db::privileged();
+        $rolePdo = $roleDsn !== null ? $this->roleConnection($roleDsn) : null;
         $executed = [];
 
         foreach ($files as $file) {
@@ -46,31 +51,39 @@ class ModuleMigrationRunner
                 continue;
             }
 
-            $up = $this->upPart((string)file_get_contents($file));
+            $statements = $this->statements($this->upPart((string)file_get_contents($file)));
 
             try {
-                $connection->transactional(function () use ($connection, $schema, $up, $moduleId, $name, $asRole): void {
-                    $connection->execute("SET LOCAL search_path TO $schema, core, public");
-                    // Isolierte Module: DDL unter der eingeschränkten Modul-Rolle
-                    // (kann nur das eigene Schema verändern), danach zurück zum
-                    // Superuser für den Tracking-Insert in core.*.
-                    if ($asRole !== null) {
-                        $connection->execute("SET LOCAL ROLE $asRole");
+                if ($rolePdo !== null) {
+                    // DDL als eingeschränkte Login-Rolle (kein Superuser-Code).
+                    $rolePdo->beginTransaction();
+                    $rolePdo->exec("SET LOCAL search_path TO $schema, core, public");
+                    foreach ($statements as $stmt) {
+                        $rolePdo->exec($stmt);
                     }
-                    foreach ($this->statements($up) as $stmt) {
-                        $connection->execute($stmt);
-                    }
-                    if ($asRole !== null) {
-                        $connection->execute('RESET ROLE');
-                    }
+                    $rolePdo->commit();
+                    // Tracking als Superuser (Rolle hat keinen core.*-Zugriff).
                     $connection->execute(
-                        "INSERT INTO core.module_migrations_log (module_id, migration_name, status) "
-                        . "VALUES (:m, :n, 'success')",
+                        "INSERT INTO core.module_migrations_log (module_id, migration_name, status) VALUES (:m, :n, 'success')",
                         ['m' => $moduleId, 'n' => $name],
                     );
-                });
+                } else {
+                    $connection->transactional(function () use ($connection, $schema, $statements, $moduleId, $name): void {
+                        $connection->execute("SET LOCAL search_path TO $schema, core, public");
+                        foreach ($statements as $stmt) {
+                            $connection->execute($stmt);
+                        }
+                        $connection->execute(
+                            "INSERT INTO core.module_migrations_log (module_id, migration_name, status) VALUES (:m, :n, 'success')",
+                            ['m' => $moduleId, 'n' => $name],
+                        );
+                    });
+                }
                 $executed[] = $name;
             } catch (Throwable $e) {
+                if ($rolePdo !== null && $rolePdo->inTransaction()) {
+                    $rolePdo->rollBack();
+                }
                 // Kein 'failed'-Log (sonst Unique-Konflikt beim Retry); die
                 // fehlgeschlagene Migrationstransaktion ist bereits zurückgerollt.
                 throw new RuntimeException("Modul-Migration $name fehlgeschlagen: " . $e->getMessage(), 0, $e);
@@ -83,27 +96,66 @@ class ModuleMigrationRunner
     /**
      * Führt die down-Operation einer bereits angewendeten Modul-Migration aus
      * (Rollback). Liest den @DOWN-Teil aus der Paketdatei, führt ihn im
-     * Modul-Schema aus und entfernt den Log-Eintrag.
+     * Modul-Schema aus und entfernt den Log-Eintrag. Bei isolierten Modulen
+     * (`$roleDsn`) läuft auch die down-DDL als Login-Rolle.
      */
-    public function runDown(string $moduleId, string $schema, string $migrationsDir, string $name): void
+    public function runDown(string $moduleId, string $schema, string $migrationsDir, string $name, ?string $roleDsn = null): void
     {
         $file = rtrim($migrationsDir, '/') . '/' . $name;
         if (!is_file($file)) {
             return;
         }
-        $down = $this->downPart((string)file_get_contents($file));
+        $statements = $this->statements($this->downPart((string)file_get_contents($file)));
+        // Eine leere @DOWN-Sektion ist kein gültiger Rückbau: den Tracking-Eintrag
+        // OHNE tatsächliches Zurücksetzen zu löschen würde den Stand inkonsistent
+        // machen (Re-Update scheitert dann an „Objekt existiert bereits").
+        if ($statements === []) {
+            throw new RuntimeException("Migration $name hat keine @DOWN-Sektion – Rückbau nicht möglich.");
+        }
 
         $connection = \App\Infrastructure\Db::privileged();
-        $connection->transactional(function () use ($connection, $schema, $down, $moduleId, $name): void {
-            $connection->execute("SET LOCAL search_path TO $schema, core, public");
-            foreach ($this->statements($down) as $stmt) {
-                $connection->execute($stmt);
+        $rolePdo = $roleDsn !== null ? $this->roleConnection($roleDsn) : null;
+        try {
+            if ($rolePdo !== null) {
+                $rolePdo->beginTransaction();
+                $rolePdo->exec("SET LOCAL search_path TO $schema, core, public");
+                foreach ($statements as $stmt) {
+                    $rolePdo->exec($stmt);
+                }
+                $rolePdo->commit();
+                $connection->execute(
+                    'DELETE FROM core.module_migrations_log WHERE module_id = :m AND migration_name = :n',
+                    ['m' => $moduleId, 'n' => $name],
+                );
+            } else {
+                $connection->transactional(function () use ($connection, $schema, $statements, $moduleId, $name): void {
+                    $connection->execute("SET LOCAL search_path TO $schema, core, public");
+                    foreach ($statements as $stmt) {
+                        $connection->execute($stmt);
+                    }
+                    $connection->execute(
+                        'DELETE FROM core.module_migrations_log WHERE module_id = :m AND migration_name = :n',
+                        ['m' => $moduleId, 'n' => $name],
+                    );
+                });
             }
-            $connection->execute(
-                'DELETE FROM core.module_migrations_log WHERE module_id = :m AND migration_name = :n',
-                ['m' => $moduleId, 'n' => $name],
-            );
-        });
+        } catch (Throwable $e) {
+            if ($rolePdo !== null && $rolePdo->inTransaction()) {
+                $rolePdo->rollBack();
+            }
+            throw $e instanceof RuntimeException
+                ? $e
+                : new RuntimeException("Down-Migration $name fehlgeschlagen: " . $e->getMessage(), 0, $e);
+        }
+    }
+
+    /** Verbindung als eingeschränkte Modul-Login-Rolle (für Migrationen-als-Rolle). */
+    private function roleConnection(string $dsn): \PDO
+    {
+        $pdo = new \PDO($dsn);
+        $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+
+        return $pdo;
     }
 
     public function isApplied(string $moduleId, string $name): bool

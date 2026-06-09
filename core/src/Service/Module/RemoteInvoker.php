@@ -16,10 +16,13 @@ use RuntimeException;
 class RemoteInvoker
 {
     private string $socketDir;
+    private string $tokenDir;
 
     public function __construct(?string $socketDir = null)
     {
         $this->socketDir = rtrim($socketDir ?? (sys_get_temp_dir() . '/fertura-mod'), '/');
+        // Token-Verzeichnis liegt parallel zum Socket-Verzeichnis (s. Supervisor).
+        $this->tokenDir = dirname($this->socketDir) . '/fertura-mod-tokens';
     }
 
     public function socketPath(string $moduleKey): string
@@ -52,7 +55,12 @@ class RemoteInvoker
             throw new RuntimeException("Modul-Host nicht erreichbar ($moduleKey): $errstr");
         }
         stream_set_timeout($sock, 30);
-        fwrite($sock, json_encode(['contract' => $contract, 'input' => $input], JSON_UNESCAPED_UNICODE) . "\n");
+        $payload = ['contract' => $contract, 'input' => $input];
+        $tokenFile = $this->tokenDir . '/' . $moduleKey . '.token';
+        if (is_file($tokenFile)) {
+            $payload['token'] = trim((string)file_get_contents($tokenFile));
+        }
+        fwrite($sock, json_encode($payload, JSON_UNESCAPED_UNICODE) . "\n");
         $line = fgets($sock);
         fclose($sock);
 

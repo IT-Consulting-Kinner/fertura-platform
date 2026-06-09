@@ -269,16 +269,17 @@ class ModuleLifecycle
             // Out-of-Process-Isolation (Kap. 23.16.2): eigene DB-Rolle anlegen und
             // die Migrationen UNTER dieser Rolle ausführen (kein Modulcode mit
             // Superuser-Rechten). Nur Service-Contracts sind erlaubt.
-            $asRole = null;
+            $roleDsn = null;
             if ($isolation === 'out_of_process') {
                 $conn->execute("UPDATE modules SET isolation = 'out_of_process' WHERE module_key = :k", ['k' => $key]);
                 $role = new ModuleDbRole();
                 $role->provision($key);
                 $role->grantSchemaCreate($key);
-                $asRole = $role->roleName($key);
+                // Migrationen über die Login-Rolle ausführen (kein Superuser-Code).
+                $roleDsn = $role->dsn($key);
             }
 
-            $this->migrations->runUp($moduleId, $schema, $targetPath . '/migrations', $asRole);
+            $this->migrations->runUp($moduleId, $schema, $targetPath . '/migrations', $roleDsn);
 
             // RLS-Pflicht (Kap. 30.3, E47): direkt nach den Migrationen — wer
             // is_scoped-Ressourcen deklariert, muss im Modul-Schema mind. eine
@@ -289,7 +290,7 @@ class ModuleLifecycle
 
             // Isolierte Module: RLS auch für den Tabelleneigentümer (die Modul-
             // Rolle) erzwingen, sonst umginge sie ihre eigene Policy.
-            if ($asRole !== null) {
+            if ($roleDsn !== null) {
                 (new ModuleDbRole())->forceRls($key);
             }
 

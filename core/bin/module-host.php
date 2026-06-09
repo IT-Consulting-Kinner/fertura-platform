@@ -64,7 +64,14 @@ if ($dbUrl !== '') {
     }
 }
 
-$dispatch = static function (array $req) use ($map, $pdo, $pdoErr, $key): array {
+$rpcToken = (string)getenv('MODULE_RPC_TOKEN');
+
+$dispatch = static function (array $req) use ($map, $pdo, $pdoErr, $key, $rpcToken): array {
+    // Authentifizierung: ist ein Token gesetzt, muss jede Anfrage es mitführen
+    // (Kap. 23.16.2) -> der Socket ist nicht anonym ansprechbar.
+    if ($rpcToken !== '' && !hash_equals($rpcToken, (string)($req['token'] ?? ''))) {
+        return ['error' => 'nicht autorisiert'];
+    }
     $contract = (string)($req['contract'] ?? '');
     $input = (array)($req['input'] ?? []);
 
@@ -88,7 +95,8 @@ $dispatch = static function (array $req) use ($map, $pdo, $pdoErr, $key): array 
             'sees_backup_password' => getenv('BACKUP_PASSWORD') !== false && getenv('BACKUP_PASSWORD') !== '',
             'can_read_core_users' => $tryRead($pdo, 'SELECT count(*) FROM core.users'),
             'can_read_own_schema' => $tryRead($pdo, 'SELECT count(*) FROM mod_' . $key . '.ping_log'),
-            'db_error' => $pdoErr,
+            // Nur boolesch, kein roher Treiberfehler (Info-Leak vermeiden).
+            'db_connected' => $pdoErr === null && $pdo !== null,
         ]];
     }
 

@@ -21,6 +21,7 @@ class ModuleHostSupervisor
     private string $socketDir;
     private string $pidDir;
     private string $logDir;
+    private string $tokenDir;
 
     public function __construct(?string $baseDir = null)
     {
@@ -28,7 +29,8 @@ class ModuleHostSupervisor
         $this->socketDir = $base . '/fertura-mod';
         $this->pidDir = $base . '/fertura-mod-pids';
         $this->logDir = $base . '/fertura-mod-logs';
-        foreach ([$this->socketDir, $this->pidDir, $this->logDir] as $d) {
+        $this->tokenDir = $base . '/fertura-mod-tokens';
+        foreach ([$this->socketDir, $this->pidDir, $this->logDir, $this->tokenDir] as $d) {
             if (!is_dir($d)) {
                 @mkdir($d, 0o770, true);
             }
@@ -43,6 +45,11 @@ class ModuleHostSupervisor
     private function pidPath(string $key): string
     {
         return $this->pidDir . '/' . $key . '.pid';
+    }
+
+    private function tokenPath(string $key): string
+    {
+        return $this->tokenDir . '/' . $key . '.token';
     }
 
     private function hostScript(): string
@@ -82,6 +89,12 @@ class ModuleHostSupervisor
             throw new \RuntimeException("Keine DB-Rolle provisioniert für: $key");
         }
 
+        // RPC-Token: nur wer es kennt (der Core über die 0600-Datei) darf den
+        // Host aufrufen -> Socket ist nicht mehr anonym ansprechbar (Kap. 23.16.2).
+        $token = bin2hex(random_bytes(32));
+        @file_put_contents($this->tokenPath($key), $token);
+        @chmod($this->tokenPath($key), 0o600);
+
         // Nur diese Variablen sind im isolierten Prozess sichtbar (env -i):
         // KEIN Core-DATABASE_URL, KEIN BACKUP_PASSWORD.
         $env = [
@@ -92,6 +105,7 @@ class ModuleHostSupervisor
             'MODULE_NAMESPACE' => (string)$mod['php_namespace'],
             'MODULE_MANIFEST' => rtrim((string)$mod['source_path'], '/') . '/manifest.json',
             'MODULE_DB_URL' => $dsn,
+            'MODULE_RPC_TOKEN' => $token,
         ];
         $assign = '';
         foreach ($env as $k => $v) {
@@ -124,6 +138,7 @@ class ModuleHostSupervisor
             @unlink($pidFile);
         }
         @unlink($this->socketPath($key));
+        @unlink($this->tokenPath($key));
     }
 
     /** Startet den Host, falls das Modul aktiv+isoliert ist und nicht läuft. */

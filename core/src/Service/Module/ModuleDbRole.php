@@ -87,10 +87,16 @@ class ModuleDbRole
         return $password;
     }
 
+    /** Quotet einen SQL-Bezeichner sicher (verdoppelt eingebettete Anführungszeichen). */
+    private function q(string $ident): string
+    {
+        return '"' . str_replace('"', '""', $ident) . '"';
+    }
+
     /** Erteilt der Rolle das Recht, im eigenen Schema Objekte anzulegen (Migrationen-als-Rolle). */
     public function grantSchemaCreate(string $key): void
     {
-        $role = $this->roleName($key);
+        $role = $this->roleName($key); // validiert $key
         $schema = 'mod_' . $key;
         $this->conn()->execute("GRANT CREATE, USAGE ON SCHEMA $schema TO $role");
     }
@@ -102,7 +108,7 @@ class ModuleDbRole
      */
     public function grantSchemaCrud(string $key): void
     {
-        $role = $this->roleName($key);
+        $role = $this->roleName($key); // validiert $key
         $schema = 'mod_' . $key;
         $c = $this->conn();
         $c->execute("GRANT USAGE ON SCHEMA $schema TO $role");
@@ -118,6 +124,7 @@ class ModuleDbRole
      */
     public function forceRls(string $key): void
     {
+        $this->assertSafe($key);
         $schema = 'mod_' . $key;
         $rows = $this->conn()->execute(
             'SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace '
@@ -125,7 +132,11 @@ class ModuleDbRole
             ['s' => $schema],
         )->fetchAll('assoc');
         foreach ($rows as $r) {
-            $this->conn()->execute("ALTER TABLE $schema." . $r['relname'] . ' FORCE ROW LEVEL SECURITY');
+            // Tabellenname stammt aus dem Katalog -> sicher quoten (kann von der
+            // Modul-Migration beliebig benannt worden sein).
+            $this->conn()->execute(
+                'ALTER TABLE ' . $this->q($schema) . '.' . $this->q((string)$r['relname']) . ' FORCE ROW LEVEL SECURITY',
+            );
         }
     }
 

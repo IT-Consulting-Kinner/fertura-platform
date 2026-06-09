@@ -35,12 +35,14 @@ class OutOfProcessIsolationTest extends TestCase
         $sm->set('core', 'require_module_signature', false);
         $this->cleanup(self::KEY);
         $this->cleanup('sample_module');
+        $this->cleanup('ztest_evil');
     }
 
     protected function tearDown(): void
     {
         $this->cleanup(self::KEY);
         $this->cleanup('sample_module');
+        $this->cleanup('ztest_evil');
         (new SettingsManager())->set('core', 'require_module_signature', $this->prevRequireSig);
         parent::tearDown();
     }
@@ -100,6 +102,41 @@ class OutOfProcessIsolationTest extends TestCase
         // Deaktivieren stoppt den Host.
         $lc->deactivate(self::KEY);
         $this->assertFalse($sup->isRunning(self::KEY), 'Deaktivierung muss den Host stoppen.');
+    }
+
+    public function testMaliciousMigrationCannotEscalateViaResetRole(): void
+    {
+        // Eine bösartige Migration versucht per `RESET ROLE` wieder Superuser zu
+        // werden und im core-Schema zu schreiben. Da die Migration über die
+        // eingeschränkte LOGIN-Rolle läuft (nicht SET LOCAL ROLE auf Superuser),
+        // bleibt RESET ROLE bei der Rolle selbst -> der core-Zugriff scheitert.
+        $dir = sys_get_temp_dir() . '/fertura_evil_' . bin2hex(random_bytes(5));
+        @mkdir($dir . '/migrations', 0o775, true);
+        file_put_contents($dir . '/manifest.json', json_encode([
+            'id' => 'ztest_evil', 'name' => 'Evil', 'version' => '1.0.0', 'type' => 'main',
+            'edition' => 'free', 'description' => 'Eskalationsversuch.', 'publisher' => 'Fertura Test',
+            'php_namespace' => 'ZtestEvil', 'core_compatibility' => '>=1.0.0 <2.0.0',
+            'requires_license' => false, 'dependencies' => [], 'permissions' => [],
+        ]));
+        file_put_contents(
+            $dir . '/migrations/001_evil.sql',
+            "CREATE TABLE legit (id integer);\nRESET ROLE;\nCREATE TABLE core.evil_escalation (id integer);\n-- @DOWN\nDROP TABLE IF EXISTS legit;\n",
+        );
+
+        try {
+            (new ModuleLifecycle())->install($dir, 'out_of_process');
+            $this->fail('Die Eskalations-Migration hätte fehlschlagen müssen.');
+        } catch (\Throwable $e) {
+            $this->assertMatchesRegularExpression('/fehlgeschlagen|permission|denied|recht/i', $e->getMessage());
+        }
+        // Beweis: die core-Tabelle wurde NICHT angelegt (keine Eskalation).
+        $evil = ConnectionManager::get('default')->execute(
+            "SELECT 1 FROM information_schema.tables WHERE table_schema='core' AND table_name='evil_escalation'",
+        )->fetch();
+        $this->assertFalse($evil, 'RESET ROLE darf nicht zu Superuser-Schreibzugriff auf core führen.');
+
+        $this->cleanup('ztest_evil');
+        $this->rrmdir($dir);
     }
 
     public function testEnforcementRejectsNonServiceModule(): void
