@@ -12,20 +12,28 @@ declare(strict_types=1);
  * arbeiten — aber isoliert. Der Core ruft ausschließlich über den
  * token-gesicherten Unix-Domain-Socket auf ({@see RemoteInvoker}).
  *
- * Protokoll (JSON-Zeilen): {token, op}
+ * Protokoll (JSON-Zeilen): {nonce, exp, cap, op, …}
  *   - op='probe'                                  -> Isolationsdiagnose
  *   - op='call', class, method, args[], rls{}     -> $impl->$method(...$args)
  *   - {contract, input}            (Alt-Service)  -> map[contract]->handle(input)
+ *
+ * Auth: Jede Anfrage trägt ein **Pro-Aufruf-Capability-Token** (nonce/exp/cap).
+ * `cap` ist ein HMAC über die kanonisierte Anfrage + Nonce + Ablauf, mit dem
+ * gemeinsamen Geheimnis (MODULE_RPC_TOKEN) als Schlüssel — das Geheimnis selbst
+ * reist nie über den Socket. Der Host prüft MAC + Ablauf + Einmaligkeit der
+ * Nonce ({@see RpcCapabilityToken}).
  *
  * RLS: Der Aufrufer reicht seinen Zeilenkontext (`rls`) mit; der Host setzt ihn
  * je Aufruf transaktionslokal auf der Modul-Connection (set_config).
  *
  * Erwartete Umgebung: MODULE_KEY, MODULE_SOCKET, MODULE_SRC, MODULE_NAMESPACE,
- * MODULE_MANIFEST, MODULE_DB_URL (CakePHP-URL der Modul-Rolle), MODULE_RPC_TOKEN.
+ * MODULE_MANIFEST, MODULE_DB_URL (CakePHP-URL der Modul-Rolle), MODULE_RPC_TOKEN
+ * (gemeinsames HMAC-Geheimnis, NICHT mehr als Klartext-Bearer mitgeschickt).
  */
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
+use App\Service\Module\RpcCapabilityToken;
 use Cake\Datasource\ConnectionManager;
 
 $key = (string)($argv[1] ?? getenv('MODULE_KEY'));
@@ -120,10 +128,28 @@ $invoke = static function (string $class, string $method, array $args, array $rl
     }
 };
 
-$dispatch = static function (array $req) use ($serviceMap, $key, $rpcToken, $dbReady, $invoke): array {
-    // Authentifizierung: gesetztes Token muss jede Anfrage mitführen (Kap. 23.16.2).
-    if ($rpcToken !== '' && !hash_equals($rpcToken, (string)($req['token'] ?? ''))) {
-        return ['error' => 'nicht autorisiert'];
+// Bereits eingelöste Nonces (Nonce -> Ablauf) für Einmaligkeit/Replay-Schutz.
+$seenNonces = [];
+
+$dispatch = static function (array $req) use ($serviceMap, $key, $rpcToken, $dbReady, $invoke, &$seenNonces): array {
+    // Pro-Aufruf-Authentifizierung (Kap. 23.16.2): der MAC (`cap`) muss zur
+    // kanonisierten Anfrage + Nonce + Ablauf passen; das Geheimnis selbst reist
+    // nie über den Socket. Zusätzlich Replay-Schutz über die einmalige Nonce.
+    if ($rpcToken !== '') {
+        if (!RpcCapabilityToken::verify($rpcToken, $req)) {
+            return ['error' => 'nicht autorisiert'];
+        }
+        $now = time();
+        foreach ($seenNonces as $n => $exp) {
+            if ($exp < $now) {
+                unset($seenNonces[$n]); // abgelaufene Nonces verwerfen (begrenzt den Speicher)
+            }
+        }
+        $nonce = (string)($req['nonce'] ?? '');
+        if (isset($seenNonces[$nonce])) {
+            return ['error' => 'nicht autorisiert']; // Replay derselben Nonce
+        }
+        $seenNonces[$nonce] = (int)($req['exp'] ?? $now);
     }
     $op = (string)($req['op'] ?? '');
 

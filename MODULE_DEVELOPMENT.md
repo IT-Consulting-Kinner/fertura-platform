@@ -176,7 +176,12 @@ bin/cake module host status                     # laufende Hosts anzeigen
   erfordert OS-Rechte), `bwrap --unshare-all --ro-bind / / --proc /proc --dev /dev
   --die-with-parent` (FS-/Kernel-Sandbox) oder `firejail`. Der Befehl muss das
   Image bereitstellen und Argumente an `php` durchreichen. Leer = kein Prefix
-  (Default). Capability-Tokens je Aufruf sind eine spätere Protokoll-Erweiterung.
+  (Default).
+- **Pro-Aufruf-Authentifizierung:** Jeder RPC-Aufruf trägt ein aufruf-gebundenes
+  Capability-Token (HMAC über die kanonisierte Anfrage + Nonce + Ablauf). Das
+  Host-Geheimnis dient nur als Schlüssel und reist nie über den Socket; der Host
+  weist abgelaufene und wiederholte Nonces sowie manipulierte Anfragen ab. Für
+  die Modulentwicklung transparent (der Core signiert/prüft automatisch).
 - **Transaktionsgrenze:** Ein Out-of-Process-Beitrag committet in seiner eigenen
   Sitzung — Core-Operation und Modul-Beitrag bilden keine verteilte Transaktion.
 - Verifikation: `OutOfProcessIsolationTest` + `OutOfProcessPhase3Test` (E2E) und

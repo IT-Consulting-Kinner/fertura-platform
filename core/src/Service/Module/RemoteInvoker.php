@@ -87,9 +87,15 @@ class RemoteInvoker
             throw new RuntimeException("Modul-Host nicht erreichbar ($moduleKey): $errstr");
         }
         stream_set_timeout($sock, 30);
-        $tokenFile = $this->tokenDir . '/' . $moduleKey . '.token';
-        if (is_file($tokenFile)) {
-            $req['token'] = trim((string)file_get_contents($tokenFile));
+        // Pro-Aufruf-Capability-Token: das gemeinsame Geheimnis dient nur als
+        // HMAC-Schlüssel und reist NICHT über den Socket; mitgeschickt wird ein
+        // aufruf-gebundener MAC + Nonce + Ablauf (Kap. 23.16.2).
+        $secretFile = $this->tokenDir . '/' . $moduleKey . '.token';
+        if (is_file($secretFile)) {
+            $secret = trim((string)file_get_contents($secretFile));
+            if ($secret !== '') {
+                $req += RpcCapabilityToken::mint($secret, $req);
+            }
         }
         fwrite($sock, json_encode($req, JSON_UNESCAPED_UNICODE) . "\n");
         $line = fgets($sock);

@@ -9,6 +9,7 @@ use App\Service\Module\ModuleDbRole;
 use App\Service\Module\ModuleHostSupervisor;
 use App\Service\Module\ModuleLifecycle;
 use App\Service\Module\RemoteInvoker;
+use App\Service\Module\RpcCapabilityToken;
 use App\Service\Registry\ContractRegistry;
 use App\Service\Registry\RegistryException;
 use App\Service\Settings\SettingsManager;
@@ -105,6 +106,47 @@ class OutOfProcessIsolationTest extends TestCase
         // Deaktivieren stoppt den Host.
         $lc->deactivate(self::KEY);
         $this->assertFalse($sup->isRunning(self::KEY), 'Deaktivierung muss den Host stoppen.');
+    }
+
+    public function testPerCallTokenRejectsReplayAndForgery(): void
+    {
+        $lc = new ModuleLifecycle();
+        $lc->install($this->fixture(self::KEY), 'out_of_process');
+        $lc->activate(self::KEY);
+        $this->assertTrue((new ModuleHostSupervisor())->isRunning(self::KEY), 'Host muss laufen.');
+
+        // Gemeinsames Geheimnis (HMAC-Schlüssel) wie der Core es liest.
+        $secretFile = sys_get_temp_dir() . '/fertura-mod-tokens/' . self::KEY . '.token';
+        $secret = trim((string)@file_get_contents($secretFile));
+        $this->assertNotSame('', $secret, 'Host-Geheimnis muss provisioniert sein.');
+        $socket = (new RemoteInvoker())->socketPath(self::KEY);
+
+        $req = ['contract' => 'isolated_module.service.echo', 'input' => ['msg' => 'x'], 'rls' => []];
+        $signed = $req + RpcCapabilityToken::mint($secret, $req);
+
+        // 1) Gültiger, frisch signierter Aufruf geht durch.
+        $first = $this->rawRpc($socket, $signed);
+        $this->assertSame('x', $first['output']['echo'] ?? null, 'Erster gültiger Aufruf muss durchgehen.');
+
+        // 2) Exakt dieselbe Anfrage erneut -> dieselbe Nonce -> Replay abgewiesen.
+        $replay = $this->rawRpc($socket, $signed);
+        $this->assertArrayHasKey('error', $replay, 'Replay derselben Nonce muss abgewiesen werden.');
+
+        // 3) Fälschung mit falschem Geheimnis -> MAC stimmt nicht -> abgewiesen.
+        $forged = $req + RpcCapabilityToken::mint('falsches-geheimnis', $req);
+        $bad = $this->rawRpc($socket, $forged);
+        $this->assertArrayHasKey('error', $bad, 'MAC mit falschem Geheimnis muss abgewiesen werden.');
+
+        // 4) Manipulierte Argumente bei wiederverwendetem MAC -> abgewiesen.
+        $tampered = $signed;
+        $tampered['input'] = ['msg' => 'manipuliert'];
+        $this->assertArrayHasKey(
+            'error',
+            $this->rawRpc($socket, $tampered),
+            'Geänderte Nutzlast bei altem MAC muss abgewiesen werden.',
+        );
+
+        $lc->deactivate(self::KEY);
     }
 
     public function testLauncherPrefixWrapsHostProcess(): void
@@ -280,6 +322,25 @@ class OutOfProcessIsolationTest extends TestCase
     private function fixture(string $key): string
     {
         return ROOT . '/tests/Fixture/' . $key;
+    }
+
+    /**
+     * Sendet eine **rohe** JSON-Anfrage an den Host-Socket (umgeht RemoteInvoker,
+     * um Replay/Fälschung gezielt zu testen) und gibt die dekodierte Antwort.
+     *
+     * @param array<string, mixed> $req
+     * @return array<string, mixed>
+     */
+    private function rawRpc(string $socket, array $req): array
+    {
+        $sock = stream_socket_client('unix://' . $socket, $errno, $errstr, 5);
+        $this->assertNotFalse($sock, "Socket nicht erreichbar: $errstr");
+        stream_set_timeout($sock, 30);
+        fwrite($sock, json_encode($req, JSON_UNESCAPED_UNICODE) . "\n");
+        $line = fgets($sock);
+        fclose($sock);
+
+        return json_decode(trim((string)$line), true) ?: [];
     }
 
     /** @param array<string, mixed> $params */
