@@ -115,14 +115,17 @@ class ModuleHostSupervisor
                 throw new \RuntimeException("Keine DB-Rolle provisioniert für: $key");
             }
 
-            // RPC-Token: nur wer es kennt (der Core über die 0600-Datei) darf den
-            // Host aufrufen -> Socket ist nicht mehr anonym ansprechbar (Kap. 23.16.2).
+            // RPC-Geheimnis (HMAC-Schlüssel der Pro-Aufruf-Tokens): nur in die
+            // 0600-Datei geschrieben und dem Host als **Pfad** mitgegeben — der
+            // Wert selbst landet NICHT in der Prozess-Umgebung (`/proc/<pid>/environ`)
+            // oder Kommandozeile (Kap. 23.16.2). Core und Host lesen ihn aus der
+            // Datei (owner-only).
             $token = bin2hex(random_bytes(32));
             @file_put_contents($this->tokenPath($key), $token);
             @chmod($this->tokenPath($key), 0o600);
 
             // Nur diese Variablen sind im isolierten Prozess sichtbar (env -i):
-            // KEIN Core-DATABASE_URL, KEIN BACKUP_PASSWORD.
+            // KEIN Core-DATABASE_URL, KEIN BACKUP_PASSWORD, KEIN Klartext-Geheimnis.
             $env = [
                 'PATH' => (string)(getenv('PATH') ?: '/usr/local/bin:/usr/bin:/bin'),
                 'MODULE_KEY' => $key,
@@ -131,7 +134,7 @@ class ModuleHostSupervisor
                 'MODULE_NAMESPACE' => (string)$mod['php_namespace'],
                 'MODULE_MANIFEST' => rtrim((string)$mod['source_path'], '/') . '/manifest.json',
                 'MODULE_DB_URL' => $dsn,
-                'MODULE_RPC_TOKEN' => $token,
+                'MODULE_RPC_TOKEN_FILE' => $this->tokenPath($key),
             ];
             $assign = '';
             foreach ($env as $k => $v) {
@@ -173,18 +176,51 @@ class ModuleHostSupervisor
     /** Stoppt den Host (SIGTERM -> sauberes Herunterfahren) und räumt auf. */
     public function stop(string $key): void
     {
+        // Den **tatsächlichen** Host-Prozess anhand seiner Kommandozeile finden
+        // (`module-host.php` + Key) und beenden — robust auch dann, wenn ein
+        // forkender Launcher (firejail u. ä.) die eingefangene `$!`-PID „verfälscht"
+        // hat (sonst bliebe der echte Host verwaist). Die Doppelbedingung
+        // (Skript UND Key) ist PID-Recycling-sicher.
+        $pids = $this->findHostPids($key);
+
+        // Eingefangene PID zusätzlich berücksichtigen (exec-artige Launcher).
         $pidFile = $this->pidPath($key);
         if (is_file($pidFile)) {
-            $pid = (int)trim((string)file_get_contents($pidFile));
-            // Nur killen, wenn die PID wirklich noch unser Host ist (gegen
-            // PID-Recycling: sonst träfe SIGTERM einen Fremdprozess).
-            if ($pid > 0 && $this->isOurHost($pid, $key)) {
-                @shell_exec('kill -TERM ' . $pid . ' 2>/dev/null');
+            $stored = (int)trim((string)file_get_contents($pidFile));
+            if ($stored > 0 && $this->isOurHost($stored, $key) && !in_array($stored, $pids, true)) {
+                $pids[] = $stored;
             }
             @unlink($pidFile);
         }
+        foreach ($pids as $pid) {
+            @shell_exec('kill -TERM ' . (int)$pid . ' 2>/dev/null');
+        }
         @unlink($this->socketPath($key));
         @unlink($this->tokenPath($key));
+    }
+
+    /**
+     * Findet die PID(s) des laufenden Modul-Hosts dieses Keys über `/proc`
+     * (Kommandozeile enthält `module-host.php` UND den Key als eigenes Token).
+     * Findet den **echten** `php`-Host auch hinter einem forkenden Launcher.
+     *
+     * @return list<int>
+     */
+    private function findHostPids(string $key): array
+    {
+        $pids = [];
+        foreach (glob('/proc/[0-9]*/cmdline') ?: [] as $file) {
+            $cmdline = @file_get_contents($file);
+            if ($cmdline === false || $cmdline === '') {
+                continue;
+            }
+            $args = explode("\0", $cmdline);
+            if (str_contains(implode(' ', $args), 'module-host.php') && in_array($key, $args, true)) {
+                $pids[] = (int)basename(dirname($file));
+            }
+        }
+
+        return $pids;
     }
 
     /**

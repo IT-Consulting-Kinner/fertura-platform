@@ -114,7 +114,7 @@ class ScheduledTaskRunner
                     $ran[] = $key;
                 } catch (Throwable $e) {
                     WorkerHeartbeat::beat($hbKey, 'error', ['interval_seconds' => $interval, 'error' => $e->getMessage()]);
-                    Log::error('Scheduled task failed: ' . $key, ['module' => $key, 'exception' => $e->getMessage()]);
+                    Log::error('Scheduled task failed: ' . $key, ['task' => $key, 'exception' => $e->getMessage()]);
                 }
             } finally {
                 $this->unlock($lockKey);

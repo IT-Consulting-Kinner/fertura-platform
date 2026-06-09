@@ -719,9 +719,11 @@ class ModuleLifecycle
     // ---- intern --------------------------------------------------------------
 
     /**
-     * Out-of-Process unterstützt derzeit nur Service-Contracts. Deklariert ein
-     * Modul Resolver/Collector/Event-Listener, würden diese still in-process
-     * laufen — daher wird die Isolation abgelehnt (keine stille Lücke).
+     * Stellt sicher, dass ein Modul out_of_process betrieben werden darf
+     * (Kap. 23.16.2, Phase 3). Service-Contracts, (Daten-)Resolver, Collector
+     * (Health/Anonymize/Scheduled) und Event-Listener laufen über RPC; einzig
+     * der **Auth-Provider-Slot** (`core.auth.provider`) wird abgelehnt, weil er
+     * In-Process-Authenticator-Objekte konfiguriert (nicht über RPC reichbar).
      */
     private function assertIsolatable(ModuleManifest $manifest): void
     {

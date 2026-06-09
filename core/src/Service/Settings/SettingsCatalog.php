@@ -70,9 +70,16 @@ class SettingsCatalog
             //   "firejail --quiet --private".
             // Wird unverändert (NICHT als ein Argument gequotet) eingesetzt, läuft
             // also in der bereits bereinigten `env -i`-Umgebung und exec/wrapped `php`.
-            // Leer = kein Prefix (Default, In-Process-UID). Nur durch Betreiber/Admin
-            // setzbar; der Befehl muss das Image bereitstellen und Argumente an `php`
-            // durchreichen. Siehe MODULE_DEVELOPMENT / 23.16.2.
+            // Leer = kein Prefix (Default, In-Process-UID). Der Befehl muss das Image
+            // bereitstellen und Argumente an `php` durchreichen.
+            // WICHTIG: Der Launcher muss `php` per **exec** ersetzen oder SIGTERM an
+            //   den Host weiterreichen und mit dem Elternprozess sterben (z. B.
+            //   `setpriv … --`, `bwrap … --die-with-parent`). Ein Launcher, der
+            //   abspaltet und sich löst (z. B. `firejail` ohne entsprechende Optionen),
+            //   kann beim Stoppen einen verwaisten Host hinterlassen.
+            // SICHERHEIT: Wer dieses Setting setzen darf, kann beliebigen Code als
+            //   Worker-Benutzer ausführen (Shell-Prefix) — auf dieselbe Vertrauensstufe
+            //   wie Shell-Zugriff beschränken. Siehe MODULE_DEVELOPMENT / 23.16.2.
             'module.host.launcher' => ['type' => 'string', 'default' => null],
         ],
     ];

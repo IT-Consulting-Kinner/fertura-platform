@@ -42,11 +42,22 @@ $src = (string)getenv('MODULE_SRC');
 $namespace = (string)getenv('MODULE_NAMESPACE');
 $manifest = (string)getenv('MODULE_MANIFEST');
 $dbUrl = (string)getenv('MODULE_DB_URL');
-$rpcToken = (string)getenv('MODULE_RPC_TOKEN');
+// HMAC-Geheimnis aus der 0600-Datei (bevorzugt) lesen — der Wert liegt NICHT
+// als Klartext in der Prozess-Umgebung/Kommandozeile. Fallback auf den
+// direkten Env-Wert nur für Alt-/Test-Spawns.
+$secretFile = (string)getenv('MODULE_RPC_TOKEN_FILE');
+$rpcToken = $secretFile !== '' && is_file($secretFile)
+    ? trim((string)@file_get_contents($secretFile))
+    : (string)getenv('MODULE_RPC_TOKEN');
 
 if ($key === '' || $socket === '' || $src === '' || $namespace === '') {
     fwrite(STDERR, "module-host: MODULE_KEY/SOCKET/SRC/NAMESPACE erforderlich\n");
     exit(2);
+}
+// Fail-closed: ohne Geheimnis NICHT unauthentifiziert bedienen (kein Fail-open).
+if ($rpcToken === '') {
+    fwrite(STDERR, "module-host[$key]: kein RPC-Geheimnis -> verweigere Start (fail-closed).\n");
+    exit(4);
 }
 
 // Nur den Modul-Namespace autoloaden (Modul-src). Die Contract-SDK
@@ -135,7 +146,8 @@ $dispatch = static function (array $req) use ($serviceMap, $key, $rpcToken, $dbR
     // Pro-Aufruf-Authentifizierung (Kap. 23.16.2): der MAC (`cap`) muss zur
     // kanonisierten Anfrage + Nonce + Ablauf passen; das Geheimnis selbst reist
     // nie über den Socket. Zusätzlich Replay-Schutz über die einmalige Nonce.
-    if ($rpcToken !== '') {
+    // Das Geheimnis ist garantiert gesetzt (sonst Fail-closed beim Start).
+    {
         if (!RpcCapabilityToken::verify($rpcToken, $req)) {
             return ['error' => 'nicht autorisiert'];
         }
@@ -231,7 +243,18 @@ while ($running) {
         continue; // Timeout -> Signal-Check
     }
     stream_set_timeout($conn, 30);
-    $line = fgets($conn);
+    // Anfragezeile begrenzen (DoS-Schutz vor dem Decodieren): RPC-Nutzlasten
+    // sind klein und zeilenterminiert. `fgets` liest höchstens das Limit; fehlt
+    // dann der Zeilenabschluss, war die Zeile überlang (oder fehlerhaft ohne
+    // \n) -> ablehnen, ohne json_decode mit Riesendaten zu füttern.
+    $maxLine = 4 * 1024 * 1024;
+    $line = fgets($conn, $maxLine);
+    if ($line !== false && !str_ends_with($line, "\n")) {
+        $resp = ['error' => 'Anfrage zu groß oder unvollständig'];
+        fwrite($conn, json_encode($resp, JSON_UNESCAPED_UNICODE) . "\n");
+        fclose($conn);
+        continue;
+    }
     if ($line !== false) {
         $req = json_decode(trim($line), true);
         $resp = is_array($req) ? $dispatch($req) : ['error' => 'ungültige Anfrage'];

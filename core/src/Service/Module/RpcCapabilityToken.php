@@ -22,6 +22,15 @@ namespace App\Service\Module;
  *
  * Symmetrisch: {@see mint()} erzeugt die Auth-Felder (Core-Seite), {@see verify()}
  * prüft sie (Host-Seite). Beide Seiten nutzen dieselbe Kanonisierung.
+ *
+ * **Bedrohungsmodell (ehrlich).** Das Token authentifiziert die **Inter-Prozess-
+ * Grenze** (Core ruft den Host) und schützt vor anderen Socket-Clients sowie vor
+ * Manipulation/Replay einer abgefangenen Anfrage. Es **beschränkt nicht** den im
+ * Host laufenden Modulcode selbst: dieser kennt das Geheimnis (eigene 0600-Datei,
+ * gleiche UID) und kann Beiträge in seinem eigenen Namespace ohnehin aufrufen.
+ * Die eigentliche Sandbox des Moduls sind die eingeschränkte DB-Rolle, die
+ * bereinigte Umgebung und die optionale OS-Isolation (Launcher-Prefix) — nicht
+ * dieses Token.
  */
 final class RpcCapabilityToken
 {

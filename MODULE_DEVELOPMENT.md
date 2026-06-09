@@ -176,12 +176,20 @@ bin/cake module host status                     # laufende Hosts anzeigen
   erfordert OS-Rechte), `bwrap --unshare-all --ro-bind / / --proc /proc --dev /dev
   --die-with-parent` (FS-/Kernel-Sandbox) oder `firejail`. Der Befehl muss das
   Image bereitstellen und Argumente an `php` durchreichen. Leer = kein Prefix
-  (Default).
+  (Default). Der Launcher muss `php` per `exec` ersetzen oder SIGTERM
+  weiterreichen und mit dem Elternprozess sterben (z. B. `setpriv … --`,
+  `bwrap … --die-with-parent`) — sonst kann beim Stoppen ein verwaister Host
+  zurückbleiben. Wer das Setting setzen darf, kann Code als Worker-Benutzer
+  ausführen (auf Shell-Vertrauensstufe beschränken).
 - **Pro-Aufruf-Authentifizierung:** Jeder RPC-Aufruf trägt ein aufruf-gebundenes
   Capability-Token (HMAC über die kanonisierte Anfrage + Nonce + Ablauf). Das
-  Host-Geheimnis dient nur als Schlüssel und reist nie über den Socket; der Host
-  weist abgelaufene und wiederholte Nonces sowie manipulierte Anfragen ab. Für
-  die Modulentwicklung transparent (der Core signiert/prüft automatisch).
+  Host-Geheimnis liegt nur in einer 0600-Datei, dient ausschließlich als
+  Schlüssel und reist nie über den Socket; der Host weist abgelaufene und
+  wiederholte Nonces sowie manipulierte Anfragen ab und startet ohne Geheimnis
+  gar nicht erst (fail-closed). Für die Modulentwicklung transparent (der Core
+  signiert/prüft automatisch). Das Token sichert die Prozessgrenze (Core→Host),
+  nicht den Modulcode selbst — die Isolation leisten DB-Rolle, bereinigte
+  Umgebung und die optionale OS-Härtung.
 - **Transaktionsgrenze:** Ein Out-of-Process-Beitrag committet in seiner eigenen
   Sitzung — Core-Operation und Modul-Beitrag bilden keine verteilte Transaktion.
 - Verifikation: `OutOfProcessIsolationTest` + `OutOfProcessPhase3Test` (E2E) und
