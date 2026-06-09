@@ -41,6 +41,9 @@ class SettingsCatalog
             'maintenance_mode' => ['type' => 'bool', 'default' => false],
             // Observability (Step 12, Kap. 20.2).
             'storage.path' => ['type' => 'string', 'default' => null],
+            // Objekt-Storage-Treiber (P03): 'local' (Default) oder 's3'
+            // (S3-Zugangsdaten out-of-band über STORAGE_S3_*-Env).
+            'storage.driver' => ['type' => 'string', 'default' => 'local'],
             'health.worker_max_age_seconds' => ['type' => 'int', 'default' => 120, 'min' => 10, 'max' => 86400],
             'health_token' => ['type' => 'string', 'default' => null, 'secret' => true],
 

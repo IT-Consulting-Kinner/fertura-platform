@@ -31,7 +31,7 @@ Tests, Doku (Anforderungsdokument-Kapitel + Changelog) und eigenem Commit/Push
 - [x] **P02 — Cache-Abstraktion** (E77). `Cake\Cache`-Konfiguration (File-Default,
   Redis/APCu optional via Env), Helfer für get/remember/invalidate; Settings-Cache
   mit TTL + Invalidierung bei Änderung. *Fundament für P07-Rate-Limit, P10.*
-- [ ] **P03 — Objekt-Storage-Abstraktion.** Flysystem + S3-kompatibler Adapter
+- [x] **P03 — Objekt-Storage-Abstraktion** (E78). Flysystem + S3-kompatibler Adapter
   (lokal als Default), einheitliche `StorageManager`-API. *Fundament für P13/P14.*
 - [ ] **P04 — Metrics + Tracing.** Prometheus-`/metrics` (auth/Token-geschützt),
   OpenTelemetry-kompatible Trace-/Span-IDs (Wiederverwendung `correlation_id`),
@@ -85,4 +85,5 @@ Abgeschlossene Punkte werden oben abgehakt und hier mit E-Nummer + Commit notier
 |------|-------|--------|-------|
 | —    | —     | —      | Programm angelegt |
 | P01 HTTP-Egress-Primitiv | E76 | a8ec0bd | fertig — 98 Tests grün |
-| P02 Cache-Abstraktion | E77 | (folgt) | fertig — 102 Tests grün |
+| P02 Cache-Abstraktion | E77 | 4ac3006 | fertig — 102 Tests grün |
+| P03 Objekt-Storage | E78 | (folgt) | fertig — Flysystem lokal+S3 |
