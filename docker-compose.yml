@@ -5,7 +5,9 @@ name: fertura
 
 services:
   db:
-    image: postgres:17-bookworm
+    # pgvector-Image (offiziell, basiert auf postgres:17) für AI-Embeddings (P11).
+    # Datenkompatibel zu postgres:17; das vorhandene Daten-Volume bleibt erhalten.
+    image: pgvector/pgvector:pg17
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-fertura}

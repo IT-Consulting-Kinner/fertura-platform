@@ -62,9 +62,10 @@ Tests, Doku (Anforderungsdokument-Kapitel + Changelog) und eigenem Commit/Push
 - [x] **P10 — Volltext-Suche** (E85). Postgres `tsvector`, Owner-Scoping, API,
   Collector `core.collector.search`. Postgres `tsvector` als opt-in Core-Capability
   (`core.search.indexable`), Index-Pflege über Events, Ranking, Such-API.
-- [ ] **P11 — AI/LLM-Primitive.** `pgvector`-Embedding-Store + provider-agnostisches
-  **LLM-Gateway** (über P01) mit Key-/Kosten-/Rate-Management + Audit; semantische
-  Suche speist P10. Capability `core.ai.complete` / `core.ai.embed`.
+- [x] **P11 — AI/LLM-Primitive** (E86). `pgvector`-Embedding-Store + provider-
+  agnostisches **LLM-Gateway** (über P01) für OpenAI/Anthropic/xAI/Google;
+  semantische Suche; Capabilities `core.ai.complete`/`core.ai.embed`. DB-Image →
+  `pgvector/pgvector:pg17`.
 - [ ] **P12 — Workflow-/Automations-Engine.** Deklarative Event-Condition-Action-
   Regeln + State-Machines auf Events (P-Outbox) mit Aktionen (Notify/Webhook/
   Service-Call), Admin-UI, Audit.
@@ -101,7 +102,8 @@ Abgeschlossene Punkte werden oben abgehakt und hier mit E-Nummer + Commit notier
 | P08 Echtzeit (SSE) | E83 | 38cb836 | fertig — 138 Tests grün, Stream live |
 | P09 Notification-Framework | E84 | (folgt) | fertig — 142 Tests grün, API live |
 
-| P10 Volltext-Suche | E85 | (folgt) | fertig — 145 Tests grün, /search live |
+| P10 Volltext-Suche | E85 | 228d025 | fertig — 145 Tests grün, /search live |
+| P11 AI/LLM (pgvector) | E86 | (folgt) | fertig — 153 Tests grün, 4 Provider |
 
 **Phasen A–C abgeschlossen** (P01–P09). Phase D läuft: P10 fertig, als Nächstes
 P11 AI/LLM (Provider: OpenAI/Anthropic/xAI/Google), P12 Workflow-Engine.

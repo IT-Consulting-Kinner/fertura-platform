@@ -97,6 +97,12 @@ class SettingsCatalog
             // API-Rate-Limiting (P07): pro Token (bzw. IP) und Minute.
             'api.rate_limit.enabled' => ['type' => 'bool', 'default' => true],
             'api.rate_limit.per_minute' => ['type' => 'int', 'default' => 120, 'min' => 1, 'max' => 100000],
+            // AI/LLM-Gateway (P11): Provider openai|anthropic|xai|google. Schlüssel
+            // out-of-band über *_API_KEY-Env. Leer = AI deaktiviert.
+            'ai.chat.provider' => ['type' => 'string', 'default' => null],
+            'ai.chat.model' => ['type' => 'string', 'default' => null],
+            'ai.embed.provider' => ['type' => 'string', 'default' => null],
+            'ai.embed.model' => ['type' => 'string', 'default' => null],
         ],
     ];
 
