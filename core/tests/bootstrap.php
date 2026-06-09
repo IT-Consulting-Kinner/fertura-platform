@@ -57,4 +57,8 @@ ConnectionHelper::addTestAliases();
 // use Cake\TestSuite\Fixture\SchemaLoader;
 // (new SchemaLoader())->loadSqlFiles('./tests/schema.sql', 'test');
 
-(new Migrator())->run();
+// `skip`: Die Partition `audit_log_default` ist ein Kind der partitionierten
+// Tabelle `audit_log`; sie direkt zu droppen scheitert (sie hängt am Parent).
+// Beim Drop des Parents fällt sie ohnehin mit – also beim Rebuild auslassen,
+// damit das Hinzufügen einer Migration kein manuelles `DROP DATABASE` erfordert.
+(new Migrator())->run(['skip' => ['audit_log_default']]);

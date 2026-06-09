@@ -35,7 +35,7 @@ class FeatureFlagsTest extends TestCase
 
     public function testFalsyValuesDisable(): void
     {
-        foreach (['false', '0', 'off', 'no', 'disabled', 'FALSE', 'Off'] as $val) {
+        foreach (['false', '0', 'off', 'no', 'disabled', 'FALSE', 'Off', ' false ', "false\n"] as $val) {
             putenv("FEATURE_API=$val");
             $this->assertFalse(FeatureFlags::enabled('api'), "Wert '$val' muss deaktivieren.");
         }

@@ -29,12 +29,12 @@ final class FeatureFlags
     public static function enabled(string $feature): bool
     {
         $default = self::DEFAULTS[$feature] ?? true;
-        $raw = env('FEATURE_' . strtoupper($feature));
-        if ($raw === null || $raw === '') {
+        $raw = trim((string)env('FEATURE_' . strtoupper($feature)));
+        if ($raw === '') {
             return $default;
         }
 
-        return !in_array(strtolower((string)$raw), ['0', 'false', 'off', 'no', 'disabled'], true);
+        return !in_array(strtolower($raw), ['0', 'false', 'off', 'no', 'disabled'], true);
     }
 
     /** @return array<string, bool> */

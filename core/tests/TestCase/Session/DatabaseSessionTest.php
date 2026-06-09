@@ -58,6 +58,16 @@ class DatabaseSessionTest extends TestCase
         $this->assertSame('gemeinsam', $nodeB->read($this->sid));
     }
 
+    public function testStoresBinaryDataWithNulBytes(): void
+    {
+        // PHP-Session-Serialisierung kann NUL-Bytes enthalten (z. B. private
+        // Objekt-Properties). Eine text-Spalte würde daran scheitern -> bytea.
+        $payload = "user|O:8:\"stdClass\":1:{s:7:\"\0*\0name\";s:3:\"abc\";}";
+        $h = $this->handler();
+        $this->assertTrue($h->write($this->sid, $payload));
+        $this->assertSame($payload, $h->read($this->sid));
+    }
+
     public function testGcRemovesExpired(): void
     {
         $h = (new DatabaseSession(['model' => 'Sessions']))->setTimeout(-10); // sofort abgelaufen

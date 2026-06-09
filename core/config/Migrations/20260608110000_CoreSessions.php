@@ -20,7 +20,7 @@ class CoreSessions extends BaseMigration
         $this->execute(<<<'SQL'
             CREATE TABLE core.sessions (
                 id      varchar(255) NOT NULL PRIMARY KEY,
-                data    text         NULL,
+                data    bytea        NULL,
                 expires bigint       NULL,
                 created timestamptz  NOT NULL DEFAULT now()
             )
