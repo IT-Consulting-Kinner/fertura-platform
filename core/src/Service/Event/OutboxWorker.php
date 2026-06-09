@@ -192,6 +192,11 @@ class OutboxWorker
 
         \App\Log\LogContext::put('component', 'worker');
 
+        // Modulhost-Supervision nicht in jedem Poll-Zyklus, sondern gedrosselt
+        // (DB-Query + Socket-Checks je isoliertem Modul sind sonst teuer).
+        $lastSupervision = 0.0;
+        $supervisionEverySec = 30.0;
+
         while ($this->running) {
             try {
                 // Heartbeat (Kap. 20.3): jeder Zyklus protokolliert seinen Lauf
@@ -215,16 +220,19 @@ class OutboxWorker
                     $this->log('Scheduler-Fehler: ' . $e->getMessage());
                 }
                 // Out-of-Process-Modulhosts überwachen (Selbstheilung, Kap. 23.16.2):
-                // abgestürzte Hosts neu starten, verwaiste stoppen.
-                try {
-                    $sup = new \App\Service\Module\ModuleHostSupervisor();
-                    $started = $sup->ensureAll();
-                    $sup->reapStale();
-                    if ($started !== []) {
-                        $this->log('Modulhosts gestartet: ' . implode(', ', $started));
+                // abgestürzte Hosts neu starten, verwaiste stoppen — gedrosselt.
+                if ($cycleStart - $lastSupervision >= $supervisionEverySec) {
+                    $lastSupervision = $cycleStart;
+                    try {
+                        $sup = new \App\Service\Module\ModuleHostSupervisor();
+                        $started = $sup->ensureAll();
+                        $sup->reapStale();
+                        if ($started !== []) {
+                            $this->log('Modulhosts gestartet: ' . implode(', ', $started));
+                        }
+                    } catch (Throwable $e) {
+                        $this->log('Modulhost-Supervision-Fehler: ' . $e->getMessage());
                     }
-                } catch (Throwable $e) {
-                    $this->log('Modulhost-Supervision-Fehler: ' . $e->getMessage());
                 }
                 // Vorhandene Events vollständig abarbeiten.
                 $processed = 0;

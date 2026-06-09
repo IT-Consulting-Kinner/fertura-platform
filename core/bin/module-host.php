@@ -118,8 +118,18 @@ $dispatch = static function (array $req) use ($map, $pdo, $pdoErr, $key, $rpcTok
     }
 };
 
-@unlink($socket);
-$server = stream_socket_server('unix://' . $socket, $errno, $errstr);
+// Binden, OHNE einen evtl. lebenden Vorgänger-Socket blind zu stehlen.
+$server = @stream_socket_server('unix://' . $socket, $errno, $errstr);
+if ($server === false) {
+    $probe = @stream_socket_client('unix://' . $socket, $pe, $ps, 1);
+    if ($probe !== false) {
+        fclose($probe);
+        fwrite(STDERR, "module-host[$key]: bereits ein aktiver Host -> beende.\n");
+        exit(0); // lebenden Host nicht verdrängen
+    }
+    @unlink($socket); // verwaister Socket -> entfernen und erneut binden
+    $server = stream_socket_server('unix://' . $socket, $errno, $errstr);
+}
 if ($server === false) {
     fwrite(STDERR, "module-host: Socket nicht bindbar ($errstr)\n");
     exit(3);

@@ -74,55 +74,75 @@ class ModuleHostSupervisor
      */
     public function spawn(string $key): void
     {
-        if ($this->isRunning($key)) {
-            return;
-        }
-        $mod = Db::privileged()->execute(
-            "SELECT source_path, php_namespace FROM modules WHERE module_key = :k AND status = 'active' AND isolation = 'out_of_process'",
-            ['k' => $key],
-        )->fetch('assoc');
-        if ($mod === false) {
-            throw new \RuntimeException("Kein aktives out_of_process-Modul: $key");
-        }
-        $dsn = (new ModuleDbRole())->dsn($key);
-        if ($dsn === null) {
-            throw new \RuntimeException("Keine DB-Rolle provisioniert für: $key");
-        }
+        // Pro Key serialisieren (gegen Check->Spawn-Races, die doppelte oder
+        // verwaiste Hosts erzeugen würden).
+        $lock = fopen($this->pidDir . '/' . $key . '.lock', 'c');
+        if ($lock !== false && !flock($lock, LOCK_EX | LOCK_NB)) {
+            fclose($lock);
 
-        // RPC-Token: nur wer es kennt (der Core über die 0600-Datei) darf den
-        // Host aufrufen -> Socket ist nicht mehr anonym ansprechbar (Kap. 23.16.2).
-        $token = bin2hex(random_bytes(32));
-        @file_put_contents($this->tokenPath($key), $token);
-        @chmod($this->tokenPath($key), 0o600);
-
-        // Nur diese Variablen sind im isolierten Prozess sichtbar (env -i):
-        // KEIN Core-DATABASE_URL, KEIN BACKUP_PASSWORD.
-        $env = [
-            'PATH' => (string)(getenv('PATH') ?: '/usr/local/bin:/usr/bin:/bin'),
-            'MODULE_KEY' => $key,
-            'MODULE_SOCKET' => $this->socketPath($key),
-            'MODULE_SRC' => rtrim((string)$mod['source_path'], '/') . '/src',
-            'MODULE_NAMESPACE' => (string)$mod['php_namespace'],
-            'MODULE_MANIFEST' => rtrim((string)$mod['source_path'], '/') . '/manifest.json',
-            'MODULE_DB_URL' => $dsn,
-            'MODULE_RPC_TOKEN' => $token,
-        ];
-        $assign = '';
-        foreach ($env as $k => $v) {
-            $assign .= $k . '=' . escapeshellarg($v) . ' ';
+            return; // ein anderer Spawn läuft bereits
         }
-        $log = $this->logDir . '/' . $key . '.log';
-        // Bereinigte Umgebung (env -i), losgelöst (nohup &), PID einfangen.
-        $cmd = 'nohup env -i ' . $assign . ' php ' . escapeshellarg($this->hostScript())
-            . ' ' . escapeshellarg($key) . ' > ' . escapeshellarg($log) . ' 2>&1 & echo $!';
-        $pid = trim((string)shell_exec('/bin/sh -c ' . escapeshellarg($cmd)));
-        if ($pid !== '') {
-            file_put_contents($this->pidPath($key), $pid);
-        }
+        try {
+            if ($this->isRunning($key)) {
+                return;
+            }
+            $mod = Db::privileged()->execute(
+                "SELECT source_path, php_namespace FROM modules WHERE module_key = :k AND status = 'active' AND isolation = 'out_of_process'",
+                ['k' => $key],
+            )->fetch('assoc');
+            if ($mod === false) {
+                throw new \RuntimeException("Kein aktives out_of_process-Modul: $key");
+            }
+            $dsn = (new ModuleDbRole())->dsn($key);
+            if ($dsn === null) {
+                throw new \RuntimeException("Keine DB-Rolle provisioniert für: $key");
+            }
 
-        // Auf Socket-Bereitschaft warten (max ~3 s).
-        for ($i = 0; $i < 30 && !$this->isRunning($key); $i++) {
-            usleep(100_000);
+            // RPC-Token: nur wer es kennt (der Core über die 0600-Datei) darf den
+            // Host aufrufen -> Socket ist nicht mehr anonym ansprechbar (Kap. 23.16.2).
+            $token = bin2hex(random_bytes(32));
+            @file_put_contents($this->tokenPath($key), $token);
+            @chmod($this->tokenPath($key), 0o600);
+
+            // Nur diese Variablen sind im isolierten Prozess sichtbar (env -i):
+            // KEIN Core-DATABASE_URL, KEIN BACKUP_PASSWORD.
+            $env = [
+                'PATH' => (string)(getenv('PATH') ?: '/usr/local/bin:/usr/bin:/bin'),
+                'MODULE_KEY' => $key,
+                'MODULE_SOCKET' => $this->socketPath($key),
+                'MODULE_SRC' => rtrim((string)$mod['source_path'], '/') . '/src',
+                'MODULE_NAMESPACE' => (string)$mod['php_namespace'],
+                'MODULE_MANIFEST' => rtrim((string)$mod['source_path'], '/') . '/manifest.json',
+                'MODULE_DB_URL' => $dsn,
+                'MODULE_RPC_TOKEN' => $token,
+            ];
+            $assign = '';
+            foreach ($env as $k => $v) {
+                $assign .= $k . '=' . escapeshellarg($v) . ' ';
+            }
+            $log = $this->logDir . '/' . $key . '.log';
+            // Bereinigte Umgebung (env -i), losgelöst (nohup &), PID einfangen.
+            $cmd = 'nohup env -i ' . $assign . ' php ' . escapeshellarg($this->hostScript())
+                . ' ' . escapeshellarg($key) . ' > ' . escapeshellarg($log) . ' 2>&1 & echo $!';
+            $pid = trim((string)shell_exec('/bin/sh -c ' . escapeshellarg($cmd)));
+            if ($pid !== '') {
+                file_put_contents($this->pidPath($key), $pid);
+            }
+
+            // Auf Socket-Bereitschaft warten (max ~3 s).
+            for ($i = 0; $i < 30 && !$this->isRunning($key); $i++) {
+                usleep(100_000);
+            }
+            // Laut scheitern, wenn der Host nicht hochkam (z. B. php/shell_exec
+            // nicht verfügbar) — sonst glaubt der Aufrufer, alles sei in Ordnung.
+            if (!$this->isRunning($key)) {
+                throw new \RuntimeException("Modul-Host für $key nicht gestartet (siehe $log).");
+            }
+        } finally {
+            if ($lock !== false) {
+                flock($lock, LOCK_UN);
+                fclose($lock);
+            }
         }
     }
 
@@ -132,13 +152,27 @@ class ModuleHostSupervisor
         $pidFile = $this->pidPath($key);
         if (is_file($pidFile)) {
             $pid = (int)trim((string)file_get_contents($pidFile));
-            if ($pid > 0) {
+            // Nur killen, wenn die PID wirklich noch unser Host ist (gegen
+            // PID-Recycling: sonst träfe SIGTERM einen Fremdprozess).
+            if ($pid > 0 && $this->isOurHost($pid, $key)) {
                 @shell_exec('kill -TERM ' . $pid . ' 2>/dev/null');
             }
             @unlink($pidFile);
         }
         @unlink($this->socketPath($key));
         @unlink($this->tokenPath($key));
+    }
+
+    /** Prüft, ob $pid tatsächlich der Modul-Host dieses Keys ist (PID-Recycling-Schutz). */
+    private function isOurHost(int $pid, string $key): bool
+    {
+        $cmdline = @file_get_contents('/proc/' . $pid . '/cmdline');
+        if ($cmdline === false || $cmdline === '') {
+            return false; // Prozess weg / nicht lesbar -> nicht killen
+        }
+        $args = explode("\0", $cmdline);
+
+        return str_contains(implode(' ', $args), 'module-host.php') && in_array($key, $args, true);
     }
 
     /** Startet den Host, falls das Modul aktiv+isoliert ist und nicht läuft. */
