@@ -6,6 +6,7 @@ namespace App\Service\Module;
 use App\Application;
 use App\Audit\AuditLogger;
 use App\Model\Entity\ContractRegistration;
+use App\Service\I18n\LanguagePackStore;
 use App\Service\Registry\ContractRegistry;
 use App\Service\Registry\RegistryException;
 use App\Service\Registry\SemVer;
@@ -76,9 +77,10 @@ class ModuleLifecycle
      * Durchsetzung der RLS-Pflicht für is_scoped-Ressourcen (Kap. 30.3, E47).
      * Deklariert das Modul mindestens eine scoped Ressource, muss sein Schema
      * mindestens eine RLS-aktivierte Tabelle UND mindestens eine Policy
-     * enthalten. Andernfalls LifecycleException (Install-Abbruch/Rollback).
+     * enthalten. Andernfalls LifecycleException — der manuelle Rückbau läuft
+     * zentral über den try/catch in {@see install()} (E69).
      */
-    private function assertScopedRls(string $key, string $schema, string $targetPath, ModuleManifest $manifest): void
+    private function assertScopedRls(string $schema, ModuleManifest $manifest): void
     {
         $scoped = array_filter($manifest->permissions(), static fn ($p) => !empty($p['is_scoped']));
         if ($scoped === []) {
@@ -94,18 +96,64 @@ class ModuleLifecycle
         if ((int)$row['rls_tables'] > 0 && (int)$row['policies'] > 0) {
             return;
         }
-        // Sauberer Rückbau der bisher angelegten Install-Artefakte (Schema +
-        // Migrationen + Modul-Stammdaten + kopiertes Verzeichnis), da der Install
-        // nicht transaktional ist.
-        $conn = $this->conn();
-        $conn->execute("DROP SCHEMA IF EXISTS $schema CASCADE");
-        $conn->execute('DELETE FROM modules WHERE module_key = :k', ['k' => $key]);
-        $this->removeDir($targetPath);
 
         throw new LifecycleException(
             "Modul deklariert is_scoped-Ressourcen, aber Schema $schema enthält keine "
             . 'RLS-geschützte Tabelle mit Policy (Kap. 30.3). Installation abgebrochen.',
         );
+    }
+
+    /**
+     * Manueller Rückbau aller bis zu einem Fehlschlag angelegten Install-
+     * Artefakte (Kap. 24, E69). Der Install ist NICHT in eine DB-Transaktion
+     * gekapselt — CREATE ROLE/Schema und das Kopieren des Pakets sind teils
+     * nicht-transaktional —, daher räumt {@see install()} bei jedem Throw nach
+     * Beginn der Seiteneffekte hier explizit auf: isolierten Host stoppen,
+     * provisionierte DB-Rolle entfernen, Schema droppen, Modulzeile samt
+     * Registrierungen/Contracts/Ressourcen/Sprachpaketen löschen und das
+     * kopierte Verzeichnis (+ Sprachpaket-Dateien) entfernen. So bleibt kein
+     * Rest zurück, an dem ein erneuter Install („bereits installiert") scheitert.
+     * Jeder Schritt ist best effort und für sich gekapselt.
+     */
+    private function rollbackInstall(string $key, string $schema, string $targetPath, bool $outOfProcess): void
+    {
+        // Out-of-Process: etwaigen bereits gestarteten Host stoppen und die
+        // eigene DB-Rolle entfernen (DROP OWNED + DROP ROLE), BEVOR das Schema
+        // fällt — die Rolle kann Tabellen im Schema besitzen.
+        if ($outOfProcess) {
+            try {
+                (new ModuleHostSupervisor())->stop($key);
+            } catch (Throwable) {
+                // best effort
+            }
+            try {
+                (new ModuleDbRole())->drop($key);
+            } catch (Throwable) {
+                // best effort
+            }
+        }
+
+        $conn = $this->conn();
+        $cleanup = [
+            "DROP SCHEMA IF EXISTS $schema CASCADE",
+            'DELETE FROM contract_registrations WHERE module_key = :k',
+            'DELETE FROM contracts WHERE owner_module_key = :k',
+            'DELETE FROM resources WHERE module_key = :k',
+            'DELETE FROM language_packs WHERE component_key = :k',
+            // Modul-Stammdaten zuletzt (CASCADE -> dependencies, migrations_log).
+            'DELETE FROM modules WHERE module_key = :k',
+        ];
+        foreach ($cleanup as $sql) {
+            try {
+                $conn->execute($sql, str_contains($sql, ':k') ? ['k' => $key] : []);
+            } catch (Throwable) {
+                // best effort
+            }
+        }
+
+        // Kopiertes Paketverzeichnis + Sprachpaket-Dateien im Locale Store.
+        $this->removeDir($targetPath);
+        $this->removeDir((new LanguagePackStore())->base() . '/' . $key);
     }
 
     private function grantSchemaToAppRole(string $schema): void
@@ -141,7 +189,7 @@ class ModuleLifecycle
             return;
         }
         $type = $manifest->type() === 'extension' ? 'extension' : 'module';
-        $store = new \App\Service\I18n\LanguagePackStore();
+        $store = new LanguagePackStore();
         foreach (glob($base . '/*', GLOB_ONLYDIR) ?: [] as $localeDir) {
             $locale = basename($localeDir);
             $poFile = $localeDir . '/' . $domain . '.po';
@@ -225,130 +273,171 @@ class ModuleLifecycle
 
             $conn = $this->conn();
             $targetPath = $this->modulesBaseDir() . '/' . $key;
-            $this->copyDir($sourcePath, $targetPath);
-
             $schema = 'mod_' . $key;
-            $conn->execute("CREATE SCHEMA IF NOT EXISTS $schema");
 
-            $row = $conn->execute(
-                'INSERT INTO modules (module_key, name, version, type, edition, publisher, php_namespace, '
-                . 'core_compatibility, extends_main_module, main_module_compatibility, requires_license, '
-                . 'status, manifest, source_path, signature_key_id) VALUES (:key, :name, :ver, :type, :ed, :pub, :ns, :cc, '
-                . ":ext, :mmc, :rl, 'installed_inactive', CAST(:man AS jsonb), :sp, :skid) RETURNING id",
-                [
-                    'key' => $key,
-                    'name' => $manifest->name(),
-                    'ver' => $manifest->version(),
-                    'type' => $manifest->type(),
-                    'ed' => $manifest->edition(),
-                    'pub' => $manifest->publisher(),
-                    'ns' => $manifest->phpNamespace(),
-                    'cc' => $manifest->coreCompatibility(),
-                    'ext' => $manifest->data['extends_main_module'] ?? null,
-                    'mmc' => $manifest->data['main_module_compatibility'] ?? null,
-                    'rl' => $manifest->requiresLicense() ? 'true' : 'false',
-                    'man' => json_encode($manifest->data),
-                    'sp' => $targetPath,
-                    'skid' => $signatureKeyId,
-                ],
-            )->fetch('assoc');
-            $moduleId = (string)$row['id'];
+            // Ab hier entstehen Seiteneffekte (Verzeichnis, Schema, Modulzeile,
+            // ggf. DB-Rolle/Host). Der Install ist NICHT in eine DB-Transaktion
+            // gekapselt — CREATE ROLE/SCHEMA und das Kopieren des Pakets sind
+            // teils nicht-transaktional. Wirft irgendein nachfolgender Schritt
+            // (grantSchemaToAppRole, importPackageLocales, registerContract …),
+            // wird alles bis hierher Angelegte manuell wieder abgeräumt (E69),
+            // damit kein Rest zurückbleibt und ein erneuter Install nicht an
+            // „bereits installiert" scheitert.
+            try {
+                $this->copyDir($sourcePath, $targetPath);
+                $conn->execute("CREATE SCHEMA IF NOT EXISTS $schema");
 
-            foreach ($manifest->dependencies() as $dep) {
-                $conn->execute(
-                    'INSERT INTO module_dependencies (module_id, required_module_key, required_version) '
-                    . 'VALUES (:m, :k, :v)',
-                    ['m' => $moduleId, 'k' => (string)($dep['module'] ?? $dep['id'] ?? ''), 'v' => $dep['version'] ?? null],
-                );
-            }
-
-            if ($manifest->phpNamespace() !== null) {
-                ModuleAutoloader::register($manifest->phpNamespace(), $targetPath . '/src');
-            }
-
-            // Out-of-Process-Isolation (Kap. 23.16.2): eigene DB-Rolle anlegen und
-            // die Migrationen UNTER dieser Rolle ausführen (kein Modulcode mit
-            // Superuser-Rechten). Nur Service-Contracts sind erlaubt.
-            $roleDsn = null;
-            if ($isolation === 'out_of_process') {
-                $conn->execute("UPDATE modules SET isolation = 'out_of_process' WHERE module_key = :k", ['k' => $key]);
-                $role = new ModuleDbRole();
-                $role->provision($key);
-                $role->grantSchemaCreate($key);
-                // Migrationen über die Login-Rolle ausführen (kein Superuser-Code).
-                $roleDsn = $role->dsn($key);
-            }
-
-            $this->migrations->runUp($moduleId, $schema, $targetPath . '/migrations', $roleDsn);
-
-            // RLS-Pflicht (Kap. 30.3, E47): direkt nach den Migrationen — wer
-            // is_scoped-Ressourcen deklariert, muss im Modul-Schema mind. eine
-            // RLS-geschützte Tabelle mit Policy mitbringen. Schlägt fehl → sauber
-            // zurückbauen (Install ist nicht in einer DB-Transaktion gekapselt),
-            // bevor weitere Registrierungen erfolgen.
-            $this->assertScopedRls($key, $schema, $targetPath, $manifest);
-
-            // Isolierte Module: RLS auch für den Tabelleneigentümer (die Modul-
-            // Rolle) erzwingen, sonst umginge sie ihre eigene Policy.
-            if ($roleDsn !== null) {
-                (new ModuleDbRole())->forceRls($key);
-            }
-
-            // App-Rolle (NOBYPASSRLS) auf das neue Modul-Schema berechtigen,
-            // damit der Request-Pfad nach dem Install darauf zugreifen kann (E26).
-            $this->grantSchemaToAppRole($schema);
-
-            // Sprachdateien des Pakets in den Managed Locale Store übernehmen
-            // (i18n-4); signiert -> reviewed (E38).
-            $this->importPackageLocales($sourcePath, $manifest, $signatureKeyId !== null);
-
-            // contracts_provided als Contract-Definitionen registrieren.
-            foreach ($manifest->contractsProvided() as $c) {
-                $this->registry->registerContract(
+                return $this->installArtifacts(
+                    $manifest,
                     $key,
-                    (string)$c['name'],
-                    (string)$c['type'],
-                    (string)$c['version'],
-                    [
-                        'description' => $c['description'] ?? null,
-                        // Service-Interface-Felder (Kap. 29.5): Mehrfachnutzung +
-                        // maschinenlesbare Input-/Output-/Fehler-Spezifikation.
-                        'multiUse' => $c['multi_use'] ?? true,
-                        'inputSpec' => $c['input_spec'] ?? null,
-                        'outputSpec' => $c['output_spec'] ?? null,
-                        'defaultBehavior' => $c['error_behavior'] ?? null,
-                    ],
+                    $schema,
+                    $sourcePath,
+                    $targetPath,
+                    $isolation,
+                    $signatureKeyId,
                 );
+            } catch (Throwable $e) {
+                $this->rollbackInstall($key, $schema, $targetPath, $isolation === 'out_of_process');
+                throw $e;
             }
-
-            // Deklarierte BREAD-Ressourcen registrieren (Step 9, Kap. 25.11).
-            foreach ($manifest->permissions() as $p) {
-                $conn->execute(
-                    'INSERT INTO resources (module_key, resource_type, resource_name, description, is_scoped, group_capable, extra_actions) '
-                    . 'VALUES (:m, :t, :n, :d, :s, :gc, CAST(:e AS jsonb)) '
-                    . 'ON CONFLICT (module_key, resource_name) DO NOTHING',
-                    [
-                        'm' => $key,
-                        't' => (string)($p['resource_type'] ?? ''),
-                        'n' => (string)($p['name'] ?? ''),
-                        'd' => $p['description'] ?? null,
-                        's' => !empty($p['is_scoped']) ? 'true' : 'false',
-                        // Gruppenfähig per Default; Modul kann es per Manifest abschalten (Kap. 25.11).
-                        'gc' => (!array_key_exists('group_capable', $p) || !empty($p['group_capable'])) ? 'true' : 'false',
-                        'e' => isset($p['extra_actions']) ? json_encode($p['extra_actions']) : null,
-                    ],
-                );
-            }
-
-            $this->audit->log('module.install', 'module', $key, [
-                'newValue' => ['version' => $manifest->version(), 'type' => $manifest->type()],
-                'moduleKey' => $key,
-                'moduleName' => $manifest->name(),
-                'moduleVersion' => $manifest->version(),
-            ]);
-
-            return $this->findModule($key) ?? [];
         });
+    }
+
+    /**
+     * Legt die eigentlichen Install-Artefakte an (Modulzeile, Abhängigkeiten,
+     * Migrationen, RLS-Pflicht, Rechte, Sprachpakete, Contracts, Ressourcen).
+     * Ausgelagert aus {@see install()}, damit der dortige try/catch den
+     * manuellen Rückbau ({@see rollbackInstall()}) sauber umschließt.
+     *
+     * @return array<string, mixed>
+     */
+    private function installArtifacts(
+        ModuleManifest $manifest,
+        string $key,
+        string $schema,
+        string $sourcePath,
+        string $targetPath,
+        string $isolation,
+        ?string $signatureKeyId,
+    ): array {
+        $conn = $this->conn();
+        $row = $conn->execute(
+            'INSERT INTO modules (module_key, name, version, type, edition, publisher, php_namespace, '
+            . 'core_compatibility, extends_main_module, main_module_compatibility, requires_license, '
+            . 'status, manifest, source_path, signature_key_id) VALUES (:key, :name, :ver, :type, :ed, :pub, :ns, :cc, '
+            . ":ext, :mmc, :rl, 'installed_inactive', CAST(:man AS jsonb), :sp, :skid) RETURNING id",
+            [
+                'key' => $key,
+                'name' => $manifest->name(),
+                'ver' => $manifest->version(),
+                'type' => $manifest->type(),
+                'ed' => $manifest->edition(),
+                'pub' => $manifest->publisher(),
+                'ns' => $manifest->phpNamespace(),
+                'cc' => $manifest->coreCompatibility(),
+                'ext' => $manifest->data['extends_main_module'] ?? null,
+                'mmc' => $manifest->data['main_module_compatibility'] ?? null,
+                'rl' => $manifest->requiresLicense() ? 'true' : 'false',
+                'man' => json_encode($manifest->data),
+                'sp' => $targetPath,
+                'skid' => $signatureKeyId,
+            ],
+        )->fetch('assoc');
+        $moduleId = (string)$row['id'];
+
+        foreach ($manifest->dependencies() as $dep) {
+            $conn->execute(
+                'INSERT INTO module_dependencies (module_id, required_module_key, required_version) '
+                . 'VALUES (:m, :k, :v)',
+                ['m' => $moduleId, 'k' => (string)($dep['module'] ?? $dep['id'] ?? ''), 'v' => $dep['version'] ?? null],
+            );
+        }
+
+        if ($manifest->phpNamespace() !== null) {
+            ModuleAutoloader::register($manifest->phpNamespace(), $targetPath . '/src');
+        }
+
+        // Out-of-Process-Isolation (Kap. 23.16.2): eigene DB-Rolle anlegen und
+        // die Migrationen UNTER dieser Rolle ausführen (kein Modulcode mit
+        // Superuser-Rechten). Nur Service-Contracts sind erlaubt.
+        $roleDsn = null;
+        if ($isolation === 'out_of_process') {
+            $conn->execute("UPDATE modules SET isolation = 'out_of_process' WHERE module_key = :k", ['k' => $key]);
+            $role = new ModuleDbRole();
+            $role->provision($key);
+            $role->grantSchemaCreate($key);
+            // Migrationen über die Login-Rolle ausführen (kein Superuser-Code).
+            $roleDsn = $role->dsn($key);
+        }
+
+        $this->migrations->runUp($moduleId, $schema, $targetPath . '/migrations', $roleDsn);
+
+        // RLS-Pflicht (Kap. 30.3, E47): direkt nach den Migrationen — wer
+        // is_scoped-Ressourcen deklariert, muss im Modul-Schema mind. eine
+        // RLS-geschützte Tabelle mit Policy mitbringen. Schlägt fehl → wirft;
+        // der Rückbau läuft zentral über den try/catch in install() (E69).
+        $this->assertScopedRls($schema, $manifest);
+
+        // Isolierte Module: RLS auch für den Tabelleneigentümer (die Modul-
+        // Rolle) erzwingen, sonst umginge sie ihre eigene Policy.
+        if ($roleDsn !== null) {
+            (new ModuleDbRole())->forceRls($key);
+        }
+
+        // App-Rolle (NOBYPASSRLS) auf das neue Modul-Schema berechtigen,
+        // damit der Request-Pfad nach dem Install darauf zugreifen kann (E26).
+        $this->grantSchemaToAppRole($schema);
+
+        // Sprachdateien des Pakets in den Managed Locale Store übernehmen
+        // (i18n-4); signiert -> reviewed (E38).
+        $this->importPackageLocales($sourcePath, $manifest, $signatureKeyId !== null);
+
+        // contracts_provided als Contract-Definitionen registrieren.
+        foreach ($manifest->contractsProvided() as $c) {
+            $this->registry->registerContract(
+                $key,
+                (string)$c['name'],
+                (string)$c['type'],
+                (string)$c['version'],
+                [
+                    'description' => $c['description'] ?? null,
+                    // Service-Interface-Felder (Kap. 29.5): Mehrfachnutzung +
+                    // maschinenlesbare Input-/Output-/Fehler-Spezifikation.
+                    'multiUse' => $c['multi_use'] ?? true,
+                    'inputSpec' => $c['input_spec'] ?? null,
+                    'outputSpec' => $c['output_spec'] ?? null,
+                    'defaultBehavior' => $c['error_behavior'] ?? null,
+                ],
+            );
+        }
+
+        // Deklarierte BREAD-Ressourcen registrieren (Step 9, Kap. 25.11).
+        foreach ($manifest->permissions() as $p) {
+            $conn->execute(
+                'INSERT INTO resources (module_key, resource_type, resource_name, description, is_scoped, group_capable, extra_actions) '
+                . 'VALUES (:m, :t, :n, :d, :s, :gc, CAST(:e AS jsonb)) '
+                . 'ON CONFLICT (module_key, resource_name) DO NOTHING',
+                [
+                    'm' => $key,
+                    't' => (string)($p['resource_type'] ?? ''),
+                    'n' => (string)($p['name'] ?? ''),
+                    'd' => $p['description'] ?? null,
+                    's' => !empty($p['is_scoped']) ? 'true' : 'false',
+                    // Gruppenfähig per Default; Modul kann es per Manifest abschalten (Kap. 25.11).
+                    'gc' => (!array_key_exists('group_capable', $p) || !empty($p['group_capable'])) ? 'true' : 'false',
+                    'e' => isset($p['extra_actions']) ? json_encode($p['extra_actions']) : null,
+                ],
+            );
+        }
+
+        $this->audit->log('module.install', 'module', $key, [
+            'newValue' => ['version' => $manifest->version(), 'type' => $manifest->type()],
+            'moduleKey' => $key,
+            'moduleName' => $manifest->name(),
+            'moduleVersion' => $manifest->version(),
+        ]);
+
+        return $this->findModule($key) ?? [];
     }
 
     /** @return array<string, mixed> */

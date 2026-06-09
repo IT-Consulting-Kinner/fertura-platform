@@ -3,11 +3,14 @@ declare(strict_types=1);
 
 namespace App\Test\TestCase\Service\Module;
 
+use App\Model\Entity\Contract;
 use App\Service\Module\LifecycleException;
 use App\Service\Module\ModuleDbRole;
 use App\Service\Module\ModuleHostSupervisor;
 use App\Service\Module\ModuleLifecycle;
 use App\Service\Module\RemoteInvoker;
+use App\Service\Registry\ContractRegistry;
+use App\Service\Registry\RegistryException;
 use App\Service\Settings\SettingsManager;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\TestCase;
@@ -139,6 +142,66 @@ class OutOfProcessIsolationTest extends TestCase
         $this->rrmdir($dir);
     }
 
+    public function testFailedInstallRollsBackSchemaRoleAndArtifacts(): void
+    {
+        // M7/E69: ein Fehlschlag NACH der Schema-Erzeugung (hier beim Registrieren
+        // der Contracts — also nach DB-Rolle, Migrationen, FORCE-RLS, Grants und
+        // Sprachimport) darf nichts zurücklassen. Sonst scheitert ein erneuter
+        // Install an „bereits installiert" und die DB-Rolle bliebe verwaist.
+        $registry = new class extends ContractRegistry {
+            public function registerContract(
+                string $ownerModuleKey,
+                string $name,
+                string $type,
+                string $version,
+                array $opts = [],
+            ): Contract {
+                throw new RegistryException('Erzwungener Fehlschlag nach der Schema-Erzeugung (Test).');
+            }
+        };
+        $lc = new ModuleLifecycle($registry);
+        $conn = ConnectionManager::get('default');
+
+        try {
+            $lc->install($this->fixture(self::KEY), 'out_of_process');
+            $this->fail('Install hätte am erzwungenen Contract-Fehler scheitern müssen.');
+        } catch (RegistryException $e) {
+            $this->assertStringContainsString('Erzwungener Fehlschlag', $e->getMessage());
+        }
+
+        // Rollback-Nachweis: kein Schema, keine Modulzeile, keine DB-Rolle,
+        // keine Contracts/Ressourcen/Sprachpakete, kein kopiertes Verzeichnis.
+        $this->assertFalse(
+            $this->rowExists($conn, "SELECT 1 FROM information_schema.schemata WHERE schema_name = 'mod_isolated_module'"),
+            'Schema muss zurückgebaut sein.',
+        );
+        $this->assertFalse(
+            $this->rowExists($conn, 'SELECT 1 FROM modules WHERE module_key = :k', ['k' => self::KEY]),
+            'Modulzeile muss weg sein.',
+        );
+        $this->assertFalse(
+            $this->rowExists($conn, 'SELECT 1 FROM pg_roles WHERE rolname = :r', ['r' => self::ROLE]),
+            'Provisionierte DB-Rolle darf nicht zurückbleiben.',
+        );
+        $this->assertFalse(
+            $this->rowExists($conn, 'SELECT 1 FROM contracts WHERE owner_module_key = :k', ['k' => self::KEY]),
+            'Keine Contracts dürfen zurückbleiben.',
+        );
+        $this->assertFalse(
+            $this->rowExists($conn, 'SELECT 1 FROM resources WHERE module_key = :k', ['k' => self::KEY]),
+            'Keine Ressourcen dürfen zurückbleiben.',
+        );
+        $this->assertFalse(
+            $this->rowExists($conn, 'SELECT 1 FROM language_packs WHERE component_key = :k', ['k' => self::KEY]),
+            'Keine Sprachpakete dürfen zurückbleiben.',
+        );
+        $this->assertDirectoryDoesNotExist(ROOT . '/modules/' . self::KEY, 'Kopiertes Verzeichnis muss weg sein.');
+
+        // Ein erneuter (regulärer) Install muss jetzt wieder gelingen.
+        $rec = (new ModuleLifecycle())->install($this->fixture(self::KEY), 'out_of_process');
+        $this->assertSame('out_of_process', $rec['isolation']);
+    }
+
     public function testEnforcementRejectsNonServiceModule(): void
     {
         // sample_module deklariert einen Event-Listener -> nicht isolierbar.
@@ -160,6 +223,12 @@ class OutOfProcessIsolationTest extends TestCase
     private function fixture(string $key): string
     {
         return ROOT . '/tests/Fixture/' . $key;
+    }
+
+    /** @param array<string, mixed> $params */
+    private function rowExists($conn, string $sql, array $params = []): bool
+    {
+        return $conn->execute($sql, $params)->fetch() !== false;
     }
 
     private function cleanup(string $key): void
