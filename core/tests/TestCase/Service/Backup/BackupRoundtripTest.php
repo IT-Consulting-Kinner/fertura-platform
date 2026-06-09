@@ -18,11 +18,15 @@ use Cake\TestSuite\TestCase;
  */
 class BackupRoundtripTest extends TestCase
 {
+    /** Lifecycle-Advisory-Lock-Key (Spiegel von BackupService::LIFECYCLE_LOCK). */
+    private const LIFECYCLE_LOCK = 778899001;
+
     private string $tmpDir = '';
     /** @var list<string> */
     private array $created = [];
     /** @var array<string,mixed> */
     private array $prev = [];
+    private string $holderConn = '';
 
     protected function setUp(): void
     {
@@ -103,6 +107,78 @@ class BackupRoundtripTest extends TestCase
 
         // Für das Aufräumen (delete) wieder das korrekte Passwort setzen.
         $sm->set('core', 'backup.password', 'Geheim!123');
+    }
+
+    /**
+     * Hält eine andere Operation den Lifecycle-Lock, darf `create()` keinen
+     * (DB↔Storage-inkonsistenten) Snapshot ohne Lock erstellen, sondern muss
+     * laut scheitern (B2). Der Lock wird hier über eine **eigene** DB-Sitzung
+     * gehalten, damit der nicht-blockierende `pg_try_advisory_lock` im Service
+     * tatsächlich `false` liefert.
+     */
+    public function testCreateAbortsWhenLifecycleLockHeld(): void
+    {
+        $note = 'lock-contention-' . bin2hex(random_bytes(4));
+
+        $holder = $this->separateConnection();
+        $got = $holder->execute('SELECT pg_try_advisory_lock(:k) AS ok', ['k' => self::LIFECYCLE_LOCK])->fetch('assoc');
+        $this->assertTrue($got['ok'] === true || $got['ok'] === 't', 'Testaufbau: Lock muss in eigener Sitzung greifbar sein.');
+
+        try {
+            $threw = false;
+            try {
+                (new BackupService())->context('cli')->create($note, null, $this->tmpDir);
+            } catch (\RuntimeException $e) {
+                $threw = true;
+                $this->assertStringContainsStringIgnoringCase('lock', $e->getMessage());
+            }
+            $this->assertTrue($threw, 'create() muss bei gehaltenem Lifecycle-Lock werfen statt still fortzufahren.');
+        } finally {
+            $holder->execute('SELECT pg_advisory_unlock(:k)', ['k' => self::LIFECYCLE_LOCK]);
+            $this->dropSeparateConnection();
+            // Der fehlgeschlagene Lauf hinterlässt eine als 'failed' markierte
+            // Zeile (INSERT erfolgt vor dem Lock-Versuch) — aufräumen.
+            $rows = ConnectionManager::get('default')
+                ->execute('SELECT id FROM backups WHERE note = :n', ['n' => $note])->fetchAll('assoc');
+            foreach ($rows as $r) {
+                try {
+                    (new BackupService())->delete((string)$r['id']);
+                } catch (\Throwable) {
+                    // best effort
+                }
+            }
+        }
+    }
+
+    /** Eigene DB-Sitzung (zweite Connection) zum Halten des Advisory-Locks. */
+    private function separateConnection(): \Cake\Database\Connection
+    {
+        $this->holderConn = 'bk_lockholder';
+        if (ConnectionManager::getConfig($this->holderConn) === null) {
+            $cfg = ConnectionManager::get('default')->config();
+            unset($cfg['name']);
+            $cfg['className'] = \Cake\Database\Connection::class;
+            ConnectionManager::setConfig($this->holderConn, $cfg);
+        }
+        /** @var \Cake\Database\Connection $conn */
+        $conn = ConnectionManager::get($this->holderConn);
+        $conn->getDriver()->connect();
+
+        return $conn;
+    }
+
+    private function dropSeparateConnection(): void
+    {
+        if ($this->holderConn === '') {
+            return;
+        }
+        try {
+            ConnectionManager::get($this->holderConn)->getDriver()->disconnect();
+            ConnectionManager::drop($this->holderConn);
+        } catch (\Throwable) {
+            // best effort
+        }
+        $this->holderConn = '';
     }
 
     private function rrmdir(string $path): void

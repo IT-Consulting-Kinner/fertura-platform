@@ -129,6 +129,69 @@ class BackupService
     }
 
     /**
+     * Wertet die Ausgabe eines `pg_restore`-Laufs aus und wirft bei einem
+     * **echten** Fehler. `pg_restore` läuft hier bewusst ohne
+     * `--exit-on-error` (ein Restore soll möglichst vollständig durchlaufen),
+     * signalisiert harmlose Situationen aber dennoch über Exitcode/Notices:
+     * `--clean --if-exists` erzeugt „… does not exist, skipping"-Notices und am
+     * Ende ggf. „errors ignored on restore: N" — beides tolerierbar. Echte
+     * `pg_restore: error:`/`ERROR:`-Zeilen sind es nicht: sie dürfen nicht (wie
+     * zuvor, als der Exitcode gar nicht geprüft wurde) verschluckt werden und
+     * eine halb-restaurierte DB als „ok" durchgehen lassen (M6/B1).
+     *
+     * @param list<string> $out Gesammelte (stdout+stderr) Ausgabe des Laufs.
+     */
+    private function assertRestoreOk(array $out, int $rc, string $context): void
+    {
+        $errors = [];
+        foreach ($out as $line) {
+            if ($this->isIgnorableRestoreLine($line)) {
+                continue;
+            }
+            if (stripos($line, 'pg_restore: error:') !== false
+                || preg_match('/(?<![A-Za-z])ERROR:\s/', $line) === 1) {
+                $errors[] = trim($line);
+            }
+        }
+        if ($errors !== []) {
+            throw new RuntimeException(
+                $context . ' meldete Fehler: ' . implode(' | ', array_slice($errors, 0, 5)),
+            );
+        }
+        // Kein erkennbarer Fehlertext, aber Exitcode != 0: reine
+        // „does not exist, skipping"-Notices eines `--clean`-Laufs sind
+        // tolerierbar (genau der Fehlalarm, den der reine Exitcode-Check
+        // erzeugen würde). Alles andere — unbekannte Ausgabe oder gar keine
+        // Ausgabe bei rc != 0 (pg_restore nicht gefunden, Verbindung
+        // abgebrochen) — ist ein strukturelles Problem und darf nicht still als
+        // Erfolg gelten.
+        if ($rc !== 0) {
+            $unexpected = array_values(array_filter($out, fn ($l) => !$this->isIgnorableRestoreLine($l)));
+            if ($unexpected !== [] || $out === []) {
+                throw new RuntimeException(
+                    $context . ' fehlgeschlagen (rc=' . $rc . '): '
+                    . ($out === [] ? '(keine Ausgabe)' : implode("\n", array_slice($unexpected, 0, 5))),
+                );
+            }
+        }
+    }
+
+    /** Tolerierbare (nicht-fatale) Ausgabezeile eines `pg_restore --clean --if-exists`-Laufs. */
+    private function isIgnorableRestoreLine(string $line): bool
+    {
+        if (trim($line) === '') {
+            return true;
+        }
+        foreach (['does not exist, skipping', 'errors ignored on restore', 'pg_restore: warning:'] as $needle) {
+            if (stripos($line, $needle) !== false) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Erstellt eine konsistente, verifizierte (ggf. verschlüsselte) Sicherung.
      * Gibt die Backup-ID zurück. `$targetDir` überschreibt optional den Ort.
      */
@@ -171,7 +234,19 @@ class BackupService
         );
 
         try {
-            $locked = $this->lock();
+            // Der Lifecycle-Lock ist Pflicht, nicht „nice to have": ein Backup
+            // ohne ihn wäre ein DB↔Storage-inkonsistenter Snapshot, sobald eine
+            // parallele Lifecycle-/Update-/Restore-Operation zwischen pg_dump und
+            // tar Daten oder Datei-Stores verändert. Erhalten wir ihn nicht
+            // (eine andere Operation hält ihn), brechen wir laut ab, statt still
+            // ohne Lock weiterzulaufen (B2).
+            if (!$this->lock()) {
+                throw new RuntimeException(
+                    'Backup nicht möglich: Der Lifecycle-Lock wird von einer anderen Operation '
+                    . '(Update/Restore/Backup) gehalten — ein konsistenter Snapshot ist gerade nicht '
+                    . 'erstellbar. Bitte später erneut versuchen.',
+                );
+            }
             try {
                 $this->run($env . 'pg_dump -h ' . escapeshellarg($pg['host']) . ' -p ' . escapeshellarg($pg['port'])
                     . ' -U ' . escapeshellarg($pg['user']) . ' -d ' . escapeshellarg($pg['db'])
@@ -184,9 +259,7 @@ class BackupService
                     $this->run('tar czf ' . escapeshellarg($filesTar) . ' -C ' . escapeshellarg(ROOT) . ' --files-from /dev/null');
                 }
             } finally {
-                if ($locked) {
-                    $this->unlock();
-                }
+                $this->unlock();
             }
 
             $dbSha = hash_file('sha256', $dumpFile) ?: '';
@@ -452,6 +525,7 @@ class BackupService
             $this->run($env . 'createdb ' . $base . ' ' . escapeshellarg($scratch));
             exec($env . 'pg_restore --no-owner --no-privileges -d ' . escapeshellarg($scratch) . ' '
                 . $base . ' ' . escapeshellarg($tmpDump) . ' 2>&1', $o, $rc);
+            $this->assertRestoreOk($o, $rc, 'Probe-Restore (pg_restore)');
             [$scratchConn, $connName] = $this->scratchConnection($pg, $scratch);
             $tables = (int)$scratchConn->execute(
                 "SELECT count(*) AS n FROM information_schema.tables WHERE table_schema = 'core'",
@@ -493,6 +567,10 @@ class BackupService
             $base = '-h ' . escapeshellarg($pg['host']) . ' -p ' . escapeshellarg($pg['port']) . ' -U ' . escapeshellarg($pg['user']);
             exec($env . 'pg_restore --clean --if-exists --no-owner -d ' . escapeshellarg($pg['db'])
                 . ' ' . $base . ' ' . escapeshellarg($tmp . '/database.dump') . ' 2>&1', $o, $rc);
+            // Exitcode + Ausgabe prüfen, BEVOR die Datei-Stores entpackt werden
+            // und (über restore()) der Wartungsmodus wieder freigegeben wird —
+            // sonst käme eine halb-restaurierte DB still wieder online (M6/B1).
+            $this->assertRestoreOk($o, $rc, 'Wiederherstellung (pg_restore)');
             if ($hasFiles && (int)filesize($tmp . '/files.tar.gz') > 0) {
                 $this->run('tar xzf ' . escapeshellarg($tmp . '/files.tar.gz') . ' -C ' . escapeshellarg(ROOT));
             }
