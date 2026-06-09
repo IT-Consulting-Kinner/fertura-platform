@@ -136,6 +136,31 @@ return [
             'duration' => '+1 years',
             'url' => env('CACHE_CAKEMODEL_URL', null),
         ],
+
+        /*
+         * Anwendungs-Cache (P02): allgemeiner Cache für Core/Module. Engine über
+         * CACHE_APP_URL steuerbar (file/apcu/redis), z. B. redis://redis:6379/0.
+         */
+        '_app_' => [
+            'className' => FileEngine::class,
+            'prefix' => 'fertura_app_',
+            'serialize' => true,
+            'duration' => '+1 hours',
+            'url' => env('CACHE_APP_URL', null),
+        ],
+
+        /*
+         * Settings-Cache (P02): kurzlebiger Cache der Konfigurations-Lesezugriffe.
+         * Wird bei jedem set() gezielt invalidiert; Geheimnisse werden NIE gecacht
+         * (immer DB/AES). Engine via CACHE_APP_URL.
+         */
+        '_app_settings_' => [
+            'className' => FileEngine::class,
+            'prefix' => 'fertura_settings_',
+            'serialize' => true,
+            'duration' => '+5 minutes',
+            'url' => env('CACHE_APP_URL', null),
+        ],
     ],
 
     /*

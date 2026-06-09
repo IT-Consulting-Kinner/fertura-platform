@@ -63,3 +63,13 @@ ConnectionHelper::addTestAliases();
 // – also beim Rebuild auslassen, damit das Hinzufügen einer Migration kein
 // manuelles `DROP DATABASE` erfordert.
 (new Migrator())->run(['skip' => ['audit_log_default', 'event_outbox_default']]);
+
+// Settings-/App-Cache (P02) vor dem Lauf leeren: der Migrator truncatet die
+// Seed-Daten, ein evtl. persistenter Datei-Cache aus einem früheren Lauf wäre
+// sonst stale. Innerhalb eines Laufs invalidiert SettingsManager::set() gezielt.
+foreach (['_app_settings_', '_app_'] as $cacheConfig) {
+    try {
+        \Cake\Cache\Cache::clear($cacheConfig);
+    } catch (\Throwable) {
+    }
+}

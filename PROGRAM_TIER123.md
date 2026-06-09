@@ -28,7 +28,7 @@ Tests, Doku (Anforderungsdokument-Kapitel + Changelog) und eigenem Commit/Push
   `Cake\Http\Client`: Timeouts, Retry/Backoff (opt-in), **SSRF-Schutz**
   (Private/Loopback/Link-Local blockiert, Allowlist), Antwortgrößen-Limit,
   Secret-Redaction in Logs, Audit/Metrics-Hooks. *Fundament für P05/P06/P11.*
-- [ ] **P02 — Cache-Abstraktion.** `Cake\Cache`-Konfiguration (File-Default,
+- [x] **P02 — Cache-Abstraktion** (E77). `Cake\Cache`-Konfiguration (File-Default,
   Redis/APCu optional via Env), Helfer für get/remember/invalidate; Settings-Cache
   mit TTL + Invalidierung bei Änderung. *Fundament für P07-Rate-Limit, P10.*
 - [ ] **P03 — Objekt-Storage-Abstraktion.** Flysystem + S3-kompatibler Adapter
@@ -84,4 +84,5 @@ Abgeschlossene Punkte werden oben abgehakt und hier mit E-Nummer + Commit notier
 | Punkt | E-Nr. | Commit | Stand |
 |------|-------|--------|-------|
 | —    | —     | —      | Programm angelegt |
-| P01 HTTP-Egress-Primitiv | E76 | (folgt) | fertig — 98 Tests grün |
+| P01 HTTP-Egress-Primitiv | E76 | a8ec0bd | fertig — 98 Tests grün |
+| P02 Cache-Abstraktion | E77 | (folgt) | fertig — 102 Tests grün |
