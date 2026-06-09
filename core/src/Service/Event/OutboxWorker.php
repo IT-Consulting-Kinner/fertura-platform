@@ -109,6 +109,15 @@ class OutboxWorker
         ];
 
         $errors = [];
+        // Outbound-Webhooks (P05): passende Subscriptions idempotent einreihen
+        // (UNIQUE(subscription_id,event_id)); ein Fehler hier lässt das Event
+        // erneut versuchen (at-least-once, Einreihen ist idempotent).
+        try {
+            (new \App\Service\Webhook\WebhookService())
+                ->enqueueForEvent((string)$event['contract_name'], $payload, (string)$event['id']);
+        } catch (Throwable $e) {
+            $errors[] = 'webhook-enqueue: ' . $e->getMessage();
+        }
         $runtime = new \App\Service\Module\ContributionRuntime($this->registry);
         foreach ($runtime->listeners((string)$event['contract_name']) as $listener) {
             try {
@@ -233,10 +242,19 @@ class OutboxWorker
                 while ($this->running && ($n = $this->processBatch()) > 0) {
                     $processed += $n;
                 }
+                // Fällige Webhook-Zustellungen (P05) zustellen — pro Zyklus
+                // begrenzt (externe HTTP-Aufrufe), der Rest folgt im nächsten Zyklus.
+                $deliveredWebhooks = 0;
+                try {
+                    $deliveredWebhooks = (new \App\Service\Webhook\WebhookService())->deliverPending(25);
+                } catch (Throwable $e) {
+                    $this->log('Webhook-Zustellung-Fehler: ' . $e->getMessage());
+                }
                 \App\Service\Health\WorkerHeartbeat::beat('outbox', 'ok', [
                     'duration_ms' => (int)round((microtime(true) - $cycleStart) * 1000),
                     'interval_seconds' => (int)round($this->pollMs / 1000),
                     'processed' => $processed,
+                    'webhooks_delivered' => $deliveredWebhooks,
                 ]);
                 // Auf NOTIFY oder Timeout warten.
                 if ($listenPdo !== null) {

@@ -38,7 +38,8 @@ Tests, Doku (Anforderungsdokument-Kapitel + Changelog) und eigenem Commit/Push
   Counters/Histogramme für HTTP/Worker/Outbox/RPC. *Instrumentiert alles Spätere.*
 
 ### Phase B — Integrations-Oberfläche (Tier-1-Kern)
-- [ ] **P05 — Outbound-Webhooks.** Auf Outbox + P01: Subscriptions je
+- [x] **P05 — Outbound-Webhooks** (E80). _Admin-GUI bewusst auf später verschoben
+  (i18n-Aufwand); Verwaltung über CLI `webhook` + künftige API (P07)._ Auf Outbox + P01: Subscriptions je
   Event/Contract, **HMAC-signierte** Zustellung, Retry/Backoff, Dead-Letter,
   Admin-UI, Zustell-Audit. *Größter Integrations-Hebel.*
 - [ ] **P06 — OIDC/OAuth2-SSO.** First-Party-Provider am `core.auth.provider`-Slot
@@ -89,5 +90,7 @@ Abgeschlossene Punkte werden oben abgehakt und hier mit E-Nummer + Commit notier
 | P03 Objekt-Storage | E78 | e347265 | fertig — Flysystem lokal+S3 |
 | P04 Metrics + Tracing | E79 | (folgt) | fertig — 115 Tests grün, /metrics live |
 
-**Phase A abgeschlossen** (P01–P04). Nächster Halt: Zwischenstand, dann Phase B
-(P05 Webhooks, P06 OIDC, P07 API-Reife).
+| P05 Outbound-Webhooks | E80 | (folgt) | fertig — 119 Tests grün |
+
+**Phase A abgeschlossen** (P01–P04). Phase B läuft: P05 fertig, als Nächstes
+P06 OIDC, P07 API-Reife.
