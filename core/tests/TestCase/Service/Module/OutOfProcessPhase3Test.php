@@ -3,10 +3,10 @@ declare(strict_types=1);
 
 namespace App\Test\TestCase\Service\Module;
 
-use App\Service\Module\LifecycleException;
 use App\Service\Module\ModuleDbRole;
 use App\Service\Module\ModuleHostSupervisor;
 use App\Service\Module\ModuleLifecycle;
+use App\Service\Schedule\ScheduledTaskRunner;
 use App\Service\Settings\SettingsManager;
 use Cake\Datasource\ConnectionManager;
 use Cake\ORM\Locator\LocatorAwareTrait;
@@ -17,8 +17,10 @@ use Cake\TestSuite\TestCase;
  * Modul stellt einen **Collector-Beitrag** (`core.collector.anonymize`) bereit,
  * der bei der Benutzer-Anonymisierung **im isolierten Host über RPC** ausgeführt
  * wird — inkl. eigener DB-Zugriff (Modul-Rolle) und RLS-Kontext (Bypass) über
- * die RPC-Grenze. Zudem: Resolver/periodische Aufgaben bleiben bei Isolation
- * abgelehnt (noch nicht über RPC).
+ * die RPC-Grenze. Zudem läuft eine **periodische Aufgabe** (core.collector.scheduled)
+ * des Moduls beim Tick im isolierten Host (Scheduled-over-RPC), und das Modul
+ * stellt einen **Daten-Resolver** bereit (out_of_process erlaubt; nur der
+ * Auth-Provider-Slot bleibt config-bedingt ausgenommen).
  *
  * @group slow
  */
@@ -36,11 +38,15 @@ class OutOfProcessPhase3Test extends TestCase
         $this->prevSig = (bool)$sm->get('core', 'require_module_signature', true);
         $sm->set('core', 'require_module_signature', false);
         $this->cleanup();
-        // Core-Collector-Contract (per Migration geseedet, vom Test-Migrator truncatet).
-        ConnectionManager::get('default')->execute(
-            "INSERT INTO contracts (owner_module_key, name, contract_type, version, multi_use, active) "
-            . "VALUES ('core', 'core.collector.anonymize', 'collector', '1.0.0', true, true) ON CONFLICT (name) DO NOTHING",
-        );
+        // Core-Collector-Contracts (per Migration geseedet, vom Test-Migrator truncatet).
+        $conn = ConnectionManager::get('default');
+        foreach (['core.collector.anonymize', 'core.collector.scheduled'] as $name) {
+            $conn->execute(
+                "INSERT INTO contracts (owner_module_key, name, contract_type, version, multi_use, active) "
+                . "VALUES ('core', :n, 'collector', '1.0.0', true, true) ON CONFLICT (name) DO NOTHING",
+                ['n' => $name],
+            );
+        }
     }
 
     protected function tearDown(): void
@@ -86,28 +92,35 @@ class OutOfProcessPhase3Test extends TestCase
         }
     }
 
-    public function testIsolationStillRejectsScheduledTask(): void
+    public function testIsolatedScheduledTaskRunsInHost(): void
     {
-        // Ein Modul mit periodischer Aufgabe (core.collector.scheduled) darf
-        // (noch) nicht isoliert werden — läuft noch nicht über RPC.
-        $dir = sys_get_temp_dir() . '/fertura_sched_' . bin2hex(random_bytes(5));
-        @mkdir($dir, 0o775, true);
-        file_put_contents($dir . '/manifest.json', json_encode([
-            'id' => 'ztest_sched', 'name' => 'Sched', 'version' => '1.0.0', 'type' => 'main',
-            'edition' => 'free', 'description' => 'Periodische Aufgabe.', 'publisher' => 'Fertura Test',
-            'php_namespace' => 'ZtestSched', 'core_compatibility' => '>=1.0.0 <2.0.0',
-            'requires_license' => false, 'dependencies' => [], 'permissions' => [],
-            'collectors_registered' => [
-                ['contract' => 'core.collector.scheduled', 'version' => '>=1.0.0 <2.0.0', 'class' => 'ZtestSched\\Task'],
-            ],
-        ]));
-        $this->expectException(LifecycleException::class);
-        $this->expectExceptionMessageMatches('/periodische Aufgabe|RPC/');
-        try {
-            (new ModuleLifecycle())->install($dir, 'out_of_process');
-        } finally {
-            $this->rrmdir($dir);
-        }
+        $lc = new ModuleLifecycle();
+        $lc->install(ROOT . '/tests/Fixture/' . self::KEY, 'out_of_process');
+        $lc->activate(self::KEY);
+
+        $conn = ConnectionManager::get('default');
+        // Tick -> die periodische Aufgabe des isolierten Moduls läuft IM HOST
+        // (über RPC + Modul-Rolle) und schreibt einen Marker in die Modultabelle.
+        $ran = (new ScheduledTaskRunner())->tick();
+        $this->assertContains('isolated_anon.ping', $ran, 'Die isolierte Aufgabe muss getickt worden sein.');
+
+        $row = $conn->execute(
+            "SELECT count(*) AS c FROM mod_isolated_anon_module.user_data WHERE note = 'ticked'",
+        )->fetch('assoc');
+        $this->assertGreaterThan(0, (int)$row['c'], 'run() muss im isolierten Host einen Marker geschrieben haben.');
+    }
+
+    public function testDataResolverModuleIsIsolatable(): void
+    {
+        // Ein Modul, das einen Daten-Resolver bereitstellt, darf out_of_process
+        // installiert werden (Resolver laufen über RPC — nur der config-basierte
+        // Auth-Provider-Slot bleibt ausgenommen, siehe OutOfProcessIsolationTest).
+        (new ModuleLifecycle())->install(ROOT . '/tests/Fixture/' . self::KEY, 'out_of_process');
+        $row = ConnectionManager::get('default')->execute(
+            'SELECT isolation FROM modules WHERE module_key = :k',
+            ['k' => self::KEY],
+        )->fetch('assoc');
+        $this->assertSame('out_of_process', $row['isolation']);
     }
 
     private function cleanup(): void
@@ -131,6 +144,7 @@ class OutOfProcessPhase3Test extends TestCase
             'DELETE FROM contracts WHERE owner_module_key = :k',
             'DELETE FROM resources WHERE module_key = :k',
             'DELETE FROM modules WHERE module_key = :k',
+            "DELETE FROM worker_heartbeats WHERE worker_key = 'sched:isolated_anon.ping'",
         ] as $sql) {
             try {
                 $conn->execute($sql, str_contains($sql, ':k') ? ['k' => self::KEY] : []);

@@ -262,6 +262,18 @@ class ContractRegistry
 
     public function resolveProviderClass(string $contractName): ?string
     {
+        return $this->resolveProvider($contractName)['class'] ?? null;
+    }
+
+    /**
+     * Aktiver Provider (Klasse **und** beitragendes Modul) eines Contracts.
+     * Für die Out-of-Process-Weiche zählt das **Anbieter**-Modul (nicht der
+     * Contract-Owner — bei Resolver/Service kann es ein anderes Modul sein).
+     *
+     * @return array{class:string, module_key:string}|null
+     */
+    public function resolveProvider(string $contractName): ?array
+    {
         $c = $this->findContract($contractName);
         if ($c === null || !$c->active) {
             return null;
@@ -273,8 +285,11 @@ class ContractRegistry
                 'active' => true,
             ])
             ->first();
+        if ($r === null || $r->implementation_class === null) {
+            return null;
+        }
 
-        return $r?->implementation_class;
+        return ['class' => (string)$r->implementation_class, 'module_key' => (string)$r->module_key];
     }
 
     /** @return list<string> */

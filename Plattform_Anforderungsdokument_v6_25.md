@@ -881,19 +881,25 @@ nicht: Signatur/Anker/Widerruf bleiben die maßgebliche Zulassungsgrenze
 (23.16.1); die Out-of-Process-Isolation begrenzt zusätzlich, was bereits
 zugelassener Modulcode zur Laufzeit technisch erreichen kann.
 
-**Geltungsbereich (Phase 3).** Isolierte Module dürfen **Service-Contracts,
-Collector-Beiträge** (Health, Anonymisierung u. a.) **und Event-Listener**
-anbieten — diese laufen über RPC im Host. Der **RLS-Zeilenkontext**
-(`app.current_user_id`/`-group_ids`/`-bypass`) wird dabei über die RPC-Grenze
-mitgereicht und im Host transaktionslokal gesetzt, sodass Modul-Beiträge
-benutzer-/gruppen-scoped arbeiten. Beitragsklassen nutzen im Host eine
-CakePHP-`default`-Connection auf die Modul-Rolle (Search-Path auf das
-Modul-Schema). **Noch nicht über RPC** und daher bei Isolation **abgelehnt**
-(statt still in-process ausgeführt — die Grenze bleibt ehrlich): **Resolver**
-und **periodische Aufgaben** (`core.collector.scheduled`).
+**Geltungsbereich (Phase 3, vollständig).** Isolierte Module dürfen **alle
+gängigen Erweiterungspunkte** anbieten: **Service-Contracts, Collector-Beiträge**
+(Health, Anonymisierung, periodische Aufgaben) **, Event-Listener, Daten-Resolver
+und periodische Aufgaben** (`core.collector.scheduled`) — diese laufen über RPC
+im Host. Der **RLS-Zeilenkontext** (`app.current_user_id`/`-group_ids`/`-bypass`)
+wird dabei über die RPC-Grenze mitgereicht und im Host transaktionslokal gesetzt,
+sodass Modul-Beiträge benutzer-/gruppen-scoped arbeiten. Beitragsklassen nutzen
+im Host eine CakePHP-`default`-Connection auf die Modul-Rolle (Search-Path auf
+das Modul-Schema). **Periodische Aufgaben:** Fälligkeits-Prüfung (Heartbeat) und
+der Mehrinstanz-Advisory-Lock bleiben im Core; nur die Ausführung (`run()`)
+reist über die RPC-Grenze (Systemkontext, RLS-Bypass). **Resolver** werden über
+das Capability-Handle aufgerufen und nach der **Isolation des bereitstellenden
+Moduls** geroutet. **Einzige Ausnahme:** der **Auth-Provider-Slot**
+(`core.auth.provider`) bleibt bei Isolation **abgelehnt** — er ist config-artig
+(der Resolver liefert ein In-Process-Authenticator-Objekt, das nicht über RPC
+reichbar ist) und ist daher per Konstruktion in-process.
 
-**Bewusst spätere Ausbaustufen** (ehrlich benannt): Resolver und periodische
-Aufgaben über RPC; **echte Same-User-Trennung** über einen eigenen
+**Bewusst spätere Ausbaustufen** (ehrlich benannt): **echte Same-User-Trennung**
+über einen eigenen
 Betriebssystem-Benutzer bzw. Container (das RPC-Token schützt vor fremden,
 nicht vor gleich-UID-Prozessen); Dateisystem-/Kernel-Begrenzung und
 Capability-Tokens je Aufruf. **Hinweis Transaktionsgrenze:** Ein
@@ -4481,6 +4487,7 @@ Komponente neu auszuliefern.
 | 6.30 | 07.06.2026 | Doku-Software-Abgleich nach Umsetzung: (a) **7. Administrationsbereich „Sprachverwaltung"** in 27.3.1 + Entscheidung 170 ergänzt (zuvor 6); (b) **API-Token tragen Scopes** (zusätzliche Einschränkung, nie erweiternd) in 27.16.3 + Entscheidung 162 korrigiert (zuvor „keine eigenen Scopes"); (c) **20.1.2 um den realen Backup-Funktionsumfang erweitert** (ZIP+Zeitstempel, Verifikation-vor-Abschluss, optionale AES-256-Verschlüsselung, Zeitplan/Retention nach Anzahl+Alter, append-only-Protokoll, Pre-Flight, Mail-Alarm, Download, Health-Subsystem); (d) **30.3.1**: Core **erzwingt** RLS für `is_scoped`-Module bei der Installation (Abbruch sonst). Hinweis: Mehrsprachigkeit/Locale-Verwaltung ist als eigener Subsystem implementiert, im Anforderungsdokument bislang nur als Technologie-Zeile geführt (eigene Kapitel-Ausarbeitung offen). |
 | 6.31 | 07.06.2026 | Doku-Software-Abgleich (Fortsetzung): (a) **Neues Kapitel 31 „Mehrsprachigkeit und Lokalisierung"** ausgearbeitet (Grundsatz/symbolische Schlüssel, Mitlieferung, Managed Locale Store mit ausfallsicherem Schreiben, Versions-Gate, Sprachverwaltungs-Admin-Bereich mit Status-Trio + verlustfreiem Editor, Laufzeit-Sprachwahl, Audit/Health). (b) Bestehende Kapitel um umgesetzte Mechanismen ergänzt: **20.2.1** Health-Subsysteme `localization` + `backup`; **20.3** Andock-Punkt für periodische Modul-Aufgaben (`core.collector.scheduled`); **24.9.2** Durchsetzung des Anker-Gültigkeitsfensters + gleitende Rotation; **26.9.2** Dead-Letter-Retry/Verwerfen-GUI; **28.14.2** automatischer Wiederherstellungspunkt auch bei Boot-Migrationen. |
 | 6.32 | 08.06.2026 | (a) **Mehrere Worker-Instanzen** explizit unterstützt (20.3): periodische Aufgaben werden je Aufgabe über einen PostgreSQL-Advisory-Lock serialisiert (kein Doppellauf bei >1 Worker); Outbox bleibt über SKIP LOCKED kollisionsfrei. Einzelinstanz = Standard. (b) **Backup-Verschlüsselung DR-tauglich** (20.1.2): Passwort aus Env/Secret (`BACKUP_PASSWORD_FILE`/`BACKUP_PASSWORD`) mit Vorrang vor dem DB-Setting — out-of-band, damit ein verschlüsseltes Backup nicht über das im Dump enthaltene Passwort entschlüsselt werden müsste (Henne-Ei). |
+| 6.45 | 09.06.2026 | **Out-of-Process-Isolation Phase 3 abgeschlossen (Kap. 23.16.2)**: Auch **Daten-Resolver** und **periodische Aufgaben** (`core.collector.scheduled`) isolierter Module laufen jetzt über RPC im isolierten Host — damit decken alle gängigen Erweiterungspunkte (Service, Collector, Event, Resolver, Scheduled) die Isolation ab. Bei periodischen Aufgaben bleiben Fälligkeits-Prüfung (Heartbeat) und der Mehrinstanz-Advisory-Lock **im Core**; nur die Ausführung (`run()`) reist über die RPC-Grenze (Systemkontext mit RLS-Bypass). Resolver werden über das Capability-Handle aufgerufen und nach der **Isolation des bereitstellenden Moduls** geroutet. Einzige verbleibende Ausnahme: der **Auth-Provider-Slot** (`core.auth.provider`) — er ist config-artig (liefert ein In-Process-Authenticator-Objekt) und bleibt naturgemäß in-process. Nebenbei geschlossene latente Lücke: Der Core-Contract `core.collector.scheduled` war nie geseedet, sodass sich Module gar nicht für periodische Aufgaben registrieren konnten (Migration `CoreScheduledCollector`). |
 | 6.44 | 09.06.2026 | **Out-of-Process-Isolation Phase 3 (Kap. 23.16.2 erweitert)**: Isolierte Module dürfen jetzt nicht nur Service-Contracts, sondern auch **Collector-Beiträge** (Health, Anonymisierung) und **Event-Listener** anbieten — diese laufen über RPC im isolierten Host. Der **RLS-Zeilenkontext** (`app.current_user_id`/`-group_ids`/`-bypass`) wird über die RPC-Grenze mitgereicht und im Host gesetzt; Beitragsklassen nutzen dort eine CakePHP-Connection auf die Modul-Rolle. **Resolver** und **periodische Aufgaben** (`core.collector.scheduled`) bleiben bei Isolation abgelehnt (noch nicht über RPC — keine stille In-Process-Ausführung). Transaktionsgrenze dokumentiert (Out-of-Process-Beitrag committet eigenständig). |
 | 6.43 | 09.06.2026 | **Anonymisierungs-Hook für Module (Kap. 27.15.3 aktualisiert)**: Der Core stellt jetzt den Collector-Contract `core.collector.anonymize` bereit, über den Module beim irreversiblen Anonymisieren eines Benutzers **in derselben Transaktion** ihre eigenen personenbezogenen (Freitext-)Daten zu dem Benutzer mit-bereinigen (Interface `AnonymizeContributorInterface`). All-or-Nothing; für die Beiträge wird RLS-Bypass gesetzt und danach wiederhergestellt. Damit ist die zuvor als „spätere Version/Betreiberprozess" markierte Freitext-Bereinigung über Modulgrenzen **Core-seitig orchestriert** — die fachliche Bereinigung bleibt Modul-Sache. |
 | 6.42 | 09.06.2026 | **Peer-Review-Härtung der Modul-Installation (Kap. 24)**: Bestand-Befund M7 behoben (Korrektheits-Härtung, keine Spezifikationsänderung). Der `install()`-Vorgang lässt sich nicht in eine DB-Transaktion kapseln (CREATE ROLE/Schema und das Kopieren des Pakets sind teils nicht-transaktional); zuvor räumte nur der RLS-Pflicht-Abbruch (E47) einen Teil der Artefakte ab — schlug ein **späterer** Schritt fehl (Schema-Grant an die App-Rolle, Sprachpaket-Import oder eine `RegistryException` beim Registrieren der Contracts), blieben Schema, Modulzeile, kopiertes Verzeichnis und — bei `out_of_process` — die provisionierte DB-Rolle `mod_<key>` zurück, sodass ein erneuter Install an „Modul bereits installiert" scheiterte. Jetzt umschließt ein zentraler manueller Rückbau **alle** Schritte ab Beginn der Seiteneffekte: bei jedem Fehlschlag wird der isolierte Host gestoppt, die DB-Rolle entfernt, das Schema gedroppt, Modulzeile/Registrierungen/Contracts/Ressourcen/Sprachpakete gelöscht und das kopierte Verzeichnis (samt Sprachpaket-Dateien) entfernt. Verifiziert per Integrationstest (erzwungener Fehlschlag nach der Schema-Erzeugung → nichts bleibt zurück, anschließender Install gelingt). |

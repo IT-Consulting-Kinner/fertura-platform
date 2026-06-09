@@ -4,18 +4,38 @@
     "version": "1.0.0",
     "type": "main",
     "edition": "free",
-    "description": "Out-of-Process-Modul mit Anonymisierungs-Collector (Phase-3-E2E).",
+    "description": "Out-of-Process-Modul mit Anonymize-Collector, Scheduled-Task und Daten-Resolver (Phase-3-E2E).",
     "publisher": "Fertura",
     "php_namespace": "IsolatedAnon",
     "core_compatibility": ">=1.0.0 <2.0.0",
     "requires_license": false,
     "dependencies": [],
     "contracts_used": [],
+    "contracts_provided": [
+        {
+            "name": "isolated_anon_module.resolver.echo",
+            "type": "resolver",
+            "version": "1.0.0",
+            "description": "Daten-Resolver: gibt die Eingabe zurück."
+        }
+    ],
     "collectors_registered": [
         {
             "contract": "core.collector.anonymize",
             "version": ">=1.0.0 <2.0.0",
             "class": "IsolatedAnon\\AnonContributor"
+        },
+        {
+            "contract": "core.collector.scheduled",
+            "version": ">=1.0.0 <2.0.0",
+            "class": "IsolatedAnon\\PingTask"
+        }
+    ],
+    "resolvers_registered": [
+        {
+            "contract": "isolated_anon_module.resolver.echo",
+            "version": ">=1.0.0 <2.0.0",
+            "class": "IsolatedAnon\\EchoResolver"
         }
     ],
     "permissions": [

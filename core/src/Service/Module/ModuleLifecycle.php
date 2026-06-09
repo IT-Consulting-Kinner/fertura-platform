@@ -725,26 +725,19 @@ class ModuleLifecycle
      */
     private function assertIsolatable(ModuleManifest $manifest): void
     {
-        // Phase 3 (Kap. 23.16.2): Service-Contracts, Collector (Health/Anonymize
-        // u. a.) und Event-Listener laufen über RPC. Noch NICHT über RPC und daher
-        // bei Isolation abgelehnt: Resolver und periodische Aufgaben
-        // (Collector `core.collector.scheduled`) — beide würden sonst still
-        // in-process ausgeführt.
-        $bad = [];
-        if ($manifest->resolversRegistered() !== []) {
-            $bad[] = 'Resolver';
-        }
-        foreach ($manifest->collectorsRegistered() as $c) {
-            if ((string)($c['contract'] ?? '') === \App\Service\Schedule\ScheduledTaskRunner::COLLECTOR) {
-                $bad[] = 'periodische Aufgabe (core.collector.scheduled)';
-                break;
+        // Phase 3 (Kap. 23.16.2): Service-Contracts, (Daten-)Resolver, Collector
+        // (Health/Anonymize/Scheduled) und Event-Listener laufen über RPC.
+        // Einzige Ausnahme: der **Auth-Provider-Slot** (`core.auth.provider`)
+        // konfiguriert In-Process-Authenticator-Objekte (configure-style) und
+        // lässt sich nicht über RPC reichen — wird daher bei Isolation abgelehnt
+        // (statt still in-process ausgeführt zu werden).
+        foreach ($manifest->resolversRegistered() as $r) {
+            if ((string)($r['contract'] ?? '') === 'core.auth.provider') {
+                throw new LifecycleException(
+                    'Out-of-Process unterstützt den Auth-Provider-Slot (core.auth.provider) nicht: '
+                    . 'er konfiguriert In-Process-Authenticator-Objekte, die nicht über RPC reichbar sind.',
+                );
             }
-        }
-        if ($bad !== []) {
-            throw new LifecycleException(
-                'Out-of-Process unterstützt diese Erweiterungspunkte noch nicht über RPC: '
-                . implode(', ', $bad) . '. Sie würden sonst still in-process ausgeführt.',
-            );
         }
     }
 

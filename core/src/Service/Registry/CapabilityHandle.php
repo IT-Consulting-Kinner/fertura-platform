@@ -54,57 +54,42 @@ final class CapabilityHandle
         }
 
         $contract = $this->registry->findContract($this->contractName);
-        if ($contract === null || $contract->contract_type !== 'service') {
+        // Aufrufbar sind Service- und (Daten-)Resolver-Contracts: beide werden
+        // über die Anbieter-Methode handle(input):array genutzt (Kap. 26/29).
+        if ($contract === null || !in_array($contract->contract_type, ['service', 'resolver'], true)) {
             throw new CapabilityRejectedException(
-                "Kein aufrufbares Service-Interface: '{$this->contractName}'."
+                "Kein aufrufbares Interface (Service/Resolver): '{$this->contractName}'."
             );
         }
 
-        // Out-of-Process-Anbieter (Kap. 23.16): transparent über RPC an den
-        // isolierten Modulprozess statt In-Process-Instanziierung.
-        $remoteKey = $this->outOfProcessProvider();
-        if ($remoteKey !== null) {
-            return (new \App\Service\Module\RemoteInvoker())->invoke($remoteKey, $this->contractName, $input);
-        }
-
-        $class = $this->registry->resolveProviderClass($this->contractName);
-        if ($class === null) {
+        $provider = $this->registry->resolveProvider($this->contractName);
+        if ($provider === null) {
             // Anbieter deaktiviert/entfernt -> Interface nicht verfügbar (Kap. 29.14).
             throw new CapabilityRejectedException(
                 "Interface-Aufruf abgewiesen: kein aktiver Anbieter für '{$this->contractName}'."
             );
         }
-        if (!class_exists($class)) {
-            throw new CapabilityRejectedException("Anbieterklasse nicht ladbar: $class");
-        }
 
-        $impl = new $class();
-        if (!$impl instanceof ServiceInterface) {
-            throw new CapabilityRejectedException(
-                "Anbieterklasse implementiert kein ServiceInterface: $class"
-            );
-        }
+        // Out-of-Process-Anbieter (Kap. 23.16.2): transparent über RPC an den
+        // isolierten Modulprozess; sonst in-process. Maßgeblich ist das
+        // **Anbieter**-Modul (nicht der Contract-Owner).
+        $contrib = $provider + ['isolation' => $this->providerIsolation($provider['module_key'])];
 
-        return $impl->handle($input);
+        return (array)(new \App\Service\Module\ContributionRuntime($this->registry))->call($contrib, 'handle', [$input]);
     }
 
-    /**
-     * Liefert den Modul-Schlüssel des Anbieters, wenn dieser im Modus
-     * `out_of_process` läuft (Kap. 23.16) und aktiv ist – sonst null.
-     *
-     * Der Aufruf wird dann transparent über {@see RemoteInvoker} an den
-     * isolierten Modulprozess geleitet, statt In-Process zu instanziieren.
-     */
-    private function outOfProcessProvider(): ?string
+    /** Isolationsmodus des Anbieter-Moduls (core/unbekannt -> in_process). */
+    private function providerIsolation(string $moduleKey): string
     {
+        if ($moduleKey === '' || $moduleKey === 'core') {
+            return 'in_process';
+        }
         $row = ConnectionManager::get('default')->execute(
-            'SELECT m.module_key FROM core.contracts c '
-            . 'JOIN core.modules m ON m.module_key = c.owner_module_key '
-            . "WHERE c.name = :name AND m.isolation = 'out_of_process' AND m.status = 'active'",
-            ['name' => $this->contractName],
+            "SELECT isolation FROM core.modules WHERE module_key = :k AND status = 'active'",
+            ['k' => $moduleKey],
         )->fetch('assoc');
 
-        return $row === false ? null : (string)$row['module_key'];
+        return $row === false ? 'in_process' : (string)$row['isolation'];
     }
 
     /** Aktiver Provider (Resolver/Service) oder null (-> Default greift). */
