@@ -42,7 +42,8 @@ Tests, Doku (Anforderungsdokument-Kapitel + Changelog) und eigenem Commit/Push
   (i18n-Aufwand); Verwaltung über CLI `webhook` + künftige API (P07)._ Auf Outbox + P01: Subscriptions je
   Event/Contract, **HMAC-signierte** Zustellung, Retry/Backoff, Dead-Letter,
   Admin-UI, Zustell-Audit. *Größter Integrations-Hebel.*
-- [ ] **P06 — OIDC/OAuth2-SSO.** First-Party-Provider am `core.auth.provider`-Slot
+- [x] **P06 — OIDC/OAuth2-SSO + SAML** (E81). _web-token (OIDC, PKCE+JWKS) +
+  onelogin/php-saml; CLI `sso`; Admin-GUI später._ First-Party-Provider am `core.auth.provider`-Slot
   (Authorization-Code + PKCE), JWT/JWKS-Validierung, Account-Linking,
   Break-Glass-Fallback. SAML als spätere Folgestufe vermerkt.
 - [ ] **P07 — Plattform-API-Reife.** OpenAPI-Generierung, **Rate-Limiting** (über
@@ -90,7 +91,8 @@ Abgeschlossene Punkte werden oben abgehakt und hier mit E-Nummer + Commit notier
 | P03 Objekt-Storage | E78 | e347265 | fertig — Flysystem lokal+S3 |
 | P04 Metrics + Tracing | E79 | (folgt) | fertig — 115 Tests grün, /metrics live |
 
-| P05 Outbound-Webhooks | E80 | (folgt) | fertig — 119 Tests grün |
+| P05 Outbound-Webhooks | E80 | 2eb291d | fertig — 119 Tests grün |
+| P06 OIDC + SAML SSO | E81 | (folgt) | fertig — 130 Tests grün, Login-Buttons live |
 
 **Phase A abgeschlossen** (P01–P04). Phase B läuft: P05 fertig, als Nächstes
 P06 OIDC, P07 API-Reife.

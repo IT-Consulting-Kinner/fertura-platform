@@ -1,8 +1,17 @@
 <?php
 /**
  * @var \App\View\AppView $this
+ * @var list<array{id:string,type:string,name:string,button_label:string}> $ssoProviders
  */
 ?>
+<?php if (!empty($ssoProviders)): ?>
+    <div class="d-grid gap-2 mb-3">
+        <?php foreach ($ssoProviders as $p): ?>
+            <a class="btn btn-outline-primary" href="/sso/start/<?= h($p['id']) ?>"><?= h($p['button_label']) ?></a>
+        <?php endforeach; ?>
+    </div>
+    <hr class="my-3">
+<?php endif; ?>
 <?= $this->Form->create(null, ['url' => '/login']) ?>
     <div class="mb-3">
         <label class="form-label" for="username"><?= __('auth.login.username') ?></label>

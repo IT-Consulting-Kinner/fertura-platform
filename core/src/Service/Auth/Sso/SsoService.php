@@ -1,0 +1,198 @@
+<?php
+declare(strict_types=1);
+
+namespace App\Service\Auth\Sso;
+
+use App\Audit\AuditLogger;
+use App\Service\Settings\SecretCipher;
+use Cake\Datasource\ConnectionInterface;
+use Cake\Datasource\ConnectionManager;
+use RuntimeException;
+
+/**
+ * SSO-Identitätsföderation (Programm Tier-1, P06): Verwaltung der Identity
+ * Provider (OIDC/SAML) und **Just-in-Time-Provisioning/Account-Linking**.
+ *
+ * Identitäten und Autorisierung bleiben Core-verwaltet (Kap. 27.2.1): ein
+ * externer Provider authentifiziert nur; dieser Dienst ordnet die externe
+ * Identität einem Core-Benutzer zu (über `identity_links` oder die E-Mail) bzw.
+ * legt ihn an (Status `active`, ohne Passwort). Lokale Anmeldung bleibt parallel
+ * möglich (Break-Glass).
+ */
+class SsoService
+{
+    private ?SecretCipher $cipher = null;
+
+    public function __construct(private ?AuditLogger $audit = null)
+    {
+    }
+
+    private function conn(): ConnectionInterface
+    {
+        return ConnectionManager::get('default');
+    }
+
+    private function cipher(): SecretCipher
+    {
+        return $this->cipher ??= new SecretCipher();
+    }
+
+    private function audit(): AuditLogger
+    {
+        return $this->audit ??= new AuditLogger();
+    }
+
+    /**
+     * Aktive Provider für die Login-Auswahl (ohne Geheimnisse).
+     *
+     * @return list<array{id:string,type:string,name:string,button_label:string}>
+     */
+    public function activeProviders(): array
+    {
+        return $this->conn()->execute(
+            'SELECT id, type, name, button_label FROM sso_providers WHERE active ORDER BY name',
+        )->fetchAll('assoc');
+    }
+
+    /**
+     * @return list<array<string,mixed>>
+     */
+    public function listProviders(): array
+    {
+        return $this->conn()->execute(
+            'SELECT id, type, name, button_label, active, config, created_at FROM sso_providers ORDER BY created_at',
+        )->fetchAll('assoc');
+    }
+
+    /**
+     * Voller Provider inkl. dekodierter Konfig + entschlüsseltem Geheimnis.
+     *
+     * @return array<string,mixed>|null
+     */
+    public function provider(string $id): ?array
+    {
+        $row = $this->conn()->execute(
+            'SELECT id, type, name, button_label, active, config, secret_encrypted FROM sso_providers WHERE id = :id',
+            ['id' => $id],
+        )->fetch('assoc');
+        if ($row === false) {
+            return null;
+        }
+        $row['config'] = json_decode((string)$row['config'], true) ?: [];
+        $row['secret'] = $row['secret_encrypted'] !== null ? $this->cipher()->decrypt((string)$row['secret_encrypted']) : null;
+        unset($row['secret_encrypted']);
+
+        return $row;
+    }
+
+    /**
+     * @param array<string,mixed> $config
+     * @return array{id:string}
+     */
+    public function createProvider(string $type, string $name, array $config, ?string $secret, string $buttonLabel): array
+    {
+        if (!in_array($type, ['oidc', 'saml'], true)) {
+            throw new RuntimeException("Unbekannter SSO-Typ: $type");
+        }
+        $row = $this->conn()->execute(
+            'INSERT INTO sso_providers (type, name, button_label, config, secret_encrypted) '
+            . 'VALUES (:t, :n, :b, :c, :s) RETURNING id',
+            [
+                't' => $type,
+                'n' => $name,
+                'b' => $buttonLabel,
+                'c' => json_encode($config),
+                's' => $secret !== null && $secret !== '' ? $this->cipher()->encrypt($secret) : null,
+            ],
+        )->fetch('assoc');
+        $this->audit()->log('sso.provider.create', 'sso_provider', (string)$row['id'], ['type' => $type, 'name' => $name]);
+
+        return ['id' => (string)$row['id']];
+    }
+
+    public function setActive(string $id, bool $active): void
+    {
+        $this->conn()->execute('UPDATE sso_providers SET active = :a WHERE id = :id', ['a' => $active, 'id' => $id]);
+    }
+
+    public function deleteProvider(string $id): void
+    {
+        $this->conn()->execute('DELETE FROM sso_providers WHERE id = :id', ['id' => $id]);
+        $this->audit()->log('sso.provider.delete', 'sso_provider', $id, []);
+    }
+
+    /**
+     * Ordnet eine externe Identität einem Core-Benutzer zu (Link → E-Mail →
+     * Provisioning) und gibt die Benutzer-ID zurück. Der Aufrufer etabliert die
+     * Session.
+     */
+    public function loginExternalUser(string $providerId, string $subject, string $email, ?string $first, ?string $last): string
+    {
+        $conn = $this->conn();
+        $link = $conn->execute(
+            'SELECT user_id FROM identity_links WHERE provider_id = :p AND subject = :s',
+            ['p' => $providerId, 's' => $subject],
+        )->fetch('assoc');
+        if ($link !== false) {
+            return $this->assertUsable((string)$link['user_id']);
+        }
+
+        $email = trim($email);
+        if ($email === '') {
+            throw new RuntimeException('SSO-Antwort ohne E-Mail — keine Zuordnung möglich.');
+        }
+        $user = $conn->execute(
+            'SELECT id, status FROM users WHERE lower(email) = lower(:e)',
+            ['e' => $email],
+        )->fetch('assoc');
+
+        if ($user === false) {
+            $id = $conn->execute(
+                'INSERT INTO users (username, email, first_name, last_name, status, password_hash) '
+                . "VALUES (:u, :e, :f, :l, 'active', NULL) RETURNING id",
+                ['u' => $this->uniqueUsername($email), 'e' => $email, 'f' => $first, 'l' => $last],
+            )->fetch('assoc')['id'];
+            $this->audit()->log('sso.provision', 'user', (string)$id, ['email' => $email, 'provider_id' => $providerId]);
+            $userId = (string)$id;
+        } else {
+            if (in_array($user['status'], ['disabled', 'anonymized'], true)) {
+                throw new RuntimeException('Konto ist deaktiviert.');
+            }
+            $userId = (string)$user['id'];
+        }
+
+        $conn->execute(
+            'INSERT INTO identity_links (user_id, provider_id, subject) VALUES (:u, :p, :s) '
+            . 'ON CONFLICT (provider_id, subject) DO NOTHING',
+            ['u' => $userId, 'p' => $providerId, 's' => $subject],
+        );
+        $this->audit()->log('sso.login', 'user', $userId, ['provider_id' => $providerId]);
+
+        return $userId;
+    }
+
+    private function assertUsable(string $userId): string
+    {
+        $row = $this->conn()->execute('SELECT status FROM users WHERE id = :id', ['id' => $userId])->fetch('assoc');
+        if ($row === false || in_array($row['status'], ['disabled', 'anonymized'], true)) {
+            throw new RuntimeException('Konto ist deaktiviert.');
+        }
+
+        return $userId;
+    }
+
+    private function uniqueUsername(string $email): string
+    {
+        $base = strtolower((string)preg_replace('/[^a-z0-9._-]/i', '', explode('@', $email)[0])) ?: 'user';
+        $candidate = $base;
+        $i = 1;
+        while ($this->conn()->execute(
+            'SELECT 1 FROM users WHERE lower(username) = lower(:u)',
+            ['u' => $candidate],
+        )->fetch() !== false) {
+            $candidate = $base . ++$i;
+        }
+
+        return $candidate;
+    }
+}

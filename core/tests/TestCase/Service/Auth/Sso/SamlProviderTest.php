@@ -1,0 +1,43 @@
+<?php
+declare(strict_types=1);
+
+namespace App\Test\TestCase\Service\Auth\Sso;
+
+use App\Service\Auth\Sso\SamlProvider;
+use Cake\TestSuite\TestCase;
+
+/**
+ * Test der SAML-Glue (P06): Settings-Aufbau aus der Provider-Konfig und
+ * Attribut-Auflösung (die signaturbasierte ACS-Prüfung übernimmt onelogin).
+ */
+class SamlProviderTest extends TestCase
+{
+    public function testSettingsMapProviderConfig(): void
+    {
+        $provider = ['config' => [
+            'idp_entity_id' => 'https://idp/entity',
+            'idp_sso_url' => 'https://idp/sso',
+            'idp_x509cert' => 'CERT',
+        ]];
+        $s = (new SamlProvider())->settings($provider, 'https://sp/acs', 'https://sp/meta');
+
+        $this->assertTrue($s['strict']);
+        $this->assertSame('https://sp/meta', $s['sp']['entityId']);
+        $this->assertSame('https://sp/acs', $s['sp']['assertionConsumerService']['url']);
+        $this->assertSame('https://idp/entity', $s['idp']['entityId']);
+        $this->assertSame('https://idp/sso', $s['idp']['singleSignOnService']['url']);
+        $this->assertSame('CERT', $s['idp']['x509cert']);
+    }
+
+    public function testFirstAttrResolvesByPriority(): void
+    {
+        $p = new SamlProvider();
+        $attrs = [
+            'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress' => ['a@b.de'],
+            'givenName' => ['Erika'],
+        ];
+        $this->assertSame('a@b.de', $p->firstAttr($attrs, ['email', 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress']));
+        $this->assertSame('Erika', $p->firstAttr($attrs, ['givenName', 'first_name']));
+        $this->assertNull($p->firstAttr($attrs, ['nope']));
+    }
+}

@@ -141,8 +141,12 @@ class Application extends BaseApplication implements AuthenticationServiceProvid
             ->add((new CsrfProtectionMiddleware([
                 'httponly' => true,
             ]))->skipCheckCallback(static function (ServerRequestInterface $request): bool {
+                $path = $request->getUri()->getPath();
+
                 // Externe API nutzt Bearer-Token statt CSRF (Kap. 29).
-                return str_starts_with($request->getUri()->getPath(), '/api/');
+                // SAML-ACS ist ein vom IdP gepostetes Formular (kein CSRF-Token);
+                // die Echtheit garantiert die signierte SAML-Assertion (P06).
+                return str_starts_with($path, '/api/') || $path === '/sso/saml/acs';
             }))
 
             // Authentifizierung: stellt die Identitaet pro Request bereit.

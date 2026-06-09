@@ -29,6 +29,14 @@ class AuthController extends AppController
 
     public function login()
     {
+        // Aktive SSO-Provider für die Login-Auswahl (P06); fehlertolerant, damit
+        // ein SSO-Problem den lokalen Login nie blockiert (Break-Glass).
+        try {
+            $this->set('ssoProviders', (new \App\Service\Auth\Sso\SsoService())->activeProviders());
+        } catch (\Throwable) {
+            $this->set('ssoProviders', []);
+        }
+
         $result = $this->Authentication->getResult();
         $throttle = new LoginThrottle();
 

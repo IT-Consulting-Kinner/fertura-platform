@@ -13,7 +13,9 @@
         "league/flysystem": "^3.0",
         "league/flysystem-async-aws-s3": "^3.0",
         "mobiledetect/mobiledetectlib": "^4.8.03",
-        "symfony/uid": "^7.0"
+        "onelogin/php-saml": "^4.1",
+        "symfony/uid": "^7.0",
+        "web-token/jwt-library": "^3.3"
     },
     "require-dev": {
         "cakephp/bake": "^3.6",

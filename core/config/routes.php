@@ -59,6 +59,13 @@ return function (RouteBuilder $routes): void {
         $builder->connect('/forgot-password', ['controller' => 'Auth', 'action' => 'forgotPassword']);
         $builder->connect('/set-password', ['controller' => 'Auth', 'action' => 'setPassword']);
 
+        // SSO-Login-Flows (P06): OIDC + SAML, parallel zur lokalen Anmeldung.
+        $builder->connect('/sso/start/{providerId}', ['controller' => 'Sso', 'action' => 'start'])
+            ->setPass(['providerId'])
+            ->setPatterns(['providerId' => '[0-9a-f-]{36}']);
+        $builder->connect('/sso/oidc/callback', ['controller' => 'Sso', 'action' => 'oidcCallback']);
+        $builder->connect('/sso/saml/acs', ['controller' => 'Sso', 'action' => 'samlAcs']);
+
         // Health-Endpoint (Step 12, Kap. 20.2.1): öffentlicher Liveness + geschützter Detailstatus.
         $builder->connect('/health', ['controller' => 'Health', 'action' => 'index']);
         $builder->connect('/health/detail', ['controller' => 'Health', 'action' => 'detail']);
