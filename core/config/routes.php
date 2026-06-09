@@ -92,6 +92,8 @@ return function (RouteBuilder $routes): void {
                     $v1->connect('/modules', ['controller' => 'Modules', 'action' => 'index']);
                     // OpenAPI-Spezifikation (P07).
                     $v1->connect('/openapi.json', ['controller' => 'OpenApi', 'action' => 'index']);
+                    // Volltextsuche (P10).
+                    $v1->connect('/search', ['controller' => 'Search', 'action' => 'index']);
                     // Benachrichtigungen des Token-Inhabers (P09).
                     $v1->connect('/notifications', ['controller' => 'Notifications', 'action' => 'index']);
                     $v1->connect('/notifications/read-all', ['controller' => 'Notifications', 'action' => 'readAll'])

@@ -59,7 +59,8 @@ Tests, Doku (Anforderungsdokument-Kapitel + Changelog) und eigenem Commit/Push
   Collector-Contract für Modul-Benachrichtigungen.
 
 ### Phase D — Wissen & Automatisierung
-- [ ] **P10 — Volltext-Suche.** Postgres `tsvector` als opt-in Core-Capability
+- [x] **P10 — Volltext-Suche** (E85). Postgres `tsvector`, Owner-Scoping, API,
+  Collector `core.collector.search`. Postgres `tsvector` als opt-in Core-Capability
   (`core.search.indexable`), Index-Pflege über Events, Ranking, Such-API.
 - [ ] **P11 — AI/LLM-Primitive.** `pgvector`-Embedding-Store + provider-agnostisches
   **LLM-Gateway** (über P01) mit Key-/Kosten-/Rate-Management + Audit; semantische
@@ -100,5 +101,7 @@ Abgeschlossene Punkte werden oben abgehakt und hier mit E-Nummer + Commit notier
 | P08 Echtzeit (SSE) | E83 | 38cb836 | fertig — 138 Tests grün, Stream live |
 | P09 Notification-Framework | E84 | (folgt) | fertig — 142 Tests grün, API live |
 
-**Phasen A–C abgeschlossen** (P01–P09). Nächster Halt: Zwischenstand, dann
-Phase D (P10 Volltext-Suche, P11 AI/LLM, P12 Workflow-Engine).
+| P10 Volltext-Suche | E85 | (folgt) | fertig — 145 Tests grün, /search live |
+
+**Phasen A–C abgeschlossen** (P01–P09). Phase D läuft: P10 fertig, als Nächstes
+P11 AI/LLM (Provider: OpenAI/Anthropic/xAI/Google), P12 Workflow-Engine.
