@@ -7,9 +7,10 @@ use App\Audit\AuditLogger;
 use Cake\Datasource\ConnectionManager;
 
 /**
- * BREAD-Rechteprüfung (Kap. 25 / 27.16). Rein additive Aggregation über die
- * aktiven Gruppen eines aktiven Benutzers (keine Deny-Regeln, Entscheidung 124).
- * Immer serverseitig; gleich für GUI/API/CLI.
+ * BREAD-Rechteprüfung (Kap. 25 / 27.16). Additive Aggregation über die aktiven
+ * Gruppen eines aktiven Benutzers **plus explizite Deny-Regeln**: ein Deny auf
+ * einer der Gruppen überschreibt jede Erlaubnis (deny-wins). Immer serverseitig;
+ * gleich für GUI/API/CLI.
  */
 class PermissionService
 {
@@ -19,6 +20,14 @@ class PermissionService
         'add' => 'can_add',
         'edit' => 'can_edit',
         'delete' => 'can_delete',
+    ];
+
+    private const DENY = [
+        'browse' => 'deny_browse',
+        'read' => 'deny_read',
+        'add' => 'deny_add',
+        'edit' => 'deny_edit',
+        'delete' => 'deny_delete',
     ];
 
     private AuditLogger $audit;
@@ -81,27 +90,37 @@ class PermissionService
         }
 
         $rows = $this->conn()->execute(
-            'SELECT can_browse, can_read, can_add, can_edit, can_delete, extra_actions '
+            'SELECT can_browse, can_read, can_add, can_edit, can_delete, extra_actions, '
+            . 'deny_browse, deny_read, deny_add, deny_edit, deny_delete, deny_extra '
             . 'FROM group_resource_permissions WHERE group_id IN (' . implode(',', $placeholders) . ') '
             . 'AND module_key = :m AND resource_type = :t AND (resource_key IS NULL OR resource_key = :k)',
             $params,
         )->fetchAll('assoc');
 
         $action = strtolower($action);
+        $allowed = false;
         foreach ($rows as $row) {
             if (isset(self::BREAD[$action])) {
+                // Deny-wins: ein explizites Verbot überschreibt jede Erlaubnis.
+                if ($this->truthy($row[self::DENY[$action]] ?? false)) {
+                    return false;
+                }
                 if ($this->truthy($row[self::BREAD[$action]])) {
-                    return true;
+                    $allowed = true;
                 }
             } else {
+                $deny = $row['deny_extra'] ? json_decode((string)$row['deny_extra'], true) : [];
+                if (is_array($deny) && !empty($deny[$action])) {
+                    return false;
+                }
                 $extra = $row['extra_actions'] ? json_decode((string)$row['extra_actions'], true) : [];
                 if (is_array($extra) && !empty($extra[$action])) {
-                    return true;
+                    $allowed = true;
                 }
             }
         }
 
-        return false;
+        return $allowed;
     }
 
     /**
@@ -157,6 +176,44 @@ class PermissionService
         );
         $this->audit->log('bread_rights.update', 'resource', "$moduleKey.$resourceType", [
             'newValue' => ['group' => $groupId, 'bread' => $bread, 'extra' => $extraActions, 'key' => $resourceKey],
+            'moduleKey' => $moduleKey,
+        ]);
+    }
+
+    /**
+     * Setzt **Deny-Regeln** einer Gruppe auf eine Ressource (deny-wins). Aktualisiert
+     * nur die Deny-Spalten — bestehende Allow-Rechte derselben Zeile bleiben erhalten.
+     *
+     * @param array<string,bool> $bread Deny je BREAD-Aktion
+     * @param array<string,bool> $extraActions Deny je Zusatzaktion
+     */
+    public function deny(
+        string $groupId,
+        string $moduleKey,
+        string $resourceType,
+        ?string $resourceKey,
+        array $bread,
+        array $extraActions = [],
+    ): void {
+        $this->conn()->execute(
+            'INSERT INTO group_resource_permissions '
+            . '(group_id, module_key, resource_type, resource_key, deny_browse, deny_read, deny_add, deny_edit, deny_delete, deny_extra) '
+            . 'VALUES (:g, :m, :t, :k, :b, :r, :a, :e, :d, CAST(:x AS jsonb)) '
+            . "ON CONFLICT (group_id, module_key, resource_type, coalesce(resource_key, '*')) DO UPDATE SET "
+            . 'deny_browse = EXCLUDED.deny_browse, deny_read = EXCLUDED.deny_read, deny_add = EXCLUDED.deny_add, '
+            . 'deny_edit = EXCLUDED.deny_edit, deny_delete = EXCLUDED.deny_delete, deny_extra = EXCLUDED.deny_extra',
+            [
+                'g' => $groupId, 'm' => $moduleKey, 't' => $resourceType, 'k' => $resourceKey,
+                'b' => !empty($bread['browse']) ? 'true' : 'false',
+                'r' => !empty($bread['read']) ? 'true' : 'false',
+                'a' => !empty($bread['add']) ? 'true' : 'false',
+                'e' => !empty($bread['edit']) ? 'true' : 'false',
+                'd' => !empty($bread['delete']) ? 'true' : 'false',
+                'x' => $extraActions === [] ? null : json_encode($extraActions),
+            ],
+        );
+        $this->audit->log('bread_rights.deny', 'resource', "$moduleKey.$resourceType", [
+            'newValue' => ['group' => $groupId, 'deny' => $bread, 'deny_extra' => $extraActions, 'key' => $resourceKey],
             'moduleKey' => $moduleKey,
         ]);
     }
