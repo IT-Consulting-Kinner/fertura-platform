@@ -52,6 +52,44 @@ class EgressClientTest extends TestCase
         $this->assertTrue($c->isUrlAllowed('http://127.0.0.1/'));
     }
 
+    public function testPinTargetForHostnameReturnsValidatedIp(): void
+    {
+        // Host mit fester (öffentlicher) Auflösung -> CURLOPT_RESOLVE-Pin.
+        $c = $this->pinClient(['93.184.216.34']);
+        $this->assertSame('example.test:443:93.184.216.34', $c->pinTarget('https://example.test/x'));
+        $this->assertSame('example.test:80:93.184.216.34', $c->pinTarget('http://example.test/'));
+    }
+
+    public function testPinTargetRejectsPrivateResolution(): void
+    {
+        $c = $this->pinClient(['10.0.0.5']); // Rebinding-Versuch -> privat
+        $this->expectException(EgressException::class);
+        $c->pinTarget('https://example.test/x');
+    }
+
+    public function testPinTargetNullForLiteralAndOverrides(): void
+    {
+        $this->assertNull((new EgressClient(null, ['allow_private' => false]))->pinTarget('https://93.184.216.34/'));
+        $this->assertNull((new EgressClient(null, ['allow_private' => true]))->pinTarget('https://example.test/'));
+        $this->assertNull((new EgressClient(null, ['allowlist' => ['example.test']]))->pinTarget('https://example.test/'));
+    }
+
+    /** @param list<string> $ips */
+    private function pinClient(array $ips): EgressClient
+    {
+        return new class ($ips) extends EgressClient {
+            public function __construct(private array $stubIps)
+            {
+                parent::__construct(null, ['allow_private' => false, 'allowlist' => []]);
+            }
+
+            protected function resolveHostIps(string $host): array
+            {
+                return $this->stubIps;
+            }
+        };
+    }
+
     public function testAssertThrowsWithReason(): void
     {
         $this->expectException(EgressException::class);

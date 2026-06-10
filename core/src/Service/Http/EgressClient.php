@@ -68,6 +68,13 @@ class EgressClient
             // umgehen. 3xx wird unverändert zurückgegeben (Aufrufer entscheidet).
             'redirect' => 0,
         ];
+        // DNS-Rebinding-Schutz: Verbindung auf die **validierte** IP pinnen
+        // (CURLOPT_RESOLVE), damit die geprüfte IP == die verbundene IP ist
+        // (kein TOCTOU zwischen Prüfung und Request). Greift mit dem Curl-Adapter.
+        $pin = $this->pinTarget($url);
+        if ($pin !== null) {
+            $opts['curl'] = [CURLOPT_RESOLVE => [$pin]];
+        }
         if (isset($options['type'])) {
             $opts['type'] = $options['type'];
         }
@@ -132,6 +139,38 @@ class EgressClient
         } catch (EgressException) {
             return false;
         }
+    }
+
+    /**
+     * Bestimmt für einen (Hostnamen-)Aufruf die auf die **validierte** IP
+     * gepinnte CURLOPT_RESOLVE-Zeile `host:port:ip`. Gibt null zurück, wenn
+     * Pinning nicht nötig/erwünscht ist (IP-Literal, `allow_private`, Allowlist).
+     * Wirft, wenn der Host (erneut) auf ein privates/reserviertes Ziel auflöst.
+     */
+    public function pinTarget(string $url): ?string
+    {
+        $parts = parse_url($url);
+        $host = trim((string)($parts['host'] ?? ''), '[]');
+        if ($host === '' || !empty($this->config['allow_private'])) {
+            return null;
+        }
+        if (filter_var($host, FILTER_VALIDATE_IP) !== false) {
+            return null; // IP-Literal: kein DNS, kein Rebinding
+        }
+        if (in_array(strtolower($host), array_map('strtolower', (array)$this->config['allowlist']), true)) {
+            return null; // Betreiber hat den Host bewusst freigegeben
+        }
+        $ips = $this->resolveHostIps($host);
+        foreach ($ips as $ip) {
+            if (!$this->isPublicIp($ip)) {
+                throw new EgressException("Ziel-IP $ip (Host $host) ist privat/reserviert — blockiert (SSRF-Schutz).");
+            }
+        }
+        $ip = $ips[0];
+        // IPv6 in CURLOPT_RESOLVE ohne Klammern angeben.
+        $port = (int)($parts['port'] ?? (strtolower((string)($parts['scheme'] ?? '')) === 'http' ? 80 : 443));
+
+        return $host . ':' . $port . ':' . $ip;
     }
 
     /**

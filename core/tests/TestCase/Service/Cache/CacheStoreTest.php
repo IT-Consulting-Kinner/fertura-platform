@@ -24,6 +24,18 @@ class CacheStoreTest extends TestCase
         $this->assertNull($c->get('t.key'));
     }
 
+    public function testIncrementDecrement(): void
+    {
+        $c = new CacheStore('_app_');
+        $key = 'cnt.' . bin2hex(random_bytes(4));
+        $this->assertSame(1, $c->increment($key));
+        $this->assertSame(2, $c->increment($key));
+        $this->assertSame(1, $c->decrement($key));
+        $this->assertSame(0, $c->decrement($key));
+        $this->assertSame(0, $c->decrement($key), 'Boden bei 0');
+        $c->delete($key);
+    }
+
     public function testRememberComputesOnce(): void
     {
         $c = new CacheStore('_app_');

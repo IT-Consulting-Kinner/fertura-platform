@@ -37,11 +37,26 @@ class SseController extends AppController
             return $this->response->withStatus(401)->withType('text/plain')->withStringBody("unauthorized\n");
         }
 
+        // Begrenzung gleichzeitiger Streams je Benutzer (gegen FPM-/DB-Slot-
+        // Erschöpfung). Zähler im Cache; läuft bei Absturz über die TTL ab
+        // (Selbstheilung), wird sonst am Stream-Ende dekrementiert.
+        $cap = (int)(new \App\Service\Settings\SettingsManager())->get('core', 'sse.max_streams_per_user', 3);
+        $cache = new \App\Service\Cache\CacheStore('_app_ratelimit_');
+        $counterKey = 'sse:' . $userId;
+        if ($cache->increment($counterKey) > $cap) {
+            $cache->decrement($counterKey);
+
+            return $this->response->withStatus(429)->withType('text/plain')
+                ->withHeader('Retry-After', (string)self::MAX_SECONDS)
+                ->withStringBody("too many concurrent streams\n");
+        }
+
         $channel = RealtimeService::channel($userId);
         $maxSeconds = self::MAX_SECONDS;
 
-        $body = new CallbackStream(static function () use ($channel, $maxSeconds): void {
+        $body = new CallbackStream(static function () use ($channel, $maxSeconds, $cache, $counterKey): void {
             @set_time_limit($maxSeconds + 5);
+            try {
             while (ob_get_level() > 0) {
                 @ob_end_flush();
             }
@@ -71,6 +86,9 @@ class SseController extends AppController
                 } else {
                     $emit(": ping\n\n"); // Heartbeat (hält Verbindung + erkennt Abbruch)
                 }
+            }
+            } finally {
+                $cache->decrement($counterKey);
             }
         });
 

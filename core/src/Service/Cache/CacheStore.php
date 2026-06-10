@@ -103,6 +103,27 @@ class CacheStore
         }
     }
 
+    /** Verringert einen Zähler (Boden 0); Gegenstück zu {@see increment()}. */
+    public function decrement(string $key, int $offset = 1): int
+    {
+        $k = $this->key($key);
+        try {
+            $n = @Cache::decrement($k, $offset, $this->config);
+            if (is_int($n)) {
+                return max(0, $n);
+            }
+        } catch (Throwable) {
+        }
+        try {
+            $new = max(0, (int)(@Cache::read($k, $this->config) ?: 0) - $offset);
+            @Cache::write($k, $new, $this->config);
+
+            return $new;
+        } catch (Throwable) {
+            return 0;
+        }
+    }
+
     /**
      * Normalisiert Schlüssel auf cache-sichere Zeichen. Enthält der Schlüssel
      * unsichere Zeichen (Kollisionsgefahr, z. B. `a:1` vs `a/1` → `a_1`) oder ist
