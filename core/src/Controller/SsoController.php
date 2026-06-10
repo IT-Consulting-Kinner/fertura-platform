@@ -51,12 +51,12 @@ class SsoController extends AppController
                 return $this->redirect($data['url']);
             }
 
-            $saml = (new SamlProvider())->loginRequest($provider, $this->samlAcsUrl(), $this->spEntityId(), $providerId);
-            // AuthnRequest-ID merken -> beim ACS gegen `InResponseTo` prüfen (Replay-Schutz).
-            $this->request->getSession()->write('sso_saml', [
-                'provider' => $providerId,
-                'request_id' => $saml['id'],
-            ]);
+            // Zufälliger RelayState (vom IdP cookie-unabhängig zurückgespiegelt) als
+            // Bindungs-Nonce — NICHT die Provider-ID. Die AuthnRequest-ID wird
+            // serverseitig daran gebunden und beim ACS einmalig eingelöst.
+            $relayState = bin2hex(random_bytes(16));
+            $saml = (new SamlProvider())->loginRequest($provider, $this->samlAcsUrl(), $this->spEntityId(), $relayState);
+            (new SsoService())->rememberSamlRequest($relayState, $providerId, (string)$saml['id']);
 
             return $this->redirect($saml['url']);
         } catch (Throwable $e) {
@@ -101,26 +101,26 @@ class SsoController extends AppController
     public function samlAcs()
     {
         $this->request->allowMethod('post');
-        $providerId = (string)$this->request->getData('RelayState');
+        $relayState = (string)$this->request->getData('RelayState');
         // onelogin/php-saml liest die Antwort aus den PHP-Superglobals.
         $_POST['SAMLResponse'] = (string)$this->request->getData('SAMLResponse');
 
-        // Erwartete AuthnRequest-ID aus der Session ziehen und sofort verbrauchen
-        // (einmalig -> kein Replay). Provider muss zur gemerkten Anfrage passen.
-        $session = $this->request->getSession();
-        $flow = $session->read('sso_saml');
-        $session->delete('sso_saml');
-        // Existiert ein gemerkter Flow, MUSS sein Provider zur Antwort passen —
-        // sonst hart ablehnen (kein stilles Herabstufen auf „ungebunden").
-        if (is_array($flow) && (string)($flow['provider'] ?? '') !== $providerId) {
-            $this->Flash->error('SAML-Login fehlgeschlagen: Sitzungs-/Provider-Konflikt.');
+        // RelayState **einmalig** einlösen -> gebundener Provider + erwartete
+        // Request-ID (cookie-unabhängig; kein Replay). Schlägt das fehl (unbekannt/
+        // abgelaufen/verbraucht), wird die Anfrage hart abgelehnt — die Bindung an
+        // die AuthnRequest ist damit verpflichtend (nicht still herabstufbar).
+        $sso = new SsoService();
+        $pending = $sso->consumeSamlRequest($relayState);
+        if ($pending === null) {
+            $this->Flash->error('SAML-Login fehlgeschlagen: unbekannte oder abgelaufene Anfrage.');
 
             return $this->redirect('/login');
         }
-        $expectedId = is_array($flow) ? ($flow['request_id'] ?? null) : null;
+        $providerId = $pending['provider_id'];
+        $expectedId = $pending['request_id'];
 
         try {
-            $provider = (new SsoService())->provider($providerId);
+            $provider = $sso->provider($providerId);
             if ($provider === null) {
                 throw new \RuntimeException('Unbekannter SSO-Provider.');
             }

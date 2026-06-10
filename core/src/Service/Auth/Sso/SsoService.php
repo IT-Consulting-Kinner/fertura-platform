@@ -210,6 +210,49 @@ class SsoService
         return $userId;
     }
 
+    /**
+     * Merkt eine ausstehende SAML-AuthnRequest serverseitig und bindet den
+     * (zufälligen) `RelayState` an Provider + Request-ID. Cookie-unabhängiger
+     * Replay-Schutz: der IdP spiegelt den RelayState zurück, beim ACS wird er
+     * **einmalig** eingelöst. Räumt abgelaufene Einträge opportunistisch ab.
+     */
+    public function rememberSamlRequest(
+        string $relayState,
+        string $providerId,
+        string $requestId,
+        int $ttlSeconds = 600,
+    ): void {
+        $conn = $this->conn();
+        $conn->execute('DELETE FROM saml_auth_requests WHERE expires_at < now()');
+        $conn->execute(
+            'INSERT INTO saml_auth_requests (relay_state, provider_id, request_id, expires_at) '
+            . 'VALUES (:rs, :p, :r, now() + make_interval(secs => :ttl))',
+            ['rs' => $relayState, 'p' => $providerId, 'r' => $requestId, 'ttl' => $ttlSeconds],
+        );
+    }
+
+    /**
+     * Löst einen `RelayState` **einmalig** ein (atomar via `DELETE ... RETURNING`)
+     * und liefert die gebundene Provider-ID + erwartete Request-ID — oder null,
+     * wenn der RelayState unbekannt, abgelaufen oder bereits verbraucht ist
+     * (Replay). Der ACS bindet die SAML-Antwort an genau diese Request-ID.
+     *
+     * @return array{provider_id:string, request_id:string}|null
+     */
+    public function consumeSamlRequest(string $relayState): ?array
+    {
+        if ($relayState === '') {
+            return null;
+        }
+        $row = $this->conn()->execute(
+            'DELETE FROM saml_auth_requests WHERE relay_state = :rs AND expires_at > now() '
+            . 'RETURNING provider_id, request_id',
+            ['rs' => $relayState],
+        )->fetch('assoc');
+
+        return $row === false ? null : ['provider_id' => (string)$row['provider_id'], 'request_id' => (string)$row['request_id']];
+    }
+
     private function assertUsable(string $userId): string
     {
         $row = $this->conn()->execute('SELECT status FROM users WHERE id = :id', ['id' => $userId])->fetch('assoc');

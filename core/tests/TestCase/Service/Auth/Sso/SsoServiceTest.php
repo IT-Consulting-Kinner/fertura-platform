@@ -36,6 +36,7 @@ class SsoServiceTest extends TestCase
     private function cleanup(): void
     {
         $conn = ConnectionManager::get('default');
+        $conn->execute("DELETE FROM saml_auth_requests WHERE relay_state LIKE 'zz_%'");
         $conn->execute("DELETE FROM users WHERE email LIKE '%@zztest.local'");
         $conn->execute("DELETE FROM sso_providers WHERE name LIKE 'zztest_%'");
     }
@@ -105,6 +106,32 @@ class SsoServiceTest extends TestCase
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessageMatches('/unverifiziert/');
         (new SsoService())->loginExternalUser($this->providerId, 'ext-5', 'new@zztest.local', null, null, false);
+    }
+
+    public function testSamlRequestStoreIsOneTimeUse(): void
+    {
+        // Cookie-unabhängiger Replay-Schutz: RelayState ist genau einmal einlösbar.
+        $svc = new SsoService();
+        $relay = 'zz_' . bin2hex(random_bytes(8));
+        $svc->rememberSamlRequest($relay, $this->providerId, '_req-123', 600);
+
+        $first = $svc->consumeSamlRequest($relay);
+        $this->assertNotNull($first);
+        $this->assertSame($this->providerId, $first['provider_id']);
+        $this->assertSame('_req-123', $first['request_id']);
+
+        // Zweite Einlösung schlägt fehl (verbraucht -> Replay abgewehrt).
+        $this->assertNull($svc->consumeSamlRequest($relay));
+        $this->assertNull($svc->consumeSamlRequest('zz_unknown'));
+        $this->assertNull($svc->consumeSamlRequest(''));
+    }
+
+    public function testExpiredSamlRequestIsRejected(): void
+    {
+        $svc = new SsoService();
+        $relay = 'zz_' . bin2hex(random_bytes(8));
+        $svc->rememberSamlRequest($relay, $this->providerId, '_req-x', -1); // bereits abgelaufen
+        $this->assertNull($svc->consumeSamlRequest($relay));
     }
 
     public function testProviderReturnsNullForMalformedId(): void
