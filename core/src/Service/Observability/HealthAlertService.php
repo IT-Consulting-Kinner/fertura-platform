@@ -20,16 +20,21 @@ class HealthAlertService
 {
     private const STATE_KEY = 'health.last_status';
 
+    private HealthService $health;
+    private EgressClient $egress;
+    private SettingsManager $settings;
+    private CacheStore $cache;
+
     public function __construct(
-        private ?HealthService $health = null,
-        private ?EgressClient $egress = null,
-        private ?SettingsManager $settings = null,
-        private ?CacheStore $cache = null,
+        ?HealthService $health = null,
+        ?EgressClient $egress = null,
+        ?SettingsManager $settings = null,
+        ?CacheStore $cache = null,
     ) {
-        $this->health ??= new HealthService();
-        $this->egress ??= new EgressClient();
-        $this->settings ??= new SettingsManager();
-        $this->cache ??= new CacheStore('_app_');
+        $this->health = $health ?? new HealthService();
+        $this->egress = $egress ?? new EgressClient();
+        $this->settings = $settings ?? new SettingsManager();
+        $this->cache = $cache ?? new CacheStore('_app_');
     }
 
     /**

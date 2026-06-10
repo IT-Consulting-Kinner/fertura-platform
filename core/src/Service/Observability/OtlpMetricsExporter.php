@@ -19,12 +19,15 @@ use function Cake\Core\env;
  */
 class OtlpMetricsExporter
 {
+    private EgressClient $egress;
+    private MetricsService $metrics;
+
     public function __construct(
-        private ?EgressClient $egress = null,
-        private ?MetricsService $metrics = null,
+        ?EgressClient $egress = null,
+        ?MetricsService $metrics = null,
     ) {
-        $this->egress ??= new EgressClient();
-        $this->metrics ??= new MetricsService();
+        $this->egress = $egress ?? new EgressClient();
+        $this->metrics = $metrics ?? new MetricsService();
     }
 
     public function endpoint(): ?string

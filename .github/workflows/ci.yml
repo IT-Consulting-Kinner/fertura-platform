@@ -78,7 +78,13 @@ jobs:
 
       - name: Tests ausführen (mit Coverage)
         working-directory: core
-        run: vendor/bin/phpunit --coverage-text
+        run: vendor/bin/phpunit --coverage-text --coverage-clover coverage.xml
+
+      - name: Coverage-Gate (Ratschet, blockierend)
+        working-directory: core
+        # Bricht ab, wenn die Zeilenabdeckung unter core/coverage-min.txt fällt.
+        # Das Minimum wird über die Zeit nur ANGEHOBEN, nie gesenkt.
+        run: php bin/coverage-check.php coverage.xml
 
       - name: Statische Analyse (PHPStan Level 8, Baseline-gated)
         working-directory: core

@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Auth;
 
 use App\Service\Settings\SettingsManager;
+use Cake\Database\Connection;
 use Cake\Datasource\ConnectionManager;
 
 /**
@@ -44,9 +45,12 @@ class LoginThrottle
             ?? (int)$settings->get('core', 'login_throttle.ip_max_attempts', self::DEFAULT_IP_MAX_ATTEMPTS);
     }
 
-    private function connection()
+    private function connection(): Connection
     {
-        return ConnectionManager::get('default');
+        /** @var \Cake\Database\Connection $conn */
+        $conn = ConnectionManager::get('default');
+
+        return $conn;
     }
 
     /**

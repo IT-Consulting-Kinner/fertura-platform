@@ -6,6 +6,7 @@ namespace App\Command;
 use Cake\Command\Command;
 use Cake\Console\Arguments;
 use Cake\Console\ConsoleIo;
+use Cake\Database\Connection;
 use Cake\Datasource\ConnectionManager;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -26,6 +27,7 @@ class AuditPartitionCommand extends Command
 
     public function execute(Arguments $args, ConsoleIo $io): int
     {
+        /** @var \Cake\Database\Connection $connection */
         $connection = ConnectionManager::get('default');
         $utc = new DateTimeZone('UTC');
         $base = new DateTimeImmutable('first day of this month 00:00:00', $utc);
@@ -63,7 +65,7 @@ class AuditPartitionCommand extends Command
         return static::CODE_SUCCESS;
     }
 
-    private function relationExists($connection, string $name): bool
+    private function relationExists(Connection $connection, string $name): bool
     {
         return $connection->execute(
             'SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace '

@@ -62,6 +62,10 @@
         ],
         "cs-check": "phpcs --colors -p",
         "cs-fix": "phpcbf --colors -p",
-        "test": "phpunit --colors=always"
+        "test": "phpunit --colors=always",
+        "test-coverage": [
+            "phpunit --coverage-text --coverage-clover coverage.xml",
+            "php bin/coverage-check.php coverage.xml"
+        ]
     }
 }

@@ -6,6 +6,7 @@ namespace App\Service\Event;
 use App\Event\EventListenerInterface;
 use App\Service\Module\ModuleAutoloader;
 use App\Service\Registry\ContractRegistry;
+use Cake\Database\Connection;
 use Cake\Datasource\ConnectionManager;
 use Closure;
 use PDO;
@@ -42,9 +43,12 @@ class OutboxWorker
         $this->logger = $logger;
     }
 
-    private function connection()
+    private function connection(): Connection
     {
-        return ConnectionManager::get('default');
+        /** @var \Cake\Database\Connection $conn */
+        $conn = ConnectionManager::get('default');
+
+        return $conn;
     }
 
     private function log(string $message): void
