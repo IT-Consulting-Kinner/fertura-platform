@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Test\TestCase\Service\Search;
 
+use App\Service\Ai\EmbeddingService;
 use App\Service\Search\SearchService;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\TestCase;
@@ -69,6 +70,53 @@ class SearchServiceTest extends TestCase
 
         // Ohne Benutzer (System) -> alle.
         $this->assertCount(3, $s->search('Apfel', null));
+    }
+
+    public function testHybridFusesFtsAndVectorAndDegrades(): void
+    {
+        $s = new SearchService();
+        $s->index('zztest', 'doc', '1', 'Quartalsbericht Finanzen', 'Umsatz');
+        $s->index('zztest', 'doc', '2', 'Reisekostenrichtlinie', 'Spesen');
+
+        // Kein Embedding-Provider -> Hybrid degradiert auf reine Volltextsuche.
+        $ftsOnly = $s->hybrid('Quartalsbericht', null);
+        $this->assertSame('1', $ftsOnly[0]['entity_id']);
+        $this->assertArrayHasKey('score', $ftsOnly[0]);
+
+        // Mit (gestubbtem) Embedding-Dienst: FTS findet nur doc 1, der Vektor-Teil
+        // bringt doc 2 (verwandt) und doc 3 (nur semantisch, nicht im FTS-Index).
+        $fakeEmbeddings = new class extends EmbeddingService {
+            public function __construct()
+            {
+            }
+
+            public function available(): bool
+            {
+                return true;
+            }
+
+            public function semantic(string $query, ?string $userId = null, int $limit = 10): array
+            {
+                return [
+                    ['source' => 'zztest', 'entity_type' => 'doc', 'entity_id' => '2', 'content' => 'verwandt', 'score' => 0.9],
+                    ['source' => 'zztest', 'entity_type' => 'doc', 'entity_id' => '3', 'content' => 'Nur semantisch relevant', 'score' => 0.8],
+                ];
+            }
+        };
+        $hybrid = new SearchService(null, $fakeEmbeddings);
+        $hybrid->index('zztest', 'doc', '1', 'Quartalsbericht Finanzen', 'Umsatz');
+        $hybrid->index('zztest', 'doc', '2', 'Reisekostenrichtlinie', 'Spesen');
+
+        $res = $hybrid->hybrid('Quartalsbericht', null, 10);
+        $ids = array_column($res, 'entity_id');
+        $this->assertContains('1', $ids, 'Volltext-Treffer enthalten');
+        $this->assertContains('2', $ids, 'Vektor-Treffer enthalten');
+        $this->assertContains('3', $ids, 'rein semantischer Treffer (nicht im FTS-Index) enthalten');
+
+        // Rein semantischer Treffer (doc 3) zieht den Titel aus dem Inhalt.
+        $three = array_values(array_filter($res, static fn ($r) => $r['entity_id'] === '3'))[0];
+        $this->assertSame('Nur semantisch relevant', $three['title']);
+        $this->assertNull($three['url']);
     }
 
     public function testUpdateAndRemove(): void

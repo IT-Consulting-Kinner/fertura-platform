@@ -24,6 +24,16 @@ class EmbeddingService
         return ConnectionManager::get('default');
     }
 
+    /** Ist semantische Suche/Indexierung verfügbar (Embedding-Provider konfiguriert)? */
+    public function available(): bool
+    {
+        try {
+            return $this->ai->embedEnabled();
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
     public function index(string $source, string $entityType, string $entityId, string $content, ?string $ownerId = null): void
     {
         $vector = $this->literal($this->ai->embed($content));

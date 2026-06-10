@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Service\Search;
 
+use App\Service\Ai\EmbeddingService;
 use App\Service\Module\ContributionRuntime;
 use Cake\Datasource\ConnectionInterface;
 use Cake\Datasource\ConnectionManager;
@@ -18,8 +19,15 @@ class SearchService
 {
     public const COLLECTOR = 'core.collector.search';
 
-    public function __construct(private ?ContributionRuntime $runtime = null)
+    public function __construct(
+        private ?ContributionRuntime $runtime = null,
+        private ?EmbeddingService $embeddings = null,
+    ) {
+    }
+
+    private function embeddings(): EmbeddingService
     {
+        return $this->embeddings ??= new EmbeddingService();
     }
 
     private function conn(): ConnectionInterface
@@ -98,6 +106,83 @@ class SearchService
             'url' => $r['url'] !== null ? (string)$r['url'] : null,
             'rank' => (float)$r['rank'],
         ], $rows);
+    }
+
+    /**
+     * **Hybride Suche**: fusioniert Volltext (`tsvector`/`ts_rank`) und semantische
+     * Vektor-Ähnlichkeit (pgvector-Embeddings) über **Reciprocal Rank Fusion** (RRF).
+     * Vereint lexikalische Präzision (exakte Begriffe) mit semantischem Recall
+     * (Bedeutung/Synonyme). Ist kein Embedding-Provider konfiguriert (oder schlägt
+     * die Einbettung fehl), degradiert die Methode sauber auf reine Volltextsuche.
+     *
+     * Sichtbarkeit (Eigentümer) wird in beiden Hälften gleich gefiltert.
+     *
+     * @return list<array{source:string,entity_type:string,entity_id:string,title:string,url:?string,score:float}>
+     */
+    public function hybrid(string $query, ?string $userId = null, int $limit = 20): array
+    {
+        $q = trim($query);
+        if ($q === '') {
+            return [];
+        }
+        // Breitere Kandidatenmengen je Seite -> bessere Fusion, dann auf $limit kürzen.
+        $candidates = max($limit, 50);
+        $fts = $this->search($q, $userId, $candidates);
+
+        $vec = [];
+        try {
+            $emb = $this->embeddings();
+            if ($emb->available()) {
+                $vec = $emb->semantic($q, $userId, $candidates);
+            }
+        } catch (Throwable) {
+            $vec = []; // AI/Embeddings nicht verfügbar -> reine Volltextsuche
+        }
+
+        return $this->fuse($fts, $vec, $limit);
+    }
+
+    /**
+     * Reciprocal Rank Fusion zweier gerankter Trefferlisten über den Schlüssel
+     * (source, entity_type, entity_id). Score = Σ 1/(k + Rang); k=60 (Standard).
+     *
+     * @param list<array<string,mixed>> $fts Volltext-Treffer (mit title/url)
+     * @param list<array<string,mixed>> $vec Vektor-Treffer (mit content)
+     * @return list<array{source:string,entity_type:string,entity_id:string,title:string,url:?string,score:float}>
+     */
+    private function fuse(array $fts, array $vec, int $limit): array
+    {
+        $k = 60;
+        $scores = [];
+        $meta = [];
+        $accumulate = static function (array $list) use (&$scores, &$meta, $k): void {
+            foreach (array_values($list) as $i => $r) {
+                $key = $r['source'] . '|' . $r['entity_type'] . '|' . $r['entity_id'];
+                $scores[$key] = ($scores[$key] ?? 0.0) + 1.0 / ($k + $i + 1);
+                if (!isset($meta[$key])) {
+                    // Erste Quelle gewinnt die Metadaten — FTS (mit title/url) wird
+                    // zuerst eingespeist, daher bevorzugt; reine Vektor-Treffer
+                    // fallen auf einen Inhalts-Ausschnitt als Titel zurück.
+                    $meta[$key] = [
+                        'source' => (string)$r['source'],
+                        'entity_type' => (string)$r['entity_type'],
+                        'entity_id' => (string)$r['entity_id'],
+                        'title' => (string)($r['title'] ?? mb_substr((string)($r['content'] ?? ''), 0, 120)),
+                        'url' => isset($r['url']) && $r['url'] !== null ? (string)$r['url'] : null,
+                    ];
+                }
+            }
+        };
+        $accumulate($fts);
+        $accumulate($vec);
+
+        arsort($scores);
+        $out = [];
+        foreach (array_slice(array_keys($scores), 0, $limit) as $key) {
+            $out[] = $meta[$key] + ['score' => round($scores[$key], 6)];
+        }
+
+        return $out;
     }
 
     /**

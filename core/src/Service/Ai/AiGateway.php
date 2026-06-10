@@ -38,6 +38,14 @@ class AiGateway
         return $name !== '' && $this->apiKey($name) !== '';
     }
 
+    /** Ist ein Embedding-Provider konfiguriert (für semantische/Hybrid-Suche)? */
+    public function embedEnabled(): bool
+    {
+        $name = $this->str('ai.embed.provider');
+
+        return $name !== '' && $this->apiKey($name) !== '';
+    }
+
     public function complete(string $prompt, array $opts = []): string
     {
         return $this->chatMessages([['role' => 'user', 'content' => $prompt]], $opts)['text'];
