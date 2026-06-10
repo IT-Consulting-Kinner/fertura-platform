@@ -64,6 +64,11 @@ class TenantsControllerTest extends TestCase
         $this->assertResponseContains('Default');          // Default-Mandant in der Liste
         $this->assertResponseContains('sort=name');         // sortierbarer Kopf (UiKit::sortHeader)
         $this->assertResponseContains('Create tenant');     // Formular (UiKit::fields + Button), i18n en_US
+        // A11y: Skip-Link, Main-Landmark, aktiver Nav-Eintrag, scope-Spaltenköpfe.
+        $this->assertResponseContains('Skip to main content');
+        $this->assertResponseContains('id="main"');
+        $this->assertResponseContains('aria-current="page"');
+        $this->assertResponseContains('scope="col"');
     }
 
     public function testAddCreatesTenant(): void

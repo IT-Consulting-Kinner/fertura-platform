@@ -49,15 +49,16 @@ class UiKitHelper extends Helper
         $head = '';
         if ($select) {
             // Kopf-Checkbox „alle umschalten" — minimaler Inline-Toggle, kein JS-Framework.
-            $head .= '<th style="width:1%"><input type="checkbox" class="form-check-input" '
+            $head .= '<th scope="col" style="width:1%"><input type="checkbox" class="form-check-input" '
                 . 'onclick="this.closest(\'table\').querySelectorAll(\'tbody input[type=checkbox]\')'
-                . '.forEach(function(c){c.checked=this.checked}.bind(this))" aria-label="Alle"></th>';
+                . '.forEach(function(c){c.checked=this.checked}.bind(this))" aria-label="'
+                . h(__d('default', 'uikit.select_all')) . '"></th>';
         }
         foreach ($columns as $c) {
-            $head .= '<th>' . h((string)($c['label'] ?? $c['key'] ?? '')) . '</th>';
+            $head .= '<th scope="col">' . h((string)($c['label'] ?? $c['key'] ?? '')) . '</th>';
         }
         if ($actions !== []) {
-            $head .= '<th class="text-end">' . h(__d('default', 'uikit.actions')) . '</th>';
+            $head .= '<th scope="col" class="text-end">' . h(__d('default', 'uikit.actions')) . '</th>';
         }
 
         $body = '';
@@ -180,8 +181,9 @@ class UiKitHelper extends Helper
         $nextDir = ($curSort === $sortKey && $curDir === 'asc') ? 'desc' : 'asc';
         $arrow = $curSort === $sortKey ? ($curDir === 'asc' ? ' ↑' : ' ↓') : '';
         $href = $this->withQuery($url, array_merge($query, ['sort' => $sortKey, 'dir' => $nextDir]));
+        $ariaSort = $curSort === $sortKey ? ' aria-sort="' . ($curDir === 'asc' ? 'ascending' : 'descending') . '"' : '';
 
-        return '<th><a class="text-decoration-none text-reset" href="' . h($href) . '">'
+        return '<th scope="col"' . $ariaSort . '><a class="text-decoration-none text-reset" href="' . h($href) . '">'
             . h($label . $arrow) . '</a></th>';
     }
 

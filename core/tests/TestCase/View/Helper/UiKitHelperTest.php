@@ -32,7 +32,7 @@ class UiKitHelperTest extends TestCase
         ];
         $html = $this->ui->index($rows, $columns);
 
-        $this->assertStringContainsString('<th>Name</th>', $html);
+        $this->assertStringContainsString('<th scope="col">Name</th>', $html);
         $this->assertStringContainsString('Alpha', $html);
         // XSS: Roh-HTML aus Daten muss escapt sein.
         $this->assertStringNotContainsString('<script>x</script>', $html);

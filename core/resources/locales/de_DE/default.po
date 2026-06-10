@@ -1238,3 +1238,15 @@ msgstr "Ausgewählte Mandanten und ihre Daten endgültig löschen? Mandanten mit
 
 msgid "flash.tenants.bulk_errors"
 msgstr "%d Mandant(en) übersprungen (z. B. noch Benutzer oder Default)."
+
+msgid "a11y.skip_to_content"
+msgstr "Zum Hauptinhalt springen"
+
+msgid "a11y.nav_main"
+msgstr "Hauptnavigation"
+
+msgid "a11y.nav_admin"
+msgstr "Verwaltungsbereiche"
+
+msgid "uikit.select_all"
+msgstr "Alle Zeilen auswählen"
