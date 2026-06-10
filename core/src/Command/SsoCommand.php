@@ -33,6 +33,8 @@ class SsoCommand extends Command
         $parser->addOption('idp-entity-id', ['help' => 'SAML IdP EntityID']);
         $parser->addOption('idp-sso-url', ['help' => 'SAML IdP SSO-URL']);
         $parser->addOption('idp-cert-file', ['help' => 'SAML IdP X.509-Zertifikat (Datei)']);
+        $parser->addOption('sp-cert-file', ['help' => 'SAML SP-Zertifikat (Datei) — optional, für signierte AuthnRequests']);
+        $parser->addOption('sp-key-file', ['help' => 'SAML SP-Privatschlüssel (Datei) — optional, wird verschlüsselt']);
 
         return $parser;
     }
@@ -91,12 +93,27 @@ class SsoCommand extends Command
 
                     return self::CODE_ERROR;
                 }
-                $res = $svc->createProvider('saml', $name, [
+                // Optionale SP-Signierung: Zertifikat in die Konfig, Privatschlüssel
+                // als (verschlüsseltes) Secret.
+                $spCertFile = (string)$args->getOption('sp-cert-file');
+                $spKeyFile = (string)$args->getOption('sp-key-file');
+                $config = [
                     'idp_entity_id' => $entityId,
                     'idp_sso_url' => $ssoUrl,
                     'idp_x509cert' => trim((string)file_get_contents($certFile)),
-                ], null, (string)$args->getOption('label'));
-                $io->success('SAML-Provider angelegt: ' . $res['id']);
+                ];
+                $spKey = null;
+                if ($spCertFile !== '' && $spKeyFile !== '') {
+                    if (!is_file($spCertFile) || !is_file($spKeyFile)) {
+                        $io->error('SP-Zertifikat/-Schlüssel-Datei nicht gefunden.');
+
+                        return self::CODE_ERROR;
+                    }
+                    $config['sp_cert'] = trim((string)file_get_contents($spCertFile));
+                    $spKey = trim((string)file_get_contents($spKeyFile));
+                }
+                $res = $svc->createProvider('saml', $name, $config, $spKey, (string)$args->getOption('label'));
+                $io->success('SAML-Provider angelegt' . ($spKey !== null ? ' (signierte AuthnRequests)' : '') . ': ' . $res['id']);
 
                 return self::CODE_SUCCESS;
 

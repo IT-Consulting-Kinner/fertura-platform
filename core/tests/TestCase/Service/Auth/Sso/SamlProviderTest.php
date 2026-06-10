@@ -29,6 +29,26 @@ class SamlProviderTest extends TestCase
         $this->assertSame('CERT', $s['idp']['x509cert']);
     }
 
+    public function testSpSigningEnabledWhenCertAndKeyPresent(): void
+    {
+        $provider = [
+            'config' => ['idp_entity_id' => 'i', 'idp_sso_url' => 'u', 'idp_x509cert' => 'IC', 'sp_cert' => 'SPCERT'],
+            'secret' => 'SPKEY',
+        ];
+        $s = (new SamlProvider())->settings($provider, 'https://sp/acs', 'https://sp/meta');
+
+        $this->assertSame('SPCERT', $s['sp']['x509cert']);
+        $this->assertSame('SPKEY', $s['sp']['privateKey']);
+        $this->assertTrue($s['security']['authnRequestsSigned']);
+        $this->assertTrue($s['security']['wantAssertionsSigned']);
+    }
+
+    public function testSpSigningDisabledWithoutKey(): void
+    {
+        $s = (new SamlProvider())->settings(['config' => ['idp_entity_id' => 'i']], 'https://sp/acs', 'https://sp/meta');
+        $this->assertFalse($s['security']['authnRequestsSigned']);
+    }
+
     public function testFirstAttrResolvesByPriority(): void
     {
         $p = new SamlProvider();

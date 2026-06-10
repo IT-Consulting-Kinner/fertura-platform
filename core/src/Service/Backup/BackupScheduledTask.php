@@ -5,6 +5,8 @@ namespace App\Service\Backup;
 
 use App\Service\Schedule\ScheduledTaskInterface;
 use App\Service\Settings\SettingsManager;
+use Cake\Datasource\ConnectionManager;
+use Throwable;
 
 /**
  * Automatisches Daten-Backup im konfigurierten Intervall (Kap. 20.1.2).
@@ -39,8 +41,23 @@ class BackupScheduledTask implements ScheduledTaskInterface
             return; // Scheduler deaktiviert – kein Backup.
         }
         $service = (new BackupService())->context('scheduler', null);
-        $service->create('scheduled', null);
+        $id = $service->create('scheduled', null);
         $service->prune((int)$settings->get('core', 'backup.retention', 14));
         $service->pruneByAge((int)$settings->get('core', 'backup.retention_days', 0));
+
+        // Off-Site-Geo-Redundanz (P14): das frisch erzeugte Archiv zusätzlich ins
+        // Objekt-Storage laden. Fehler hier dürfen das lokale Backup nicht
+        // entwerten (isoliert).
+        if ((bool)$settings->get('core', 'backup.offsite.enabled', false)) {
+            try {
+                $row = ConnectionManager::get('default')
+                    ->execute('SELECT path FROM backups WHERE id = :id', ['id' => $id])
+                    ->fetch('assoc');
+                if ($row !== false && is_file((string)$row['path'])) {
+                    (new OffsiteBackupService())->upload((string)$row['path']);
+                }
+            } catch (Throwable) {
+            }
+        }
     }
 }

@@ -22,6 +22,12 @@ class SamlProvider
     public function settings(array $provider, string $acsUrl, string $spEntityId): array
     {
         $c = (array)($provider['config'] ?? []);
+        // SP-Zertifikat (öffentlich, in der Konfig) + SP-Privatschlüssel
+        // (geheim -> provider['secret'], AES-verschlüsselt gespeichert). Sind
+        // beide vorhanden, werden AuthnRequests **signiert** (Härtung).
+        $spCert = (string)($c['sp_cert'] ?? '');
+        $spKey = (string)($provider['secret'] ?? '');
+        $signed = $spCert !== '' && $spKey !== '';
 
         return [
             'strict' => true,
@@ -33,6 +39,8 @@ class SamlProvider
                     'binding' => 'urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST',
                 ],
                 'NameIDFormat' => 'urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress',
+                'x509cert' => $spCert,
+                'privateKey' => $spKey,
             ],
             'idp' => [
                 'entityId' => (string)($c['idp_entity_id'] ?? ''),
@@ -41,6 +49,12 @@ class SamlProvider
                     'binding' => 'urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect',
                 ],
                 'x509cert' => (string)($c['idp_x509cert'] ?? ''),
+            ],
+            'security' => [
+                'authnRequestsSigned' => $signed,
+                'logoutRequestSigned' => $signed,
+                'signatureAlgorithm' => 'http://www.w3.org/2001/04/xmldsig-more#rsa-sha256',
+                'wantAssertionsSigned' => true,
             ],
         ];
     }

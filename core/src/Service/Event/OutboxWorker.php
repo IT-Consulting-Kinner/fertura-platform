@@ -128,6 +128,12 @@ class OutboxWorker
             } catch (Throwable $e) {
                 $this->log('Automation-Fehler: ' . $e->getMessage());
             }
+            try {
+                (new \App\Service\Automation\WorkflowEngine())
+                    ->onEvent((string)$event['contract_name'], $payload);
+            } catch (Throwable $e) {
+                $this->log('Workflow-Fehler: ' . $e->getMessage());
+            }
         }
         $runtime = new \App\Service\Module\ContributionRuntime($this->registry);
         foreach ($runtime->listeners((string)$event['contract_name']) as $listener) {

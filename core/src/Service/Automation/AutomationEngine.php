@@ -20,6 +20,8 @@ use Throwable;
  */
 class AutomationEngine
 {
+    private ?ActionExecutor $executor = null;
+
     public function __construct(
         private ?ConditionEvaluator $evaluator = null,
         private ?NotificationService $notifications = null,
@@ -57,7 +59,7 @@ class AutomationEngine
                     continue;
                 }
                 $actions = (array)(json_decode((string)$rule['actions'], true) ?: []);
-                $this->runActions($actions, $payload);
+                ($this->executor ??= new ActionExecutor($this->notifications, $this->outbox))->run($actions, $payload);
                 $fired++;
             } catch (Throwable) {
                 // Regelfehler isolieren.
@@ -78,85 +80,5 @@ class AutomationEngine
         }
 
         return false;
-    }
-
-    /**
-     * @param list<array<string,mixed>> $actions
-     * @param array<string,mixed> $payload
-     */
-    private function runActions(array $actions, array $payload): void
-    {
-        foreach ($actions as $action) {
-            $type = (string)($action['type'] ?? '');
-            try {
-                match ($type) {
-                    'notify' => $this->actionNotify($action, $payload),
-                    'event' => $this->actionEvent($action, $payload),
-                    default => null,
-                };
-            } catch (Throwable) {
-                // Aktionsfehler isolieren.
-            }
-        }
-    }
-
-    /**
-     * @param array<string,mixed> $action
-     * @param array<string,mixed> $payload
-     */
-    private function actionNotify(array $action, array $payload): void
-    {
-        $userId = (string)($action['user_id'] ?? $this->fromPayload((string)($action['user_field'] ?? 'user_id'), $payload));
-        if ($userId === '') {
-            return;
-        }
-        ($this->notifications ??= new NotificationService())->notify(
-            $userId,
-            (string)($action['notify_type'] ?? 'automation'),
-            $this->interpolate((string)($action['title'] ?? 'Automatisierung'), $payload),
-            $this->interpolate((string)($action['body'] ?? ''), $payload),
-        );
-    }
-
-    /**
-     * @param array<string,mixed> $action
-     * @param array<string,mixed> $payload
-     */
-    private function actionEvent(array $action, array $payload): void
-    {
-        $contract = (string)($action['contract'] ?? '');
-        if ($contract === '') {
-            return;
-        }
-        ($this->outbox ??= new OutboxPublisher())->publish($contract, (array)($action['payload'] ?? $payload));
-    }
-
-    /**
-     * @param array<string,mixed> $payload
-     */
-    private function fromPayload(string $path, array $payload): string
-    {
-        $value = $payload;
-        foreach (explode('.', $path) as $segment) {
-            if (is_array($value) && array_key_exists($segment, $value)) {
-                $value = $value[$segment];
-            } else {
-                return '';
-            }
-        }
-
-        return is_scalar($value) ? (string)$value : '';
-    }
-
-    /**
-     * Ersetzt `{{pfad}}`-Platzhalter aus der Nutzlast.
-     *
-     * @param array<string,mixed> $payload
-     */
-    private function interpolate(string $text, array $payload): string
-    {
-        return (string)preg_replace_callback('/\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/', function (array $m) use ($payload): string {
-            return $this->fromPayload($m[1], $payload);
-        }, $text);
     }
 }
