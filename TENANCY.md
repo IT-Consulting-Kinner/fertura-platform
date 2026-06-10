@@ -51,12 +51,22 @@ Login muss Benutzer lesen können, bevor ein Kontext existiert.
 Propagation in den Request (RLS), `current_tenant()`-Helfer, `TenantService`,
 Fail-closed-Garantie.
 
-**Nächste Schritte zum SaaS-Vollausbau:**
-1. **Pre-Auth-Mandantenauflösung** per Host/Subdomain (heute: aus dem Benutzer
-   nach Login). Hook in einer frühen Middleware, der `app.current_tenant_id` schon
-   vor dem Login setzt (z. B. für mandantenspezifische Login-Themes/SSO-Provider).
-2. **RPC/Worker-Propagation** des Mandanten an Out-of-Process-Hosts und Event-
-   Listener (heute fail-closed unsichtbar ohne Bypass).
-3. **Mandanten-Verwaltungs-GUI** (Admin) und Benutzer-↔-Mandant-Zuweisung im UI.
-4. **Mandanten-Scoping** der gewünschten Core-Tabellen (heute owner-scoped,
-   Single-Org) bzw. konsequente Adoption des Musters in den Modulen.
+**Inzwischen umgesetzt:**
+- ✅ **Pre-Auth-Mandantenauflösung** per Host/Subdomain — `App\Service\Tenant\TenantResolver`
+  (exakte `tenants.domain` oder Konvention Subdomain==Schlüssel); die
+  `TransactionRlsMiddleware` setzt den Mandanten pre-auth aus dem Request-Host
+  (mandantenspezifische Login-/SSO-Oberfläche).
+- ✅ **RPC-Propagation** des Mandanten an isolierte Modul-Hosts — `RemoteInvoker`
+  reicht `tenant_id` mit, `bin/module-host.php` setzt `app.current_tenant_id` je Aufruf.
+- ✅ **Mandanten-Verwaltungs-GUI** (`/admin/tenants`): anlegen, sortier-/paginierbare
+  Liste, **Aktivieren/Suspendieren** (Sammelaktion), **Benutzer-↔-Mandant-Zuweisung**.
+
+**Verbleibende Schritte zum SaaS-Vollausbau:**
+1. **Worker-/Event-Propagation** des Mandanten (Outbox-Listener laufen heute
+   system-/bypass-seitig; pro-Event-Mandant müsste am Event mitgeführt werden).
+2. **Mandanten-Scoping** der gewünschten Core-Tabellen (heute owner-scoped,
+   Single-Org) bzw. konsequente Adoption des Musters in den Modulen — inklusive
+   öffentlicher (owner=NULL) Such-/Embedding-Dokumente, die sonst mandanten­übergreifend
+   sichtbar wären.
+3. **Mandantenspezifische Settings/Branding** und Cross-Tenant-Host-Policy
+   (Verhalten, wenn ein Benutzer den Host eines fremden Mandanten aufruft).

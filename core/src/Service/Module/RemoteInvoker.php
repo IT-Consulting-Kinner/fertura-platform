@@ -120,7 +120,7 @@ class RemoteInvoker
      * (von der TransactionRlsMiddleware bzw. dem aufrufenden Code gesetzt), um
      * ihn an den isolierten Host weiterzureichen.
      *
-     * @return array{user_id:?string,group_ids:list<string>,bypass:bool}
+     * @return array{user_id:?string,group_ids:list<string>,bypass:bool,tenant_id:?string}
      */
     private function currentRls(): array
     {
@@ -128,10 +128,11 @@ class RemoteInvoker
             $row = ConnectionManager::get('default')->execute(
                 "SELECT nullif(current_setting('app.current_user_id', true), '') AS uid, "
                 . "current_setting('app.current_group_ids', true) AS gids, "
+                . "nullif(current_setting('app.current_tenant_id', true), '') AS tid, "
                 . "coalesce(nullif(current_setting('app.bypass_rls', true), ''), 'false') AS bypass",
             )->fetch('assoc');
         } catch (Throwable) {
-            return ['user_id' => null, 'group_ids' => [], 'bypass' => false];
+            return ['user_id' => null, 'group_ids' => [], 'bypass' => false, 'tenant_id' => null];
         }
         $gids = (string)($row['gids'] ?? '');
 
@@ -139,6 +140,9 @@ class RemoteInvoker
             'user_id' => $row['uid'] !== null && $row['uid'] !== '' ? (string)$row['uid'] : null,
             'group_ids' => $gids === '' ? [] : explode(',', $gids),
             'bypass' => (string)($row['bypass'] ?? 'false') === 'true',
+            // Mandantenkontext mitreichen, damit mandanten-bezogene Daten auch im
+            // isolierten Modul-Host korrekt gescoped sind (sonst fail-closed).
+            'tenant_id' => $row['tid'] !== null && $row['tid'] !== '' ? (string)$row['tid'] : null,
         ];
     }
 }

@@ -40,11 +40,19 @@ class UiKitHelper extends Helper
     public function index(array $rows, array $columns, array $options = []): string
     {
         $actions = (array)($options['actions'] ?? []);
+        $select = (bool)($options['select'] ?? false);
+        $idKey = (string)($options['idKey'] ?? 'id');
         $tableClass = (string)($options['class'] ?? 'table table-sm table-hover align-middle');
         $emptyText = (string)($options['empty'] ?? __d('default', 'uikit.empty'));
-        $colCount = count($columns) + ($actions !== [] ? 1 : 0);
+        $colCount = count($columns) + ($actions !== [] ? 1 : 0) + ($select ? 1 : 0);
 
         $head = '';
+        if ($select) {
+            // Kopf-Checkbox „alle umschalten" — minimaler Inline-Toggle, kein JS-Framework.
+            $head .= '<th style="width:1%"><input type="checkbox" class="form-check-input" '
+                . 'onclick="this.closest(\'table\').querySelectorAll(\'tbody input[type=checkbox]\')'
+                . '.forEach(function(c){c.checked=this.checked}.bind(this))" aria-label="Alle"></th>';
+        }
         foreach ($columns as $c) {
             $head .= '<th>' . h((string)($c['label'] ?? $c['key'] ?? '')) . '</th>';
         }
@@ -55,6 +63,10 @@ class UiKitHelper extends Helper
         $body = '';
         foreach ($rows as $row) {
             $cells = '';
+            if ($select) {
+                $cells .= '<td><input type="checkbox" class="form-check-input" name="ids[]" value="'
+                    . h((string)($row[$idKey] ?? '')) . '"></td>';
+            }
             foreach ($columns as $c) {
                 $cells .= '<td>' . $this->cell($row, $c) . '</td>';
             }
@@ -71,6 +83,30 @@ class UiKitHelper extends Helper
 
         return '<table class="' . h($tableClass) . '"' . $idAttr . '><thead><tr>' . $head . '</tr></thead><tbody>'
             . $body . '</tbody></table>';
+    }
+
+    /**
+     * Sammelaktions-Leiste (Submit-Buttons) für eine Liste mit `select`. MUSS mit
+     * der Liste in EINEM `Form->create()/end()` stehen; der Controller liest die
+     * Auswahl über `ids[]` und die gewählte Aktion über deren `name`/`value`.
+     * Knopf: ['label','value','name'?(=op),'class'?,'confirm'?].
+     *
+     * @param list<array<string,mixed>> $buttons
+     */
+    public function bulkActions(array $buttons): string
+    {
+        $out = '';
+        foreach ($buttons as $b) {
+            $name = (string)($b['name'] ?? 'op');
+            $attrs = 'type="submit" class="' . h((string)($b['class'] ?? 'btn btn-sm btn-outline-secondary')) . '"'
+                . ' name="' . h($name) . '" value="' . h((string)($b['value'] ?? '')) . '"';
+            if (isset($b['confirm'])) {
+                $attrs .= ' onclick="return confirm(' . htmlspecialchars(json_encode((string)$b['confirm']) ?: '""', ENT_QUOTES) . ')"';
+            }
+            $out .= '<button ' . $attrs . '>' . h((string)($b['label'] ?? '')) . '</button> ';
+        }
+
+        return $out !== '' ? '<div class="btn-toolbar gap-2 mb-2">' . trim($out) . '</div>' : '';
     }
 
     /**

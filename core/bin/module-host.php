@@ -128,6 +128,8 @@ $invoke = static function (string $class, string $method, array $args, array $rl
         $conn->execute("SELECT set_config('app.current_user_id', :u, true)", ['u' => (string)($rls['user_id'] ?? '')]);
         $conn->execute("SELECT set_config('app.current_group_ids', :g, true)", ['g' => implode(',', array_map('strval', (array)($rls['group_ids'] ?? [])))]);
         $conn->execute("SELECT set_config('app.bypass_rls', :b, true)", ['b' => !empty($rls['bypass']) ? 'true' : 'false']);
+        // Mandantenkontext anwenden (cookie-/prozessunabhängig vom Aufrufer gereicht).
+        $conn->execute("SELECT set_config('app.current_tenant_id', :t, true)", ['t' => (string)($rls['tenant_id'] ?? '')]);
         $out = (new $class())->$method(...$args);
         $conn->commit();
 

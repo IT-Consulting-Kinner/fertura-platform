@@ -112,6 +112,20 @@ class TenantService
         return ['id' => $id, 'key' => $key, 'name' => $name, 'active' => true];
     }
 
+    /** Aktiviert/deaktiviert (suspendiert) einen Mandanten. Der Default-Mandant
+     *  kann nicht deaktiviert werden (Single-Org-/Break-Glass-Schutz). */
+    public function setActive(string $tenantId, bool $active): void
+    {
+        if (!$active && $tenantId === self::DEFAULT_TENANT_ID) {
+            throw new InvalidArgumentException('Der Default-Mandant kann nicht deaktiviert werden.');
+        }
+        $this->conn()->execute(
+            'UPDATE tenants SET active = :a WHERE id = :id',
+            ['a' => $active ? 'true' : 'false', 'id' => $tenantId],
+        );
+        $this->audit()->log($active ? 'tenant.activate' : 'tenant.suspend', 'tenant', $tenantId, []);
+    }
+
     /** Ordnet einen Benutzer einem Mandanten zu. */
     public function assignUser(string $userId, string $tenantId): void
     {

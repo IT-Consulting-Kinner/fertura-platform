@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Test\TestCase\Service\Tenant;
 
+use App\Service\Tenant\TenantResolver;
 use App\Service\Tenant\TenantService;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\TestCase;
@@ -71,6 +72,25 @@ class TenantServiceTest extends TestCase
 
         $this->expectException(InvalidArgumentException::class);
         $svc->assignUser($userId, '00000000-0000-0000-0000-0000000000ff');
+    }
+
+    public function testTenantResolverByDomainAndSubdomain(): void
+    {
+        $svc = new TenantService();
+        $t = $svc->create('zztest-acme3', 'ACME 3');
+        ConnectionManager::get('default')->execute(
+            'UPDATE tenants SET domain = :d WHERE id = :id',
+            ['d' => 'acme3.example.test', 'id' => $t['id']],
+        );
+        $r = new TenantResolver();
+
+        $this->assertSame($t['id'], $r->resolve('acme3.example.test'), 'exakte Domain');
+        $this->assertSame($t['id'], $r->resolve('zztest-acme3.portal.test:8443'), 'Subdomain == Schlüssel (+Port)');
+        $this->assertNull($r->resolve('unbekannt.test'));
+
+        // Suspendiert -> nicht mehr auflösbar.
+        $svc->setActive($t['id'], false);
+        $this->assertNull($r->resolve('acme3.example.test'));
     }
 
     public function testCurrentTenantFunctionAndPredicate(): void

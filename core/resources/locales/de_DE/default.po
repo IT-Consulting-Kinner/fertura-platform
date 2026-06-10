@@ -1166,3 +1166,57 @@ msgstr "Mandant anlegen"
 
 msgid "flash.tenants.created"
 msgstr "Mandant angelegt."
+
+msgid "admin.search.title"
+msgstr "Suche"
+
+msgid "admin.search.placeholder"
+msgstr "Im gesamten indexierten Inhalt suchen…"
+
+msgid "admin.search.btn"
+msgstr "Suchen"
+
+msgid "admin.search.col_title"
+msgstr "Titel"
+
+msgid "admin.search.col_source"
+msgstr "Quelle"
+
+msgid "admin.search.col_type"
+msgstr "Typ"
+
+msgid "admin.search.col_score"
+msgstr "Relevanz"
+
+msgid "admin.search.empty"
+msgstr "Keine Treffer."
+
+msgid "admin.tenants.bulk_activate"
+msgstr "Aktivieren"
+
+msgid "admin.tenants.bulk_suspend"
+msgstr "Suspendieren"
+
+msgid "admin.tenants.bulk_suspend_confirm"
+msgstr "Ausgewählte Mandanten suspendieren?"
+
+msgid "flash.tenants.bulk_done"
+msgstr "%d Mandant(en) aktualisiert."
+
+msgid "admin.tenants.assign_title"
+msgstr "Benutzer einem Mandanten zuordnen"
+
+msgid "admin.tenants.assign_email"
+msgstr "Benutzer-E-Mail"
+
+msgid "admin.tenants.assign_tenant"
+msgstr "Mandant"
+
+msgid "admin.tenants.assign_btn"
+msgstr "Zuordnen"
+
+msgid "flash.tenants.assigned"
+msgstr "Benutzer dem Mandanten zugeordnet."
+
+msgid "flash.tenants.user_not_found"
+msgstr "Kein Benutzer mit dieser E-Mail gefunden."

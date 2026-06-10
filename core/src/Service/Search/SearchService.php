@@ -232,6 +232,47 @@ class SearchService
     }
 
     /**
+     * Erzeugt Embeddings für bereits indexierte Suchdokumente, die noch keines
+     * haben (z. B. solche, die vor Aktivierung von `ai.embed.auto_index` indexiert
+     * wurden). Macht die Hybrid-Suche für Bestandsdaten nutzbar, ohne die Modul-
+     * Indexer erneut laufen zu lassen. Gibt die Zahl neu eingebetteter Dokumente
+     * zurück (0, wenn kein Embedding-Provider verfügbar ist).
+     */
+    public function backfillEmbeddings(int $limit = 500): int
+    {
+        if (!$this->embeddings()->available()) {
+            return 0;
+        }
+        $rows = $this->conn()->execute(
+            'SELECT s.source, s.entity_type, s.entity_id, s.title, s.body, s.owner_id '
+            . 'FROM search_index s '
+            . 'LEFT JOIN embeddings e '
+            . '  ON e.source = s.source AND e.entity_type = s.entity_type AND e.entity_id = s.entity_id '
+            . 'WHERE e.entity_id IS NULL '
+            . 'ORDER BY s.updated_at DESC LIMIT :l',
+            ['l' => max(1, $limit)],
+        )->fetchAll('assoc');
+
+        $done = 0;
+        foreach ($rows as $r) {
+            try {
+                $content = trim((string)$r['title'] . "\n" . (string)$r['body']);
+                $this->embeddings()->index(
+                    (string)$r['source'],
+                    (string)$r['entity_type'],
+                    (string)$r['entity_id'],
+                    $content,
+                    $r['owner_id'] !== null ? (string)$r['owner_id'] : null,
+                );
+                $done++;
+            } catch (Throwable) {
+            }
+        }
+
+        return $done;
+    }
+
+    /**
      * Stößt den vollständigen Neuaufbau über die Modul-Indexer an
      * (`core.collector.search`). Gibt die Anzahl angesprochener Indexer zurück.
      */

@@ -94,6 +94,23 @@ class UiKitHelperTest extends TestCase
         $this->assertStringContainsString('active', $html);  // aktuelle Seite markiert
     }
 
+    public function testSelectColumnAndBulkActions(): void
+    {
+        $rows = [['id' => 'a1', 'name' => 'Alpha'], ['id' => 'b2', 'name' => 'Beta']];
+        $html = $this->ui->index($rows, [['key' => 'name', 'label' => 'Name']], ['select' => true, 'idKey' => 'id']);
+        // Auswahl-Checkboxen je Zeile mit der ID.
+        $this->assertStringContainsString('name="ids[]" value="a1"', $html);
+        $this->assertStringContainsString('name="ids[]" value="b2"', $html);
+
+        $bar = $this->ui->bulkActions([
+            ['value' => 'activate', 'label' => 'Aktivieren'],
+            ['value' => 'suspend', 'label' => 'Suspendieren', 'confirm' => 'Sicher?'],
+        ]);
+        $this->assertStringContainsString('name="op" value="activate"', $bar);
+        $this->assertStringContainsString('value="suspend"', $bar);
+        $this->assertStringContainsString('confirm(', $bar); // Confirm-Dialog
+    }
+
     public function testDetailRendersDefinitionList(): void
     {
         $html = $this->ui->detail(

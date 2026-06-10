@@ -162,6 +162,37 @@ class SearchServiceTest extends TestCase
         $this->assertSame([['zztest', 'doc', 'e1']], $emb->removed);
     }
 
+    public function testBackfillEmbeddings(): void
+    {
+        $emb = new class extends EmbeddingService {
+            /** @var list<string> */
+            public array $indexed = [];
+
+            public function __construct()
+            {
+            }
+
+            public function available(): bool
+            {
+                return true;
+            }
+
+            public function index(string $source, string $entityType, string $entityId, string $content, ?string $ownerId = null): void
+            {
+                $this->indexed[] = $entityId;
+            }
+        };
+        $s = new SearchService(null, $emb);
+        // Ohne auto_index -> nur Volltext indexiert, keine Embeddings.
+        $s->index('zztest', 'doc', 'b1', 'Backfill Eins', 'Inhalt eins');
+        $s->index('zztest', 'doc', 'b2', 'Backfill Zwei', 'Inhalt zwei');
+
+        $n = $s->backfillEmbeddings(100);
+        $this->assertGreaterThanOrEqual(2, $n);
+        $this->assertContains('b1', $emb->indexed);
+        $this->assertContains('b2', $emb->indexed);
+    }
+
     public function testUpdateAndRemove(): void
     {
         $s = new SearchService();

@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Test\TestCase\Controller\Admin;
 
+use App\Service\Tenant\TenantService;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
@@ -81,5 +82,44 @@ class TenantsControllerTest extends TestCase
         )->fetch('assoc');
         $this->assertNotFalse($row);
         $this->assertSame('Controller Tenant', $row['name']);
+    }
+
+    public function testAssignUserToTenant(): void
+    {
+        $conn = ConnectionManager::get('default');
+        $tid = (string)$conn->execute(
+            "INSERT INTO tenants (key, name) VALUES ('zztest-assign', 'Assign') RETURNING id",
+        )->fetch('assoc')['id'];
+        $uid = (string)$conn->execute(
+            "INSERT INTO users (username, email, status) VALUES (:u, :e, 'active') RETURNING id",
+            ['u' => 'zztest_assignee_' . bin2hex(random_bytes(3)), 'e' => 'assignee@zztenant.local'],
+        )->fetch('assoc')['id'];
+
+        $this->login();
+        $this->enableCsrfToken();
+        $this->enableSecurityToken();
+        $this->post('/admin/tenants/assign', ['email' => 'assignee@zztenant.local', 'tenant_id' => $tid]);
+
+        $this->assertRedirect(['action' => 'index']);
+        $this->assertSame($tid, (new TenantService())->tenantIdForUser($uid));
+    }
+
+    public function testBulkSuspendAndActivate(): void
+    {
+        $conn = ConnectionManager::get('default');
+        $id = (string)$conn->execute(
+            "INSERT INTO tenants (key, name) VALUES ('zztest-bulk', 'Bulk') RETURNING id",
+        )->fetch('assoc')['id'];
+
+        $this->login();
+        $this->enableCsrfToken();
+        $this->enableSecurityToken();
+
+        $this->post('/admin/tenants/bulk', ['op' => 'suspend', 'ids' => [$id]]);
+        $this->assertRedirect(['action' => 'index']);
+        $this->assertFalse((bool)$conn->execute('SELECT active FROM tenants WHERE id = :id', ['id' => $id])->fetch('assoc')['active']);
+
+        $this->post('/admin/tenants/bulk', ['op' => 'activate', 'ids' => [$id]]);
+        $this->assertTrue((bool)$conn->execute('SELECT active FROM tenants WHERE id = :id', ['id' => $id])->fetch('assoc')['active']);
     }
 }

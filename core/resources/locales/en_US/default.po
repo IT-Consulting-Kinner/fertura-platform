@@ -1170,3 +1170,57 @@ msgstr "Create tenant"
 
 msgid "flash.tenants.created"
 msgstr "Tenant created."
+
+msgid "admin.search.title"
+msgstr "Search"
+
+msgid "admin.search.placeholder"
+msgstr "Search across all indexed content…"
+
+msgid "admin.search.btn"
+msgstr "Search"
+
+msgid "admin.search.col_title"
+msgstr "Title"
+
+msgid "admin.search.col_source"
+msgstr "Source"
+
+msgid "admin.search.col_type"
+msgstr "Type"
+
+msgid "admin.search.col_score"
+msgstr "Score"
+
+msgid "admin.search.empty"
+msgstr "No matches."
+
+msgid "admin.tenants.bulk_activate"
+msgstr "Activate"
+
+msgid "admin.tenants.bulk_suspend"
+msgstr "Suspend"
+
+msgid "admin.tenants.bulk_suspend_confirm"
+msgstr "Suspend the selected tenants?"
+
+msgid "flash.tenants.bulk_done"
+msgstr "%d tenant(s) updated."
+
+msgid "admin.tenants.assign_title"
+msgstr "Assign user to tenant"
+
+msgid "admin.tenants.assign_email"
+msgstr "User e-mail"
+
+msgid "admin.tenants.assign_tenant"
+msgstr "Tenant"
+
+msgid "admin.tenants.assign_btn"
+msgstr "Assign"
+
+msgid "flash.tenants.assigned"
+msgstr "User assigned to tenant."
+
+msgid "flash.tenants.user_not_found"
+msgstr "No user found with that e-mail."
