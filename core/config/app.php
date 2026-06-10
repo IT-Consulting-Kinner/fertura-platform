@@ -173,6 +173,20 @@ return [
             'duration' => '+2 minutes',
             'url' => env('CACHE_APP_URL', null),
         ],
+
+        /*
+         * Health-Alert-Zustand (#12): persistenter letzter Health-Status für die
+         * Übergangs-Erkennung (up <-> degraded/down). Bewusst LANGLEBIG (+1 Jahr) —
+         * eine kurze TTL würde bei anhaltender Störung nach Ablauf auf den Default
+         * "up" zurückfallen und denselben Alarm fälschlich erneut auslösen.
+         */
+        '_app_health_' => [
+            'className' => FileEngine::class,
+            'prefix' => 'fertura_health_',
+            'serialize' => true,
+            'duration' => '+1 years',
+            'url' => env('CACHE_APP_URL', null),
+        ],
     ],
 
     /*

@@ -5,6 +5,7 @@ namespace App\Service\Observability;
 
 use App\Service\Http\EgressClient;
 use App\Service\Metrics\MetricsService;
+use Cake\Log\Log;
 use Throwable;
 use function Cake\Core\env;
 
@@ -53,7 +54,12 @@ class OtlpMetricsExporter
             $resp = $this->egress->postJson($endpoint, $this->payload($this->metrics->collect()));
 
             return $resp->isSuccess();
-        } catch (Throwable) {
+        } catch (Throwable $e) {
+            // Sichtbar machen statt still schlucken: ein interner Collector liegt
+            // typischerweise auf einer privaten IP und wird vom Egress-SSRF-Schutz
+            // blockiert, bis er in core.http.egress.allowlist steht (siehe SCALING.md).
+            Log::warning('[otlp-export] Export fehlgeschlagen (' . $endpoint . '): ' . $e->getMessage());
+
             return false;
         }
     }

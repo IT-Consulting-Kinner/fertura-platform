@@ -7,6 +7,7 @@ use App\Service\Cache\CacheStore;
 use App\Service\Health\HealthService;
 use App\Service\Http\EgressClient;
 use App\Service\Settings\SettingsManager;
+use Cake\Log\Log;
 use Throwable;
 
 /**
@@ -34,7 +35,9 @@ class HealthAlertService
         $this->health = $health ?? new HealthService();
         $this->egress = $egress ?? new EgressClient();
         $this->settings = $settings ?? new SettingsManager();
-        $this->cache = $cache ?? new CacheStore('_app_');
+        // Langlebiger Zustands-Cache (kein +1h-TTL): sonst löst eine >1h anhaltende
+        // Störung nach Ablauf des Schlüssels denselben Alarm fälschlich erneut aus.
+        $this->cache = $cache ?? new CacheStore('_app_health_');
     }
 
     /**
@@ -78,7 +81,12 @@ class HealthAlertService
             $resp = $this->egress->request('POST', $url, ['headers' => $headers, 'data' => $body]);
 
             return $resp->isSuccess();
-        } catch (Throwable) {
+        } catch (Throwable $e) {
+            // Sichtbar machen (kein stilles Schlucken): ein interner Alert-Empfänger
+            // auf privater IP wird vom Egress-SSRF-Schutz blockiert, bis er in
+            // core.http.egress.allowlist steht. Kein Body/Secret im Log.
+            Log::warning('[health-alert] Zustellung fehlgeschlagen (' . $url . '): ' . $e->getMessage());
+
             return false;
         }
     }

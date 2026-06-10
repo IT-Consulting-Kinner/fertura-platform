@@ -31,6 +31,30 @@ class TenantConnectionResolverTest extends TestCase
         $this->assertSame(ConnectionManager::get('default'), Tenancy::data());
     }
 
+    public function testIsolatedKeyWithUnderscoreRejectedFailClosed(): void
+    {
+        // Fail-closed gegen Env-Namens-Kollision ('-' und '_' bilden beide auf '_'
+        // ab): ein isolierter Key mit '_' muss abgewiesen werden, BEVOR er auf eine
+        // fremde TENANT_DB_*-Env (und damit fremde DB) gemappt werden könnte.
+        $this->expectException(RuntimeException::class);
+        (new TenantConnectionResolver())->isolatedConnection('acme_eu');
+    }
+
+    public function testIsolatedConnectionUsesCoreSchemaProfile(): void
+    {
+        putenv('TENANT_DB_ZZTESTISO3=' . (string)env('DATABASE_TEST_URL'));
+        try {
+            $resolved = (new TenantConnectionResolver())->isolatedConnection('zztestiso3');
+            $cfg = ConnectionManager::getConfig('tenant_zztestiso3');
+            $this->assertSame('core', $cfg['schema'] ?? null);
+            $this->assertContains('SET search_path TO core, public', (array)($cfg['init'] ?? []));
+            $resolved->execute('SELECT 1');
+        } finally {
+            ConnectionManager::drop('tenant_zztestiso3');
+            putenv('TENANT_DB_ZZTESTISO3');
+        }
+    }
+
     public function testIsolatedWithoutDsnFailsClosed(): void
     {
         $conn = ConnectionManager::get('default');

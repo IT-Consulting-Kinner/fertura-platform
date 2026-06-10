@@ -47,6 +47,14 @@ Betrieb beisteuert** (Infrastruktur/Policy) — die Grenze von Thema #10.
   (`BACKUP.md`).
 - **Observability-Backend & Alerting**: Prometheus/Grafana/Loki/Jaeger, Alert-Regeln,
   On-Call/Paging — der Core **emittiert** die Telemetrie, die Stacks **konsumieren**.
+  - **OTLP-Metrik-Export** (`OTEL_EXPORTER_OTLP_ENDPOINT`) und **Health-Alert-Webhook**
+    (`health.alert_url`) laufen über den gehärteten Egress mit **SSRF-Schutz**: private/
+    reservierte Ziel-IPs sind per Default **blockiert**. Interne Collector/Empfänger
+    (z. B. `http://otel-collector:4318`, `http://alertmanager.internal`) müssen daher
+    in `core.http.egress.allowlist` aufgenommen (oder `core.http.egress.allow_private`
+    gesetzt) werden — sonst schlägt der Versand fehl. Fehlversuche werden als
+    **Warning geloggt** (`[otlp-export]` / `[health-alert]`), laufen aber fehlerisoliert
+    (kein Worker-Abbruch).
 
 ## Empfohlene Topologie (Richtwert)
 

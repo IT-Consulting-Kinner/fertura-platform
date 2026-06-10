@@ -32,7 +32,15 @@ foreach ($xml->xpath('//file/metrics') ?: [] as $m) {
     $covered += (int)$m['coveredstatements'];
 }
 
-$pct = $statements > 0 ? $covered / $statements * 100 : 0.0;
+// Strukturell leerer/falscher Bericht (kein <file>/<metrics>) → harter Fehler,
+// NICHT 0 % berechnen: sonst könnte ein degenerierter Bericht das Gate bei einem
+// künftig auf 0 gesetzten Minimum still bestehen lassen (False-Green).
+if ($statements === 0) {
+    fwrite(STDERR, "coverage-check: Bericht enthält keine Statements (kein Clover-Coverage?): {$cloverPath}\n");
+    exit(2);
+}
+
+$pct = $covered / $statements * 100;
 printf("Zeilenabdeckung: %.2f%% (%d/%d), Minimum: %.2f%%\n", $pct, $covered, $statements, $min);
 
 // kleine Epsilon-Toleranz gegen Fließkomma-Jitter

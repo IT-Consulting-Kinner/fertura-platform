@@ -80,7 +80,14 @@ class OutboxWorker
         // `perTenant` begrenzt zusätzlich, wie viele Events EIN Mandant pro Batch
         // beisteuern darf. FOR UPDATE SKIP LOCKED bleibt erhalten (Multi-Worker), indem
         // die gerankten Kandidaten-IDs anschließend an der Basistabelle gesperrt werden.
+        //
+        // Wichtig (Multi-Worker-Durchsatz): die finale `LIMIT :limit` greift ERST NACH
+        // dem SKIP LOCKED. `picked` über-selektiert deshalb fair gerankte Kandidaten
+        // (`:overfetch`), und `due` sperrt daraus die ersten `:limit` NICHT gesperrten.
+        // Andernfalls (LIMIT vor dem Lock) griffen alle Worker auf dieselben Top-N
+        // Kandidaten zu, fänden sie gegenseitig gesperrt und holten fast leere Batches.
         $perTenant = $this->maxPerTenantPerBatch();
+        $overfetch = $limit * 10;
         $rows = $this->connection()->execute(
             <<<SQL
             WITH candidates AS (
@@ -93,16 +100,18 @@ class OutboxWorker
                 WHERE status = 'pending' AND available_at <= now()
             ),
             picked AS (
-                SELECT id, created_at FROM candidates
+                SELECT id, created_at, rn, available_at FROM candidates
                 WHERE rn <= :perTenant
                 ORDER BY rn, available_at
-                LIMIT :limit
+                LIMIT :overfetch
             ),
             due AS (
                 SELECT o.id, o.created_at FROM event_outbox o
                 JOIN picked p ON p.id = o.id AND p.created_at = o.created_at
                 WHERE o.status = 'pending' AND o.available_at <= now()
+                ORDER BY p.rn, p.available_at
                 FOR UPDATE SKIP LOCKED
+                LIMIT :limit
             )
             UPDATE event_outbox o
             SET status = 'processing', locked_at = now(), attempt_count = o.attempt_count + 1
@@ -110,7 +119,7 @@ class OutboxWorker
             WHERE o.id = due.id AND o.created_at = due.created_at
             RETURNING o.id, o.contract_name, o.payload, o.attempt_count, o.max_attempts, o.correlation_id, o.derived_done, o.tenant_id
             SQL,
-            ['limit' => $limit, 'perTenant' => $perTenant],
+            ['limit' => $limit, 'perTenant' => $perTenant, 'overfetch' => $overfetch],
         )->fetchAll('assoc');
 
         foreach ($rows as $event) {

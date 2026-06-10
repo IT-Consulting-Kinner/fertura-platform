@@ -50,7 +50,9 @@ class TenantDbProvisionCommand extends Command
             $conn->execute('SELECT 1'); // Konnektivität
             $io->success("Verbindung zu Mandanten-DB '$key' ok.");
 
-            (new Migrations(['connection' => 'tenant_' . $key]))->migrate();
+            // Denselben Verbindungsnamen verwenden, den der Resolver registriert hat
+            // (keine zweite, abweichende Ableitung des Namens).
+            (new Migrations(['connection' => $conn->configName()]))->migrate();
             $io->success("Migrationen auf Mandanten-DB '$key' ausgeführt.");
 
             return self::CODE_SUCCESS;

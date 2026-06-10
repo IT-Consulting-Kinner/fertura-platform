@@ -14,6 +14,15 @@ use function Cake\Core\env;
  *
  * Stream-Befehle laufen über `executeRaw`, um von predis-Versionssignaturen
  * unabhängig zu sein.
+ *
+ * Bekannte, bewusst offene Punkte (für den späteren produktiven Consumer-Loop):
+ * - **Stale Consumer:** der Consumer-Name ist `hostname:pid`; nach Neustart bleibt
+ *   der alte (leere) Consumer in der Gruppe. Verwaiste *Einträge* werden per
+ *   XAUTOCLAIM zurückgeholt (kein Verlust), aber leere Consumer häufen sich an —
+ *   ein periodisches `XGROUP DELCONSUMER` (0 Pending) wäre die Housekeeping-Lösung.
+ * - **release()-Latenz:** ein freigegebener (fehlgeschlagener) Job wird erst nach
+ *   `RECLAIM_IDLE_MS` per XAUTOCLAIM erneut zugestellt (kein sofortiges Requeue);
+ *   Absturz und explizites release() sind dadurch ununterscheidbar.
  */
 class RedisStreamTransport implements QueueTransportInterface
 {
@@ -44,13 +53,31 @@ class RedisStreamTransport implements QueueTransportInterface
         $max = max(1, $max);
 
         // 1) Verwaiste (idle) Einträge anderer/abgestürzter Consumer zurückholen.
+        //    XAUTOCLAIM liefert je Aufruf nur EINE Seite (COUNT) ab dem Cursor; bei
+        //    großem Pending-Backlog würden Einträge jenseits der ersten Seite sonst
+        //    erst über viele reserve()-Aufrufe (je vom Anfang) zurückgeholt. Daher
+        //    paginieren wir mit dem zurückgegebenen Cursor, bis $max gedeckt ist oder
+        //    der Cursor zu '0' zurückkehrt (Scan vollständig). Harte Schleifengrenze
+        //    als Sicherheitsnetz gegen unerwartete Cursor-Zyklen.
         $out = [];
-        $claim = $this->redis->executeRaw([
-            'XAUTOCLAIM', $key, self::GROUP, $this->consumer, (string)self::RECLAIM_IDLE_MS, '0', 'COUNT', (string)$max,
-        ]);
-        // Antwort: [nextCursor, [[id,[f,v,...]],...], [deleted]] (Redis 7).
-        if (is_array($claim) && isset($claim[1]) && is_array($claim[1])) {
-            $out = $this->parseEntries($claim[1]);
+        $cursor = '0';
+        for ($page = 0; $page < 100 && count($out) < $max; $page++) {
+            $need = $max - count($out);
+            $claim = $this->redis->executeRaw([
+                'XAUTOCLAIM', $key, self::GROUP, $this->consumer,
+                (string)self::RECLAIM_IDLE_MS, $cursor, 'COUNT', (string)$need,
+            ]);
+            // Antwort: [nextCursor, [[id,[f,v,...]],...], [deleted]] (Redis 7).
+            if (!is_array($claim)) {
+                break;
+            }
+            if (isset($claim[1]) && is_array($claim[1])) {
+                $out = array_merge($out, $this->parseEntries($claim[1]));
+            }
+            $cursor = isset($claim[0]) ? (string)$claim[0] : '0';
+            if ($cursor === '0') {
+                break; // Scan der Pending-Liste vollständig.
+            }
         }
 
         // 2) Neue Einträge lesen, falls noch Kapazität.

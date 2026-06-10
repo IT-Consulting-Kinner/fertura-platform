@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace App\Service\Tenant;
 
+use Cake\Database\Connection;
+use Cake\Database\Driver\Postgres;
 use Cake\Datasource\ConnectionInterface;
 use Cake\Datasource\ConnectionManager;
 use RuntimeException;
@@ -53,15 +55,42 @@ class TenantConnectionResolver
     /** Stellt die Connection eines DB-isolierten Mandanten sicher und liefert sie. */
     public function isolatedConnection(string $key): ConnectionInterface
     {
+        // Fail-closed gegen Env-Namens-Kollision: envKey() bildet '-' auf '_' ab,
+        // also kollidierten zwei Keys, die sich nur durch '-' vs. '_' unterscheiden
+        // (z. B. 'acme-eu' und 'acme_eu') auf dieselbe TENANT_DB_*-Env → zwei
+        // isolierte Mandanten landeten auf derselben DB (Cross-Tenant-Leak). Indem
+        // wir '_' in isolierten Keys verbieten, ist die Abbildung injektiv.
+        if (str_contains($key, '_')) {
+            throw new RuntimeException(
+                "DB-isolierter Mandanten-Key '$key' darf kein '_' enthalten "
+                . "(Kollision der TENANT_DB_*-Env mit '-' ausgeschlossen).",
+            );
+        }
         $name = 'tenant_' . $key;
         if (!in_array($name, ConnectionManager::configured(), true)) {
-            $dsn = (string)(env('TENANT_DB_' . $this->envKey($key)) ?: '');
+            $dsn = trim((string)(env('TENANT_DB_' . $this->envKey($key)) ?: ''));
             if ($dsn === '') {
                 throw new RuntimeException(
                     "Mandant '$key' ist DB-isoliert, aber die Env TENANT_DB_" . $this->envKey($key) . ' fehlt.',
                 );
             }
-            ConnectionManager::setConfig($name, ['url' => $dsn]);
+            // Gleiches Verbindungsprofil wie 'default' (DB_CONVENTIONS.md): Schema-
+            // Reflektion und search_path auf 'core' — sonst greifen unqualifizierte
+            // Abfragen/Migrationen auf der Mandanten-DB ins falsche (Default-)Schema.
+            ConnectionManager::setConfig($name, [
+                'className' => Connection::class,
+                'driver' => Postgres::class,
+                'persistent' => false,
+                'timezone' => 'UTC',
+                'encoding' => 'utf8',
+                'flags' => [],
+                'cacheMetadata' => true,
+                'quoteIdentifiers' => true,
+                'log' => false,
+                'schema' => 'core',
+                'init' => ['SET search_path TO core, public'],
+                'url' => $dsn,
+            ]);
         }
 
         return ConnectionManager::get($name);
