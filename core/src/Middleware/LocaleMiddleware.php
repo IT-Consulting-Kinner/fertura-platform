@@ -53,7 +53,15 @@ class LocaleMiddleware implements MiddlewareInterface
         if ($locale === null) {
             $identity = $request->getAttribute('identity');
             if ($identity !== null && method_exists($identity, 'getOriginalData')) {
-                $userLocale = $identity->getOriginalData()?->get('locale');
+                $data = $identity->getOriginalData();
+                // Daten können ein ORM-Entity (->get) oder ein ArrayObject/Array
+                // sein (z. B. Token-Identität) — beide robust behandeln.
+                $userLocale = null;
+                if (is_object($data) && method_exists($data, 'get')) {
+                    $userLocale = $data->get('locale');
+                } elseif (is_array($data) || $data instanceof \ArrayAccess) {
+                    $userLocale = $data['locale'] ?? null;
+                }
                 if (is_string($userLocale) && in_array($userLocale, $enabled, true)) {
                     $locale = $userLocale;
                 }
