@@ -1121,3 +1121,15 @@ msgid "admin.integrations.cli_hint"
 msgstr "Anlegen/Konfigurieren per CLI: webhook, sso, automation, workflow."
 msgid "flash.integrations.done"
 msgstr "Erledigt."
+
+msgid "uikit.yes"
+msgstr "Ja"
+
+msgid "uikit.no"
+msgstr "Nein"
+
+msgid "uikit.empty"
+msgstr "Keine Einträge."
+
+msgid "uikit.actions"
+msgstr "Aktionen"

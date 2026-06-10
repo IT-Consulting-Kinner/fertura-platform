@@ -38,5 +38,8 @@ class AppView extends View
      */
     public function initialize(): void
     {
+        // Modul-UI-Kit: deklarative CRUD-Bausteine (Liste/Detail/Formular) im
+        // einheitlichen Stil, für Modul- und Core-Templates verfügbar als $this->UiKit.
+        $this->addHelper('UiKit');
     }
 }
