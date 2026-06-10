@@ -24,10 +24,22 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 15
+      redis:
+        # Broker für den Job-Queue-Transport-Test (#10, Redis-Streams-Treiber).
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 15
 
     env:
       # Test-DB wird vom Migrator (tests/bootstrap.php) aus den Migrationen gebaut.
       DATABASE_TEST_URL: "postgres://fertura:fertura@127.0.0.1/fertura_test?encoding=utf8"
+      # Redis-Service des Runners (für den Job-Queue-Redis-Streams-Test).
+      QUEUE_REDIS_URL: "tcp://127.0.0.1:6379"
 
     steps:
       - uses: actions/checkout@v4

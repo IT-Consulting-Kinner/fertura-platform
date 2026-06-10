@@ -16,6 +16,7 @@
         "mobiledetect/mobiledetectlib": "^4.8.03",
         "onelogin/php-saml": "^4.1",
         "phpoffice/phpspreadsheet": "^3",
+        "predis/predis": "^3.5",
         "symfony/uid": "^7.0",
         "web-token/jwt-library": "^3.3"
     },

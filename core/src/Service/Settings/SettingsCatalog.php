@@ -107,6 +107,10 @@ class SettingsCatalog
             // Multi-Tenancy: angemeldeten Benutzer auf der Domain eines FREMDEN
             // Mandanten abweisen (Cross-Tenant-Host-Policy). Single-Org unberührt.
             'tenancy.enforce_host_match' => ['type' => 'bool', 'default' => true],
+            // Treiber des generischen Job-Queue-Transports (#10): `db` (Default,
+            // Postgres) oder `redis` (Redis Streams; QUEUE_REDIS_URL). Der Event-
+            // Outbox bleibt davon unberührt (immer DB).
+            'queue.transport' => ['type' => 'string', 'default' => 'db'],
             // Pro-Mandant-Obergrenze an Outbox-Events je Worker-Batch (Fairness/Quota
             // im Multi-Tenant-Pool; Default praktisch unbegrenzt — Fairness kommt schon
             // aus dem Round-Robin-Claiming). Pro Mandant via Settings-Overlay setzbar.
