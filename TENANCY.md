@@ -58,15 +58,28 @@ Fail-closed-Garantie.
   (mandantenspezifische Login-/SSO-Oberfläche).
 - ✅ **RPC-Propagation** des Mandanten an isolierte Modul-Hosts — `RemoteInvoker`
   reicht `tenant_id` mit, `bin/module-host.php` setzt `app.current_tenant_id` je Aufruf.
-- ✅ **Mandanten-Verwaltungs-GUI** (`/admin/tenants`): anlegen, sortier-/paginierbare
-  Liste, **Aktivieren/Suspendieren** (Sammelaktion), **Benutzer-↔-Mandant-Zuweisung**.
+- ✅ **Mandanten-Verwaltungs-GUI** (`/admin/tenants`): anlegen (inkl. Branding),
+  sortier-/paginierbare Liste, **Aktivieren/Suspendieren** (Sammelaktion),
+  **Benutzer-↔-Mandant-Zuweisung**.
+- ✅ **Such-/Embedding-Index mandantenscharf** — `search_index`/`embeddings` haben
+  `tenant_id` (Default-Mandant für Bestand), pro-Mandant-Eindeutigkeit, und die
+  Service-Abfragen filtern mandantenscharf (anwendungsseitig, konsistent zur
+  bestehenden Owner-Sichtbarkeit). Schließt das Leck öffentlicher Dokumente.
+- ✅ **Mandant am Event** — `event_outbox.tenant_id` (vom `OutboxPublisher` aus dem
+  Kontext gesetzt); der Worker setzt ihn beim Verarbeiten, sodass abgeleitete
+  Aktionen/Listener im richtigen Mandanten arbeiten.
+- ✅ **Cross-Tenant-Host-Policy** — ein angemeldeter Benutzer auf der Domain eines
+  fremden Mandanten wird mit `403` abgewiesen (`tenancy.enforce_host_match`, Default an).
+- ✅ **Mandantenspezifisches Branding** — `tenants.brand_name`/`logo_url`, angezeigt
+  auf der (host-aufgelösten) Login-Seite.
 
 **Verbleibende Schritte zum SaaS-Vollausbau:**
-1. **Worker-/Event-Propagation** des Mandanten (Outbox-Listener laufen heute
-   system-/bypass-seitig; pro-Event-Mandant müsste am Event mitgeführt werden).
-2. **Mandanten-Scoping** der gewünschten Core-Tabellen (heute owner-scoped,
-   Single-Org) bzw. konsequente Adoption des Musters in den Modulen — inklusive
-   öffentlicher (owner=NULL) Such-/Embedding-Dokumente, die sonst mandanten­übergreifend
-   sichtbar wären.
-3. **Mandantenspezifische Settings/Branding** und Cross-Tenant-Host-Policy
-   (Verhalten, wenn ein Benutzer den Host eines fremden Mandanten aufruft).
+1. **Tenant-Scoping in den Modulen** — Modul-Datentabellen adoptieren das
+   dokumentierte Muster (oben); der Core-Index ist bereits gescoped.
+2. **Pro-Mandant-Settings** über das Branding hinaus (z. B. Limits, Feature-Flags je
+   Mandant) und Self-Service-Mandantenanlage/-Lifecycle (Abrechnung etc.).
+
+*Hinweis zur Konsistenz:* Die Such-/Embedding-Tabellen werden **anwendungsseitig**
+mandantengefiltert (wie ihre bestehende Owner-Sichtbarkeit), nicht per RLS — ihre
+Schreiblast und die CLI-/Worker-Kontexte machen RLS hier teurer als den Nutzen.
+Mandanten-eigene Modultabellen nutzen weiterhin das RLS-Muster (`core.current_tenant()`).

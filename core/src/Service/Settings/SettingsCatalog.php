@@ -104,6 +104,9 @@ class SettingsCatalog
             'api.rate_limit.per_minute' => ['type' => 'int', 'default' => 120, 'min' => 1, 'max' => 100000],
             // Max. gleichzeitige SSE-Streams je Benutzer (P08; gegen FPM-/DB-Erschöpfung).
             'sse.max_streams_per_user' => ['type' => 'int', 'default' => 3, 'min' => 1, 'max' => 100],
+            // Multi-Tenancy: angemeldeten Benutzer auf der Domain eines FREMDEN
+            // Mandanten abweisen (Cross-Tenant-Host-Policy). Single-Org unberührt.
+            'tenancy.enforce_host_match' => ['type' => 'bool', 'default' => true],
             // AI/LLM-Gateway (P11): Provider openai|anthropic|xai|google. Schlüssel
             // out-of-band über *_API_KEY-Env. Leer = AI deaktiviert.
             'ai.chat.provider' => ['type' => 'string', 'default' => null],

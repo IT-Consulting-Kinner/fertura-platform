@@ -65,6 +65,8 @@
 <?= $this->UiKit->fields([
     ['key' => 'key', 'label' => __('admin.tenants.col_key'), 'required' => true, 'help' => __('admin.tenants.key_help')],
     ['key' => 'name', 'label' => __('admin.tenants.col_name'), 'required' => true],
+    ['key' => 'brand_name', 'label' => __('admin.tenants.brand_name'), 'help' => __('admin.tenants.brand_help')],
+    ['key' => 'logo_url', 'label' => __('admin.tenants.logo_url')],
 ]) ?>
 <?= $this->Form->button(__('admin.tenants.btn_add'), ['class' => 'btn btn-primary']) ?>
 <?= $this->Form->end() ?>

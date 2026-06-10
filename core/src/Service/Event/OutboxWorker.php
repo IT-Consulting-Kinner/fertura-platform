@@ -83,7 +83,7 @@ class OutboxWorker
             SET status = 'processing', locked_at = now(), attempt_count = o.attempt_count + 1
             FROM due
             WHERE o.id = due.id AND o.created_at = due.created_at
-            RETURNING o.id, o.contract_name, o.payload, o.attempt_count, o.max_attempts, o.correlation_id, o.derived_done
+            RETURNING o.id, o.contract_name, o.payload, o.attempt_count, o.max_attempts, o.correlation_id, o.derived_done, o.tenant_id
             SQL,
             ['limit' => $limit],
         )->fetchAll('assoc');
@@ -99,6 +99,27 @@ class OutboxWorker
      * @param array<string, mixed> $event
      */
     private function dispatch(array $event): void
+    {
+        // Mandantenkontext des Events setzen, damit abgeleitete Aktionen und
+        // Listener im richtigen Mandanten arbeiten (z. B. korrekter Such-/Embedding-
+        // Index). Session-weit, da Verarbeitung sequenziell ist; im finally wieder
+        // geleert, damit kein Mandant ins nächste Event leckt.
+        $tenantId = $event['tenant_id'] !== null ? (string)$event['tenant_id'] : '';
+        $this->connection()->execute(
+            "SELECT set_config('app.current_tenant_id', :t, false)",
+            ['t' => $tenantId],
+        );
+        try {
+            $this->dispatchInner($event);
+        } finally {
+            $this->connection()->execute("SELECT set_config('app.current_tenant_id', '', false)");
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $event
+     */
+    private function dispatchInner(array $event): void
     {
         $payload = json_decode((string)$event['payload'], true) ?: [];
         $context = [

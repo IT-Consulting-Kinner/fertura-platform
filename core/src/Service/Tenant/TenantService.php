@@ -93,7 +93,7 @@ class TenantService
      *
      * @return array{id:string,key:string,name:string,active:bool}
      */
-    public function create(string $key, string $name): array
+    public function create(string $key, string $name, ?string $brandName = null, ?string $logoUrl = null): array
     {
         $key = strtolower(trim($key));
         $name = trim($name);
@@ -103,13 +103,42 @@ class TenantService
         if ($name === '') {
             throw new InvalidArgumentException('Mandantenname darf nicht leer sein.');
         }
+        $brandName = $brandName !== null && trim($brandName) !== '' ? trim($brandName) : null;
+        $logoUrl = $logoUrl !== null && trim($logoUrl) !== '' ? trim($logoUrl) : null;
         $id = (string)$this->conn()->execute(
-            'INSERT INTO tenants (key, name) VALUES (:k, :n) RETURNING id',
-            ['k' => $key, 'n' => $name],
+            'INSERT INTO tenants (key, name, brand_name, logo_url) VALUES (:k, :n, :b, :l) RETURNING id',
+            ['k' => $key, 'n' => $name, 'b' => $brandName, 'l' => $logoUrl],
         )->fetch('assoc')['id'];
         $this->audit()->log('tenant.create', 'tenant', $id, ['key' => $key, 'name' => $name]);
 
         return ['id' => $id, 'key' => $key, 'name' => $name, 'active' => true];
+    }
+
+    /**
+     * Branding des **aktuellen** Mandanten (aus dem RLS-Kontext, z. B. pre-auth aus
+     * dem Host aufgelöst) — für die Login-/SSO-Oberfläche. Null = kein/Default.
+     *
+     * @return array{name:string, brand_name:?string, logo_url:?string}|null
+     */
+    public function currentBranding(): ?array
+    {
+        try {
+            $row = $this->conn()->execute(
+                'SELECT name, brand_name, logo_url FROM tenants '
+                . "WHERE id = nullif(current_setting('app.current_tenant_id', true), '')::uuid AND active",
+            )->fetch('assoc');
+            if ($row === false) {
+                return null;
+            }
+
+            return [
+                'name' => (string)$row['name'],
+                'brand_name' => $row['brand_name'] !== null ? (string)$row['brand_name'] : null,
+                'logo_url' => $row['logo_url'] !== null ? (string)$row['logo_url'] : null,
+            ];
+        } catch (Throwable) {
+            return null;
+        }
     }
 
     /** Aktiviert/deaktiviert (suspendiert) einen Mandanten. Der Default-Mandant

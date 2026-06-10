@@ -6,6 +6,7 @@ namespace App\Service\Search;
 use App\Service\Ai\EmbeddingService;
 use App\Service\Module\ContributionRuntime;
 use App\Service\Settings\SettingsManager;
+use App\Service\Tenant\TenantService;
 use Cake\Datasource\ConnectionInterface;
 use Cake\Datasource\ConnectionManager;
 use Throwable;
@@ -31,6 +32,21 @@ class SearchService
         return $this->embeddings ??= new EmbeddingService();
     }
 
+    /** Aktueller Mandant aus dem RLS-Kontext (Fallback Default-Mandant). */
+    private function tenantId(): string
+    {
+        try {
+            $row = $this->conn()->execute(
+                "SELECT coalesce(nullif(current_setting('app.current_tenant_id', true), ''), :d) AS t",
+                ['d' => TenantService::DEFAULT_TENANT_ID],
+            )->fetch('assoc');
+
+            return (string)($row['t'] ?? TenantService::DEFAULT_TENANT_ID);
+        } catch (\Throwable) {
+            return TenantService::DEFAULT_TENANT_ID;
+        }
+    }
+
     private function conn(): ConnectionInterface
     {
         return ConnectionManager::get('default');
@@ -50,13 +66,14 @@ class SearchService
         ?string $url = null,
         ?bool $embed = null,
     ): void {
+        $tenantId = $this->tenantId();
         $this->conn()->execute(
-            'INSERT INTO search_index (source, entity_type, entity_id, title, body, owner_id, url) '
-            . 'VALUES (:s, :et, :ei, :ti, :b, :o, :u) '
-            . 'ON CONFLICT (source, entity_type, entity_id) DO UPDATE SET '
+            'INSERT INTO search_index (tenant_id, source, entity_type, entity_id, title, body, owner_id, url) '
+            . 'VALUES (:tid, :s, :et, :ei, :ti, :b, :o, :u) '
+            . 'ON CONFLICT (tenant_id, source, entity_type, entity_id) DO UPDATE SET '
             . 'title = EXCLUDED.title, body = EXCLUDED.body, owner_id = EXCLUDED.owner_id, '
             . 'url = EXCLUDED.url, updated_at = now()',
-            ['s' => $source, 'et' => $entityType, 'ei' => $entityId, 'ti' => $title, 'b' => $body, 'o' => $ownerId, 'u' => $url],
+            ['tid' => $tenantId, 's' => $source, 'et' => $entityType, 'ei' => $entityId, 'ti' => $title, 'b' => $body, 'o' => $ownerId, 'u' => $url],
         );
 
         // Optional dasselbe Dokument für die Hybrid-Suche einbetten (best-effort:
@@ -65,7 +82,7 @@ class SearchService
         if ($this->shouldEmbed($embed)) {
             try {
                 $content = trim($title . "\n" . $body);
-                $this->embeddings()->index($source, $entityType, $entityId, $content, $ownerId);
+                $this->embeddings()->index($source, $entityType, $entityId, $content, $ownerId, $tenantId);
             } catch (Throwable) {
             }
         }
@@ -74,8 +91,8 @@ class SearchService
     public function remove(string $source, string $entityType, string $entityId): void
     {
         $this->conn()->execute(
-            'DELETE FROM search_index WHERE source = :s AND entity_type = :et AND entity_id = :ei',
-            ['s' => $source, 'et' => $entityType, 'ei' => $entityId],
+            'DELETE FROM search_index WHERE tenant_id = :tid AND source = :s AND entity_type = :et AND entity_id = :ei',
+            ['tid' => $this->tenantId(), 's' => $source, 'et' => $entityType, 'ei' => $entityId],
         );
         // Embedding synchron mit entfernen (best-effort), damit beide Indizes
         // konsistent bleiben.
@@ -87,7 +104,10 @@ class SearchService
 
     public function removeSource(string $source): void
     {
-        $this->conn()->execute('DELETE FROM search_index WHERE source = :s', ['s' => $source]);
+        $this->conn()->execute(
+            'DELETE FROM search_index WHERE tenant_id = :tid AND source = :s',
+            ['tid' => $this->tenantId(), 's' => $source],
+        );
         try {
             $this->embeddings()->removeSource($source);
         } catch (Throwable) {
@@ -129,8 +149,10 @@ class SearchService
         if ($q === '') {
             return [];
         }
+        // Mandantenscharf (schließt das mandantenübergreifende Leck öffentlicher
+        // Dokumente) + Owner-Sichtbarkeit (eigene + öffentliche INNERHALB des Mandanten).
         $scope = $userId === null ? '' : ' AND (owner_id IS NULL OR owner_id = :uid)';
-        $params = ['q' => $q, 'l' => $limit];
+        $params = ['q' => $q, 'l' => $limit, 'tid' => $this->tenantId()];
         if ($userId !== null) {
             $params['uid'] = $userId;
         }
@@ -139,7 +161,7 @@ class SearchService
             "SELECT source, entity_type, entity_id, title, url, "
             . "ts_rank(tsv, websearch_to_tsquery('simple', :q)) AS rank "
             . "FROM search_index "
-            . "WHERE tsv @@ websearch_to_tsquery('simple', :q)" . $scope . ' '
+            . "WHERE tenant_id = :tid AND tsv @@ websearch_to_tsquery('simple', :q)" . $scope . ' '
             . 'ORDER BY rank DESC, updated_at DESC LIMIT :l',
             $params,
         )->fetchAll('assoc');
@@ -244,10 +266,11 @@ class SearchService
             return 0;
         }
         $rows = $this->conn()->execute(
-            'SELECT s.source, s.entity_type, s.entity_id, s.title, s.body, s.owner_id '
+            'SELECT s.tenant_id, s.source, s.entity_type, s.entity_id, s.title, s.body, s.owner_id '
             . 'FROM search_index s '
             . 'LEFT JOIN embeddings e '
-            . '  ON e.source = s.source AND e.entity_type = s.entity_type AND e.entity_id = s.entity_id '
+            . '  ON e.tenant_id = s.tenant_id AND e.source = s.source '
+            . '  AND e.entity_type = s.entity_type AND e.entity_id = s.entity_id '
             . 'WHERE e.entity_id IS NULL '
             . 'ORDER BY s.updated_at DESC LIMIT :l',
             ['l' => max(1, $limit)],
@@ -263,6 +286,7 @@ class SearchService
                     (string)$r['entity_id'],
                     $content,
                     $r['owner_id'] !== null ? (string)$r['owner_id'] : null,
+                    (string)$r['tenant_id'], // Mandant der Quellzeile übernehmen
                 );
                 $done++;
             } catch (Throwable) {

@@ -5,6 +5,7 @@ namespace App\Test\TestCase\Service\Search;
 
 use App\Service\Ai\EmbeddingService;
 use App\Service\Search\SearchService;
+use App\Service\Tenant\TenantService;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\TestCase;
 
@@ -137,7 +138,7 @@ class SearchServiceTest extends TestCase
                 return true;
             }
 
-            public function index(string $source, string $entityType, string $entityId, string $content, ?string $ownerId = null): void
+            public function index(string $source, string $entityType, string $entityId, string $content, ?string $ownerId = null, ?string $tenantId = null): void
             {
                 $this->indexed[] = [$source, $entityType, $entityId];
             }
@@ -177,7 +178,7 @@ class SearchServiceTest extends TestCase
                 return true;
             }
 
-            public function index(string $source, string $entityType, string $entityId, string $content, ?string $ownerId = null): void
+            public function index(string $source, string $entityType, string $entityId, string $content, ?string $ownerId = null, ?string $tenantId = null): void
             {
                 $this->indexed[] = $entityId;
             }
@@ -191,6 +192,36 @@ class SearchServiceTest extends TestCase
         $this->assertGreaterThanOrEqual(2, $n);
         $this->assertContains('b1', $emb->indexed);
         $this->assertContains('b2', $emb->indexed);
+    }
+
+    public function testTenantScopingIsolatesSearch(): void
+    {
+        $conn = ConnectionManager::get('default');
+        $default = TenantService::DEFAULT_TENANT_ID;
+        $s = new SearchService();
+        $conn->begin();
+        try {
+            $tenantB = (new TenantService())->create('zztest-s2', 'S2')['id'];
+
+            $conn->execute("SELECT set_config('app.current_tenant_id', :t, true)", ['t' => $default]);
+            $s->index('zztest', 'doc', 't1', 'Mandantenwortzwei Alpha');
+
+            $conn->execute("SELECT set_config('app.current_tenant_id', :t, true)", ['t' => $tenantB]);
+            $s->index('zztest', 'doc', 't2', 'Mandantenwortzwei Beta');
+
+            // Mandant B sieht nur den eigenen Treffer.
+            $idsB = array_column($s->search('Mandantenwortzwei'), 'entity_id');
+            $this->assertContains('t2', $idsB);
+            $this->assertNotContains('t1', $idsB, 'Mandant B sieht den Default-Mandant NICHT (kein Leck)');
+
+            // Default-Mandant sieht nur den eigenen Treffer.
+            $conn->execute("SELECT set_config('app.current_tenant_id', :t, true)", ['t' => $default]);
+            $idsD = array_column($s->search('Mandantenwortzwei'), 'entity_id');
+            $this->assertContains('t1', $idsD);
+            $this->assertNotContains('t2', $idsD);
+        } finally {
+            $conn->rollback(); // setzt set_config (tx-lokal) zurück und verwirft die Test-Indexe
+        }
     }
 
     public function testUpdateAndRemove(): void

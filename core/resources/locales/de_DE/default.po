@@ -1220,3 +1220,12 @@ msgstr "Benutzer dem Mandanten zugeordnet."
 
 msgid "flash.tenants.user_not_found"
 msgstr "Kein Benutzer mit dieser E-Mail gefunden."
+
+msgid "admin.tenants.brand_name"
+msgstr "Markenname (optional)"
+
+msgid "admin.tenants.brand_help"
+msgstr "Wird auf der mandantenspezifischen Login-Seite angezeigt."
+
+msgid "admin.tenants.logo_url"
+msgstr "Logo-URL (optional)"

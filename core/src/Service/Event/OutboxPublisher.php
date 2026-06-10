@@ -27,8 +27,11 @@ class OutboxPublisher
         $connection = ConnectionManager::get('default');
 
         $row = $connection->execute(
-            'INSERT INTO event_outbox (contract_name, payload, correlation_id, max_attempts) '
-            . 'VALUES (:contract, CAST(:payload AS jsonb), :corr, :max) '
+            'INSERT INTO event_outbox (contract_name, payload, correlation_id, max_attempts, tenant_id) '
+            // Mandant des publizierenden Kontextes festhalten (NULL = systemweit),
+            // damit der Worker das Event später im richtigen Mandanten verarbeitet.
+            . "VALUES (:contract, CAST(:payload AS jsonb), :corr, :max, "
+            . "nullif(current_setting('app.current_tenant_id', true), '')::uuid) "
             . 'RETURNING id',
             [
                 'contract' => $contractName,

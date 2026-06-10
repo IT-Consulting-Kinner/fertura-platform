@@ -74,6 +74,23 @@ class TenantServiceTest extends TestCase
         $svc->assignUser($userId, '00000000-0000-0000-0000-0000000000ff');
     }
 
+    public function testBrandingForCurrentTenant(): void
+    {
+        $conn = ConnectionManager::get('default');
+        $conn->begin();
+        try {
+            $t = (new TenantService())->create('zztest-brand', 'Brand Co', 'Brand Co AG', 'https://x/logo.png');
+            $conn->execute("SELECT set_config('app.current_tenant_id', :t, true)", ['t' => $t['id']]);
+
+            $b = (new TenantService())->currentBranding();
+            $this->assertNotNull($b);
+            $this->assertSame('Brand Co AG', $b['brand_name']);
+            $this->assertSame('https://x/logo.png', $b['logo_url']);
+        } finally {
+            $conn->rollback();
+        }
+    }
+
     public function testTenantResolverByDomainAndSubdomain(): void
     {
         $svc = new TenantService();

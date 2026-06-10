@@ -36,6 +36,12 @@ class AuthController extends AppController
         } catch (\Throwable) {
             $this->set('ssoProviders', []);
         }
+        // Mandantenspezifisches Branding (aus dem pre-auth host-aufgelösten Mandanten).
+        try {
+            $this->set('tenantBranding', (new \App\Service\Tenant\TenantService())->currentBranding());
+        } catch (\Throwable) {
+            $this->set('tenantBranding', null);
+        }
 
         $result = $this->Authentication->getResult();
         $throttle = new LoginThrottle();

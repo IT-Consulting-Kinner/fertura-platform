@@ -81,6 +81,8 @@ class TenantsController extends AdminController
             (new TenantService())->create(
                 (string)$this->request->getData('key'),
                 (string)$this->request->getData('name'),
+                $this->request->getData('brand_name') !== null ? (string)$this->request->getData('brand_name') : null,
+                $this->request->getData('logo_url') !== null ? (string)$this->request->getData('logo_url') : null,
             );
             $this->Flash->success(__('flash.tenants.created'));
         } catch (Throwable $e) {

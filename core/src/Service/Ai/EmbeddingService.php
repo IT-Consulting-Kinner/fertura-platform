@@ -34,29 +34,47 @@ class EmbeddingService
         }
     }
 
-    public function index(string $source, string $entityType, string $entityId, string $content, ?string $ownerId = null): void
+    public function index(string $source, string $entityType, string $entityId, string $content, ?string $ownerId = null, ?string $tenantId = null): void
     {
         $vector = $this->literal($this->ai->embed($content));
         $this->conn()->execute(
-            'INSERT INTO embeddings (source, entity_type, entity_id, owner_id, content, embedding) '
-            . 'VALUES (:s, :et, :ei, :o, :c, :v::vector) '
-            . 'ON CONFLICT (source, entity_type, entity_id) DO UPDATE SET '
+            'INSERT INTO embeddings (tenant_id, source, entity_type, entity_id, owner_id, content, embedding) '
+            . 'VALUES (:tid, :s, :et, :ei, :o, :c, :v::vector) '
+            . 'ON CONFLICT (tenant_id, source, entity_type, entity_id) DO UPDATE SET '
             . 'owner_id = EXCLUDED.owner_id, content = EXCLUDED.content, embedding = EXCLUDED.embedding',
-            ['s' => $source, 'et' => $entityType, 'ei' => $entityId, 'o' => $ownerId, 'c' => $content, 'v' => $vector],
+            ['tid' => $tenantId ?? $this->tenantId(), 's' => $source, 'et' => $entityType, 'ei' => $entityId, 'o' => $ownerId, 'c' => $content, 'v' => $vector],
         );
     }
 
     public function remove(string $source, string $entityType, string $entityId): void
     {
         $this->conn()->execute(
-            'DELETE FROM embeddings WHERE source = :s AND entity_type = :et AND entity_id = :ei',
-            ['s' => $source, 'et' => $entityType, 'ei' => $entityId],
+            'DELETE FROM embeddings WHERE tenant_id = :tid AND source = :s AND entity_type = :et AND entity_id = :ei',
+            ['tid' => $this->tenantId(), 's' => $source, 'et' => $entityType, 'ei' => $entityId],
         );
     }
 
     public function removeSource(string $source): void
     {
-        $this->conn()->execute('DELETE FROM embeddings WHERE source = :s', ['s' => $source]);
+        $this->conn()->execute(
+            'DELETE FROM embeddings WHERE tenant_id = :tid AND source = :s',
+            ['tid' => $this->tenantId(), 's' => $source],
+        );
+    }
+
+    /** Aktueller Mandant aus dem RLS-Kontext (Fallback Default-Mandant). */
+    private function tenantId(): string
+    {
+        try {
+            $row = $this->conn()->execute(
+                "SELECT coalesce(nullif(current_setting('app.current_tenant_id', true), ''), :d) AS t",
+                ['d' => \App\Service\Tenant\TenantService::DEFAULT_TENANT_ID],
+            )->fetch('assoc');
+
+            return (string)($row['t'] ?? \App\Service\Tenant\TenantService::DEFAULT_TENANT_ID);
+        } catch (\Throwable) {
+            return \App\Service\Tenant\TenantService::DEFAULT_TENANT_ID;
+        }
     }
 
     /**
@@ -68,8 +86,9 @@ class EmbeddingService
     public function semantic(string $query, ?string $userId = null, int $limit = 10): array
     {
         $vector = $this->literal($this->ai->embed($query));
+        // Mandantenscharf + Owner-Sichtbarkeit (eigene + öffentliche im Mandanten).
         $scope = $userId === null ? '' : ' AND (owner_id IS NULL OR owner_id = :uid)';
-        $params = ['v' => $vector, 'l' => $limit];
+        $params = ['v' => $vector, 'l' => $limit, 'tid' => $this->tenantId()];
         if ($userId !== null) {
             $params['uid'] = $userId;
         }
@@ -77,7 +96,7 @@ class EmbeddingService
         $rows = $this->conn()->execute(
             'SELECT source, entity_type, entity_id, content, '
             . '(1 - (embedding <=> :v::vector)) AS score '
-            . 'FROM embeddings WHERE true' . $scope . ' '
+            . 'FROM embeddings WHERE tenant_id = :tid' . $scope . ' '
             . 'ORDER BY embedding <=> :v::vector LIMIT :l',
             $params,
         )->fetchAll('assoc');

@@ -5,9 +5,11 @@ namespace App\Middleware;
 
 use App\Service\Permission\PermissionService;
 use App\Service\Permission\RlsContext;
+use App\Service\Settings\SettingsManager;
 use App\Service\Tenant\TenantResolver;
 use App\Service\Tenant\TenantService;
 use Cake\Datasource\ConnectionManager;
+use Cake\Http\Exception\ForbiddenException;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\MiddlewareInterface;
@@ -34,9 +36,19 @@ class TransactionRlsMiddleware implements MiddlewareInterface
             // Default-Mandant). Pre-Auth (kein Benutzer): aus dem Request-Host
             // auflösen (mandantenspezifische Login-/SSO-Oberfläche), sonst null →
             // mandanten-bezogene Daten unsichtbar (fail-closed).
-            $tenantId = $userId !== null
-                ? (new TenantService())->tenantIdForUser($userId)
-                : (new TenantResolver())->resolve($request->getUri()->getHost());
+            $hostTenant = (new TenantResolver())->resolve($request->getUri()->getHost());
+            if ($userId !== null) {
+                $tenantId = (new TenantService())->tenantIdForUser($userId);
+                // Cross-Tenant-Host-Policy: ein angemeldeter Benutzer auf der Domain
+                // eines FREMDEN Mandanten wird abgewiesen (sofern aktiviert und der
+                // Host überhaupt einem Mandanten zugeordnet ist). Single-Org/Default-
+                // Host lösen auf null auf -> kein Konflikt.
+                if ($hostTenant !== null && $hostTenant !== $tenantId && $this->enforceHostMatch()) {
+                    throw new ForbiddenException('Zugriff auf einen fremden Mandanten-Host.');
+                }
+            } else {
+                $tenantId = $hostTenant;
+            }
             (new RlsContext())->applyLocal($connection, $userId, $groupIds, false, $tenantId);
 
             $response = $handler->handle($request);
@@ -47,6 +59,15 @@ class TransactionRlsMiddleware implements MiddlewareInterface
             $connection->rollback();
 
             throw $e;
+        }
+    }
+
+    private function enforceHostMatch(): bool
+    {
+        try {
+            return (bool)(new SettingsManager())->get('core', 'tenancy.enforce_host_match', true);
+        } catch (Throwable) {
+            return true;
         }
     }
 }
