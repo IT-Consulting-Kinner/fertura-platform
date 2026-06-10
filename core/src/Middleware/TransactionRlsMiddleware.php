@@ -5,6 +5,7 @@ namespace App\Middleware;
 
 use App\Service\Permission\PermissionService;
 use App\Service\Permission\RlsContext;
+use App\Service\Tenant\TenantService;
 use Cake\Datasource\ConnectionManager;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -28,7 +29,11 @@ class TransactionRlsMiddleware implements MiddlewareInterface
             $identity = $request->getAttribute('identity');
             $userId = $identity !== null ? (string)$identity->getIdentifier() : null;
             $groupIds = $userId !== null ? (new PermissionService())->activeGroupIds($userId) : [];
-            (new RlsContext())->applyLocal($connection, $userId, $groupIds, false);
+            // Mandantenkontext aus dem angemeldeten Benutzer ableiten (Single-Org:
+            // Default-Mandant). Pre-Auth (kein Benutzer) -> kein Mandant -> mandanten-
+            // bezogene Daten sind unsichtbar (fail-closed).
+            $tenantId = $userId !== null ? (new TenantService())->tenantIdForUser($userId) : null;
+            (new RlsContext())->applyLocal($connection, $userId, $groupIds, false, $tenantId);
 
             $response = $handler->handle($request);
             $connection->commit();

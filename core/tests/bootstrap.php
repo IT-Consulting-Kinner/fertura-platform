@@ -64,6 +64,20 @@ ConnectionHelper::addTestAliases();
 // manuelles `DROP DATABASE` erfordert.
 (new Migrator())->run(['skip' => ['audit_log_default', 'event_outbox_default']]);
 
+// Der Migrator truncatet nach dem Schema-Aufbau alle Tabellen — der per Migration
+// geseedete **Default-Mandant** (System-Invariante; in Prod vorhanden) fällt dabei
+// weg. Ohne ihn schlägt jeder `users`-INSERT an der `tenant_id`-FK fehl. Hier
+// idempotent wiederherstellen, damit die Testumgebung dem Produktionszustand
+// entspricht (vgl. Migration CoreTenancy).
+try {
+    \Cake\Datasource\ConnectionManager::get('default')->execute(
+        "INSERT INTO tenants (id, key, name) "
+        . "VALUES ('00000000-0000-0000-0000-000000000001', 'default', 'Default') "
+        . 'ON CONFLICT (id) DO NOTHING',
+    );
+} catch (\Throwable) {
+}
+
 // Settings-/App-Cache (P02) vor dem Lauf leeren: der Migrator truncatet die
 // Seed-Daten, ein evtl. persistenter Datei-Cache aus einem früheren Lauf wäre
 // sonst stale. Innerhalb eines Laufs invalidiert SettingsManager::set() gezielt.
