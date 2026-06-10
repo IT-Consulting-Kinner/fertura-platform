@@ -31,4 +31,13 @@ class ApiRouteRegistryTest extends TestCase
         $this->assertNull(ApiRouteRegistry::matchPath('/things/{id}', '/things/1/extra'));
         $this->assertNull(ApiRouteRegistry::matchPath('/a/{x}', '/b/1'));
     }
+
+    public function testDuplicatePlaceholderNameIsRejectedCleanly(): void
+    {
+        // Doppelter Platzhaltername -> ungültiges PCRE; muss sauber als
+        // Nichttreffer (null) behandelt werden, ohne Fatal/Warnung pro Request.
+        $this->assertNull(ApiRouteRegistry::matchPath('/a/{id}/b/{id}', '/a/1/b/2'));
+        // Eindeutige Namen funktionieren weiterhin.
+        $this->assertSame(['id' => '1', 'sub' => '2'], ApiRouteRegistry::matchPath('/a/{id}/b/{sub}', '/a/1/b/2'));
+    }
 }

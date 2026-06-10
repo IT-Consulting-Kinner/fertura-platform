@@ -149,6 +149,12 @@ class Application extends BaseApplication implements AuthenticationServiceProvid
                 return str_starts_with($path, '/api/') || $path === '/sso/saml/acs';
             }))
 
+            // Per-IP-Anmeldeschutz VOR der Authentifizierung (P-Review #2): eine
+            // IP mit zu vielen Fehlversuchen (Password-Spraying) wird mit 429
+            // abgewiesen, bevor ein Passwort gehasht wird. Nach BodyParser/CSRF,
+            // vor der AuthenticationMiddleware.
+            ->add(new \App\Middleware\LoginThrottleMiddleware())
+
             // Authentifizierung: stellt die Identitaet pro Request bereit.
             // Erzwingt selbst keinen Login; Controller/Adminbereich entscheiden.
             ->add(new AuthenticationMiddleware($this))

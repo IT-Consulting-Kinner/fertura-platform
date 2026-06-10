@@ -83,13 +83,10 @@ class EgressClient
         // (kein TOCTOU zwischen Prüfung und Request). Greift mit dem Curl-Adapter.
         $pin = $this->pinTarget($url);
         if ($pin !== null) {
+            // Auf die geprüften IPs (beide Familien) pinnen — curl verbindet nur
+            // auf eine davon und löst nicht selbst auf (kein Dual-Stack-/Rebinding-
+            // Ausweichen über eine ungeprüfte Adresse).
             $opts['curl'][CURLOPT_RESOLVE] = [$pin];
-            // Nur auf die gepinnte (IPv4-)Adresse verbinden. Verhindert, dass curl bei
-            // einem Dual-Stack-Host über eine NICHT geprüfte IPv6-Adresse ausweicht
-            // (die IPv4-only-Auflösung in resolveHostIps validiert keine AAAA-Records).
-            if (defined('CURL_IPRESOLVE_V4')) {
-                $opts['curl'][CURLOPT_IPRESOLVE] = CURL_IPRESOLVE_V4;
-            }
         }
         // Antwortgrößen-Limit BEREITS WÄHREND des Transfers durchsetzen (statt erst
         // nach dem vollständigen Puffern): ein bösartiger Server kann `Content-Length`
@@ -205,11 +202,16 @@ class EgressClient
                 throw new EgressException("Ziel-IP $ip (Host $host) ist privat/reserviert — blockiert (SSRF-Schutz).");
             }
         }
-        $ip = $ips[0];
-        // IPv6 in CURLOPT_RESOLVE ohne Klammern angeben.
         $port = (int)($parts['port'] ?? (strtolower((string)($parts['scheme'] ?? '')) === 'http' ? 80 : 443));
+        // ALLE geprüften Adressen (beide Familien) pinnen — curl verbindet dann
+        // ausschließlich auf eine davon und löst NICHT selbst auf. IPv6 in
+        // CURLOPT_RESOLVE in eckigen Klammern.
+        $formatted = array_map(
+            static fn (string $ip): string => str_contains($ip, ':') ? '[' . $ip . ']' : $ip,
+            $ips,
+        );
 
-        return $host . ':' . $port . ':' . $ip;
+        return $host . ':' . $port . ':' . implode(',', $formatted);
     }
 
     /**
@@ -273,12 +275,28 @@ class EgressClient
         if (filter_var($host, FILTER_VALIDATE_IP) !== false) {
             return [$host];
         }
-        $ips = @gethostbynamel($host);
-        if ($ips === false || $ips === []) {
+        // Beide Familien auflösen: IPv4 (A) UND IPv6 (AAAA). Sonst bliebe ein
+        // privater AAAA-Record bei einem Dual-Stack-Host ungeprüft (curl könnte
+        // ihn ansteuern) — die reine IPv4-Auflösung war hier die SSRF-Lücke.
+        $ips = [];
+        $v4 = @gethostbynamel($host);
+        if (is_array($v4)) {
+            $ips = $v4;
+        }
+        $aaaa = @dns_get_record($host, DNS_AAAA);
+        if (is_array($aaaa)) {
+            foreach ($aaaa as $rec) {
+                if (!empty($rec['ipv6'])) {
+                    $ips[] = (string)$rec['ipv6'];
+                }
+            }
+        }
+        $ips = array_values(array_unique($ips));
+        if ($ips === []) {
             throw new EgressException("Host nicht auflösbar: $host");
         }
 
-        return array_values($ips);
+        return $ips;
     }
 
     /** Eine IP ist „öffentlich", wenn sie NICHT in privaten/reservierten Bereichen liegt. */

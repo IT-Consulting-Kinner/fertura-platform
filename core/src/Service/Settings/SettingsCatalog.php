@@ -21,6 +21,9 @@ class SettingsCatalog
             // Anmeldeschutz (Entscheidung 162).
             'login_throttle.max_attempts' => ['type' => 'int', 'default' => 10, 'min' => 1, 'max' => 1000],
             'login_throttle.window_minutes' => ['type' => 'int', 'default' => 15, 'min' => 1, 'max' => 1440],
+            // Per-IP-Obergrenze für Fehlversuche (über alle Benutzernamen) im
+            // selben Fenster — gegen Password-Spraying / Pre-Auth-CPU-Last.
+            'login_throttle.ip_max_attempts' => ['type' => 'int', 'default' => 30, 'min' => 1, 'max' => 100000],
             // Session-Timeout (Wiring an die Session folgt mit der GUI, Step 10).
             'session.timeout_minutes' => ['type' => 'int', 'default' => 120, 'min' => 1, 'max' => 43200],
             // Beispiel für ein verschlüsseltes Geheimnis.

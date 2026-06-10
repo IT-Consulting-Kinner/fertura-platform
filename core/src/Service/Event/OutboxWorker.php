@@ -119,27 +119,31 @@ class OutboxWorker
             $errors[] = 'webhook-enqueue: ' . $e->getMessage();
         }
         // Automations-/Workflow-Regeln genau einmal auswerten, gesteuert über das
-        // persistierte `derived_done`-Flag (nicht attempt_count==1): so gehen die
-        // Aktionen bei Absturz+Reclaim nicht verloren (at-least-once), und ein
-        // normaler Listener-Retry löst sie nicht erneut aus. Fehler sind in den
-        // Engines isoliert und beeinflussen den Event-Status nicht.
+        // persistierte `derived_done`-Flag. Aktionen UND das Setzen des Flags
+        // laufen in **einer** Transaktion: ein Absturz dazwischen rollt beides
+        // zurück, sodass der Reclaim sie genau einmal ausführt (keine doppelte
+        // Benachrichtigung / kein doppeltes Folge-Event). Behandelte Engine-Fehler
+        // bleiben isoliert (das Flag committet trotzdem); ein normaler Listener-
+        // Retry löst die Aktionen nicht erneut aus.
         if (!(bool)$event['derived_done']) {
-            try {
-                (new \App\Service\Automation\AutomationEngine())
-                    ->onEvent((string)$event['contract_name'], $payload);
-            } catch (Throwable $e) {
-                $this->log('Automation-Fehler: ' . $e->getMessage());
-            }
-            try {
-                (new \App\Service\Automation\WorkflowEngine())
-                    ->onEvent((string)$event['contract_name'], $payload);
-            } catch (Throwable $e) {
-                $this->log('Workflow-Fehler: ' . $e->getMessage());
-            }
-            $this->connection()->execute(
-                "UPDATE event_outbox SET derived_done = true WHERE id = :id",
-                ['id' => $event['id']],
-            );
+            $this->connection()->transactional(function () use ($event, $payload): void {
+                try {
+                    (new \App\Service\Automation\AutomationEngine())
+                        ->onEvent((string)$event['contract_name'], $payload);
+                } catch (Throwable $e) {
+                    $this->log('Automation-Fehler: ' . $e->getMessage());
+                }
+                try {
+                    (new \App\Service\Automation\WorkflowEngine())
+                        ->onEvent((string)$event['contract_name'], $payload);
+                } catch (Throwable $e) {
+                    $this->log('Workflow-Fehler: ' . $e->getMessage());
+                }
+                $this->connection()->execute(
+                    'UPDATE event_outbox SET derived_done = true WHERE id = :id',
+                    ['id' => $event['id']],
+                );
+            });
         }
         $runtime = new \App\Service\Module\ContributionRuntime($this->registry);
         foreach ($runtime->listeners((string)$event['contract_name']) as $listener) {

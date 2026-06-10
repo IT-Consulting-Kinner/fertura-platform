@@ -5,6 +5,7 @@ namespace App\Service\Api;
 
 use Cake\Datasource\ConnectionInterface;
 use Cake\Datasource\ConnectionManager;
+use Cake\Log\Log;
 
 /**
  * Sammelt die von **aktiven Modulen** deklarierten API-Endpunkte (P07).
@@ -87,8 +88,26 @@ class ApiRouteRegistry
      *
      * @return array<string,string>|null
      */
+    /** @var array<string,bool> Bereits gemeldete fehlerhafte Templates (Log-Entprellung). */
+    private static array $warnedTemplates = [];
+
     public static function matchPath(string $template, string $path): ?array
     {
+        // Doppelte Platzhalternamen (z. B. `/a/{id}/b/{id}`) ergäben ein ungültiges
+        // PCRE (duplicate subpattern name) -> Compile-Fehler + Warnung pro Request.
+        // Das ist ein Manifest-Fehler des Moduls: sauber als Nichttreffer behandeln
+        // (kein Fatal/keine Warnung) und einmalig protokollieren.
+        if (preg_match_all('/\{([a-zA-Z_][a-zA-Z0-9_]*)\}/', $template, $names) && $names[1] !== []) {
+            if (count($names[1]) !== count(array_unique($names[1]))) {
+                if (!isset(self::$warnedTemplates[$template])) {
+                    self::$warnedTemplates[$template] = true;
+                    Log::warning("API-Route mit doppeltem Pfad-Parameter ignoriert: $template", ['component' => 'api']);
+                }
+
+                return null;
+            }
+        }
+
         // Sicherheit: erst das gesamte Template quoten (keine Regex-Metazeichen
         // aus dem Manifest -> kein ReDoS/Regex-Injection), DANN die nun escapten
         // Platzhalter `\{name\}` durch benannte Gruppen ersetzen.

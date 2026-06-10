@@ -20,14 +20,19 @@ class LoginThrottle
     /** Sichere Defaults (Entscheidung 162). */
     public const DEFAULT_MAX_ATTEMPTS = 10;
     public const DEFAULT_WINDOW_MINUTES = 15;
+    /** Per-IP-Obergrenze: höher als pro Benutzer (geteilte NAT/Office-IPs), aber
+     *  begrenzt Password-Spraying über viele Benutzernamen und die Pre-Auth-CPU. */
+    public const DEFAULT_IP_MAX_ATTEMPTS = 30;
 
     private int $maxAttempts;
     private int $windowMinutes;
+    private int $ipMaxAttempts;
 
     public function __construct(
         ?int $maxAttempts = null,
         ?int $windowMinutes = null,
         ?SettingsManager $settings = null,
+        ?int $ipMaxAttempts = null,
     ) {
         // Schwellen aus dem Konfigurationsspeicher (DB), Code-Konstanten als Netz.
         $settings ??= new SettingsManager();
@@ -35,6 +40,8 @@ class LoginThrottle
             ?? (int)$settings->get('core', 'login_throttle.max_attempts', self::DEFAULT_MAX_ATTEMPTS);
         $this->windowMinutes = $windowMinutes
             ?? (int)$settings->get('core', 'login_throttle.window_minutes', self::DEFAULT_WINDOW_MINUTES);
+        $this->ipMaxAttempts = $ipMaxAttempts
+            ?? (int)$settings->get('core', 'login_throttle.ip_max_attempts', self::DEFAULT_IP_MAX_ATTEMPTS);
     }
 
     private function connection()
@@ -73,6 +80,35 @@ class LoginThrottle
     public function isBlocked(string $identifier): bool
     {
         return $this->recentFailures($identifier) >= $this->maxAttempts;
+    }
+
+    /**
+     * Anzahl der Fehlversuche **dieser IP** (über beliebige Benutzernamen)
+     * innerhalb des Zeitfensters — fängt Password-Spraying ab.
+     */
+    public function recentIpFailures(string $ip): int
+    {
+        if ($ip === '') {
+            return 0;
+        }
+        $row = $this->connection()->execute(
+            'SELECT count(*) AS c FROM auth_failures ' .
+            "WHERE ip_address = :ip AND occurred_at > now() - (:mins || ' minutes')::interval",
+            ['ip' => $ip, 'mins' => (string)$this->windowMinutes],
+        )->fetch('assoc');
+
+        return (int)($row['c'] ?? 0);
+    }
+
+    /** Ist die IP aktuell gesperrt (zu viele Fehlversuche über alle Konten)? */
+    public function isIpBlocked(string $ip): bool
+    {
+        return $ip !== '' && $this->recentIpFailures($ip) >= $this->ipMaxAttempts;
+    }
+
+    public function ipMaxAttempts(): int
+    {
+        return $this->ipMaxAttempts;
     }
 
     /**

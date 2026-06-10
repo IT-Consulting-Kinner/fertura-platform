@@ -99,7 +99,12 @@ class EmbeddingService
                 throw new AiException('Embedding enthält einen nicht-endlichen Wert.');
             }
 
-            return rtrim(rtrim(sprintf('%.8f', $v), '0'), '.');
+            // Locale-UNABHÄNGIG formatieren: `number_format` mit explizitem '.'
+            // als Dezimaltrenner (kein `LC_NUMERIC`-Komma, das das `::vector`-
+            // Literal zerstören würde) und Festkomma (kein Exponent). 12 Stellen
+            // erfassen die Float-Genauigkeit ohne Repräsentationsrauschen; Nullen
+            // werden abgeschnitten. Vgl. `sprintf('%f')` wäre `LC_NUMERIC`-anfällig.
+            return rtrim(rtrim(number_format($v, 12, '.', ''), '0'), '.');
         }, $floats)) . ']';
     }
 }

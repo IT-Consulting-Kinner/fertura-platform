@@ -67,6 +67,25 @@ class EgressClientTest extends TestCase
         $c->pinTarget('https://example.test/x');
     }
 
+    public function testPinTargetPinsBothFamiliesIncludingIpv6(): void
+    {
+        // Dual-Stack: beide geprüften Adressen werden gepinnt (IPv6 in Klammern),
+        // damit curl nicht über eine ungeprüfte Familie ausweichen kann.
+        $c = $this->pinClient(['93.184.216.34', '2606:2800:220:1:248:1893:25c8:1946']);
+        $this->assertSame(
+            'example.test:443:93.184.216.34,[2606:2800:220:1:248:1893:25c8:1946]',
+            $c->pinTarget('https://example.test/x'),
+        );
+    }
+
+    public function testPinTargetRejectsPrivateIpv6InDualStack(): void
+    {
+        // Ein privater AAAA-Record bei sonst öffentlichem A muss blockieren.
+        $c = $this->pinClient(['93.184.216.34', 'fd00::1']);
+        $this->expectException(EgressException::class);
+        $c->pinTarget('https://example.test/x');
+    }
+
     public function testPinTargetNullForLiteralAndOverrides(): void
     {
         $this->assertNull((new EgressClient(null, ['allow_private' => false]))->pinTarget('https://93.184.216.34/'));
