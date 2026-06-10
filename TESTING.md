@@ -67,3 +67,21 @@ Ergänzend zu PHPUnit, im Container ausführbar (`docker compose exec core sh �
 `.github/workflows/ci.yml` startet einen PostgreSQL-17-Dienst, installiert den
 PG-17-Client (für den Backup-Roundtrip), PHP 8.3 mit `sodium`/`zip` und führt
 `vendor/bin/phpunit` aus.
+
+## Statische Analyse & Coverage (CI)
+
+Die CI (`.github/workflows/ci.yml`) führt neben PHPUnit aus:
+
+- **PHPStan Level 8 (blockierend, Baseline-gated):** `vendor/bin/phpstan analyse`.
+  Bestehende Befunde sind in `core/phpstan-baseline.neon` grandfathered (456 zum
+  Einführungszeitpunkt); **neue** Fehler lassen die CI rot werden. Die Baseline
+  ist schrittweise abzubauen — beim Anfassen einer Datei deren Einträge entfernen
+  und die echten Befunde beheben. Baseline neu erzeugen:
+  `php -d memory_limit=2G vendor/bin/phpstan analyse --generate-baseline phpstan-baseline.neon`.
+- **PHPCS (informativ, nicht blockierend):** `vendor/bin/phpcs --report=summary`
+  (CakePHP-Standard; Altbestand fehlender Docblocks, daher vorerst nicht als Gate).
+- **Coverage:** PHPUnit läuft mit `--coverage-text` (pcov) — sichtbar im CI-Log.
+  Noch kein hartes Mindest-Gate; sobald ein Basiswert etabliert ist, kann eine
+  Schwelle ergänzt werden.
+
+Lokal (im `core`-Container): `vendor/bin/phpstan analyse`, `composer cs-check`.

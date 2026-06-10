@@ -36,9 +36,11 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.3'
-          # sodium: Ed25519-Signaturen (Trust); zip: AES-256-Backups.
-          extensions: intl, pdo_pgsql, zip, mbstring, ctype, sodium
-          coverage: none
+          # sodium: Ed25519-Signaturen (Trust); zip: AES-256-Backups;
+          # gd: von phpoffice/phpspreadsheet (P13) verlangt — muss zur
+          # composer.lock-Plattformprüfung passen (sonst platform_check-Fatal).
+          extensions: intl, pdo_pgsql, zip, mbstring, ctype, sodium, gd
+          coverage: pcov
 
       - name: PostgreSQL-17-Client (pg_dump/pg_restore für Backup-Roundtrip)
         run: |
@@ -62,6 +64,19 @@ jobs:
         working-directory: core
         run: composer install --no-interaction --prefer-dist --no-progress
 
-      - name: Tests ausführen
+      - name: Tests ausführen (mit Coverage)
         working-directory: core
-        run: vendor/bin/phpunit
+        run: vendor/bin/phpunit --coverage-text
+
+      - name: Statische Analyse (PHPStan Level 8, Baseline-gated)
+        working-directory: core
+        # Blockierend: bestehende Befunde sind in phpstan-baseline.neon
+        # grandfathered, NEUE Fehler lassen die CI rot werden.
+        run: php -d memory_limit=1G vendor/bin/phpstan analyse --no-progress --error-format=github
+
+      - name: Coding-Standard (PHPCS, informativ)
+        working-directory: core
+        # Nicht blockierend (Altbestand fehlender Docblocks); macht Verstöße
+        # in neuen Änderungen sichtbar, ohne die CI zu brechen.
+        continue-on-error: true
+        run: vendor/bin/phpcs --report=summary

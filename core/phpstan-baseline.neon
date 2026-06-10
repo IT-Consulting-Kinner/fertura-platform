@@ -1,0 +1,1735 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Audit/AuditLogger.php
+
+		-
+			message: '#^Method App\\Audit\\AuditLogger\:\:log\(\) has parameter \$options with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Audit/AuditLogger.php
+
+		-
+			message: '#^Method App\\Auth\\LoginThrottle\:\:connection\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Auth/LoginThrottle.php
+
+		-
+			message: '#^Call to an undefined method Cake\\ORM\\Table\:\:anonymize\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Command/AnonymizeUserCommand.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Command/AuditPartitionCommand.php
+
+		-
+			message: '#^Method App\\Command\\AuditPartitionCommand\:\:relationExists\(\) has parameter \$connection with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: src/Command/AuditPartitionCommand.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 4
+			path: src/Command/AutomationCommand.php
+
+		-
+			message: '#^Parameter \#1 \$note of method App\\Service\\Backup\\BackupService\:\:create\(\) expects string\|null, bool\|string\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Command/BackupCommand.php
+
+		-
+			message: '#^Parameter \#2 \$password of method App\\Service\\Backup\\BackupService\:\:restoreFromFile\(\) expects string\|null, bool\|string\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Command/BackupCommand.php
+
+		-
+			message: '#^Parameter \#3 \$targetDir of method App\\Service\\Backup\\BackupService\:\:create\(\) expects string\|null, bool\|string\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Command/BackupCommand.php
+
+		-
+			message: '#^Access to an undefined property Cake\\Datasource\\EntityInterface\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 5
+			path: src/Command/CreateAdminCommand.php
+
+		-
+			message: '#^Access to an undefined property Cake\\Datasource\\EntityInterface\:\:\$status\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/Command/CreateAdminCommand.php
+
+		-
+			message: '#^Access to an undefined property Cake\\Datasource\\EntityInterface\:\:\$username\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/Command/CreateAdminCommand.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\EntityInterface\:\:setPassword\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Command/CreateAdminCommand.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Command/ModuleContractsCommand.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 6
+			path: src/Command/OutboxSelftestCommand.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 2
+			path: src/Command/OutboxStatusCommand.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Command/PermissionCommand.php
+
+		-
+			message: '#^Parameter \#4 \$resourceKey of method App\\Service\\Permission\\PermissionService\:\:canPerform\(\) expects string\|null, bool\|string\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Command/PermissionCommand.php
+
+		-
+			message: '#^Parameter \#4 \$resourceKey of method App\\Service\\Permission\\PermissionService\:\:grant\(\) expects string\|null, bool\|string\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Command/PermissionCommand.php
+
+		-
+			message: '#^Parameter \#4 \$resourceKey of method App\\Service\\Permission\\PermissionService\:\:revoke\(\) expects string\|null, bool\|string\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Command/PermissionCommand.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 2
+			path: src/Command/RegistryListCommand.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 3
+			path: src/Command/RegistrySelftestCommand.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Command/SchemaInitCommand.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 3
+			path: src/Command/SecretCommand.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:transactional\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Command/SecretCommand.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Command/ServiceCommand.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 4
+			path: src/Command/TrustCommand.php
+
+		-
+			message: '#^Parameter \#2 \$reason of method App\\Service\\Security\\TrustStore\:\:revokeKey\(\) expects string\|null, bool\|string\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Command/TrustCommand.php
+
+		-
+			message: '#^Parameter \#7 \$validFrom of method App\\Service\\Security\\TrustStore\:\:addAnchor\(\) expects string\|null, string\|true\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Command/TrustCommand.php
+
+		-
+			message: '#^Parameter \#8 \$validTo of method App\\Service\\Security\\TrustStore\:\:addAnchor\(\) expects string\|null, string\|true\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Command/TrustCommand.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 3
+			path: src/Command/WorkflowCommand.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Controller/Admin/AdminController.php
+
+		-
+			message: '#^Cannot cast array\|int\|string\|null to string\.$#'
+			identifier: cast.string
+			count: 1
+			path: src/Controller/Admin/AdminController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\AdminController\:\:beforeFilter\(\) with return type void returns Cake\\Http\\Response\|null but should not return anything\.$#'
+			identifier: return.void
+			count: 1
+			path: src/Controller/Admin/AdminController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\AdminController\:\:beforeFilter\(\) with return type void returns null but should not return anything\.$#'
+			identifier: return.void
+			count: 1
+			path: src/Controller/Admin/AdminController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\AdminController\:\:loadUserAreas\(\) should return list\<string\> but returns array\<string\>\.$#'
+			identifier: return.type
+			count: 1
+			path: src/Controller/Admin/AdminController.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 3
+			path: src/Controller/Admin/AuditController.php
+
+		-
+			message: '#^Cannot cast array\|int\|string\|null to string\.$#'
+			identifier: cast.string
+			count: 2
+			path: src/Controller/Admin/BackupController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\BackupController\:\:create\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/BackupController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\BackupController\:\:delete\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/BackupController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\BackupController\:\:download\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/BackupController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\BackupController\:\:testRestore\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/BackupController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\BackupController\:\:verify\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/BackupController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\ConfigController\:\:save\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/ConfigController.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 2
+			path: src/Controller/Admin/DashboardController.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 10
+			path: src/Controller/Admin/GroupsController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\GroupsController\:\:add\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/GroupsController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\GroupsController\:\:addMember\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/GroupsController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\GroupsController\:\:removeMember\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/GroupsController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\GroupsController\:\:setActive\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/GroupsController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\GroupsController\:\:setPermission\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/GroupsController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\GroupsController\:\:view\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/GroupsController.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 6
+			path: src/Controller/Admin/IntegrationsController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\IntegrationsController\:\:automationDelete\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/IntegrationsController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\IntegrationsController\:\:automationToggle\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/IntegrationsController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\IntegrationsController\:\:back\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/IntegrationsController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\IntegrationsController\:\:deliveryRetry\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/IntegrationsController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\IntegrationsController\:\:ssoDelete\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/IntegrationsController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\IntegrationsController\:\:ssoToggle\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/IntegrationsController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\IntegrationsController\:\:webhookDelete\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/IntegrationsController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\IntegrationsController\:\:webhookToggle\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/IntegrationsController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\IntegrationsController\:\:workflowDelete\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/IntegrationsController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\IntegrationsController\:\:workflowToggle\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/IntegrationsController.php
+
+		-
+			message: '#^Cannot cast array\|int\|string\|null to string\.$#'
+			identifier: cast.string
+			count: 2
+			path: src/Controller/Admin/LocalizationController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\LocalizationController\:\:delete\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/LocalizationController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\LocalizationController\:\:edit\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/LocalizationController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\LocalizationController\:\:import\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/LocalizationController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\LocalizationController\:\:review\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/LocalizationController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\LocalizationController\:\:save\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/LocalizationController.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Controller/Admin/MarketplaceController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\MarketplaceController\:\:sync\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/MarketplaceController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\MarketplaceController\:\:uploadLicense\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/MarketplaceController.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 4
+			path: src/Controller/Admin/ModulesController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\ModulesController\:\:activate\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/ModulesController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\ModulesController\:\:deactivate\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/ModulesController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\ModulesController\:\:delete\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/ModulesController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\ModulesController\:\:run\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/ModulesController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\OutboxController\:\:discard\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/OutboxController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\OutboxController\:\:retry\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/OutboxController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\OutboxController\:\:retryAll\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/OutboxController.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 5
+			path: src/Controller/Admin/RegistryController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\TenantsController\:\:add\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/TenantsController.php
+
+		-
+			message: '#^Cannot call method getIdentifier\(\) on Authentication\\IdentityInterface\|null\.$#'
+			identifier: method.nonObject
+			count: 3
+			path: src/Controller/Admin/TokensController.php
+
+		-
+			message: '#^Cannot cast array\|int\|string\|null to string\.$#'
+			identifier: cast.string
+			count: 3
+			path: src/Controller/Admin/TokensController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\TokensController\:\:create\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/TokensController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\TokensController\:\:revoke\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/TokensController.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Controller/Admin/UpdatesController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\UpdatesController\:\:core\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/UpdatesController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\UpdatesController\:\:module\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/UpdatesController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\UpdatesController\:\:previewCore\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/UpdatesController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\UpdatesController\:\:previewModule\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/UpdatesController.php
+
+		-
+			message: '#^Access to an undefined property Cake\\Datasource\\EntityInterface\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/Controller/Admin/UsersController.php
+
+		-
+			message: '#^Access to an undefined property Cake\\Datasource\\EntityInterface\:\:\$status\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/Controller/Admin/UsersController.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 12
+			path: src/Controller/Admin/UsersController.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\EntityInterface\:\:setPassword\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Controller/Admin/UsersController.php
+
+		-
+			message: '#^Call to an undefined method Cake\\ORM\\Table\:\:anonymize\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Controller/Admin/UsersController.php
+
+		-
+			message: '#^Cannot cast array\|int\|string to string\.$#'
+			identifier: cast.string
+			count: 2
+			path: src/Controller/Admin/UsersController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\UsersController\:\:add\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/UsersController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\UsersController\:\:anonymize\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/UsersController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\UsersController\:\:audit\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/UsersController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\UsersController\:\:edit\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/UsersController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\UsersController\:\:invite\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/UsersController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\UsersController\:\:setPassword\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/UsersController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\UsersController\:\:setStatus\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/UsersController.php
+
+		-
+			message: '#^Method App\\Controller\\Admin\\UsersController\:\:toggleArea\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Admin/UsersController.php
+
+		-
+			message: '#^Method App\\Controller\\Api\\V1\\ApiController\:\:scopes\(\) should return list\<string\> but returns array\<mixed, mixed\>\.$#'
+			identifier: return.type
+			count: 1
+			path: src/Controller/Api/V1/ApiController.php
+
+		-
+			message: '#^Method App\\Controller\\Api\\V1\\HealthController\:\:index\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Api/V1/HealthController.php
+
+		-
+			message: '#^Method App\\Controller\\Api\\V1\\MeController\:\:index\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Api/V1/MeController.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Controller/Api/V1/ModulesController.php
+
+		-
+			message: '#^Method App\\Controller\\Api\\V1\\ModulesController\:\:index\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/Api/V1/ModulesController.php
+
+		-
+			message: '#^Access to an undefined property App\\Controller\\AuthController\:\:\$Authentication\.$#'
+			identifier: property.notFound
+			count: 4
+			path: src/Controller/AuthController.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Controller/AuthController.php
+
+		-
+			message: '#^Method App\\Controller\\AuthController\:\:forgotPassword\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/AuthController.php
+
+		-
+			message: '#^Method App\\Controller\\AuthController\:\:login\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/AuthController.php
+
+		-
+			message: '#^Method App\\Controller\\AuthController\:\:logout\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/AuthController.php
+
+		-
+			message: '#^Method App\\Controller\\AuthController\:\:setPassword\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/AuthController.php
+
+		-
+			message: '#^Access to an undefined property App\\Controller\\HealthController\:\:\$Authentication\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/Controller/HealthController.php
+
+		-
+			message: '#^Cannot cast array\|int\|string\|null to string\.$#'
+			identifier: cast.string
+			count: 1
+			path: src/Controller/LocaleController.php
+
+		-
+			message: '#^Method App\\Controller\\LocaleController\:\:change\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/LocaleController.php
+
+		-
+			message: '#^Access to an undefined property App\\Controller\\MetricsController\:\:\$Authentication\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/Controller/MetricsController.php
+
+		-
+			message: '#^Access to an undefined property App\\Controller\\SseController\:\:\$Authentication\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/Controller/SseController.php
+
+		-
+			message: '#^Access to an undefined property App\\Controller\\SsoController\:\:\$Authentication\.$#'
+			identifier: property.notFound
+			count: 2
+			path: src/Controller/SsoController.php
+
+		-
+			message: '#^Method App\\Controller\\SsoController\:\:establish\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/SsoController.php
+
+		-
+			message: '#^Method App\\Controller\\SsoController\:\:oidcCallback\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/SsoController.php
+
+		-
+			message: '#^Method App\\Controller\\SsoController\:\:samlAcs\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/SsoController.php
+
+		-
+			message: '#^Method App\\Controller\\SsoController\:\:start\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Controller/SsoController.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Event/Demo/RecordingListener.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/I18n/StoreLocaleLoader.php
+
+		-
+			message: '#^Cannot call method getOriginalData\(\) on class\-string\|object\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: src/Middleware/LocaleMiddleware.php
+
+		-
+			message: '#^Parameter \#2 \$enabled of method App\\Middleware\\LocaleMiddleware\:\:matchAcceptLanguage\(\) expects list\<string\>, array\<string\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Middleware/LocaleMiddleware.php
+
+		-
+			message: '#^Method App\\Model\\Behavior\\FootprintBehavior\:\:beforeSave\(\) has parameter \$event with generic interface Cake\\Event\\EventInterface but does not specify its types\: TSubject$#'
+			identifier: missingType.generics
+			count: 1
+			path: src/Model/Behavior/FootprintBehavior.php
+
+		-
+			message: '#^Method App\\Model\\Behavior\\FootprintBehavior\:\:beforeSave\(\) has parameter \$options with generic class ArrayObject but does not specify its types\: TKey, TValue$#'
+			identifier: missingType.generics
+			count: 1
+			path: src/Model/Behavior/FootprintBehavior.php
+
+		-
+			message: '#^Method App\\Model\\Behavior\\UuidV7Behavior\:\:beforeSave\(\) has parameter \$event with generic interface Cake\\Event\\EventInterface but does not specify its types\: TSubject$#'
+			identifier: missingType.generics
+			count: 1
+			path: src/Model/Behavior/UuidV7Behavior.php
+
+		-
+			message: '#^Method App\\Model\\Behavior\\UuidV7Behavior\:\:beforeSave\(\) has parameter \$options with generic class ArrayObject but does not specify its types\: TKey, TValue$#'
+			identifier: missingType.generics
+			count: 1
+			path: src/Model/Behavior/UuidV7Behavior.php
+
+		-
+			message: '#^Class App\\Model\\Entity\\Contract has PHPDoc tag @property for property \$default_behavior with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Model/Entity/Contract.php
+
+		-
+			message: '#^Class App\\Model\\Entity\\Contract has PHPDoc tag @property for property \$input_spec with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Model/Entity/Contract.php
+
+		-
+			message: '#^Class App\\Model\\Entity\\Contract has PHPDoc tag @property for property \$output_spec with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Model/Entity/Contract.php
+
+		-
+			message: '#^Class App\\Model\\Table\\ContractsTable has PHPDoc tag @method for method newEntity\(\) parameter \#1 \$data with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Model/Table/ContractsTable.php
+
+		-
+			message: '#^Class App\\Model\\Table\\ContractsTable has PHPDoc tag @method for method newEntity\(\) parameter \#2 \$options with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Model/Table/ContractsTable.php
+
+		-
+			message: '#^Class App\\Model\\Table\\SettingsTable has PHPDoc tag @method for method newEntity\(\) parameter \#1 \$data with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Model/Table/SettingsTable.php
+
+		-
+			message: '#^Class App\\Model\\Table\\SettingsTable has PHPDoc tag @method for method newEntity\(\) parameter \#2 \$options with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Model/Table/SettingsTable.php
+
+		-
+			message: '#^Class App\\Model\\Table\\UsersTable has PHPDoc tag @method for method get\(\) parameter \#2 \$options with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Model/Table/UsersTable.php
+
+		-
+			message: '#^Class App\\Model\\Table\\UsersTable has PHPDoc tag @method for method newEntity\(\) parameter \#1 \$data with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Model/Table/UsersTable.php
+
+		-
+			message: '#^Class App\\Model\\Table\\UsersTable has PHPDoc tag @method for method newEntity\(\) parameter \#2 \$options with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Model/Table/UsersTable.php
+
+		-
+			message: '#^Method App\\Model\\Table\\UsersTable\:\:findActive\(\) has parameter \$options with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Model/Table/UsersTable.php
+
+		-
+			message: '#^Method App\\Model\\Table\\UsersTable\:\:findActive\(\) has parameter \$query with generic class Cake\\ORM\\Query\\SelectQuery but does not specify its types\: TSubject$#'
+			identifier: missingType.generics
+			count: 1
+			path: src/Model/Table/UsersTable.php
+
+		-
+			message: '#^Method App\\Model\\Table\\UsersTable\:\:findActive\(\) return type with generic class Cake\\ORM\\Query\\SelectQuery does not specify its types\: TSubject$#'
+			identifier: missingType.generics
+			count: 1
+			path: src/Model/Table/UsersTable.php
+
+		-
+			message: '#^Parameter \#3 \$entityId of method App\\Audit\\AuditLogger\:\:log\(\) expects string\|null, int given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Model/Table/UsersTable.php
+
+		-
+			message: '#^Cannot call method get\(\) on App\\Service\\Settings\\SettingsManager\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: src/Service/Ai/AiGateway.php
+
+		-
+			message: '#^Method App\\Service\\Ai\\AiGateway\:\:complete\(\) has parameter \$opts with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/Ai/AiGateway.php
+
+		-
+			message: '#^Parameter \#1 \$egress of class App\\Service\\Ai\\Provider\\AnthropicProvider constructor expects App\\Service\\Http\\EgressClient, App\\Service\\Http\\EgressClient\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Service/Ai/AiGateway.php
+
+		-
+			message: '#^Parameter \#1 \$egress of class App\\Service\\Ai\\Provider\\GoogleProvider constructor expects App\\Service\\Http\\EgressClient, App\\Service\\Http\\EgressClient\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Service/Ai/AiGateway.php
+
+		-
+			message: '#^Parameter \#1 \$egress of class App\\Service\\Ai\\Provider\\OpenAiProvider constructor expects App\\Service\\Http\\EgressClient, App\\Service\\Http\\EgressClient\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Service/Ai/AiGateway.php
+
+		-
+			message: '#^Parameter \#1 \$egress of class App\\Service\\Ai\\Provider\\XaiProvider constructor expects App\\Service\\Http\\EgressClient, App\\Service\\Http\\EgressClient\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Service/Ai/AiGateway.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 4
+			path: src/Service/Ai/EmbeddingService.php
+
+		-
+			message: '#^Cannot call method embed\(\) on App\\Service\\Ai\\AiGateway\|null\.$#'
+			identifier: method.nonObject
+			count: 2
+			path: src/Service/Ai/EmbeddingService.php
+
+		-
+			message: '#^Cannot call method embedEnabled\(\) on App\\Service\\Ai\\AiGateway\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: src/Service/Ai/EmbeddingService.php
+
+		-
+			message: '#^Method App\\Service\\Ai\\EmbeddingService\:\:literal\(\) has parameter \$floats with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/Ai/EmbeddingService.php
+
+		-
+			message: '#^Method App\\Service\\Ai\\EmbeddingService\:\:semantic\(\) should return list\<array\{source\: string, entity_type\: string, entity_id\: string, content\: string, score\: float\}\> but returns array\<array\{source\: string, entity_type\: string, entity_id\: string, content\: string, score\: float\}\>\.$#'
+			identifier: return.type
+			count: 1
+			path: src/Service/Ai/EmbeddingService.php
+
+		-
+			message: '#^Method App\\Service\\Ai\\Provider\\GoogleProvider\:\:embed\(\) should return list\<float\> but returns array\<float\>\.$#'
+			identifier: return.type
+			count: 1
+			path: src/Service/Ai/Provider/GoogleProvider.php
+
+		-
+			message: '#^Method App\\Service\\Ai\\Provider\\OpenAiProvider\:\:embed\(\) should return list\<float\> but returns array\<float\>\.$#'
+			identifier: return.type
+			count: 1
+			path: src/Service/Ai/Provider/OpenAiProvider.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Service/Api/ApiRouteRegistry.php
+
+		-
+			message: '#^Method App\\Service\\Api\\ApiRouteRegistry\:\:matchPath\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/Api/ApiRouteRegistry.php
+
+		-
+			message: '#^Cannot call method all\(\) on App\\Service\\Api\\ApiRouteRegistry\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: src/Service/Api/OpenApiGenerator.php
+
+		-
+			message: '#^Cannot call method log\(\) on App\\Audit\\AuditLogger\|null\.$#'
+			identifier: method.nonObject
+			count: 2
+			path: src/Service/Api/TokenService.php
+
+		-
+			message: '#^Method App\\Service\\Api\\TokenService\:\:conn\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Service/Api/TokenService.php
+
+		-
+			message: '#^Method App\\Service\\Api\\TokenService\:\:hasScope\(\) has parameter \$scopes with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/Api/TokenService.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Service/Auth/AuthProviderResolver.php
+
+		-
+			message: '#^Cannot call method get\(\) on App\\Service\\Http\\EgressClient\|null\.$#'
+			identifier: method.nonObject
+			count: 2
+			path: src/Service/Auth/Sso/OidcProvider.php
+
+		-
+			message: '#^Cannot call method remember\(\) on App\\Service\\Cache\\CacheStore\|null\.$#'
+			identifier: method.nonObject
+			count: 2
+			path: src/Service/Auth/Sso/OidcProvider.php
+
+		-
+			message: '#^Cannot call method request\(\) on App\\Service\\Http\\EgressClient\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: src/Service/Auth/Sso/OidcProvider.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 15
+			path: src/Service/Auth/Sso/SsoService.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Service/Automation/AutomationEngine.php
+
+		-
+			message: '#^Cannot call method evaluate\(\) on App\\Service\\Automation\\ConditionEvaluator\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: src/Service/Automation/AutomationEngine.php
+
+		-
+			message: '#^Parameter \#1 \$actions of method App\\Service\\Automation\\ActionExecutor\:\:run\(\) expects list\<array\<string, mixed\>\>, array\<mixed, mixed\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Service/Automation/AutomationEngine.php
+
+		-
+			message: '#^Property App\\Service\\Automation\\AutomationEngine\:\:\$audit is never read, only written\.$#'
+			identifier: property.onlyWritten
+			count: 1
+			path: src/Service/Automation/AutomationEngine.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 5
+			path: src/Service/Automation/WorkflowEngine.php
+
+		-
+			message: '#^Cannot call method evaluate\(\) on App\\Service\\Automation\\ConditionEvaluator\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: src/Service/Automation/WorkflowEngine.php
+
+		-
+			message: '#^Cannot call method fromPayload\(\) on App\\Service\\Automation\\ActionExecutor\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: src/Service/Automation/WorkflowEngine.php
+
+		-
+			message: '#^Cannot call method run\(\) on App\\Service\\Automation\\ActionExecutor\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: src/Service/Automation/WorkflowEngine.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Service/Backup/BackupScheduledTask.php
+
+		-
+			message: '#^Call to an undefined method object\:\:disconnect\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Service/Backup/BackupService.php
+
+		-
+			message: '#^Cannot call method log\(\) on App\\Audit\\AuditLogger\|null\.$#'
+			identifier: method.nonObject
+			count: 3
+			path: src/Service/Backup/BackupService.php
+
+		-
+			message: '#^Method App\\Service\\Backup\\BackupService\:\:conn\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Service/Backup/BackupService.php
+
+		-
+			message: '#^Method App\\Service\\Backup\\BackupService\:\:scratchConnection\(\) has parameter \$pg with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/Backup/BackupService.php
+
+		-
+			message: '#^Cannot call method delete\(\) on App\\Service\\Storage\\StorageManager\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: src/Service/Backup/OffsiteBackupService.php
+
+		-
+			message: '#^Cannot call method list\(\) on App\\Service\\Storage\\StorageManager\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: src/Service/Backup/OffsiteBackupService.php
+
+		-
+			message: '#^Cannot call method readStream\(\) on App\\Service\\Storage\\StorageManager\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: src/Service/Backup/OffsiteBackupService.php
+
+		-
+			message: '#^Cannot call method writeStream\(\) on App\\Service\\Storage\\StorageManager\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: src/Service/Backup/OffsiteBackupService.php
+
+		-
+			message: '#^Parameter \#2 \$default of static method Cake\\Cache\\Cache\:\:remember\(\) expects Closure, callable\(\)\: mixed given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Service/Cache/CacheStore.php
+
+		-
+			message: '#^Cannot call method log\(\) on App\\Audit\\AuditLogger\|null\.$#'
+			identifier: method.nonObject
+			count: 3
+			path: src/Service/Event/OutboxAdmin.php
+
+		-
+			message: '#^Method App\\Service\\Event\\OutboxAdmin\:\:conn\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Service/Event/OutboxAdmin.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 2
+			path: src/Service/Event/OutboxPublisher.php
+
+		-
+			message: '#^Method App\\Service\\Event\\OutboxWorker\:\:connection\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Service/Event/OutboxWorker.php
+
+		-
+			message: '#^Parameter \#1 \$stream of function fclose expects resource, resource\|false given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Service/Export/ExportService.php
+
+		-
+			message: '#^Parameter \#1 \$stream of function fputcsv expects resource, resource\|false given\.$#'
+			identifier: argument.type
+			count: 2
+			path: src/Service/Export/ExportService.php
+
+		-
+			message: '#^Parameter \#1 \$stream of function rewind expects resource, resource\|false given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Service/Export/ExportService.php
+
+		-
+			message: '#^Parameter \#1 \$stream of function stream_get_contents expects resource, resource\|false given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Service/Export/ExportService.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 11
+			path: src/Service/Health/HealthService.php
+
+		-
+			message: '#^Cannot call method evaluate\(\) on App\\Service\\License\\LicenseService\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: src/Service/Health/HealthService.php
+
+		-
+			message: '#^Cannot call method get\(\) on App\\Service\\Settings\\SettingsManager\|null\.$#'
+			identifier: method.nonObject
+			count: 6
+			path: src/Service/Health/HealthService.php
+
+		-
+			message: '#^Method App\\Service\\Health\\HealthService\:\:checkBackup\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/Health/HealthService.php
+
+		-
+			message: '#^Method App\\Service\\Health\\HealthService\:\:checkDatabase\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/Health/HealthService.php
+
+		-
+			message: '#^Method App\\Service\\Health\\HealthService\:\:checkLicenses\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/Health/HealthService.php
+
+		-
+			message: '#^Method App\\Service\\Health\\HealthService\:\:checkLocalization\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/Health/HealthService.php
+
+		-
+			message: '#^Method App\\Service\\Health\\HealthService\:\:checkMarketplace\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/Health/HealthService.php
+
+		-
+			message: '#^Method App\\Service\\Health\\HealthService\:\:checkModules\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/Health/HealthService.php
+
+		-
+			message: '#^Method App\\Service\\Health\\HealthService\:\:checkOutbox\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/Health/HealthService.php
+
+		-
+			message: '#^Method App\\Service\\Health\\HealthService\:\:checkRegistry\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/Health/HealthService.php
+
+		-
+			message: '#^Method App\\Service\\Health\\HealthService\:\:checkStorage\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/Health/HealthService.php
+
+		-
+			message: '#^Method App\\Service\\Health\\HealthService\:\:checkWorkers\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/Health/HealthService.php
+
+		-
+			message: '#^Method App\\Service\\Health\\HealthService\:\:collectModuleHealth\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/Health/HealthService.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 2
+			path: src/Service/Health/WorkerHeartbeat.php
+
+		-
+			message: '#^Parameter \#2 \$parts of method App\\Service\\Http\\EgressClient\:\:pinLine\(\) expects array\<string, mixed\>, array\<string, int\|string\>\|false given\.$#'
+			identifier: argument.type
+			count: 2
+			path: src/Service/Http/EgressClient.php
+
+		-
+			message: '#^Cannot call method delete\(\) on App\\Service\\I18n\\LanguagePackStore\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: src/Service/I18n/LanguagePackAdmin.php
+
+		-
+			message: '#^Cannot call method log\(\) on App\\Audit\\AuditLogger\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: src/Service/I18n/LanguagePackAdmin.php
+
+		-
+			message: '#^Cannot call method read\(\) on App\\Service\\I18n\\LanguagePackStore\|null\.$#'
+			identifier: method.nonObject
+			count: 2
+			path: src/Service/I18n/LanguagePackAdmin.php
+
+		-
+			message: '#^Cannot call method save\(\) on App\\Service\\I18n\\LanguagePackStore\|null\.$#'
+			identifier: method.nonObject
+			count: 2
+			path: src/Service/I18n/LanguagePackAdmin.php
+
+		-
+			message: '#^Method App\\Service\\I18n\\LanguagePackAdmin\:\:componentMeta\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/I18n/LanguagePackAdmin.php
+
+		-
+			message: '#^Method App\\Service\\I18n\\LanguagePackAdmin\:\:conn\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Service/I18n/LanguagePackAdmin.php
+
+		-
+			message: '#^Method App\\Service\\I18n\\LanguagePackStore\:\:conn\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Service/I18n/LanguagePackStore.php
+
+		-
+			message: '#^Method App\\Service\\I18n\\LocaleResolver\:\:conn\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Service/I18n/LocaleResolver.php
+
+		-
+			message: '#^If condition is always false\.$#'
+			identifier: if.alwaysFalse
+			count: 1
+			path: src/Service/I18n/PoDocument.php
+
+		-
+			message: '#^Method App\\Service\\I18n\\PoDocument\:\:setMsgstr\(\) has parameter \$values with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/I18n/PoDocument.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between array\{\} and array\{\} will always evaluate to true\.$#'
+			identifier: identical.alwaysTrue
+			count: 1
+			path: src/Service/I18n/PoDocument.php
+
+		-
+			message: '#^Variable \$msgid on left side of \?\? always exists and is always null\.$#'
+			identifier: nullCoalesce.variable
+			count: 1
+			path: src/Service/I18n/PoDocument.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\EntityInterface\:\:setPassword\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Service/Identity/PasswordResetService.php
+
+		-
+			message: '#^Cannot call method get\(\) on App\\Service\\Settings\\SettingsManager\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: src/Service/Identity/PasswordResetService.php
+
+		-
+			message: '#^Cannot call method log\(\) on App\\Audit\\AuditLogger\|null\.$#'
+			identifier: method.nonObject
+			count: 2
+			path: src/Service/Identity/PasswordResetService.php
+
+		-
+			message: '#^Method App\\Service\\Identity\\PasswordResetService\:\:conn\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Service/Identity/PasswordResetService.php
+
+		-
+			message: '#^Method App\\Service\\License\\LicenseService\:\:conn\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Service/License/LicenseService.php
+
+		-
+			message: '#^Method App\\Service\\License\\LicenseService\:\:install\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/License/LicenseService.php
+
+		-
+			message: '#^Offset ''payload'' might not exist on array\{ok\: true, reason\?\: string, payload\?\: array\<string, mixed\>, key_id\?\: string\}\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: src/Service/License/LicenseService.php
+
+		-
+			message: '#^Cannot call method get\(\) on App\\Service\\Settings\\SettingsManager\|null\.$#'
+			identifier: method.nonObject
+			count: 3
+			path: src/Service/Mail/MailService.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 2
+			path: src/Service/Marketplace/MarketplaceClient.php
+
+		-
+			message: '#^Method App\\Service\\Marketplace\\MarketplaceClient\:\:canonical\(\) has parameter \$payload with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/Marketplace/MarketplaceClient.php
+
+		-
+			message: '#^Method App\\Service\\Marketplace\\MarketplaceClient\:\:fetch\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/Marketplace/MarketplaceClient.php
+
+		-
+			message: '#^Method App\\Service\\Marketplace\\MarketplaceClient\:\:verifySigned\(\) has parameter \$doc with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/Marketplace/MarketplaceClient.php
+
+		-
+			message: '#^Call to an undefined method object\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Service/Metrics/MetricsService.php
+
+		-
+			message: '#^Cannot call method collectContributions\(\) on App\\Service\\Registry\\ContractRegistry\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: src/Service/Module/ContributionRuntime.php
+
+		-
+			message: '#^Cannot call method listenerContributions\(\) on App\\Service\\Registry\\ContractRegistry\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: src/Service/Module/ContributionRuntime.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Service/Module/ModuleAutoloader.php
+
+		-
+			message: '#^Method App\\Service\\Module\\ModuleDbRole\:\:conn\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Service/Module/ModuleDbRole.php
+
+		-
+			message: '#^Negated boolean expression is always true\.$#'
+			identifier: booleanNot.alwaysTrue
+			count: 2
+			path: src/Service/Module/ModuleHostSupervisor.php
+
+		-
+			message: '#^Method App\\Service\\Module\\ModuleLifecycle\:\:conn\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Service/Module/ModuleLifecycle.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Service/Module/RemoteInvoker.php
+
+		-
+			message: '#^Method App\\Service\\Module\\RemoteInvoker\:\:send\(\) has parameter \$req with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/Module/RemoteInvoker.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 8
+			path: src/Service/Notification/NotificationService.php
+
+		-
+			message: '#^Method App\\Service\\Notification\\NotificationService\:\:dispatchModuleChannels\(\) has parameter \$channels with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/Notification/NotificationService.php
+
+		-
+			message: '#^Method App\\Service\\Permission\\PermissionService\:\:activeGroupIds\(\) should return list\<string\> but returns array\<string\>\.$#'
+			identifier: return.type
+			count: 1
+			path: src/Service/Permission/PermissionService.php
+
+		-
+			message: '#^Method App\\Service\\Permission\\PermissionService\:\:conn\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Service/Permission/PermissionService.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Service/Realtime/RealtimeService.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Service/Registry/CapabilityHandle.php
+
+		-
+			message: '#^Access to an undefined property Cake\\Datasource\\EntityInterface\:\:\$contract_id\.$#'
+			identifier: property.notFound
+			count: 2
+			path: src/Service/Registry/ContractRegistry.php
+
+		-
+			message: '#^Access to an undefined property Cake\\Datasource\\EntityInterface\:\:\$implementation_class\.$#'
+			identifier: property.notFound
+			count: 3
+			path: src/Service/Registry/ContractRegistry.php
+
+		-
+			message: '#^Access to an undefined property Cake\\Datasource\\EntityInterface\:\:\$module_key\.$#'
+			identifier: property.notFound
+			count: 8
+			path: src/Service/Registry/ContractRegistry.php
+
+		-
+			message: '#^Access to an undefined property Cake\\Datasource\\EntityInterface\:\:\$name\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/Service/Registry/ContractRegistry.php
+
+		-
+			message: '#^Method App\\Service\\Registry\\ContractRegistry\:\:bindings\(\) should return App\\Model\\Table\\CapabilityBindingsTable but returns Cake\\ORM\\Table\.$#'
+			identifier: return.type
+			count: 1
+			path: src/Service/Registry/ContractRegistry.php
+
+		-
+			message: '#^Method App\\Service\\Registry\\ContractRegistry\:\:contracts\(\) should return App\\Model\\Table\\ContractsTable but returns Cake\\ORM\\Table\.$#'
+			identifier: return.type
+			count: 1
+			path: src/Service/Registry/ContractRegistry.php
+
+		-
+			message: '#^Method App\\Service\\Registry\\ContractRegistry\:\:findContract\(\) should return App\\Model\\Entity\\Contract\|null but returns Cake\\Datasource\\EntityInterface\|null\.$#'
+			identifier: return.type
+			count: 1
+			path: src/Service/Registry/ContractRegistry.php
+
+		-
+			message: '#^Method App\\Service\\Registry\\ContractRegistry\:\:register\(\) has parameter \$opts with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/Registry/ContractRegistry.php
+
+		-
+			message: '#^Method App\\Service\\Registry\\ContractRegistry\:\:registerContract\(\) has parameter \$opts with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/Registry/ContractRegistry.php
+
+		-
+			message: '#^Method App\\Service\\Registry\\ContractRegistry\:\:registrations\(\) should return App\\Model\\Table\\ContractRegistrationsTable but returns Cake\\ORM\\Table\.$#'
+			identifier: return.type
+			count: 1
+			path: src/Service/Registry/ContractRegistry.php
+
+		-
+			message: '#^Argument of an invalid type list\<string\>\|false supplied for foreach, only iterables are supported\.$#'
+			identifier: foreach.nonIterable
+			count: 1
+			path: src/Service/Registry/VersionConstraint.php
+
+		-
+			message: '#^Match expression does not handle remaining value\: string$#'
+			identifier: match.unhandled
+			count: 1
+			path: src/Service/Registry/VersionConstraint.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 4
+			path: src/Service/Schedule/ScheduledTaskRunner.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\<non\-falsy\-string\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 2
+			path: src/Service/Sdk/ManifestLinter.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 4
+			path: src/Service/Search/SearchService.php
+
+		-
+			message: '#^Method App\\Service\\Search\\SearchService\:\:search\(\) should return list\<array\{source\: string, entity_type\: string, entity_id\: string, title\: string, url\: string\|null, rank\: float\}\> but returns array\<array\{source\: string, entity_type\: string, entity_id\: string, title\: string, url\: string\|null, rank\: float\}\>\.$#'
+			identifier: return.type
+			count: 1
+			path: src/Service/Search/SearchService.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between mixed and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: src/Service/Search/SearchService.php
+
+		-
+			message: '#^Parameter \#1 \$signature of function sodium_crypto_sign_verify_detached expects non\-empty\-string, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Service/Security/Signer.php
+
+		-
+			message: '#^Parameter \#2 \$secret_key of function sodium_crypto_sign_detached expects non\-empty\-string, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Service/Security/Signer.php
+
+		-
+			message: '#^Parameter \#3 \$public_key of function sodium_crypto_sign_verify_detached expects non\-empty\-string, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Service/Security/Signer.php
+
+		-
+			message: '#^Method App\\Service\\Security\\TrustStore\:\:conn\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Service/Security/TrustStore.php
+
+		-
+			message: '#^Access to an undefined property Cake\\Datasource\\EntityInterface\:\:\$is_secret\.$#'
+			identifier: property.notFound
+			count: 2
+			path: src/Service/Settings/SettingsManager.php
+
+		-
+			message: '#^Access to an undefined property Cake\\Datasource\\EntityInterface\:\:\$value\.$#'
+			identifier: property.notFound
+			count: 2
+			path: src/Service/Settings/SettingsManager.php
+
+		-
+			message: '#^Access to an undefined property Cake\\Datasource\\EntityInterface\:\:\$value_encrypted\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/Service/Settings/SettingsManager.php
+
+		-
+			message: '#^Parameter \#1 \$configuration of class AsyncAws\\S3\\S3Client constructor expects array\<''accessKeyId''\|''accessKeySecret''\|''containerCredential…''\|''debug''\|''endpoint''\|''endpointDiscoveryEn…''\|''pathStyleEndpoint''\|''podIdentityAuthoriz…''\|''podIdentityCredenti…''\|''profile''\|''region''\|''roleArn''\|''roleSessionName''\|''sendChunkedBody''\|''sessionToken''\|''sharedConfigFile''\|''sharedCredentialsFi…''\|''webIdentityTokenFile'', string\|null\>\|AsyncAws\\Core\\Configuration, array\{region\: non\-falsy\-string, endpoint\?\: non\-falsy\-string, accessKeyId\?\: non\-falsy\-string, accessKeySecret\?\: non\-falsy\-string, pathStyleEndpoint\: bool\} given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/Service/Storage/StorageManager.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 5
+			path: src/Service/Tenant/TenantService.php
+
+		-
+			message: '#^Method App\\Service\\Tenant\\TenantService\:\:all\(\) should return list\<array\{id\: string, key\: string, name\: string, active\: bool\}\> but returns array\<array\{id\: string, key\: string, name\: string, active\: bool\}\>\.$#'
+			identifier: return.type
+			count: 1
+			path: src/Service/Tenant/TenantService.php
+
+		-
+			message: '#^Method App\\Service\\Update\\UpdateManager\:\:conn\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: src/Service/Update/UpdateManager.php
+
+		-
+			message: '#^Method App\\Service\\Update\\UpdateManager\:\:updateModule\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/Update/UpdateManager.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 14
+			path: src/Service/Webhook/WebhookService.php
+
+		-
+			message: '#^PHPDoc tag @extends contains generic type Cake\\View\\View\<App\\View\\AppView\> but class Cake\\View\\View is not generic\.$#'
+			identifier: generics.notGeneric
+			count: 1
+			path: src/View/AppView.php
+
+		-
+			message: '#^Class App\\View\\Cell\\LocaleSwitcherCell extends generic class Cake\\View\\Cell but does not specify its types\: TSubject$#'
+			identifier: missingType.generics
+			count: 1
+			path: src/View/Cell/LocaleSwitcherCell.php
+
+		-
+			message: '#^Parameter \#1 \$enabled of method App\\Service\\I18n\\LocaleResolver\:\:selectableLocales\(\) expects list\<string\>, array\<string\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/View/Cell/LocaleSwitcherCell.php
+
+		-
+			message: '#^Class App\\View\\Helper\\UiKitHelper extends generic class Cake\\View\\Helper but does not specify its types\: TView$#'
+			identifier: missingType.generics
+			count: 1
+			path: src/View/Helper/UiKitHelper.php
+
+		-
+			message: '#^Parameter \#2 \$actions of method App\\View\\Helper\\UiKitHelper\:\:actionButtons\(\) expects list\<array\<string, mixed\>\>, non\-empty\-array\<mixed\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: src/View/Helper/UiKitHelper.php

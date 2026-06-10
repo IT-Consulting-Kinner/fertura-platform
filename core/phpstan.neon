@@ -1,3 +1,8 @@
+includes:
+	# Bestehende Level-8-Befunde sind grandfathered; NEUE Fehler lassen die CI
+	# rot werden. Baseline schrittweise abbauen (siehe TESTING.md).
+	- phpstan-baseline.neon
+
 parameters:
 	level: 8
 	treatPhpDocTypesAsCertain: false
