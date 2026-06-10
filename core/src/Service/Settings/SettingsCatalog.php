@@ -51,6 +51,11 @@ class SettingsCatalog
             'backup.offsite.enabled' => ['type' => 'bool', 'default' => false],
             'health.worker_max_age_seconds' => ['type' => 'int', 'default' => 120, 'min' => 10, 'max' => 86400],
             'health_token' => ['type' => 'string', 'default' => null, 'secret' => true],
+            // Observability (#12): Webhook-URL für Health-Alarme (Statuswechsel
+            // up<->degraded/down), signiert per HMAC mit health.alert_secret. Der
+            // OTLP-Metrik-Export läuft separat über OTEL_EXPORTER_OTLP_ENDPOINT (Env).
+            'health.alert_url' => ['type' => 'string', 'default' => null],
+            'health.alert_secret' => ['type' => 'string', 'default' => null, 'secret' => true],
 
             // Daten-Backup (Kap. 20.1.2). Pfad als Container-/Linux- bzw.
             // Windows-Pfad; leer = Standard-Volume. Scheduler läuft im Worker.

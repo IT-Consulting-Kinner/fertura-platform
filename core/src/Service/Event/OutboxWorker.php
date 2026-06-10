@@ -316,6 +316,20 @@ class OutboxWorker
                     } catch (Throwable $e) {
                         $this->log('Modulhost-Supervision-Fehler: ' . $e->getMessage());
                     }
+                    // Observability (#12), gedrosselt: OTLP-Metrik-Push (falls
+                    // OTEL_EXPORTER_OTLP_ENDPOINT gesetzt) + Health-Alert bei
+                    // Statuswechsel. Fehlerisoliert.
+                    try {
+                        $otlp = new \App\Service\Observability\OtlpMetricsExporter();
+                        if ($otlp->available()) {
+                            $otlp->export();
+                        }
+                        if ((new \App\Service\Observability\HealthAlertService())->check()) {
+                            $this->log('Health-Alarm gesendet (Statuswechsel).');
+                        }
+                    } catch (Throwable $e) {
+                        $this->log('Observability-Fehler: ' . $e->getMessage());
+                    }
                 }
                 // Vorhandene Events vollständig abarbeiten.
                 $processed = 0;
