@@ -110,6 +110,11 @@ class SettingsCatalog
             'ai.chat.model' => ['type' => 'string', 'default' => null],
             'ai.embed.provider' => ['type' => 'string', 'default' => null],
             'ai.embed.model' => ['type' => 'string', 'default' => null],
+            // Beim Indexieren eines Suchdokuments automatisch auch ein Embedding
+            // erzeugen (für die Hybrid-Suche), sofern ein Embedding-Provider aktiv
+            // ist. Default aus, da je Dokument ein (synchroner) LLM-Aufruf anfällt;
+            // für Massen-Reindex/Hintergrund-Indexierung empfohlen.
+            'ai.embed.auto_index' => ['type' => 'bool', 'default' => false],
             // Optionaler Endpoint-Override je Provider (z. B. Azure-OpenAI, ein
             // selbst gehosteter/Proxy-Gateway wie LiteLLM). MUSS https sein, sonst
             // ginge der API-Schlüssel im Klartext über die Leitung (AiGateway lehnt

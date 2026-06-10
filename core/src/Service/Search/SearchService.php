@@ -5,6 +5,7 @@ namespace App\Service\Search;
 
 use App\Service\Ai\EmbeddingService;
 use App\Service\Module\ContributionRuntime;
+use App\Service\Settings\SettingsManager;
 use Cake\Datasource\ConnectionInterface;
 use Cake\Datasource\ConnectionManager;
 use Throwable;
@@ -47,6 +48,7 @@ class SearchService
         string $body = '',
         ?string $ownerId = null,
         ?string $url = null,
+        ?bool $embed = null,
     ): void {
         $this->conn()->execute(
             'INSERT INTO search_index (source, entity_type, entity_id, title, body, owner_id, url) '
@@ -56,6 +58,17 @@ class SearchService
             . 'url = EXCLUDED.url, updated_at = now()',
             ['s' => $source, 'et' => $entityType, 'ei' => $entityId, 'ti' => $title, 'b' => $body, 'o' => $ownerId, 'u' => $url],
         );
+
+        // Optional dasselbe Dokument für die Hybrid-Suche einbetten (best-effort:
+        // Volltext bleibt maßgeblich, ein Embedding-Fehler darf das Indexieren nie
+        // brechen). Gesteuert pro Aufruf ($embed) oder global (ai.embed.auto_index).
+        if ($this->shouldEmbed($embed)) {
+            try {
+                $content = trim($title . "\n" . $body);
+                $this->embeddings()->index($source, $entityType, $entityId, $content, $ownerId);
+            } catch (Throwable) {
+            }
+        }
     }
 
     public function remove(string $source, string $entityType, string $entityId): void
@@ -64,11 +77,44 @@ class SearchService
             'DELETE FROM search_index WHERE source = :s AND entity_type = :et AND entity_id = :ei',
             ['s' => $source, 'et' => $entityType, 'ei' => $entityId],
         );
+        // Embedding synchron mit entfernen (best-effort), damit beide Indizes
+        // konsistent bleiben.
+        try {
+            $this->embeddings()->remove($source, $entityType, $entityId);
+        } catch (Throwable) {
+        }
     }
 
     public function removeSource(string $source): void
     {
         $this->conn()->execute('DELETE FROM search_index WHERE source = :s', ['s' => $source]);
+        try {
+            $this->embeddings()->removeSource($source);
+        } catch (Throwable) {
+        }
+    }
+
+    /**
+     * Entscheidet, ob beim Indexieren zusätzlich eingebettet wird: expliziter
+     * Parameter hat Vorrang, sonst das Setting `ai.embed.auto_index`; in beiden
+     * Fällen nur, wenn überhaupt ein Embedding-Provider verfügbar ist.
+     */
+    private function shouldEmbed(?bool $explicit): bool
+    {
+        if ($explicit === false) {
+            return false;
+        }
+        if ($explicit === null) {
+            try {
+                if (!(bool)(new SettingsManager())->get('core', 'ai.embed.auto_index', false)) {
+                    return false;
+                }
+            } catch (Throwable) {
+                return false;
+            }
+        }
+
+        return $this->embeddings()->available();
     }
 
     /**

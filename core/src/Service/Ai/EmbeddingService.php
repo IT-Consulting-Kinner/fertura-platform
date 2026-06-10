@@ -54,6 +54,11 @@ class EmbeddingService
         );
     }
 
+    public function removeSource(string $source): void
+    {
+        $this->conn()->execute('DELETE FROM embeddings WHERE source = :s', ['s' => $source]);
+    }
+
     /**
      * Semantische Suche. `$userId === null` = System (alles); sonst nur eigene +
      * öffentliche Dokumente.

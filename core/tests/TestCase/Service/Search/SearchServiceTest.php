@@ -119,6 +119,49 @@ class SearchServiceTest extends TestCase
         $this->assertNull($three['url']);
     }
 
+    public function testAutoEmbedOnIndexAndRemove(): void
+    {
+        // Embedding-Dienst, der Aufrufe mitschreibt (kein echter LLM-Aufruf).
+        $emb = new class extends EmbeddingService {
+            /** @var list<array{0:string,1:string,2:string}> */
+            public array $indexed = [];
+            /** @var list<array{0:string,1:string,2:string}> */
+            public array $removed = [];
+
+            public function __construct()
+            {
+            }
+
+            public function available(): bool
+            {
+                return true;
+            }
+
+            public function index(string $source, string $entityType, string $entityId, string $content, ?string $ownerId = null): void
+            {
+                $this->indexed[] = [$source, $entityType, $entityId];
+            }
+
+            public function remove(string $source, string $entityType, string $entityId): void
+            {
+                $this->removed[] = [$source, $entityType, $entityId];
+            }
+        };
+        $s = new SearchService(null, $emb);
+
+        // explizit embed:true -> FTS + Embedding
+        $s->index('zztest', 'doc', 'e1', 'Titel', 'Inhalt', null, null, true);
+        $this->assertSame([['zztest', 'doc', 'e1']], $emb->indexed);
+
+        // explizit embed:false -> nur FTS, kein Embedding
+        $s->index('zztest', 'doc', 'e2', 'Titel2', '', null, null, false);
+        $this->assertCount(1, $emb->indexed, 'embed:false unterdrückt das Embedding');
+
+        // remove räumt beide Indizes auf
+        $s->remove('zztest', 'doc', 'e1');
+        $this->assertSame([['zztest', 'doc', 'e1']], $emb->removed);
+    }
+
     public function testUpdateAndRemove(): void
     {
         $s = new SearchService();
