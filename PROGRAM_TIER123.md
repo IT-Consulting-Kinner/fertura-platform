@@ -79,9 +79,9 @@ Tests, Doku (Anforderungsdokument-Kapitel + Changelog) und eigenem Commit/Push
   Migrations-Sicherheits-Check (Expand/Contract-Hinweise).
 
 ### Phase F — Ökosystem
-- [ ] **P16 — Modul-SDK / Scaffolding / Dev-Mode / Manifest-Linter.** CLI zum
-  Modul-Gerüst, lokaler Dev-Modus, Manifest-/Contract-Linter, Test-Harness,
-  publizierte Interface-Docs — spiegelt die nun reichere Oberfläche.
+- [x] **P16 — Modul-SDK / Scaffolding / Manifest-Linter** (E91). `ManifestLinter`
+  + `ModuleScaffolder`; CLIs `module_lint`/`module_scaffold`/`module_contracts`
+  (Erweiterungspunkt-Katalog). Gerüst besteht den Linter sauber.
 
 ## Fortschritt
 
@@ -107,10 +107,11 @@ Abgeschlossene Punkte werden oben abgehakt und hier mit E-Nummer + Commit notier
 | P12 Workflow-Engine | E87 | 0004c80 | fertig — 160 Tests grün |
 | P13 Reporting/Export | E88 | (folgt) | fertig — 171 Tests grün |
 | P14 Off-Site-Backup | E89 | (folgt) | fertig — Upload/List/Download |
-| P15 Zero-Downtime | E90 | (folgt) | fertig — /health/ready + Migr.-Check |
+| P15 Zero-Downtime | E90 | cbcf6f3 | fertig — /health/ready + Migr.-Check |
+| P16 Modul-SDK | E91 | (folgt) | fertig — 177 Tests grün |
 
-**Phasen A–E abgeschlossen** (P01–P15). Nächster Halt: Zwischenstand, dann
-Phase F (P16 Modul-SDK/Scaffolding).
+**PROGRAMM VOLLSTÄNDIG ABGESCHLOSSEN** — alle 16 Punkte (P01–P16), Phasen A–F.
+177 Tests grün.
 
 **Phasen A–C abgeschlossen** (P01–P09). Phase D läuft: P10 fertig, als Nächstes
 P11 AI/LLM (Provider: OpenAI/Anthropic/xAI/Google), P12 Workflow-Engine.
