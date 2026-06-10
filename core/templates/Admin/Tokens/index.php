@@ -48,12 +48,12 @@
 <div class="table-responsive">
 <table class="table table-sm align-middle">
     <thead><tr>
-        <th><?= h(__('admin.tokens.col_label')) ?></th>
-        <th><?= h(__('admin.tokens.col_scopes')) ?></th>
-        <th><?= h(__('admin.tokens.col_last_used')) ?></th>
-        <th><?= h(__('admin.tokens.col_expires')) ?></th>
-        <th><?= h(__('admin.tokens.col_state')) ?></th>
-        <th class="text-end"><?= h(__('admin.tokens.col_actions')) ?></th>
+        <th scope="col"><?= h(__('admin.tokens.col_label')) ?></th>
+        <th scope="col"><?= h(__('admin.tokens.col_scopes')) ?></th>
+        <th scope="col"><?= h(__('admin.tokens.col_last_used')) ?></th>
+        <th scope="col"><?= h(__('admin.tokens.col_expires')) ?></th>
+        <th scope="col"><?= h(__('admin.tokens.col_state')) ?></th>
+        <th scope="col" class="text-end"><?= h(__('admin.tokens.col_actions')) ?></th>
     </tr></thead>
     <tbody>
     <?php foreach ($tokens as $t): $revoked = $t['revoked_at'] !== null; ?>

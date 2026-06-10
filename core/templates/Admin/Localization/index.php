@@ -47,11 +47,11 @@ $badge = static function (string $status): string {
             <table class="table table-sm align-middle mb-0">
                 <thead>
                     <tr>
-                        <th><?= h(__('admin.localization.col_locale')) ?></th>
-                        <th><?= h(__('admin.localization.col_version')) ?></th>
-                        <th><?= h(__('admin.localization.col_status')) ?></th>
-                        <th><?= h(__('admin.localization.col_flags')) ?></th>
-                        <th class="text-end"><?= h(__('admin.localization.col_actions')) ?></th>
+                        <th scope="col"><?= h(__('admin.localization.col_locale')) ?></th>
+                        <th scope="col"><?= h(__('admin.localization.col_version')) ?></th>
+                        <th scope="col"><?= h(__('admin.localization.col_status')) ?></th>
+                        <th scope="col"><?= h(__('admin.localization.col_flags')) ?></th>
+                        <th scope="col" class="text-end"><?= h(__('admin.localization.col_actions')) ?></th>
                     </tr>
                 </thead>
                 <tbody>

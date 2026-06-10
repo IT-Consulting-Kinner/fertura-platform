@@ -27,7 +27,7 @@
 
 <p class="text-muted small"><?= h(__('admin.audit.hint_last_100')) ?></p>
 <table class="table table-sm table-hover align-middle">
-    <thead><tr><th><?= h(__('admin.audit.col_timestamp')) ?></th><th><?= h(__('admin.audit.col_actor')) ?></th><th><?= h(__('admin.audit.col_action')) ?></th><th><?= h(__('admin.audit.col_entity')) ?></th><th><?= h(__('admin.audit.col_module')) ?></th><th><?= h(__('admin.audit.col_component')) ?></th></tr></thead>
+    <thead><tr><th scope="col"><?= h(__('admin.audit.col_timestamp')) ?></th><th scope="col"><?= h(__('admin.audit.col_actor')) ?></th><th scope="col"><?= h(__('admin.audit.col_action')) ?></th><th scope="col"><?= h(__('admin.audit.col_entity')) ?></th><th scope="col"><?= h(__('admin.audit.col_module')) ?></th><th scope="col"><?= h(__('admin.audit.col_component')) ?></th></tr></thead>
     <tbody>
     <?php foreach ($entries as $e): ?>
         <tr>

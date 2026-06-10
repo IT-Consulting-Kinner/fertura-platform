@@ -12,7 +12,7 @@ $badge = ['active' => 'success', 'installed_inactive' => 'secondary', 'installed
 </div>
 <p class="text-muted small"><?= __('admin.modules.intro', '<code>bin/cake module install</code>') ?></p>
 <table class="table table-hover align-middle">
-    <thead><tr><th><?= h(__('admin.modules.col_key')) ?></th><th><?= h(__('admin.modules.col_name')) ?></th><th><?= h(__('admin.modules.col_version')) ?></th><th><?= h(__('admin.modules.col_type')) ?></th><th><?= h(__('admin.modules.col_license')) ?></th><th><?= h(__('admin.modules.col_status')) ?></th><th class="text-end"><?= h(__('admin.modules.col_action')) ?></th></tr></thead>
+    <thead><tr><th scope="col"><?= h(__('admin.modules.col_key')) ?></th><th scope="col"><?= h(__('admin.modules.col_name')) ?></th><th scope="col"><?= h(__('admin.modules.col_version')) ?></th><th scope="col"><?= h(__('admin.modules.col_type')) ?></th><th scope="col"><?= h(__('admin.modules.col_license')) ?></th><th scope="col"><?= h(__('admin.modules.col_status')) ?></th><th scope="col" class="text-end"><?= h(__('admin.modules.col_action')) ?></th></tr></thead>
     <tbody>
     <?php foreach ($modules as $m): $active = $m['status'] === 'active'; ?>
         <tr>

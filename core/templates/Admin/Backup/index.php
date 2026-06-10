@@ -72,14 +72,14 @@ $human = static function ($b): string {
 <div class="table-responsive">
 <table class="table table-sm align-middle">
     <thead><tr>
-        <th><?= h(__('admin.backup.col_created')) ?></th>
-        <th><?= h(__('admin.backup.col_id')) ?></th>
-        <th><?= h(__('admin.backup.col_status')) ?></th>
-        <th><?= h(__('admin.backup.col_db')) ?></th>
-        <th><?= h(__('admin.backup.col_files')) ?></th>
-        <th><?= h(__('admin.backup.col_protection')) ?></th>
-        <th><?= h(__('admin.backup.col_note')) ?></th>
-        <th class="text-end"><?= h(__('admin.backup.col_actions')) ?></th>
+        <th scope="col"><?= h(__('admin.backup.col_created')) ?></th>
+        <th scope="col"><?= h(__('admin.backup.col_id')) ?></th>
+        <th scope="col"><?= h(__('admin.backup.col_status')) ?></th>
+        <th scope="col"><?= h(__('admin.backup.col_db')) ?></th>
+        <th scope="col"><?= h(__('admin.backup.col_files')) ?></th>
+        <th scope="col"><?= h(__('admin.backup.col_protection')) ?></th>
+        <th scope="col"><?= h(__('admin.backup.col_note')) ?></th>
+        <th scope="col" class="text-end"><?= h(__('admin.backup.col_actions')) ?></th>
     </tr></thead>
     <tbody>
     <?php foreach ($backups as $b):
@@ -115,13 +115,13 @@ $human = static function ($b): string {
 <div class="table-responsive">
 <table class="table table-sm align-middle">
     <thead><tr>
-        <th><?= h(__('admin.backup.log_time')) ?></th>
-        <th><?= h(__('admin.backup.log_operation')) ?></th>
-        <th><?= h(__('admin.backup.log_result')) ?></th>
-        <th><?= h(__('admin.backup.log_source')) ?></th>
-        <th><?= h(__('admin.backup.log_actor')) ?></th>
-        <th><?= h(__('admin.backup.col_id')) ?></th>
-        <th><?= h(__('admin.backup.log_message')) ?></th>
+        <th scope="col"><?= h(__('admin.backup.log_time')) ?></th>
+        <th scope="col"><?= h(__('admin.backup.log_operation')) ?></th>
+        <th scope="col"><?= h(__('admin.backup.log_result')) ?></th>
+        <th scope="col"><?= h(__('admin.backup.log_source')) ?></th>
+        <th scope="col"><?= h(__('admin.backup.log_actor')) ?></th>
+        <th scope="col"><?= h(__('admin.backup.col_id')) ?></th>
+        <th scope="col"><?= h(__('admin.backup.log_message')) ?></th>
     </tr></thead>
     <tbody>
     <?php foreach ($logEntries as $l): ?>

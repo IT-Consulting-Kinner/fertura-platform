@@ -11,7 +11,7 @@ $evalBadge = ['valid' => 'success', 'grace' => 'warning', 'needs_online' => 'war
 </div>
 
 <table class="table table-hover align-middle">
-    <thead><tr><th><?= h(__('admin.marketplace.col_module')) ?></th><th><?= h(__('admin.marketplace.col_key_id')) ?></th><th><?= h(__('admin.marketplace.col_valid_to')) ?></th><th><?= h(__('admin.marketplace.col_online')) ?></th><th><?= h(__('admin.marketplace.col_status_db')) ?></th><th><?= h(__('admin.marketplace.col_evaluated')) ?></th></tr></thead>
+    <thead><tr><th scope="col"><?= h(__('admin.marketplace.col_module')) ?></th><th scope="col"><?= h(__('admin.marketplace.col_key_id')) ?></th><th scope="col"><?= h(__('admin.marketplace.col_valid_to')) ?></th><th scope="col"><?= h(__('admin.marketplace.col_online')) ?></th><th scope="col"><?= h(__('admin.marketplace.col_status_db')) ?></th><th scope="col"><?= h(__('admin.marketplace.col_evaluated')) ?></th></tr></thead>
     <tbody>
     <?php foreach ($licenses as $l): ?>
         <tr>

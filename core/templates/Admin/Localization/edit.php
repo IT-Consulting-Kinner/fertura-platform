@@ -25,8 +25,8 @@
 <div class="table-responsive">
 <table class="table align-middle">
     <thead><tr>
-        <th style="width:40%"><?= h(__('admin.localization.col_key')) ?></th>
-        <th><?= h(__('admin.localization.col_translation')) ?></th>
+        <th scope="col" style="width:40%"><?= h(__('admin.localization.col_key')) ?></th>
+        <th scope="col"><?= h(__('admin.localization.col_translation')) ?></th>
     </tr></thead>
     <tbody>
     <?php foreach ($entries as $e): ?>

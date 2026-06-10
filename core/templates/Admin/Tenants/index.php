@@ -24,7 +24,7 @@
 ]) ?>
 <table class="table table-sm table-hover align-middle">
     <thead><tr>
-        <th style="width:1%"><input type="checkbox" class="form-check-input"
+        <th scope="col" style="width:1%"><input type="checkbox" class="form-check-input"
             onclick="this.closest('table').querySelectorAll('tbody input[type=checkbox]').forEach(function(c){c.checked=this.checked}.bind(this))" aria-label="Alle"></th>
         <?= $this->UiKit->sortHeader(__('admin.tenants.col_name'), 'name', $query, ['action' => 'index']) ?>
         <?= $this->UiKit->sortHeader(__('admin.tenants.col_key'), 'key', $query, ['action' => 'index']) ?>

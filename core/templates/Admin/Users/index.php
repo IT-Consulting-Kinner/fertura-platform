@@ -10,7 +10,7 @@ $badge = ['active' => 'success', 'invited' => 'info', 'disabled' => 'secondary',
     <?= $this->Html->link(__('admin.users.new'), ['action' => 'add'], ['class' => 'btn btn-primary btn-sm']) ?>
 </div>
 <table class="table table-hover align-middle">
-    <thead><tr><th><?= h(__('admin.users.col_username')) ?></th><th><?= h(__('admin.users.col_name')) ?></th><th><?= h(__('admin.users.col_email')) ?></th><th><?= h(__('admin.users.col_status')) ?></th><th></th></tr></thead>
+    <thead><tr><th scope="col"><?= h(__('admin.users.col_username')) ?></th><th scope="col"><?= h(__('admin.users.col_name')) ?></th><th scope="col"><?= h(__('admin.users.col_email')) ?></th><th scope="col"><?= h(__('admin.users.col_status')) ?></th><th scope="col"></th></tr></thead>
     <tbody>
     <?php foreach ($users as $u): ?>
         <tr>

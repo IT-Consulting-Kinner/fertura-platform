@@ -71,6 +71,17 @@ class TenantsControllerTest extends TestCase
         $this->assertResponseContains('scope="col"');
     }
 
+    public function testHandRolledAdminTableHasScopedHeaders(): void
+    {
+        // Guard für den systematischen A11y-Rollout: auch *handgebaute* Admin-Tabellen
+        // (nicht nur UiKit-generierte) tragen scope="col" an den Spaltenköpfen.
+        $this->login();
+        $this->get('/admin/config');
+
+        $this->assertResponseOk();
+        $this->assertResponseContains('<th scope="col">'); // Config/index.php ist handgebaut
+    }
+
     public function testAddCreatesTenant(): void
     {
         $this->login();

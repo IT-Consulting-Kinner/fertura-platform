@@ -49,7 +49,7 @@ $flag = static fn ($v) => filter_var($v, FILTER_VALIDATE_BOOLEAN) ? '✓' : '–
         <div class="card mb-4">
             <div class="card-header"><?= h(__('admin.groups.perms_granted')) ?></div>
             <table class="table table-sm mb-0">
-                <thead><tr><th><?= h(__('admin.groups.perms_col_resource')) ?></th><th><?= h(__('admin.groups.perms_col_object')) ?></th><th class="text-center">B</th><th class="text-center">R</th><th class="text-center">A</th><th class="text-center">E</th><th class="text-center">D</th><th><?= h(__('admin.groups.perms_col_extra')) ?></th></tr></thead>
+                <thead><tr><th scope="col"><?= h(__('admin.groups.perms_col_resource')) ?></th><th scope="col"><?= h(__('admin.groups.perms_col_object')) ?></th><th scope="col" class="text-center">B</th><th scope="col" class="text-center">R</th><th scope="col" class="text-center">A</th><th scope="col" class="text-center">E</th><th scope="col" class="text-center">D</th><th scope="col"><?= h(__('admin.groups.perms_col_extra')) ?></th></tr></thead>
                 <tbody>
                 <?php foreach ($permissions as $p): ?>
                     <?php $ex = is_string($p['extra_actions'] ?? null) ? (json_decode((string)$p['extra_actions'], true) ?: []) : (array)($p['extra_actions'] ?? []); ?>

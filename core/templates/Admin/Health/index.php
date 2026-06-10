@@ -24,7 +24,7 @@ $render = static function ($detail): string {
 
 <div class="table-responsive">
 <table class="table table-hover align-middle">
-    <thead><tr><th><?= h(__('admin.health.col_subsystem')) ?></th><th><?= h(__('admin.health.col_status')) ?></th><th><?= h(__('admin.health.col_detail')) ?></th></tr></thead>
+    <thead><tr><th scope="col"><?= h(__('admin.health.col_subsystem')) ?></th><th scope="col"><?= h(__('admin.health.col_status')) ?></th><th scope="col"><?= h(__('admin.health.col_detail')) ?></th></tr></thead>
     <tbody>
     <?php foreach ($report['subsystems'] as $name => $sub): ?>
         <tr>
@@ -39,7 +39,7 @@ $render = static function ($detail): string {
 
 <h2 class="h5 mt-4"><?= h(__('admin.health.workers_heading')) ?></h2>
 <table class="table table-sm table-hover align-middle">
-    <thead><tr><th><?= h(__('admin.health.col_worker')) ?></th><th><?= h(__('admin.health.col_last_run')) ?></th><th><?= h(__('admin.health.col_age')) ?></th><th><?= h(__('admin.health.col_duration')) ?></th><th><?= h(__('admin.health.col_status')) ?></th></tr></thead>
+    <thead><tr><th scope="col"><?= h(__('admin.health.col_worker')) ?></th><th scope="col"><?= h(__('admin.health.col_last_run')) ?></th><th scope="col"><?= h(__('admin.health.col_age')) ?></th><th scope="col"><?= h(__('admin.health.col_duration')) ?></th><th scope="col"><?= h(__('admin.health.col_status')) ?></th></tr></thead>
     <tbody>
     <?php foreach ($heartbeats as $hb):
         $age = (int)$hb['age_seconds'];

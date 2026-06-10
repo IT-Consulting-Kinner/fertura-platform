@@ -9,7 +9,7 @@
 
 <div class="table-responsive">
 <table class="table align-middle">
-    <thead><tr><th><?= h(__('admin.config.col_key')) ?></th><th><?= h(__('admin.config.col_type')) ?></th><th><?= h(__('admin.config.col_default')) ?></th><th style="min-width:280px"><?= h(__('admin.config.col_value')) ?></th></tr></thead>
+    <thead><tr><th scope="col"><?= h(__('admin.config.col_key')) ?></th><th scope="col"><?= h(__('admin.config.col_type')) ?></th><th scope="col"><?= h(__('admin.config.col_default')) ?></th><th scope="col" style="min-width:280px"><?= h(__('admin.config.col_value')) ?></th></tr></thead>
     <tbody>
     <?php foreach ($settings as $s): ?>
         <tr>

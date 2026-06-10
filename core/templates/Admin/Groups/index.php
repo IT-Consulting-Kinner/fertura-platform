@@ -9,7 +9,7 @@
     <?= $this->Html->link(__('admin.groups.new'), ['action' => 'add'], ['class' => 'btn btn-primary btn-sm']) ?>
 </div>
 <table class="table table-hover align-middle">
-    <thead><tr><th><?= h(__('admin.groups.col_name')) ?></th><th><?= h(__('admin.groups.col_description')) ?></th><th><?= h(__('admin.groups.col_members')) ?></th><th><?= h(__('admin.groups.col_status')) ?></th><th></th></tr></thead>
+    <thead><tr><th scope="col"><?= h(__('admin.groups.col_name')) ?></th><th scope="col"><?= h(__('admin.groups.col_description')) ?></th><th scope="col"><?= h(__('admin.groups.col_members')) ?></th><th scope="col"><?= h(__('admin.groups.col_status')) ?></th><th scope="col"></th></tr></thead>
     <tbody>
     <?php foreach ($groups as $g): ?>
         <tr>

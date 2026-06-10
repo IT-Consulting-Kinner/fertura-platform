@@ -51,7 +51,7 @@ $spec = static function ($v): string {
 
 <h2 class="h5 mt-4"><?= h(__('admin.interfaces.usage_heading')) ?></h2>
 <table class="table table-sm table-hover align-middle">
-    <thead><tr><th><?= h(__('admin.interfaces.col_using_module')) ?></th><th><?= h(__('admin.interfaces.col_module_version')) ?></th><th><?= h(__('admin.interfaces.col_target_interface')) ?></th><th><?= h(__('admin.interfaces.col_interface_version')) ?></th><th><?= h(__('admin.interfaces.col_required')) ?></th><th><?= h(__('admin.interfaces.col_status')) ?></th><th><?= h(__('admin.interfaces.col_compatibility')) ?></th></tr></thead>
+    <thead><tr><th scope="col"><?= h(__('admin.interfaces.col_using_module')) ?></th><th scope="col"><?= h(__('admin.interfaces.col_module_version')) ?></th><th scope="col"><?= h(__('admin.interfaces.col_target_interface')) ?></th><th scope="col"><?= h(__('admin.interfaces.col_interface_version')) ?></th><th scope="col"><?= h(__('admin.interfaces.col_required')) ?></th><th scope="col"><?= h(__('admin.interfaces.col_status')) ?></th><th scope="col"><?= h(__('admin.interfaces.col_compatibility')) ?></th></tr></thead>
     <tbody>
     <?php foreach ($usages as $u): $active = $b($u['active']) && $u['binding_status'] === 'active'; ?>
         <tr>

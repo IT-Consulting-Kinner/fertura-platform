@@ -11,7 +11,7 @@ $typeBadge = ['resolver' => 'primary', 'collector' => 'info', 'event' => 'warnin
 
 <h2 class="h5"><?= h(__('admin.registry.contracts_heading')) ?></h2>
 <table class="table table-sm table-hover align-middle">
-    <thead><tr><th><?= h(__('admin.registry.col_name')) ?></th><th><?= h(__('admin.registry.col_type')) ?></th><th><?= h(__('admin.registry.col_version')) ?></th><th><?= h(__('admin.registry.col_owner_module')) ?></th><th><?= h(__('admin.registry.col_multi')) ?></th><th><?= h(__('admin.registry.col_registrations')) ?></th><th><?= h(__('admin.registry.col_status')) ?></th></tr></thead>
+    <thead><tr><th scope="col"><?= h(__('admin.registry.col_name')) ?></th><th scope="col"><?= h(__('admin.registry.col_type')) ?></th><th scope="col"><?= h(__('admin.registry.col_version')) ?></th><th scope="col"><?= h(__('admin.registry.col_owner_module')) ?></th><th scope="col"><?= h(__('admin.registry.col_multi')) ?></th><th scope="col"><?= h(__('admin.registry.col_registrations')) ?></th><th scope="col"><?= h(__('admin.registry.col_status')) ?></th></tr></thead>
     <tbody>
     <?php foreach ($contracts as $c): ?>
         <tr>
@@ -30,7 +30,7 @@ $typeBadge = ['resolver' => 'primary', 'collector' => 'info', 'event' => 'warnin
 
 <h2 class="h5 mt-4"><?= h(__('admin.registry.registrations_heading')) ?></h2>
 <table class="table table-sm table-hover align-middle">
-    <thead><tr><th><?= h(__('admin.registry.col_contract')) ?></th><th><?= h(__('admin.registry.col_module')) ?></th><th><?= h(__('admin.registry.col_type')) ?></th><th><?= h(__('admin.registry.col_implementation')) ?></th><th><?= h(__('admin.registry.col_priority')) ?></th><th><?= h(__('admin.registry.col_status')) ?></th></tr></thead>
+    <thead><tr><th scope="col"><?= h(__('admin.registry.col_contract')) ?></th><th scope="col"><?= h(__('admin.registry.col_module')) ?></th><th scope="col"><?= h(__('admin.registry.col_type')) ?></th><th scope="col"><?= h(__('admin.registry.col_implementation')) ?></th><th scope="col"><?= h(__('admin.registry.col_priority')) ?></th><th scope="col"><?= h(__('admin.registry.col_status')) ?></th></tr></thead>
     <tbody>
     <?php foreach ($registrations as $r): ?>
         <tr>
@@ -48,7 +48,7 @@ $typeBadge = ['resolver' => 'primary', 'collector' => 'info', 'event' => 'warnin
 
 <h2 class="h5 mt-4"><?= h(__('admin.registry.bindings_heading')) ?></h2>
 <table class="table table-sm table-hover align-middle">
-    <thead><tr><th><?= h(__('admin.registry.col_module')) ?></th><th><?= h(__('admin.registry.col_contract')) ?></th><th><?= h(__('admin.registry.col_status')) ?></th></tr></thead>
+    <thead><tr><th scope="col"><?= h(__('admin.registry.col_module')) ?></th><th scope="col"><?= h(__('admin.registry.col_contract')) ?></th><th scope="col"><?= h(__('admin.registry.col_status')) ?></th></tr></thead>
     <tbody>
     <?php foreach ($bindings as $b): ?>
         <tr><td><?= h($b['module_key']) ?></td><td><code><?= h($b['contract']) ?></code></td>

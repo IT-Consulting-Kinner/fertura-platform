@@ -38,7 +38,7 @@ $resBadge = ['success' => 'success', 'failed' => 'danger', 'rolled_back' => 'war
 
 <h2 class="h5"><?= h(__('admin.updates.history')) ?></h2>
 <table class="table table-sm table-hover align-middle">
-    <thead><tr><th><?= h(__('admin.updates.col_time')) ?></th><th><?= h(__('admin.updates.col_type')) ?></th><th><?= h(__('admin.updates.col_component')) ?></th><th><?= h(__('admin.updates.col_from')) ?></th><th><?= h(__('admin.updates.col_to')) ?></th><th><?= h(__('admin.updates.col_result')) ?></th></tr></thead>
+    <thead><tr><th scope="col"><?= h(__('admin.updates.col_time')) ?></th><th scope="col"><?= h(__('admin.updates.col_type')) ?></th><th scope="col"><?= h(__('admin.updates.col_component')) ?></th><th scope="col"><?= h(__('admin.updates.col_from')) ?></th><th scope="col"><?= h(__('admin.updates.col_to')) ?></th><th scope="col"><?= h(__('admin.updates.col_result')) ?></th></tr></thead>
     <tbody>
     <?php foreach ($history as $h): ?>
         <tr>

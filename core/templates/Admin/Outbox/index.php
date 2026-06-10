@@ -32,11 +32,11 @@
 <div class="table-responsive">
 <table class="table table-sm align-middle">
     <thead><tr>
-        <th><?= h(__('admin.outbox.col_created')) ?></th>
-        <th><?= h(__('admin.outbox.col_contract')) ?></th>
-        <th><?= h(__('admin.outbox.col_attempts')) ?></th>
-        <th><?= h(__('admin.outbox.col_error')) ?></th>
-        <th class="text-end"><?= h(__('admin.outbox.col_actions')) ?></th>
+        <th scope="col"><?= h(__('admin.outbox.col_created')) ?></th>
+        <th scope="col"><?= h(__('admin.outbox.col_contract')) ?></th>
+        <th scope="col"><?= h(__('admin.outbox.col_attempts')) ?></th>
+        <th scope="col"><?= h(__('admin.outbox.col_error')) ?></th>
+        <th scope="col" class="text-end"><?= h(__('admin.outbox.col_actions')) ?></th>
     </tr></thead>
     <tbody>
     <?php foreach ($deadLetters as $e): ?>

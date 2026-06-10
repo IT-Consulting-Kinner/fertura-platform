@@ -19,7 +19,7 @@ $badge = static fn (bool $a): string => $a
     <p class="text-muted"><?= h(__('admin.integrations.none')) ?></p>
 <?php else: ?>
 <div class="table-responsive"><table class="table table-sm align-middle">
-    <thead><tr><th>Name</th><th>URL</th><th>Events</th><th><?= h(__('admin.integrations.status')) ?></th><th class="text-end"></th></tr></thead>
+    <thead><tr><th scope="col">Name</th><th scope="col">URL</th><th scope="col">Events</th><th scope="col"><?= h(__('admin.integrations.status')) ?></th><th scope="col" class="text-end"></th></tr></thead>
     <tbody>
     <?php foreach ($webhooks as $w): ?>
         <tr>
@@ -42,7 +42,7 @@ $badge = static fn (bool $a): string => $a
     <p class="text-muted"><?= h(__('admin.integrations.none')) ?></p>
 <?php else: ?>
 <div class="table-responsive"><table class="table table-sm align-middle">
-    <thead><tr><th>Event</th><th><?= h(__('admin.integrations.status')) ?></th><th>HTTP</th><th>Versuche</th><th class="text-end"></th></tr></thead>
+    <thead><tr><th scope="col">Event</th><th scope="col"><?= h(__('admin.integrations.status')) ?></th><th scope="col">HTTP</th><th scope="col">Versuche</th><th scope="col" class="text-end"></th></tr></thead>
     <tbody>
     <?php foreach ($deliveries as $d): ?>
         <tr>
@@ -66,7 +66,7 @@ $badge = static fn (bool $a): string => $a
     <p class="text-muted"><?= h(__('admin.integrations.none')) ?></p>
 <?php else: ?>
 <div class="table-responsive"><table class="table table-sm align-middle">
-    <thead><tr><th>Name</th><th>Typ</th><th><?= h(__('admin.integrations.status')) ?></th><th class="text-end"></th></tr></thead>
+    <thead><tr><th scope="col">Name</th><th scope="col">Typ</th><th scope="col"><?= h(__('admin.integrations.status')) ?></th><th scope="col" class="text-end"></th></tr></thead>
     <tbody>
     <?php foreach ($ssoProviders as $p): ?>
         <tr>
@@ -88,7 +88,7 @@ $badge = static fn (bool $a): string => $a
     <p class="text-muted"><?= h(__('admin.integrations.none')) ?></p>
 <?php else: ?>
 <div class="table-responsive"><table class="table table-sm align-middle">
-    <thead><tr><th>Name</th><th>Event</th><th><?= h(__('admin.integrations.status')) ?></th><th class="text-end"></th></tr></thead>
+    <thead><tr><th scope="col">Name</th><th scope="col">Event</th><th scope="col"><?= h(__('admin.integrations.status')) ?></th><th scope="col" class="text-end"></th></tr></thead>
     <tbody>
     <?php foreach ($automationRules as $r): ?>
         <tr>
@@ -110,7 +110,7 @@ $badge = static fn (bool $a): string => $a
     <p class="text-muted"><?= h(__('admin.integrations.none')) ?></p>
 <?php else: ?>
 <div class="table-responsive"><table class="table table-sm align-middle">
-    <thead><tr><th>Name</th><th>Entity</th><th>Start</th><th><?= h(__('admin.integrations.status')) ?></th><th class="text-end"></th></tr></thead>
+    <thead><tr><th scope="col">Name</th><th scope="col">Entity</th><th scope="col">Start</th><th scope="col"><?= h(__('admin.integrations.status')) ?></th><th scope="col" class="text-end"></th></tr></thead>
     <tbody>
     <?php foreach ($workflows as $w): ?>
         <tr>
