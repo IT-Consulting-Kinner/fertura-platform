@@ -140,6 +140,11 @@ class Application extends BaseApplication implements AuthenticationServiceProvid
             // https://book.cakephp.org/5/en/security/csrf.html#cross-site-request-forgery-csrf-middleware
             ->add((new CsrfProtectionMiddleware([
                 'httponly' => true,
+                // Defense-in-Depth für das CSRF-Cookie: SameSite=Lax und — sofern
+                // TLS terminiert wird (SESSION_COOKIE_SECURE/HTTPS) — das Secure-Flag.
+                // Lokaler HTTP-Dev-Betrieb bleibt nutzbar (Default false).
+                'samesite' => 'Lax',
+                'secure' => filter_var(env('SESSION_COOKIE_SECURE', false), FILTER_VALIDATE_BOOL),
             ]))->skipCheckCallback(static function (ServerRequestInterface $request): bool {
                 $path = $request->getUri()->getPath();
 

@@ -515,6 +515,30 @@ class BackupService
         $za->close();
     }
 
+    /**
+     * Wirft, wenn das tar.gz unsichere Einträge enthält (absolute Pfade oder
+     * `..`-Traversal). Wird vor dem Entpacken nach ROOT geprüft (Zip-Slip-Schutz).
+     */
+    private function assertSafeTar(string $tarGz): void
+    {
+        $entries = [];
+        @exec('tar tzf ' . escapeshellarg($tarGz) . ' 2>/dev/null', $entries, $rc);
+        if ($rc !== 0) {
+            throw new RuntimeException('Backup-Archiv (files.tar.gz) nicht lesbar — Wiederherstellung abgebrochen.');
+        }
+        foreach ($entries as $entry) {
+            $entry = (string)$entry;
+            if ($entry === '') {
+                continue;
+            }
+            if (str_starts_with($entry, '/') || preg_match('#(^|/)\.\.(/|$)#', $entry) === 1) {
+                throw new RuntimeException(
+                    'Backup-Archiv enthält unsicheren Pfad — Wiederherstellung abgebrochen: ' . $entry,
+                );
+            }
+        }
+    }
+
     private function archiveIntact(string $zip, string $dbSha, string $filesSha, string $pw): bool
     {
         return $this->entrySha($zip, 'database.dump', $pw) === $dbSha
@@ -589,7 +613,13 @@ class BackupService
             // sonst käme eine halb-restaurierte DB still wieder online (M6/B1).
             $this->assertRestoreOk($o, $rc, 'Wiederherstellung (pg_restore)');
             if ($hasFiles && (int)filesize($tmp . '/files.tar.gz') > 0) {
-                $this->run('tar xzf ' . escapeshellarg($tmp . '/files.tar.gz') . ' -C ' . escapeshellarg(ROOT));
+                // Pfad-Traversal-Schutz: das (potenziell operator-gelieferte) Archiv
+                // VOR dem Entpacken nach ROOT prüfen — keine absoluten Pfade, kein
+                // `..`. Verhindert das Überschreiben von Dateien außerhalb der Stores
+                // (z. B. config/webroot) durch ein manipuliertes Archiv (Zip-Slip).
+                $this->assertSafeTar($tmp . '/files.tar.gz');
+                $this->run('tar xzf ' . escapeshellarg($tmp . '/files.tar.gz')
+                    . ' -C ' . escapeshellarg(ROOT) . ' --no-same-owner');
             }
         } finally {
             @exec('rm -rf ' . escapeshellarg($tmp));

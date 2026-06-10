@@ -496,6 +496,13 @@ return [
         // (CakePHP DatabaseSession): instanzübergreifend für Mehrinstanz-/HA-Betrieb
         // der Web-Schicht und überlebt Container-Recreates (kein Zwangs-Logout).
         'defaults' => env('SESSION_DEFAULTS', 'php'),
+        // Cookie-Härtung: HttpOnly + SameSite=Lax immer; Secure, sobald TLS
+        // terminiert wird (SESSION_COOKIE_SECURE=1). Lokaler HTTP-Dev bleibt nutzbar.
+        'ini' => [
+            'session.cookie_httponly' => true,
+            'session.cookie_samesite' => 'Lax',
+            'session.cookie_secure' => filter_var(env('SESSION_COOKIE_SECURE', false), FILTER_VALIDATE_BOOL),
+        ],
     ],
 
     /**

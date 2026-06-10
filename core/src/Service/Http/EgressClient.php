@@ -49,7 +49,9 @@ class EgressClient
         if (empty($this->config['enabled'])) {
             throw new EgressException('HTTP-Egress ist deaktiviert (core.http.egress.enabled).');
         }
-        $this->assertUrlAllowed($url);
+        // Policy-Prüfung + (für Hostnamen) EINMALIGE Auflösung; das Ergebnis wird
+        // direkt zur Pin-Zeile — kein zweites/drittes DNS pro Request.
+        $pin = $this->validatedPinFor($url);
 
         // Die SSRF-Garantien (IP-Pinning gegen DNS-Rebinding, In-Flight-Größenlimit)
         // werden über den Curl-Adapter durchgesetzt. Fehlt ext-curl, fiele Cake still
@@ -78,14 +80,10 @@ class EgressClient
             // umgehen. 3xx wird unverändert zurückgegeben (Aufrufer entscheidet).
             'redirect' => 0,
         ];
-        // DNS-Rebinding-Schutz: Verbindung auf die **validierte** IP pinnen
-        // (CURLOPT_RESOLVE), damit die geprüfte IP == die verbundene IP ist
-        // (kein TOCTOU zwischen Prüfung und Request). Greift mit dem Curl-Adapter.
-        $pin = $this->pinTarget($url);
+        // DNS-Rebinding-Schutz: Verbindung auf die oben **validierte** IP pinnen
+        // (CURLOPT_RESOLVE) — curl verbindet nur auf eine der geprüften Adressen
+        // und löst nicht selbst auf (kein Dual-Stack-/Rebinding-Ausweichen).
         if ($pin !== null) {
-            // Auf die geprüften IPs (beide Familien) pinnen — curl verbindet nur
-            // auf eine davon und löst nicht selbst auf (kein Dual-Stack-/Rebinding-
-            // Ausweichen über eine ungeprüfte Adresse).
             $opts['curl'][CURLOPT_RESOLVE] = [$pin];
         }
         // Antwortgrößen-Limit BEREITS WÄHREND des Transfers durchsetzen (statt erst
@@ -202,10 +200,64 @@ class EgressClient
                 throw new EgressException("Ziel-IP $ip (Host $host) ist privat/reserviert — blockiert (SSRF-Schutz).");
             }
         }
+
+        return $this->pinLine($host, $parts, $ips);
+    }
+
+    /**
+     * Kombiniert Policy-Prüfung (Schema/Host/Allowlist/`allow_private`/IP-Literal)
+     * und — für Hostnamen — die **einmalige** Auflösung+Validierung zur Pin-Zeile.
+     * So löst ein Request den Host genau einmal auf (statt in `assertUrlAllowed`
+     * UND `pinTarget` getrennt). Gibt die CURLOPT_RESOLVE-Zeile zurück oder null,
+     * wenn nicht gepinnt wird (IP-Literal/Allowlist/`allow_private`).
+     */
+    private function validatedPinFor(string $url): ?string
+    {
+        $parts = parse_url($url);
+        $scheme = strtolower((string)($parts['scheme'] ?? ''));
+        if (!in_array($scheme, ['http', 'https'], true)) {
+            throw new EgressException("Nur http/https erlaubt (Schema: '$scheme').");
+        }
+        $host = trim((string)($parts['host'] ?? ''), '[]');
+        if ($host === '') {
+            throw new EgressException('URL ohne Host.');
+        }
+        if (!empty($this->config['allow_private'])) {
+            return null;
+        }
+        if (in_array(strtolower($host), array_map('strtolower', (array)$this->config['allowlist']), true)) {
+            return null;
+        }
+        if (filter_var($host, FILTER_VALIDATE_IP) !== false) {
+            if (!$this->isPublicIp($host)) {
+                throw new EgressException("Ziel-IP $host ist privat/reserviert — blockiert (SSRF-Schutz).");
+            }
+
+            return null; // IP-Literal: validiert, aber kein DNS/Pin
+        }
+        $ips = $this->resolveHostIps($host);
+        foreach ($ips as $ip) {
+            if (!$this->isPublicIp($ip)) {
+                throw new EgressException(
+                    "Ziel-IP $ip (Host $host) ist privat/reserviert — blockiert (SSRF-Schutz). "
+                    . 'Per core.http.egress.allowlist freigeben, falls beabsichtigt.',
+                );
+            }
+        }
+
+        return $this->pinLine($host, $parts, $ips);
+    }
+
+    /**
+     * Baut die CURLOPT_RESOLVE-Zeile `host:port:ip1,[ipv6],…` aus geprüften IPs.
+     *
+     * @param array<string,mixed> $parts parse_url-Ergebnis
+     * @param list<string> $ips
+     */
+    private function pinLine(string $host, array $parts, array $ips): string
+    {
         $port = (int)($parts['port'] ?? (strtolower((string)($parts['scheme'] ?? '')) === 'http' ? 80 : 443));
-        // ALLE geprüften Adressen (beide Familien) pinnen — curl verbindet dann
-        // ausschließlich auf eine davon und löst NICHT selbst auf. IPv6 in
-        // CURLOPT_RESOLVE in eckigen Klammern.
+        // IPv6 in CURLOPT_RESOLVE in eckigen Klammern.
         $formatted = array_map(
             static fn (string $ip): string => str_contains($ip, ':') ? '[' . $ip . ']' : $ip,
             $ips,

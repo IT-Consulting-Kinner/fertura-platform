@@ -90,6 +90,12 @@ class MarketplaceClient
         if ($anchor === null) {
             return null;
         }
+        // Gültigkeitsfenster des Ankers durchsetzen (wie an den übrigen Verifikations-
+        // pfaden, Kap. 24.9.2): ein abgelaufener/noch-nicht-gültiger Anker darf auch
+        // CRL/Anchor-Dokumente nicht mehr signieren.
+        if (!\App\Service\Security\TrustStore::validity($anchor)['ok']) {
+            return null;
+        }
         if (!$this->signer->verify(self::canonical($doc['payload']), (string)$doc['signature'], (string)$anchor['public_key'])) {
             return null;
         }
