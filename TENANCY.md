@@ -72,12 +72,19 @@ Fail-closed-Garantie.
   fremden Mandanten wird mit `403` abgewiesen (`tenancy.enforce_host_match`, Default an).
 - ✅ **Mandantenspezifisches Branding** — `tenants.brand_name`/`logo_url`, angezeigt
   auf der (host-aufgelösten) Login-Seite.
+- ✅ **Pro-Mandant-Settings** — `settings.tenant_id` (NULL = global); `SettingsManager`
+  bevorzugt den mandantenspezifischen Wert und fällt sonst auf global/Katalog-Default
+  zurück (`set($ns,$key,$value,$tenantId)`). Damit sind Limits/Flags je Mandant möglich.
+- ✅ **Mandanten-Lifecycle: Löschen** — `TenantService::delete()` entfernt einen
+  Mandanten **inkl. Daten** (Such-/Embedding-Index, Settings/SAML via Cascade);
+  Default-Mandant geschützt, Mandanten mit Benutzern abgelehnt; in der GUI als
+  Sammelaktion (mit Bestätigung).
 
-**Verbleibende Schritte zum SaaS-Vollausbau:**
+**Verbleibende Schritte (Modul/Extension, nicht Core):**
 1. **Tenant-Scoping in den Modulen** — Modul-Datentabellen adoptieren das
    dokumentierte Muster (oben); der Core-Index ist bereits gescoped.
-2. **Pro-Mandant-Settings** über das Branding hinaus (z. B. Limits, Feature-Flags je
-   Mandant) und Self-Service-Mandantenanlage/-Lifecycle (Abrechnung etc.).
+2. **Self-Service-Mandantenanlage & Abrechnung** — gehören in eine Extension/ein
+   Produkt-Modul, nicht in den Core.
 
 *Hinweis zur Konsistenz:* Die Such-/Embedding-Tabellen werden **anwendungsseitig**
 mandantengefiltert (wie ihre bestehende Owner-Sichtbarkeit), nicht per RLS — ihre

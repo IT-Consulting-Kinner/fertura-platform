@@ -1229,3 +1229,12 @@ msgstr "Wird auf der mandantenspezifischen Login-Seite angezeigt."
 
 msgid "admin.tenants.logo_url"
 msgstr "Logo-URL (optional)"
+
+msgid "admin.tenants.bulk_delete"
+msgstr "Löschen"
+
+msgid "admin.tenants.bulk_delete_confirm"
+msgstr "Ausgewählte Mandanten und ihre Daten endgültig löschen? Mandanten mit Benutzern werden übersprungen."
+
+msgid "flash.tenants.bulk_errors"
+msgstr "%d Mandant(en) übersprungen (z. B. noch Benutzer oder Default)."

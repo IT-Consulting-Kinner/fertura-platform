@@ -81,7 +81,10 @@ try {
 // Settings-/App-Cache (P02) vor dem Lauf leeren: der Migrator truncatet die
 // Seed-Daten, ein evtl. persistenter Datei-Cache aus einem früheren Lauf wäre
 // sonst stale. Innerhalb eines Laufs invalidiert SettingsManager::set() gezielt.
-foreach (['_app_settings_', '_app_'] as $cacheConfig) {
+// `_cake_model_`: ORM-Metadaten-Cache leeren, damit Schema-Änderungen (z. B. neue
+// Spalten aus einer hinzugefügten Migration) über Läufe hinweg sicher greifen —
+// sonst ignoriert die ORM-Schicht neue Spalten bei INSERT/UPDATE (gecachtes Schema).
+foreach (['_app_settings_', '_app_', '_cake_model_'] as $cacheConfig) {
     try {
         \Cake\Cache\Cache::clear($cacheConfig);
     } catch (\Throwable) {

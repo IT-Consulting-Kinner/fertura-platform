@@ -19,6 +19,8 @@
     ['value' => 'activate', 'label' => __('admin.tenants.bulk_activate'), 'class' => 'btn btn-sm btn-outline-success'],
     ['value' => 'suspend', 'label' => __('admin.tenants.bulk_suspend'), 'class' => 'btn btn-sm btn-outline-warning',
         'confirm' => __('admin.tenants.bulk_suspend_confirm')],
+    ['value' => 'delete', 'label' => __('admin.tenants.bulk_delete'), 'class' => 'btn btn-sm btn-outline-danger',
+        'confirm' => __('admin.tenants.bulk_delete_confirm')],
 ]) ?>
 <table class="table table-sm table-hover align-middle">
     <thead><tr>

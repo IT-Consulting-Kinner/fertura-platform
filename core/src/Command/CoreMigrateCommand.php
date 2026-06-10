@@ -73,6 +73,15 @@ class CoreMigrateCommand extends Command
 
         try {
             $migrations->migrate();
+            // ORM-Metadaten-Cache leeren: ein gecachtes Tabellenschema würde neue
+            // Spalten in der ORM-Schicht ignorieren (z. B. INSERTs ohne die neue
+            // Spalte) — bis der Cache abläuft. Nach Migrationen also invalidieren.
+            foreach (['_cake_model_', '_cake_translations_'] as $cfg) {
+                try {
+                    \Cake\Cache\Cache::clear($cfg);
+                } catch (Throwable) {
+                }
+            }
             $io->success('Migrationen ausgeführt.');
 
             return static::CODE_SUCCESS;

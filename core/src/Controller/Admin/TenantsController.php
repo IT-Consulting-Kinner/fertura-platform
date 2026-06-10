@@ -100,14 +100,23 @@ class TenantsController extends AdminController
         $ids = array_values(array_filter((array)$this->request->getData('ids')));
         $svc = new TenantService();
         $n = 0;
+        $errors = 0;
         foreach ($ids as $id) {
             try {
-                $svc->setActive((string)$id, $op === 'activate');
+                if ($op === 'delete') {
+                    $svc->delete((string)$id);
+                } else {
+                    $svc->setActive((string)$id, $op === 'activate');
+                }
                 $n++;
             } catch (Throwable) {
+                $errors++;
             }
         }
         $this->Flash->success(__('flash.tenants.bulk_done', $n));
+        if ($errors > 0) {
+            $this->Flash->error(__('flash.tenants.bulk_errors', $errors));
+        }
 
         return $this->redirect(['action' => 'index']);
     }

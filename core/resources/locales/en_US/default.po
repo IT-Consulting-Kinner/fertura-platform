@@ -1233,3 +1233,12 @@ msgstr "Shown on the tenant-specific login page."
 
 msgid "admin.tenants.logo_url"
 msgstr "Logo URL (optional)"
+
+msgid "admin.tenants.bulk_delete"
+msgstr "Delete"
+
+msgid "admin.tenants.bulk_delete_confirm"
+msgstr "Permanently delete the selected tenants and their data? Tenants with users are skipped."
+
+msgid "flash.tenants.bulk_errors"
+msgstr "%d tenant(s) skipped (e.g. still have users or are the default)."

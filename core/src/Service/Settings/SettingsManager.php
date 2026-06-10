@@ -25,6 +25,8 @@ class SettingsManager
     private AuditLogger $audit;
     private ?SecretCipher $cipher = null;
     private CacheStore $cache;
+    private bool $tenantLoaded = false;
+    private ?string $tenantMemo = null;
 
     public function __construct(?SettingsCatalog $catalog = null, ?AuditLogger $audit = null, ?CacheStore $cache = null)
     {
@@ -71,9 +73,31 @@ class SettingsManager
      */
     private function resolve(string $namespace, string $key): array
     {
-        $row = $this->table()->find()
-            ->where(['namespace' => $namespace, 'config_key' => $key])
-            ->first();
+        $tenant = $this->currentTenant();
+        $cond = ['namespace' => $namespace, 'config_key' => $key];
+        $cond = $tenant !== null
+            ? $cond + ['OR' => [['tenant_id IS' => null], ['tenant_id' => $tenant]]]
+            : $cond + ['tenant_id IS' => null];
+        $rows = $this->table()->find()->where($cond)->all()->toArray();
+
+        // Mandantenspezifischer Wert hat Vorrang vor dem globalen (tenant_id NULL).
+        $row = null;
+        if ($tenant !== null) {
+            foreach ($rows as $r) {
+                if ((string)($r->get('tenant_id') ?? '') === $tenant) {
+                    $row = $r;
+                    break;
+                }
+            }
+        }
+        if ($row === null) {
+            foreach ($rows as $r) {
+                if ($r->get('tenant_id') === null) {
+                    $row = $r;
+                    break;
+                }
+            }
+        }
 
         if ($row === null) {
             $catalogDefault = $this->catalog->default($namespace, $key);
@@ -95,10 +119,31 @@ class SettingsManager
 
     private function cacheKey(string $namespace, string $key): string
     {
-        return $namespace . '.' . $key;
+        // Mandant in den Cache-Schlüssel, damit pro-Mandant-Werte nicht über
+        // Mandanten hinweg geteilt werden. 'g' = global (kein Mandantenkontext).
+        return $namespace . '.' . $key . '.' . ($this->currentTenant() ?? 'g');
     }
 
-    public function set(string $namespace, string $key, mixed $value): void
+    /** Aktueller Mandant aus dem RLS-Kontext (memoisiert je Instanz); NULL = global. */
+    private function currentTenant(): ?string
+    {
+        if ($this->tenantLoaded) {
+            return $this->tenantMemo;
+        }
+        $this->tenantLoaded = true;
+        try {
+            $row = $this->table()->getConnection()->execute(
+                "SELECT nullif(current_setting('app.current_tenant_id', true), '') AS t",
+            )->fetch('assoc');
+            $this->tenantMemo = ($row !== false && $row['t'] !== null && $row['t'] !== '') ? (string)$row['t'] : null;
+        } catch (\Throwable) {
+            $this->tenantMemo = null;
+        }
+
+        return $this->tenantMemo;
+    }
+
+    public function set(string $namespace, string $key, mixed $value, ?string $tenantId = null): void
     {
         // Validierung: für core.* (oder bekannte Keys) verpflichtend.
         if ($namespace === 'core' || $this->catalog->isKnown($namespace, $key)) {
@@ -111,10 +156,11 @@ class SettingsManager
         $secret = $this->catalog->isSecret($namespace, $key);
         $table = $this->table();
 
-        $table->getConnection()->transactional(function () use ($table, $namespace, $key, $value, $secret): void {
-            $row = $table->find()
-                ->where(['namespace' => $namespace, 'config_key' => $key])
-                ->first();
+        $table->getConnection()->transactional(function () use ($table, $namespace, $key, $value, $secret, $tenantId): void {
+            // Zeile für GENAU diese Ebene (global = tenant_id NULL, oder mandantenspezifisch).
+            $find = $table->find()->where(['namespace' => $namespace, 'config_key' => $key]);
+            $find = $tenantId === null ? $find->where(['tenant_id IS' => null]) : $find->where(['tenant_id' => $tenantId]);
+            $row = $find->first();
 
             // Alten Wert für das Audit (Geheimnisse niemals im Klartext loggen).
             $old = ($row === null || $row->is_secret) ? null : $row->value;
@@ -123,6 +169,7 @@ class SettingsManager
                 $row = $table->newEmptyEntity();
                 $row->set('namespace', $namespace);
                 $row->set('config_key', $key);
+                $row->set('tenant_id', $tenantId);
             }
             $row->set('is_secret', $secret);
             if ($secret) {
@@ -138,12 +185,15 @@ class SettingsManager
             }
 
             $this->audit->log('config.update', 'core_setting', "$namespace.$key", [
+                'tenant_id' => $tenantId,
                 'oldValue' => $secret ? ['secret' => true] : ['value' => $old],
                 'newValue' => $secret ? ['secret' => true] : ['value' => $value],
             ]);
         });
 
-        // Gezielte Cache-Invalidierung nach erfolgreicher Schreib-Transaktion.
-        $this->cache->delete($this->cacheKey($namespace, $key));
+        // Cache vollständig leeren: ein geänderter globaler Wert beeinflusst auch
+        // Mandanten, die auf ihn zurückfallen (deren Cache-Schlüssel sind nicht
+        // gezielt bekannt). Settings-Schreibvorgänge sind selten -> vertretbar.
+        $this->cache->clear();
     }
 }

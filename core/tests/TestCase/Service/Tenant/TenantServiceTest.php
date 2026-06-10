@@ -91,6 +91,42 @@ class TenantServiceTest extends TestCase
         }
     }
 
+    public function testDeleteProtectsDefaultAndTenantsWithUsers(): void
+    {
+        $svc = new TenantService();
+        $conn = ConnectionManager::get('default');
+
+        // Default-Mandant ist geschützt.
+        $threwDefault = false;
+        try {
+            $svc->delete(TenantService::DEFAULT_TENANT_ID);
+        } catch (InvalidArgumentException) {
+            $threwDefault = true;
+        }
+        $this->assertTrue($threwDefault, 'Default-Mandant darf nicht löschbar sein');
+
+        $t = $svc->create('zztest-del', 'Del');
+        $conn->execute(
+            "INSERT INTO users (username, email, status, tenant_id) VALUES (:u, 'del@zztenant.local', 'active', :t)",
+            ['u' => 'zztest_delu_' . bin2hex(random_bytes(3)), 't' => $t['id']],
+        );
+
+        // Mandant mit Benutzer wird abgelehnt.
+        $threwUsers = false;
+        try {
+            $svc->delete($t['id']);
+        } catch (InvalidArgumentException) {
+            $threwUsers = true;
+        }
+        $this->assertTrue($threwUsers);
+        $this->assertNotNull($svc->get($t['id']));
+
+        // Nach Entfernen der Benutzer ist das Löschen erfolgreich.
+        $conn->execute("DELETE FROM users WHERE email = 'del@zztenant.local'");
+        $svc->delete($t['id']);
+        $this->assertNull($svc->get($t['id']));
+    }
+
     public function testTenantResolverByDomainAndSubdomain(): void
     {
         $svc = new TenantService();

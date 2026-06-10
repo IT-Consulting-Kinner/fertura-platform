@@ -155,6 +155,36 @@ class TenantService
         $this->audit()->log($active ? 'tenant.activate' : 'tenant.suspend', 'tenant', $tenantId, []);
     }
 
+    /**
+     * Löscht einen Mandanten **inklusive seiner Daten** (Lifecycle). Der Default-
+     * Mandant ist geschützt; Mandanten mit noch zugeordneten Benutzern werden
+     * abgelehnt (erst neu zuordnen). Such-/Embedding-Index werden mit gelöscht
+     * (kein ON-DELETE-CASCADE-FK), Settings/SAML-Anfragen cascaden über die FK.
+     */
+    public function delete(string $tenantId): void
+    {
+        if ($tenantId === self::DEFAULT_TENANT_ID) {
+            throw new InvalidArgumentException('Der Default-Mandant kann nicht gelöscht werden.');
+        }
+        $conn = $this->conn();
+        $conn->transactional(function () use ($conn, $tenantId): void {
+            $users = (int)$conn->execute(
+                'SELECT count(*) AS c FROM users WHERE tenant_id = :t',
+                ['t' => $tenantId],
+            )->fetch('assoc')['c'];
+            if ($users > 0) {
+                throw new InvalidArgumentException(
+                    "Mandant hat noch $users Benutzer — bitte zuerst neu zuordnen.",
+                );
+            }
+            $conn->execute('DELETE FROM search_index WHERE tenant_id = :t', ['t' => $tenantId]);
+            $conn->execute('DELETE FROM embeddings WHERE tenant_id = :t', ['t' => $tenantId]);
+            // tenants-Löschung cascadet settings + saml_auth_requests (ON DELETE CASCADE).
+            $conn->execute('DELETE FROM tenants WHERE id = :t', ['t' => $tenantId]);
+            $this->audit()->log('tenant.delete', 'tenant', $tenantId, []);
+        });
+    }
+
     /** Ordnet einen Benutzer einem Mandanten zu. */
     public function assignUser(string $userId, string $tenantId): void
     {
