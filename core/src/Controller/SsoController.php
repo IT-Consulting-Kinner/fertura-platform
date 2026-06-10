@@ -51,9 +51,14 @@ class SsoController extends AppController
                 return $this->redirect($data['url']);
             }
 
-            $url = (new SamlProvider())->loginUrl($provider, $this->samlAcsUrl(), $this->spEntityId(), $providerId);
+            $saml = (new SamlProvider())->loginRequest($provider, $this->samlAcsUrl(), $this->spEntityId(), $providerId);
+            // AuthnRequest-ID merken -> beim ACS gegen `InResponseTo` prüfen (Replay-Schutz).
+            $this->request->getSession()->write('sso_saml', [
+                'provider' => $providerId,
+                'request_id' => $saml['id'],
+            ]);
 
-            return $this->redirect($url);
+            return $this->redirect($saml['url']);
         } catch (Throwable $e) {
             $this->Flash->error('SSO-Start fehlgeschlagen: ' . $e->getMessage());
 
@@ -100,12 +105,21 @@ class SsoController extends AppController
         // onelogin/php-saml liest die Antwort aus den PHP-Superglobals.
         $_POST['SAMLResponse'] = (string)$this->request->getData('SAMLResponse');
 
+        // Erwartete AuthnRequest-ID aus der Session ziehen und sofort verbrauchen
+        // (einmalig -> kein Replay). Provider muss zur gemerkten Anfrage passen.
+        $session = $this->request->getSession();
+        $flow = $session->read('sso_saml');
+        $session->delete('sso_saml');
+        $expectedId = is_array($flow) && (string)($flow['provider'] ?? '') === $providerId
+            ? ($flow['request_id'] ?? null)
+            : null;
+
         try {
             $provider = (new SsoService())->provider($providerId);
             if ($provider === null) {
                 throw new \RuntimeException('Unbekannter SSO-Provider.');
             }
-            $identity = (new SamlProvider())->processAcs($provider, $this->samlAcsUrl(), $this->spEntityId());
+            $identity = (new SamlProvider())->processAcs($provider, $this->samlAcsUrl(), $this->spEntityId(), $expectedId);
 
             return $this->establish($providerId, $identity);
         } catch (Throwable $e) {

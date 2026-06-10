@@ -84,7 +84,16 @@ class AiGateway
     {
         $custom = $this->str('ai.' . $name . '.endpoint');
         if ($custom !== '') {
-            return $custom;
+            // Override nur über https zulassen — sonst liefe der Authorization-
+            // Bearer-Schlüssel im Klartext über die Leitung. Der eigentliche
+            // Request läuft ohnehin durch den SSRF-gehärteten Egress.
+            if (strtolower((string)parse_url($custom, PHP_URL_SCHEME)) !== 'https') {
+                throw new AiException(
+                    "AI-Endpoint-Override für '$name' muss https sein (Schutz des API-Schlüssels): $custom",
+                );
+            }
+
+            return rtrim($custom, '/');
         }
 
         return match ($name) {

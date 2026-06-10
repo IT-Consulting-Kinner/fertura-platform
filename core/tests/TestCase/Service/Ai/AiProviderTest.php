@@ -11,6 +11,7 @@ use App\Service\Ai\Provider\OpenAiProvider;
 use App\Service\Ai\Provider\XaiProvider;
 use App\Service\Http\EgressClient;
 use App\Service\Http\EgressResponse;
+use App\Service\Settings\SettingsManager;
 use Cake\TestSuite\TestCase;
 
 /**
@@ -84,6 +85,50 @@ class AiProviderTest extends TestCase
         $this->expectException(AiException::class);
         $this->expectExceptionMessageMatches('/nicht konfiguriert/');
         $gateway->complete('Hallo?');
+    }
+
+    public function testCustomEndpointOverrideMustBeHttps(): void
+    {
+        putenv('OPENAI_API_KEY=sk-test');
+        try {
+            $gateway = new AiGateway($this->egress([]), new FakeSettings('http://internal-proxy/v1'));
+            $this->expectException(AiException::class);
+            $this->expectExceptionMessageMatches('/https/');
+            $gateway->complete('Hi');
+        } finally {
+            putenv('OPENAI_API_KEY');
+        }
+    }
+
+    public function testCustomHttpsEndpointOverrideIsUsedAndTrimmed(): void
+    {
+        putenv('OPENAI_API_KEY=sk-test');
+        try {
+            $e = $this->egress(['choices' => [['message' => ['content' => 'ok']]]]);
+            $gateway = new AiGateway($e, new FakeSettings('https://my-proxy.example/v1/'));
+            $this->assertSame('ok', $gateway->complete('Hi'));
+            $this->assertSame('https://my-proxy.example/v1/chat/completions', $e->calls[0]['url']);
+        } finally {
+            putenv('OPENAI_API_KEY');
+        }
+    }
+}
+
+/** Settings-Stub: liefert openai-Provider + einen vorgegebenen Endpoint-Override. */
+class FakeSettings extends SettingsManager
+{
+    public function __construct(private string $endpoint)
+    {
+    }
+
+    public function get(string $namespace, string $key, mixed $default = null): mixed
+    {
+        return match ($key) {
+            'ai.chat.provider' => 'openai',
+            'ai.chat.model' => 'gpt-4o-mini',
+            'ai.openai.endpoint' => $this->endpoint,
+            default => $default,
+        };
     }
 }
 

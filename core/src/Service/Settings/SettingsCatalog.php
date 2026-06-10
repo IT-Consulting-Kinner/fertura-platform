@@ -107,6 +107,15 @@ class SettingsCatalog
             'ai.chat.model' => ['type' => 'string', 'default' => null],
             'ai.embed.provider' => ['type' => 'string', 'default' => null],
             'ai.embed.model' => ['type' => 'string', 'default' => null],
+            // Optionaler Endpoint-Override je Provider (z. B. Azure-OpenAI, ein
+            // selbst gehosteter/Proxy-Gateway wie LiteLLM). MUSS https sein, sonst
+            // ginge der API-Schlüssel im Klartext über die Leitung (AiGateway lehnt
+            // http ab). Geht weiter über den gehärteten Egress (SSRF-Schutz). Setzen
+            // darf nur die `core_config`-Rolle; Änderung wird auditiert. Leer = Default.
+            'ai.openai.endpoint' => ['type' => 'string', 'default' => null],
+            'ai.xai.endpoint' => ['type' => 'string', 'default' => null],
+            'ai.anthropic.endpoint' => ['type' => 'string', 'default' => null],
+            'ai.google.endpoint' => ['type' => 'string', 'default' => null],
         ],
     ];
 

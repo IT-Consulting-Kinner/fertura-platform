@@ -55,36 +55,61 @@ class SamlProvider
                 'logoutRequestSigned' => $signed,
                 'signatureAlgorithm' => 'http://www.w3.org/2001/04/xmldsig-more#rsa-sha256',
                 'wantAssertionsSigned' => true,
+                // Replay-/Härtung: unaufgeforderte (IdP-initiierte) Antworten, die
+                // ein `InResponseTo` tragen, ablehnen — und nur SP-initiierte
+                // Antworten akzeptieren, deren `InResponseTo` zu unserer in der
+                // Session gemerkten AuthnRequest-ID passt (siehe processAcs()).
+                'rejectUnsolicitedResponsesWithInResponseTo' => true,
             ],
         ];
     }
 
     /**
      * Baut die Redirect-URL zum IdP (SP-initiierter Login). RelayState trägt die
-     * Provider-ID zurück zum ACS.
+     * Provider-ID zurück zum ACS. Liefert zusätzlich die **AuthnRequest-ID**, die
+     * der Aufrufer in der Session merkt und beim ACS wieder mitgibt — so wird die
+     * IdP-Antwort an genau diese Anfrage gebunden (Replay-Schutz, einmalig).
+     *
+     * @param array<string,mixed> $provider
+     * @return array{url:string, id:?string}
+     */
+    public function loginRequest(array $provider, string $acsUrl, string $spEntityId, string $relayState): array
+    {
+        $auth = new SamlAuth($this->settings($provider, $acsUrl, $spEntityId));
+
+        // stay=true -> URL zurückgeben statt direkt zu redirecten.
+        $url = $auth->login($relayState, [], false, false, true);
+
+        return ['url' => $url, 'id' => $auth->getLastRequestID()];
+    }
+
+    /**
+     * Rückwärtskompatibler Helfer: nur die Redirect-URL (ohne Request-ID-Bindung).
      *
      * @param array<string,mixed> $provider
      */
     public function loginUrl(array $provider, string $acsUrl, string $spEntityId, string $relayState): string
     {
-        $auth = new SamlAuth($this->settings($provider, $acsUrl, $spEntityId));
-
-        // stay=true -> URL zurückgeben statt direkt zu redirecten.
-        return $auth->login($relayState, [], false, false, true);
+        return $this->loginRequest($provider, $acsUrl, $spEntityId, $relayState)['url'];
     }
 
     /**
      * Verarbeitet die ACS-Antwort (liest `SAMLResponse` aus den POST-Daten) und
      * liefert die Identitätsdaten.
      *
+     * Der `$expectedRequestId` (zuvor in der Session gemerkte AuthnRequest-ID)
+     * bindet die Antwort an unsere Anfrage: onelogin prüft `InResponseTo` dagegen
+     * und lehnt fremde/wiederholte Antworten ab. Der Aufrufer löscht die ID nach
+     * dem ACS aus der Session, sodass eine Antwort nur **einmal** gültig ist.
+     *
      * @param array<string,mixed> $provider
      * @return array{sub:string,email:string,first:?string,last:?string}
      */
-    public function processAcs(array $provider, string $acsUrl, string $spEntityId): array
+    public function processAcs(array $provider, string $acsUrl, string $spEntityId, ?string $expectedRequestId = null): array
     {
         $auth = new SamlAuth($this->settings($provider, $acsUrl, $spEntityId));
         try {
-            $auth->processResponse();
+            $auth->processResponse($expectedRequestId);
         } catch (Throwable $e) {
             throw new SsoException('SAML-Antwort ungültig: ' . $e->getMessage());
         }

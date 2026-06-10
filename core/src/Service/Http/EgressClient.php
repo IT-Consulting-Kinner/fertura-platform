@@ -73,7 +73,28 @@ class EgressClient
         // (kein TOCTOU zwischen Prüfung und Request). Greift mit dem Curl-Adapter.
         $pin = $this->pinTarget($url);
         if ($pin !== null) {
-            $opts['curl'] = [CURLOPT_RESOLVE => [$pin]];
+            $opts['curl'][CURLOPT_RESOLVE] = [$pin];
+        }
+        // Antwortgrößen-Limit BEREITS WÄHREND des Transfers durchsetzen (statt erst
+        // nach dem vollständigen Puffern): ein bösartiger Server kann `Content-Length`
+        // weglassen und beliebig viel streamen -> Speicher-DoS. Der Curl-Fortschritts-
+        // callback bricht ab, sobald mehr als das Limit geladen wurde (gebundener
+        // Speicher ≈ Limit + ein Puffer-Chunk). Greift mit dem Curl-Adapter; der
+        // Stream-Adapter fällt auf die nachgelagerte Begrenzung unten zurück.
+        $max = (int)$this->config['max_response_bytes'];
+        $overLimit = false;
+        if ($max > 0) {
+            $opts['curl'][CURLOPT_NOPROGRESS] = false;
+            $opts['curl'][CURLOPT_XFERINFOFUNCTION] =
+                static function ($ch, $dlTotal, $dlNow) use ($max, &$overLimit): int {
+                    if ($dlNow > $max) {
+                        $overLimit = true;
+
+                        return 1; // != 0 -> Transfer abbrechen
+                    }
+
+                    return 0;
+                };
         }
         if (isset($options['type'])) {
             $opts['type'] = $options['type'];
@@ -85,10 +106,12 @@ class EgressClient
         } catch (EgressException $e) {
             throw $e;
         } catch (Throwable $e) {
+            if ($overLimit) {
+                throw new EgressException('Antwort zu groß (über ' . $max . ' Bytes — Transfer abgebrochen).');
+            }
             throw new EgressException('HTTP-Egress fehlgeschlagen: ' . $e->getMessage(), 0, $e);
         }
 
-        $max = (int)$this->config['max_response_bytes'];
         if ($max > 0 && (int)$resp->getHeaderLine('Content-Length') > $max) {
             throw new EgressException('Antwort zu groß (Content-Length über ' . $max . ' Bytes).');
         }

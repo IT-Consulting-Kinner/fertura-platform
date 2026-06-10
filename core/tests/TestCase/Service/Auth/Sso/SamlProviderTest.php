@@ -49,6 +49,14 @@ class SamlProviderTest extends TestCase
         $this->assertFalse($s['security']['authnRequestsSigned']);
     }
 
+    public function testRejectsUnsolicitedResponsesWithInResponseTo(): void
+    {
+        // Replay-Härtung: unaufgeforderte Antworten mit InResponseTo werden
+        // abgelehnt; SP-initiierte Antworten bindet processAcs() an die Request-ID.
+        $s = (new SamlProvider())->settings(['config' => ['idp_entity_id' => 'i']], 'https://sp/acs', 'https://sp/meta');
+        $this->assertTrue($s['security']['rejectUnsolicitedResponsesWithInResponseTo']);
+    }
+
     public function testFirstAttrResolvesByPriority(): void
     {
         $p = new SamlProvider();
