@@ -131,6 +131,124 @@ class UiKitHelper extends Helper
     }
 
     /**
+     * Sortierbarer Spaltenkopf: Link, der zwischen aufsteigend/absteigend umschaltet,
+     * mit Richtungspfeil. `$query` = aktuelle Query-Parameter (mit `sort`/`dir`).
+     *
+     * @param array<string,mixed> $query
+     * @param array<string,mixed>|string|null $url Ziel (Cake-Route-Array, String, oder aktuell)
+     */
+    public function sortHeader(string $label, string $sortKey, array $query, array|string|null $url = null): string
+    {
+        $curSort = (string)($query['sort'] ?? '');
+        $curDir = strtolower((string)($query['dir'] ?? 'asc')) === 'desc' ? 'desc' : 'asc';
+        $nextDir = ($curSort === $sortKey && $curDir === 'asc') ? 'desc' : 'asc';
+        $arrow = $curSort === $sortKey ? ($curDir === 'asc' ? ' ↑' : ' ↓') : '';
+        $href = $this->withQuery($url, array_merge($query, ['sort' => $sortKey, 'dir' => $nextDir]));
+
+        return '<th><a class="text-decoration-none text-reset" href="' . h($href) . '">'
+            . h($label . $arrow) . '</a></th>';
+    }
+
+    /**
+     * Bootstrap-Paginierung. Leer, wenn nur eine Seite. Hängt `page` an die
+     * (sonst erhaltenen) Query-Parameter an.
+     *
+     * @param array<string,mixed>|string|null $url
+     * @param array<string,mixed> $query
+     */
+    public function paginate(int $page, int $perPage, int $total, array|string|null $url = null, array $query = []): string
+    {
+        $pages = max(1, (int)ceil($total / max(1, $perPage)));
+        if ($pages <= 1) {
+            return '';
+        }
+        $page = max(1, min($page, $pages));
+        $item = function (int $p, string $label, bool $active = false, bool $disabled = false) use ($url, $query): string {
+            $cls = 'page-item' . ($active ? ' active' : '') . ($disabled ? ' disabled' : '');
+            if ($disabled || $active) {
+                return '<li class="' . $cls . '"><span class="page-link">' . h($label) . '</span></li>';
+            }
+            $href = $this->withQuery($url, array_merge($query, ['page' => $p]));
+
+            return '<li class="' . $cls . '"><a class="page-link" href="' . h($href) . '">' . h($label) . '</a></li>';
+        };
+        $out = $item($page - 1, '‹', false, $page <= 1);
+        $start = max(1, $page - 2);
+        $end = min($pages, $page + 2);
+        if ($start > 1) {
+            $out .= $item(1, '1') . ($start > 2 ? '<li class="page-item disabled"><span class="page-link">…</span></li>' : '');
+        }
+        for ($p = $start; $p <= $end; $p++) {
+            $out .= $item($p, (string)$p, $p === $page);
+        }
+        if ($end < $pages) {
+            $out .= ($end < $pages - 1 ? '<li class="page-item disabled"><span class="page-link">…</span></li>' : '') . $item($pages, (string)$pages);
+        }
+        $out .= $item($page + 1, '›', false, $page >= $pages);
+
+        return '<nav aria-label="Pagination"><ul class="pagination pagination-sm mb-0">' . $out . '</ul></nav>';
+    }
+
+    /**
+     * GET-Filterleiste aus einer Feld-Spezifikation (text/select).
+     *
+     * @param list<array<string,mixed>> $fields
+     * @param array<string,mixed> $values aktuelle Werte
+     * @param array<string,mixed> $options submit (Label), url
+     */
+    public function filters(array $fields, array $values = [], array $options = []): string
+    {
+        $createOpts = ['type' => 'get', 'class' => 'row g-2 align-items-end mb-3'];
+        if (isset($options['url'])) {
+            $createOpts['url'] = $options['url'];
+        }
+        $out = $this->Form->create(null, $createOpts);
+        foreach ($fields as $f) {
+            $key = (string)($f['key'] ?? '');
+            if ($key === '') {
+                continue;
+            }
+            $label = (string)($f['label'] ?? $key);
+            $val = $values[$key] ?? '';
+            if ((string)($f['input'] ?? 'text') === 'select') {
+                $input = $this->Form->select($key, (array)($f['options'] ?? []), [
+                    'value' => $val,
+                    'empty' => $f['empty'] ?? true,
+                    'class' => 'form-select form-select-sm',
+                ]);
+            } else {
+                $input = $this->Form->control($key, [
+                    'label' => false,
+                    'value' => $val,
+                    'class' => 'form-control form-control-sm',
+                    'placeholder' => (string)($f['placeholder'] ?? ''),
+                ]);
+            }
+            $out .= '<div class="col-auto"><label class="form-label small mb-0">' . h($label) . '</label>' . $input . '</div>';
+        }
+        $out .= '<div class="col-auto">'
+            . $this->Form->button((string)($options['submit'] ?? __d('default', 'uikit.filter')), ['class' => 'btn btn-primary btn-sm'])
+            . '</div>';
+        $out .= $this->Form->end();
+
+        return $out;
+    }
+
+    /**
+     * @param array<string,mixed>|string|null $url
+     * @param array<string,mixed> $query
+     */
+    private function withQuery(array|string|null $url, array $query): string
+    {
+        if (is_string($url) && $url !== '') {
+            return $url . (str_contains($url, '?') ? '&' : '?') . http_build_query($query);
+        }
+        $route = is_array($url) ? $url : [];
+
+        return $this->Url->build($route + ['?' => $query]);
+    }
+
+    /**
      * Formatiert einen einzelnen Wert HTML-sicher nach Typ.
      */
     public function value(mixed $val, string $type = 'text'): string

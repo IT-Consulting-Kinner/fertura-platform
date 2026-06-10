@@ -68,6 +68,32 @@ class UiKitHelperTest extends TestCase
         $this->assertSame('&lt;b&gt;', $this->ui->value('<b>', 'text'));
     }
 
+    public function testSortHeaderTogglesDirection(): void
+    {
+        // Aktuell nach 'name' aufsteigend -> Link schaltet auf desc, Pfeil hoch.
+        $asc = $this->ui->sortHeader('Name', 'name', ['sort' => 'name', 'dir' => 'asc'], '/admin/tenants');
+        $this->assertStringContainsString('dir=desc', $asc);
+        $this->assertStringContainsString('sort=name', $asc);
+        $this->assertStringContainsString('↑', $asc);
+
+        // Andere Spalte -> default asc, kein Pfeil.
+        $other = $this->ui->sortHeader('Schlüssel', 'key', ['sort' => 'name', 'dir' => 'asc'], '/admin/tenants');
+        $this->assertStringContainsString('sort=key', $other);
+        $this->assertStringContainsString('dir=asc', $other);
+        $this->assertStringNotContainsString('↑', $other);
+    }
+
+    public function testPaginateRendersWindowAndHidesForSinglePage(): void
+    {
+        $this->assertSame('', $this->ui->paginate(1, 20, 15, '/x'), 'eine Seite -> keine Paginierung');
+
+        $html = $this->ui->paginate(3, 10, 100, '/admin/tenants'); // 10 Seiten, aktuell 3
+        $this->assertStringContainsString('pagination', $html);
+        $this->assertStringContainsString('page=4', $html); // nächste
+        $this->assertStringContainsString('page=2', $html); // vorige
+        $this->assertStringContainsString('active', $html);  // aktuelle Seite markiert
+    }
+
     public function testDetailRendersDefinitionList(): void
     {
         $html = $this->ui->detail(

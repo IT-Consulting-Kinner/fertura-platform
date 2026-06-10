@@ -1133,3 +1133,36 @@ msgstr "Keine Einträge."
 
 msgid "uikit.actions"
 msgstr "Aktionen"
+
+msgid "uikit.filter"
+msgstr "Filtern"
+
+msgid "admin.nav.tenants"
+msgstr "Mandanten"
+
+msgid "admin.tenants.title"
+msgstr "Mandanten"
+
+msgid "admin.tenants.hint"
+msgstr "Single-Org läuft auf dem Default-Mandanten. Lege Mandanten an, um Daten zu trennen; Benutzer werden per API/Dienst zugeordnet."
+
+msgid "admin.tenants.col_name"
+msgstr "Name"
+
+msgid "admin.tenants.col_key"
+msgstr "Schlüssel"
+
+msgid "admin.tenants.col_active"
+msgstr "Aktiv"
+
+msgid "admin.tenants.add_title"
+msgstr "Neuer Mandant"
+
+msgid "admin.tenants.key_help"
+msgstr "Kleinbuchstaben, Ziffern, _ und - (2–63 Zeichen)."
+
+msgid "admin.tenants.btn_add"
+msgstr "Mandant anlegen"
+
+msgid "flash.tenants.created"
+msgstr "Mandant angelegt."

@@ -1137,3 +1137,36 @@ msgstr "No entries."
 
 msgid "uikit.actions"
 msgstr "Actions"
+
+msgid "uikit.filter"
+msgstr "Filter"
+
+msgid "admin.nav.tenants"
+msgstr "Tenants"
+
+msgid "admin.tenants.title"
+msgstr "Tenants"
+
+msgid "admin.tenants.hint"
+msgstr "Single-org runs on the default tenant. Create tenants to separate data; assign users via the API/service."
+
+msgid "admin.tenants.col_name"
+msgstr "Name"
+
+msgid "admin.tenants.col_key"
+msgstr "Key"
+
+msgid "admin.tenants.col_active"
+msgstr "Active"
+
+msgid "admin.tenants.add_title"
+msgstr "New tenant"
+
+msgid "admin.tenants.key_help"
+msgstr "Lowercase letters, digits, _ and - (2-63 chars)."
+
+msgid "admin.tenants.btn_add"
+msgstr "Create tenant"
+
+msgid "flash.tenants.created"
+msgstr "Tenant created."
