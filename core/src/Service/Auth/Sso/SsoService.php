@@ -8,6 +8,7 @@ use App\Service\Settings\SecretCipher;
 use Cake\Datasource\ConnectionInterface;
 use Cake\Datasource\ConnectionManager;
 use RuntimeException;
+use Symfony\Component\Uid\Uuid;
 
 /**
  * SSO-Identitätsföderation (Programm Tier-1, P06): Verwaltung der Identity
@@ -71,6 +72,13 @@ class SsoService
      */
     public function provider(string $id): ?array
     {
+        // `id` ist eine uuid-Spalte: ein nicht-UUID-Wert (z. B. aus einem
+        // Route-Parameter, der SAML-RelayState oder der Session) löst sonst eine
+        // Postgres-`QueryException` (SQLSTATE 22P02) aus, die als 500 endet und
+        // SQL/Stacktrace ins Log streut. Unbekannte ID == unbekannter Provider.
+        if (!Uuid::isValid($id)) {
+            return null;
+        }
         $row = $this->conn()->execute(
             'SELECT id, type, name, button_label, active, config, secret_encrypted FROM sso_providers WHERE id = :id',
             ['id' => $id],

@@ -106,4 +106,15 @@ class SsoServiceTest extends TestCase
         $this->expectExceptionMessageMatches('/unverifiziert/');
         (new SsoService())->loginExternalUser($this->providerId, 'ext-5', 'new@zztest.local', null, null, false);
     }
+
+    public function testProviderReturnsNullForMalformedId(): void
+    {
+        // `id` ist eine uuid-Spalte: ein nicht-UUID-Wert darf keine Postgres-
+        // QueryException (SQLSTATE 22P02 -> 500 + Stacktrace im Log) auslösen,
+        // sondern wird wie ein unbekannter Provider behandelt (null).
+        $svc = new SsoService();
+        $this->assertNull($svc->provider('nonexistent'));
+        $this->assertNull($svc->provider(str_repeat('0', 36)), '36-stellig, aber kein gültiges UUID');
+        $this->assertNull($svc->provider(''));
+    }
 }
