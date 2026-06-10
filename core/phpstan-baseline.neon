@@ -165,6 +165,12 @@ parameters:
 		-
 			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
 			identifier: method.notFound
+			count: 1
+			path: src/Command/TenantDbProvisionCommand.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
 			count: 4
 			path: src/Command/TrustCommand.php
 
@@ -1539,6 +1545,12 @@ parameters:
 		-
 			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
 			identifier: method.notFound
+			count: 5
+			path: src/Service/Queue/DbQueueTransport.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
 			count: 1
 			path: src/Service/Realtime/RealtimeService.php
 
@@ -1697,6 +1709,12 @@ parameters:
 			identifier: argument.type
 			count: 1
 			path: src/Service/Storage/StorageManager.php
+
+		-
+			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
+			identifier: method.notFound
+			count: 2
+			path: src/Service/Tenant/TenantConnectionResolver.php
 
 		-
 			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'

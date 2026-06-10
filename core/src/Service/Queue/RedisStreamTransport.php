@@ -29,6 +29,7 @@ class RedisStreamTransport implements QueueTransportInterface
         $this->consumer = (gethostname() ?: 'host') . ':' . getmypid();
     }
 
+    /** @param array<string,mixed> $payload */
     public function push(string $queue, array $payload): string
     {
         return (string)$this->redis->executeRaw([
@@ -128,7 +129,9 @@ class RedisStreamTransport implements QueueTransportInterface
                     $data = (string)$fields[$i + 1];
                 }
             }
-            $out[] = ['id' => $id, 'payload' => (array)(json_decode($data, true) ?: [])];
+            /** @var array<string,mixed> $payload */
+            $payload = (array)(json_decode($data, true) ?: []);
+            $out[] = ['id' => $id, 'payload' => $payload];
         }
 
         return $out;

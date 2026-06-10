@@ -14,7 +14,11 @@ namespace App\Service\Queue;
  */
 interface QueueTransportInterface
 {
-    /** Reiht einen Job ein und gibt seine Transport-ID zurück. */
+    /**
+     * Reiht einen Job ein und gibt seine Transport-ID zurück.
+     *
+     * @param array<string,mixed> $payload
+     */
     public function push(string $queue, array $payload): string;
 
     /**

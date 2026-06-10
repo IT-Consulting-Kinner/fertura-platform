@@ -18,6 +18,7 @@ class DbQueueTransport implements QueueTransportInterface
         return ConnectionManager::get('default');
     }
 
+    /** @param array<string,mixed> $payload */
     public function push(string $queue, array $payload): string
     {
         return (string)$this->conn()->execute(
@@ -44,10 +45,12 @@ class DbQueueTransport implements QueueTransportInterface
             ['q' => $queue, 'max' => max(1, $max)],
         )->fetchAll('assoc');
 
-        return array_map(static fn (array $r): array => [
-            'id' => (string)$r['id'],
-            'payload' => (array)(json_decode((string)$r['payload'], true) ?: []),
-        ], $rows);
+        return array_values(array_map(static function (array $r): array {
+            /** @var array<string,mixed> $payload */
+            $payload = (array)(json_decode((string)$r['payload'], true) ?: []);
+
+            return ['id' => (string)$r['id'], 'payload' => $payload];
+        }, $rows));
     }
 
     public function ack(string $queue, string $id): void
