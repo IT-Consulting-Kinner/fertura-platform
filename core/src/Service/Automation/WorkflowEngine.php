@@ -62,7 +62,12 @@ class WorkflowEngine
                         continue;
                     }
                     $to = (string)($t['to'] ?? $instance['state']);
-                    $this->setState((string)$instance['id'], $to);
+                    // Atomarer Compare-And-Swap auf den beobachteten Zustand:
+                    // bei nebenläufigen Workern transitioniert nur EINER (kein
+                    // Doppel-Übergang/Doppel-Aktion durch Race).
+                    if (!$this->transition((string)$instance['id'], (string)$instance['state'], $to)) {
+                        break; // ein anderer Worker war schneller
+                    }
                     $this->executor->run((array)($t['actions'] ?? []), $payload + [
                         'workflow' => ['entity_id' => $entityId, 'from' => $instance['state'], 'to' => $to],
                     ]);
@@ -105,11 +110,14 @@ class WorkflowEngine
         return ['id' => (string)$row['id'], 'state' => (string)$row['state']];
     }
 
-    private function setState(string $instanceId, string $state): void
+    /** Atomarer Zustandswechsel; true nur, wenn der erwartete Ausgangszustand galt. */
+    private function transition(string $instanceId, string $from, string $to): bool
     {
-        $this->conn()->execute(
-            'UPDATE workflow_instances SET state = :s WHERE id = :id',
-            ['s' => $state, 'id' => $instanceId],
+        $stmt = $this->conn()->execute(
+            'UPDATE workflow_instances SET state = :to WHERE id = :id AND state = :from',
+            ['to' => $to, 'id' => $instanceId, 'from' => $from],
         );
+
+        return $stmt->rowCount() === 1;
     }
 }

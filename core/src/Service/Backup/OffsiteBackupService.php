@@ -70,11 +70,17 @@ class OffsiteBackupService
         }
         try {
             stream_copy_to_stream($in, $out);
-        } finally {
+        } catch (\Throwable $e) {
             fclose($out);
+            @unlink($localPath); // keine halb-geschriebene Restore-Datei zurücklassen
             if (is_resource($in)) {
                 fclose($in);
             }
+            throw $e;
+        }
+        fclose($out);
+        if (is_resource($in)) {
+            fclose($in);
         }
     }
 

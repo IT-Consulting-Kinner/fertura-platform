@@ -194,3 +194,28 @@ bin/cake module host status                     # laufende Hosts anzeigen
   Sitzung — Core-Operation und Modul-Beitrag bilden keine verteilte Transaktion.
 - Verifikation: `OutOfProcessIsolationTest` + `OutOfProcessPhase3Test` (E2E) und
   `core/tests/scripts/module_isolation_check.sh` (manuell).
+
+## 7. Erweiterungspunkte des Programms „Wettbewerbsfähigkeit Core" (Tier 1–3)
+
+Über die klassischen Andock-Punkte hinaus stehen Modulen folgende neue
+Core-Contracts/Interfaces zur Verfügung (Katalog live: `bin/cake module_contracts`):
+
+| Contract | Manifest-Sektion | Interface | Zweck |
+|---|---|---|---|
+| `core.api.route` | `api_routes` (method/path/class) | `App\Service\Api\ApiEndpointInterface` | Eigene REST-Endpunkte unter `/api/v1/m/<key>/…` |
+| `core.collector.search` | `collectors_registered` | `App\Service\Search\SearchIndexerInterface` | Inhalte für die Volltext-Suche indexieren |
+| `core.collector.notification_channel` | `collectors_registered` | `App\Service\Notification\NotificationChannelInterface` | Zusätzliche Benachrichtigungs-Kanäle (z. B. Slack) |
+| `core.ai.complete` / `core.ai.embed` | — (Core-Service) | `App\Service\Ai\AiGateway` | LLM-Vervollständigung / Embeddings (provider-agnostisch) |
+| `core.collector.scheduled` | `collectors_registered` | `App\Service\Schedule\ScheduledTaskInterface` | Periodische Aufgaben (vom Worker getickt) |
+
+Weitere Core-Primitive (ohne Modul-Contract, direkt nutzbar): Outbound-Webhooks
+(Events → externe HTTP-Ziele, HMAC-signiert), Echtzeit-Push via SSE
+(`RealtimeService`), Automations-/Workflow-Engine (Event-Condition-Action +
+State-Machines), Objekt-Storage (`StorageManager`, lokal/S3), Export
+(`ExportService`, CSV/XLSX/PDF), gehärteter HTTP-Egress (`EgressClient`, SSRF-Schutz)
+und Cache (`CacheStore`). SDK-Werkzeuge: `module_scaffold`, `module_lint`,
+`module_contracts`.
+
+**Hinweis Manifest-Linter:** `bin/cake module_lint <pfad>` prüft u. a., dass
+`api_routes[].class` im `php_namespace` liegt und Pfade nur einfache Segmente +
+`{platzhalter}` enthalten (keine Regex-Metazeichen).

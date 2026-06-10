@@ -26,6 +26,17 @@ class ExportServiceTest extends TestCase
         $this->assertStringContainsString('Beta,200', $csv);
     }
 
+    public function testCsvNeutralizesFormulaInjection(): void
+    {
+        $e = new ExportService();
+        $csv = $e->csv(['x'], [['=HYPERLINK("http://evil")'], ['+1'], ['@cmd'], ['safe']]);
+        $this->assertStringContainsString("'=HYPERLINK", $csv);
+        $this->assertStringContainsString("'+1", $csv);
+        $this->assertStringContainsString("'@cmd", $csv);
+        $this->assertSame('safe', $e->antiFormula('safe'));
+        $this->assertSame("'=1+1", $e->antiFormula('=1+1'));
+    }
+
     public function testXlsxIsZipContainer(): void
     {
         $xlsx = (new ExportService())->xlsx(self::COLUMNS, self::ROWS);

@@ -28,15 +28,30 @@ class ExportService
     public function csv(array $columns, array $rows): string
     {
         $fh = fopen('php://temp', 'r+');
-        fputcsv($fh, $columns, ',', '"', '\\');
+        fputcsv($fh, array_map([$this, 'antiFormula'], $columns), ',', '"', '\\');
         foreach ($rows as $row) {
-            fputcsv($fh, array_values($row), ',', '"', '\\');
+            fputcsv($fh, array_map([$this, 'antiFormula'], array_values($row)), ',', '"', '\\');
         }
         rewind($fh);
         $content = (string)stream_get_contents($fh);
         fclose($fh);
 
         return $content;
+    }
+
+    /**
+     * Neutralisiert Formel-Injection (CSV/XLSX): ein Wert, der mit `=`,`+`,`-`,`@`,
+     * Tab oder CR beginnt, wird von Tabellen-Programmen als Formel ausgewertet
+     * (Datenexfiltration/DDE). Voranstellen eines `'` entwertet die Formel.
+     */
+    public function antiFormula(mixed $value): string
+    {
+        $s = (string)$value;
+        if ($s !== '' && in_array($s[0], ['=', '+', '-', '@', "\t", "\r"], true)) {
+            return "'" . $s;
+        }
+
+        return $s;
     }
 
     /**
@@ -47,8 +62,12 @@ class ExportService
     {
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
-        $sheet->fromArray([$columns], null, 'A1');
-        $sheet->fromArray(array_map('array_values', $rows), null, 'A2');
+        $sheet->fromArray([array_map([$this, 'antiFormula'], $columns)], null, 'A1');
+        $sheet->fromArray(
+            array_map(fn ($r): array => array_map([$this, 'antiFormula'], array_values($r)), $rows),
+            null,
+            'A2',
+        );
         $sheet->getStyle('A1:' . $sheet->getHighestColumn() . '1')->getFont()->setBold(true);
 
         $tmp = (string)tempnam(sys_get_temp_dir(), 'xlsx');

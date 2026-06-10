@@ -126,6 +126,7 @@ class SsoController extends AppController
             $identity['email'],
             $identity['first'],
             $identity['last'],
+            $identity['email_verified'] ?? null,
         );
         $user = $this->fetchTable('Users')->get($userId);
         $this->Authentication->setIdentity($user);

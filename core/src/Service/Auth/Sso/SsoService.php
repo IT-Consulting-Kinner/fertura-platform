@@ -129,7 +129,7 @@ class SsoService
      * Provisioning) und gibt die Benutzer-ID zurück. Der Aufrufer etabliert die
      * Session.
      */
-    public function loginExternalUser(string $providerId, string $subject, string $email, ?string $first, ?string $last): string
+    public function loginExternalUser(string $providerId, string $subject, string $email, ?string $first, ?string $last, ?bool $emailVerified = null): string
     {
         $conn = $this->conn();
         $link = $conn->execute(
@@ -144,8 +144,13 @@ class SsoService
         if ($email === '') {
             throw new RuntimeException('SSO-Antwort ohne E-Mail — keine Zuordnung möglich.');
         }
+        // Sagt der Provider die E-Mail ausdrücklich als unverifiziert (OIDC
+        // email_verified=false), niemals darüber zuordnen (Spoofing-Schutz).
+        if ($emailVerified === false) {
+            throw new RuntimeException('SSO-Antwort mit unverifizierter E-Mail — Zuordnung abgelehnt.');
+        }
         $user = $conn->execute(
-            'SELECT id, status FROM users WHERE lower(email) = lower(:e)',
+            'SELECT id, status, password_hash FROM users WHERE lower(email) = lower(:e)',
             ['e' => $email],
         )->fetch('assoc');
 
@@ -160,6 +165,17 @@ class SsoService
         } else {
             if (in_array($user['status'], ['disabled', 'anonymized'], true)) {
                 throw new RuntimeException('Konto ist deaktiviert.');
+            }
+            // SICHERHEIT (Account-Takeover-Schutz): niemals automatisch in ein
+            // bestehendes Konto mit **lokalem Passwort** einloggen, nur weil ein
+            // (möglicherweise fremder) IdP dessen E-Mail behauptet. Nur
+            // passwortlose Konten (SSO-/eingeladen) dürfen per E-Mail verknüpft
+            // werden; lokale Konten verknüpfen den IdP explizit nach Login.
+            if ($user['password_hash'] !== null) {
+                throw new RuntimeException(
+                    'Ein Konto mit dieser E-Mail und lokalem Login existiert bereits — '
+                    . 'bitte zuerst lokal anmelden und SSO in den Kontoeinstellungen verknüpfen.',
+                );
             }
             $userId = (string)$user['id'];
         }

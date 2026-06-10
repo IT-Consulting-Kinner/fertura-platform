@@ -106,6 +106,9 @@ class SamlProvider
         return [
             'sub' => $nameId,
             'email' => (string)$email,
+            // SAML-Attribute sind nicht als „verifiziert" markiert -> unbekannt
+            // (null); die Zuordnung lehnt lokale Passwortkonten ohnehin ab.
+            'email_verified' => null,
             'first' => $this->firstAttr($attrs, [
                 'givenName', 'first_name',
                 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname',

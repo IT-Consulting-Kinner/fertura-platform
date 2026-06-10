@@ -95,6 +95,18 @@ class OidcProviderTest extends TestCase
         (new OidcProvider())->validateIdToken($this->token($this->baseClaims()), $this->jwks(), self::ISS, self::CID, 'different');
     }
 
+    public function testMultiAudienceRequiresMatchingAzp(): void
+    {
+        $claims = ['aud' => [self::CID, 'other-client'], 'azp' => self::CID] + $this->baseClaims();
+        $ok = (new OidcProvider())->validateIdToken($this->token($claims), $this->jwks(), self::ISS, self::CID, 'n-abc');
+        $this->assertSame('user-789', $ok['sub']);
+
+        $bad = ['aud' => [self::CID, 'other-client'], 'azp' => 'other-client'] + $this->baseClaims();
+        $this->expectException(SsoException::class);
+        $this->expectExceptionMessageMatches('/azp/');
+        (new OidcProvider())->validateIdToken($this->token($bad), $this->jwks(), self::ISS, self::CID, 'n-abc');
+    }
+
     public function testForeignSignatureRejected(): void
     {
         $attacker = JWKFactory::createRSAKey(2048, ['alg' => 'RS256', 'use' => 'sig', 'kid' => 'k1']);

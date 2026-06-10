@@ -63,6 +63,10 @@ class EgressClient
         $opts = [
             'timeout' => (int)$this->config['timeout_seconds'],
             'headers' => $headers,
+            // Keine Redirects folgen: ein validiertes (öffentliches) Ziel könnte
+            // sonst auf ein internes/privates Ziel umleiten und den SSRF-Schutz
+            // umgehen. 3xx wird unverändert zurückgegeben (Aufrufer entscheidet).
+            'redirect' => 0,
         ];
         if (isset($options['type'])) {
             $opts['type'] = $options['type'];

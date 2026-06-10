@@ -103,9 +103,19 @@ class CacheStore
         }
     }
 
-    /** Normalisiert Schlüssel auf cache-sichere Zeichen. */
+    /**
+     * Normalisiert Schlüssel auf cache-sichere Zeichen. Enthält der Schlüssel
+     * unsichere Zeichen (Kollisionsgefahr, z. B. `a:1` vs `a/1` → `a_1`) oder ist
+     * er sehr lang, wird ein Hash des Originals angehängt — so bleiben sonst
+     * gleich-normalisierte Schlüssel **eindeutig** (wichtig für Rate-Limit-Buckets).
+     */
     private function key(string $key): string
     {
-        return (string)preg_replace('/[^A-Za-z0-9_.]/', '_', $key);
+        $safe = (string)preg_replace('/[^A-Za-z0-9_.]/', '_', $key);
+        if ($safe !== $key || strlen($safe) > 120) {
+            return substr($safe, 0, 100) . '_' . substr(hash('sha256', $key), 0, 16);
+        }
+
+        return $safe;
     }
 }

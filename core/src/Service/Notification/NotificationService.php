@@ -59,13 +59,15 @@ class NotificationService
 
         $id = '';
         if (in_array('in_app', $channels, true)) {
-            $row = $this->conn()->execute(
-                'INSERT INTO notifications (user_id, type, title, body, data) '
-                . 'VALUES (:u, :t, :ti, :b, CAST(:d AS jsonb)) RETURNING id',
-                ['u' => $userId, 't' => $type, 'ti' => $title, 'b' => $body, 'd' => json_encode($data)],
-            )->fetch('assoc');
-            $id = (string)$row['id'];
+            // Kanal-Fehler isolieren: ein fehlgeschlagenes In-App-Insert darf die
+            // übrigen Kanäle (E-Mail/Modul) + das Outbox-Event nicht abbrechen.
             try {
+                $row = $this->conn()->execute(
+                    'INSERT INTO notifications (user_id, type, title, body, data) '
+                    . 'VALUES (:u, :t, :ti, :b, CAST(:d AS jsonb)) RETURNING id',
+                    ['u' => $userId, 't' => $type, 'ti' => $title, 'b' => $body, 'd' => json_encode($data)],
+                )->fetch('assoc');
+                $id = (string)$row['id'];
                 ($this->realtime ??= new RealtimeService())->publish($userId, 'notification', [
                     'id' => $id, 'type' => $type, 'title' => $title, 'body' => $body,
                 ]);

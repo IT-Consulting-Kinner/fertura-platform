@@ -102,6 +102,7 @@ class OidcProvider
         return [
             'sub' => (string)($claims['sub'] ?? ''),
             'email' => (string)($claims['email'] ?? ''),
+            'email_verified' => array_key_exists('email_verified', $claims) ? (bool)$claims['email_verified'] : null,
             'first' => isset($claims['given_name']) ? (string)$claims['given_name'] : null,
             'last' => isset($claims['family_name']) ? (string)$claims['family_name'] : null,
         ];
@@ -137,6 +138,14 @@ class OidcProvider
         $audOk = is_array($aud) ? in_array($clientId, $aud, true) : $aud === $clientId;
         if (!$audOk) {
             throw new SsoException('ID-Token: aud stimmt nicht.');
+        }
+        // Bei mehreren Audiences (oder vorhandenem azp) muss azp == client_id sein
+        // (OIDC-Spec) — verhindert Token-Substitution von einem anderen Client
+        // desselben IdP.
+        if ((is_array($aud) && count($aud) > 1) || isset($claims['azp'])) {
+            if (($claims['azp'] ?? null) !== $clientId) {
+                throw new SsoException('ID-Token: azp stimmt nicht.');
+            }
         }
         if (!isset($claims['exp']) || (int)$claims['exp'] < time() - 60) {
             throw new SsoException('ID-Token abgelaufen.');

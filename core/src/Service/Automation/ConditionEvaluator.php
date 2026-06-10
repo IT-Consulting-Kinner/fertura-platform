@@ -74,15 +74,18 @@ class ConditionEvaluator
 
     private function compare(mixed $actual, string $op, mixed $value): bool
     {
+        // Strikte Vergleiche (===/!==, in_array strict): keine PHP-Typ-Juggling-
+        // Fehltreffer (z. B. "high"==true, ""==null, 100=="1e2"), die Regeln
+        // sonst auf manipulierten Nutzlasten fälschlich auslösen ließen.
         return match ($op) {
-            'eq' => $actual == $value,
-            'ne' => $actual != $value,
+            'eq' => $actual === $value,
+            'ne' => $actual !== $value,
             'gt' => is_numeric($actual) && is_numeric($value) && $actual > $value,
             'lt' => is_numeric($actual) && is_numeric($value) && $actual < $value,
             'gte' => is_numeric($actual) && is_numeric($value) && $actual >= $value,
             'lte' => is_numeric($actual) && is_numeric($value) && $actual <= $value,
             'contains' => is_string($actual) && is_string($value) && str_contains($actual, $value),
-            'in' => is_array($value) && in_array($actual, $value, false),
+            'in' => is_array($value) && in_array($actual, $value, true),
             'exists' => $value ? $actual !== null : $actual === null,
             default => false,
         };

@@ -105,13 +105,13 @@ Abgeschlossene Punkte werden oben abgehakt und hier mit E-Nummer + Commit notier
 | P10 Volltext-Suche | E85 | 228d025 | fertig — 145 Tests grün, /search live |
 | P11 AI/LLM (pgvector) | E86 | 8f6b199 | fertig — 153 Tests grün, 4 Provider |
 | P12 Workflow-Engine | E87 | 0004c80 | fertig — 160 Tests grün |
-| P13 Reporting/Export | E88 | (folgt) | fertig — 171 Tests grün |
-| P14 Off-Site-Backup | E89 | (folgt) | fertig — Upload/List/Download |
+| P13 Reporting/Export | E88 | cbcf6f3 | fertig |
+| P14 Off-Site-Backup | E89 | cbcf6f3 | fertig — Upload/List/Download |
 | P15 Zero-Downtime | E90 | cbcf6f3 | fertig — /health/ready + Migr.-Check |
-| P16 Modul-SDK | E91 | (folgt) | fertig — 177 Tests grün |
+| P16 Modul-SDK | E91 | f422e08 | fertig |
 
 **PROGRAMM VOLLSTÄNDIG ABGESCHLOSSEN** — alle 16 Punkte (P01–P16), Phasen A–F.
-177 Tests grün.
 
-**Phasen A–C abgeschlossen** (P01–P09). Phase D läuft: P10 fertig, als Nächstes
-P11 AI/LLM (Provider: OpenAI/Anthropic/xAI/Google), P12 Workflow-Engine.
+**Nachlauf:** zurückgestellte Themen (E92: Multi-Tenancy-Entscheidung + SAML-
+Signierung + Off-Site-Automatik + Workflow-State-Machines; E93: Admin-GUI),
+anschließend vollständiger Peer-Review + Remediation (E94). **Stand: 189 Tests grün.**

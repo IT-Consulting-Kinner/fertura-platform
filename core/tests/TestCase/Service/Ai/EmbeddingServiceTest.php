@@ -60,6 +60,19 @@ class EmbeddingServiceTest extends TestCase
         $this->assertGreaterThan(0.99, $res[0]['score']);
     }
 
+    public function testWrongDimensionRejected(): void
+    {
+        $stub = new class extends AiGateway {
+            public function embed(string $text): array
+            {
+                return array_fill(0, 768, 0.1); // z. B. Google-Modell -> falsche Dimension
+            }
+        };
+        $this->expectException(\App\Service\Ai\AiException::class);
+        $this->expectExceptionMessageMatches('/Dimension/');
+        (new \App\Service\Ai\EmbeddingService($stub))->index('zztest', 'doc', 'x', 'Inhalt');
+    }
+
     public function testOwnerScoping(): void
     {
         $svc = $this->service();

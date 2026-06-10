@@ -46,7 +46,13 @@ class ModuleController extends ApiController
                 [$request],
             );
         } catch (Throwable $e) {
-            return $this->json(['error' => 'module_error', 'message' => $e->getMessage()], 502);
+            // Interne Details (Pfade/SQL/Klassen) nicht an den Client geben.
+            \Cake\Log\Log::error('Modul-Endpunkt-Fehler: ' . $e->getMessage(), [
+                'module' => $moduleKey,
+                'path' => '/' . $path,
+            ]);
+
+            return $this->json(['error' => 'module_error', 'message' => 'Modul-Endpunkt fehlgeschlagen.'], 502);
         }
 
         $status = (int)($result['status'] ?? 200);

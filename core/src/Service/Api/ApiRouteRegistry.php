@@ -89,7 +89,14 @@ class ApiRouteRegistry
      */
     public static function matchPath(string $template, string $path): ?array
     {
-        $regex = preg_replace('#\{([a-zA-Z_][a-zA-Z0-9_]*)\}#', '(?<$1>[^/]+)', $template);
+        // Sicherheit: erst das gesamte Template quoten (keine Regex-Metazeichen
+        // aus dem Manifest -> kein ReDoS/Regex-Injection), DANN die nun escapten
+        // Platzhalter `\{name\}` durch benannte Gruppen ersetzen.
+        $regex = (string)preg_replace(
+            '/\\\\\{([a-zA-Z_][a-zA-Z0-9_]*)\\\\\}/',
+            '(?<$1>[^/]+)',
+            preg_quote($template, '#'),
+        );
         if (!preg_match('#^' . $regex . '$#', $path, $m)) {
             return null;
         }

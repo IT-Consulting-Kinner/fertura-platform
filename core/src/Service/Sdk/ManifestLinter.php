@@ -61,11 +61,18 @@ class ManifestLinter
             if (empty($route['method']) || !in_array(strtoupper((string)$route['method']), ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], true)) {
                 $errors[] = "api_routes [$i]: ungültige/fehlende method";
             }
-            if (empty($route['path']) || !str_starts_with((string)$route['path'], '/')) {
+            $path = (string)($route['path'] ?? '');
+            if ($path === '' || !str_starts_with($path, '/')) {
                 $errors[] = "api_routes [$i]: 'path' muss mit '/' beginnen";
+            } elseif (!preg_match('#^(/([A-Za-z0-9._~-]+|\{[a-z_][a-z0-9_]*\}))+/?$#', $path)) {
+                // Nur einfache Segmente + {platzhalter} — keine Regex-Metazeichen
+                // (sonst Regex-Injection/ReDoS im API-Router, P07).
+                $errors[] = "api_routes [$i]: 'path' enthält unzulässige Zeichen (nur Segmente + {platzhalter})";
             }
             if (empty($route['class'])) {
                 $errors[] = "api_routes [$i]: 'class' fehlt";
+            } elseif ($ns !== '' && !str_starts_with((string)$route['class'], rtrim($ns, '\\') . '\\')) {
+                $errors[] = "api_routes [$i]: class '{$route['class']}' liegt nicht im php_namespace '$ns'";
             }
         }
 

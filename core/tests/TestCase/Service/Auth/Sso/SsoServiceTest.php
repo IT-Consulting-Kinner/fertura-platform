@@ -76,7 +76,7 @@ class SsoServiceTest extends TestCase
         $this->assertSame($first, $second, 'gleicher Subject -> gleicher Benutzer (über den Link)');
     }
 
-    public function testLinksExistingUserByEmail(): void
+    public function testLinksExistingPasswordlessUserByEmail(): void
     {
         $conn = ConnectionManager::get('default');
         $existing = $conn->execute(
@@ -84,6 +84,26 @@ class SsoServiceTest extends TestCase
         )->fetch('assoc')['id'];
 
         $userId = (new SsoService())->loginExternalUser($this->providerId, 'ext-3', 'pre@zztest.local', null, null);
-        $this->assertSame((string)$existing, $userId, 'vorhandener Benutzer wird per E-Mail verknüpft, nicht dupliziert');
+        $this->assertSame((string)$existing, $userId, 'passwortloser Benutzer wird per E-Mail verknüpft, nicht dupliziert');
+    }
+
+    public function testRefusesMergeIntoLocalPasswordAccount(): void
+    {
+        // Account-Takeover-Schutz: ein bestehendes Konto MIT lokalem Passwort
+        // darf nicht per behaupteter E-Mail übernommen werden.
+        ConnectionManager::get('default')->execute(
+            "INSERT INTO users (username, email, status, password_hash) "
+            . "VALUES ('zztest_local', 'local@zztest.local', 'active', 'hash')",
+        );
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessageMatches('/lokal/');
+        (new SsoService())->loginExternalUser($this->providerId, 'ext-4', 'local@zztest.local', null, null);
+    }
+
+    public function testRefusesUnverifiedEmail(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessageMatches('/unverifiziert/');
+        (new SsoService())->loginExternalUser($this->providerId, 'ext-5', 'new@zztest.local', null, null, false);
     }
 }

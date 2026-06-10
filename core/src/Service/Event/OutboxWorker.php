@@ -83,7 +83,7 @@ class OutboxWorker
             SET status = 'processing', locked_at = now(), attempt_count = o.attempt_count + 1
             FROM due
             WHERE o.id = due.id AND o.created_at = due.created_at
-            RETURNING o.id, o.contract_name, o.payload, o.attempt_count, o.max_attempts, o.correlation_id
+            RETURNING o.id, o.contract_name, o.payload, o.attempt_count, o.max_attempts, o.correlation_id, o.derived_done
             SQL,
             ['limit' => $limit],
         )->fetchAll('assoc');
@@ -118,10 +118,12 @@ class OutboxWorker
         } catch (Throwable $e) {
             $errors[] = 'webhook-enqueue: ' . $e->getMessage();
         }
-        // Automations-Regeln (P12) NUR beim ersten Versuch auswerten (Aktionen
-        // sind nicht idempotent -> keine Doppel-Aktionen bei Retries). Fehler
-        // sind in der Engine isoliert und beeinflussen den Event-Status nicht.
-        if ((int)$event['attempt_count'] === 1) {
+        // Automations-/Workflow-Regeln genau einmal auswerten, gesteuert über das
+        // persistierte `derived_done`-Flag (nicht attempt_count==1): so gehen die
+        // Aktionen bei Absturz+Reclaim nicht verloren (at-least-once), und ein
+        // normaler Listener-Retry löst sie nicht erneut aus. Fehler sind in den
+        // Engines isoliert und beeinflussen den Event-Status nicht.
+        if (!(bool)$event['derived_done']) {
             try {
                 (new \App\Service\Automation\AutomationEngine())
                     ->onEvent((string)$event['contract_name'], $payload);
@@ -134,6 +136,10 @@ class OutboxWorker
             } catch (Throwable $e) {
                 $this->log('Workflow-Fehler: ' . $e->getMessage());
             }
+            $this->connection()->execute(
+                "UPDATE event_outbox SET derived_done = true WHERE id = :id",
+                ['id' => $event['id']],
+            );
         }
         $runtime = new \App\Service\Module\ContributionRuntime($this->registry);
         foreach ($runtime->listeners((string)$event['contract_name']) as $listener) {

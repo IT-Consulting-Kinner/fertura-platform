@@ -79,12 +79,27 @@ class EmbeddingService
     /**
      * @param list<float> $floats
      */
+    /** Erwartete Embedding-Dimension (= Spaltentyp `vector(1536)`). */
+    private const DIMENSIONS = 1536;
+
     private function literal(array $floats): string
     {
-        if ($floats === []) {
-            throw new AiException('Leeres Embedding erhalten.');
+        if (count($floats) !== self::DIMENSIONS) {
+            throw new AiException(sprintf(
+                'Embedding-Dimension %d passt nicht zur erwarteten %d — Embedding-Modell prüfen '
+                . '(z. B. OpenAI text-embedding-3-small).',
+                count($floats),
+                self::DIMENSIONS,
+            ));
         }
 
-        return '[' . implode(',', array_map(static fn ($f): string => rtrim(rtrim(sprintf('%.8f', (float)$f), '0'), '.'), $floats)) . ']';
+        return '[' . implode(',', array_map(static function ($f): string {
+            $v = (float)$f;
+            if (!is_finite($v)) {
+                throw new AiException('Embedding enthält einen nicht-endlichen Wert.');
+            }
+
+            return rtrim(rtrim(sprintf('%.8f', $v), '0'), '.');
+        }, $floats)) . ']';
     }
 }
