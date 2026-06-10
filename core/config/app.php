@@ -492,10 +492,11 @@ return [
      * To use database sessions, load the SQL file located at config/schema/sessions.sql
      */
     'Session' => [
-        // Datei-basiert (Standard, Einzelinstanz) ODER 'database' -> core.sessions
-        // (CakePHP DatabaseSession): instanzübergreifend für Mehrinstanz-/HA-Betrieb
-        // der Web-Schicht und überlebt Container-Recreates (kein Zwangs-Logout).
-        'defaults' => env('SESSION_DEFAULTS', 'php'),
+        // **Default `database`** (-> core.sessions, CakePHP DatabaseSession):
+        // instanzübergreifend für Mehrinstanz-/HA-/Multi-Tenant-Betrieb der Web-
+        // Schicht und überlebt Container-Recreates (kein Zwangs-Logout). Für reine
+        // Einzelinstanz lässt sich per `SESSION_DEFAULTS=php` auf Datei zurückstellen.
+        'defaults' => env('SESSION_DEFAULTS', 'database'),
         // Cookie-Härtung: HttpOnly + SameSite=Lax immer; Secure, sobald TLS
         // terminiert wird (SESSION_COOKIE_SECURE=1). Lokaler HTTP-Dev bleibt nutzbar.
         'ini' => [

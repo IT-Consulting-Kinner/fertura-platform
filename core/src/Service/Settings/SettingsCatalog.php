@@ -107,6 +107,10 @@ class SettingsCatalog
             // Multi-Tenancy: angemeldeten Benutzer auf der Domain eines FREMDEN
             // Mandanten abweisen (Cross-Tenant-Host-Policy). Single-Org unberührt.
             'tenancy.enforce_host_match' => ['type' => 'bool', 'default' => true],
+            // Pro-Mandant-Obergrenze an Outbox-Events je Worker-Batch (Fairness/Quota
+            // im Multi-Tenant-Pool; Default praktisch unbegrenzt — Fairness kommt schon
+            // aus dem Round-Robin-Claiming). Pro Mandant via Settings-Overlay setzbar.
+            'outbox.max_per_tenant_per_batch' => ['type' => 'int', 'default' => 10000, 'min' => 1, 'max' => 100000],
             // Volltext-Sprachkonfiguration (Postgres regconfig) für Stemming/Stopwords.
             // Wird von der Migration aus `SEARCH_TEXT_CONFIG` (Default `german`) gesetzt
             // und muss zur tsvector-Spalte passen; der Index trägt zusätzlich `simple`

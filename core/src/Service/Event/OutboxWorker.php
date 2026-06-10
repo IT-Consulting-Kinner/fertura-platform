@@ -70,14 +70,35 @@ class OutboxWorker
     public function processBatch(?int $limit = null): int
     {
         $limit ??= $this->batchLimit;
+        // Mandanten-Fairness (Pool-Modell, gegen Noisy-Neighbor): Events werden je
+        // Mandant nach Fälligkeit gerankt und **round-robin** ausgewählt (alle rn=1
+        // zuerst, dann rn=2 …), sodass kein einzelner Mandant den Worker monopolisiert.
+        // `perTenant` begrenzt zusätzlich, wie viele Events EIN Mandant pro Batch
+        // beisteuern darf. FOR UPDATE SKIP LOCKED bleibt erhalten (Multi-Worker), indem
+        // die gerankten Kandidaten-IDs anschließend an der Basistabelle gesperrt werden.
+        $perTenant = $this->maxPerTenantPerBatch();
         $rows = $this->connection()->execute(
             <<<SQL
-            WITH due AS (
-                SELECT id, created_at FROM event_outbox
+            WITH candidates AS (
+                SELECT id, created_at, available_at,
+                       row_number() OVER (
+                           PARTITION BY coalesce(tenant_id::text, '~system')
+                           ORDER BY available_at, created_at
+                       ) AS rn
+                FROM event_outbox
                 WHERE status = 'pending' AND available_at <= now()
-                ORDER BY available_at
-                FOR UPDATE SKIP LOCKED
+            ),
+            picked AS (
+                SELECT id, created_at FROM candidates
+                WHERE rn <= :perTenant
+                ORDER BY rn, available_at
                 LIMIT :limit
+            ),
+            due AS (
+                SELECT o.id, o.created_at FROM event_outbox o
+                JOIN picked p ON p.id = o.id AND p.created_at = o.created_at
+                WHERE o.status = 'pending' AND o.available_at <= now()
+                FOR UPDATE SKIP LOCKED
             )
             UPDATE event_outbox o
             SET status = 'processing', locked_at = now(), attempt_count = o.attempt_count + 1
@@ -85,7 +106,7 @@ class OutboxWorker
             WHERE o.id = due.id AND o.created_at = due.created_at
             RETURNING o.id, o.contract_name, o.payload, o.attempt_count, o.max_attempts, o.correlation_id, o.derived_done, o.tenant_id
             SQL,
-            ['limit' => $limit],
+            ['limit' => $limit, 'perTenant' => $perTenant],
         )->fetchAll('assoc');
 
         foreach ($rows as $event) {
@@ -93,6 +114,17 @@ class OutboxWorker
         }
 
         return count($rows);
+    }
+
+    /** Pro-Mandant-Obergrenze an Events je Batch (Fairness/Quota). */
+    private function maxPerTenantPerBatch(): int
+    {
+        try {
+            return max(1, (int)(new \App\Service\Settings\SettingsManager())
+                ->get('core', 'outbox.max_per_tenant_per_batch', 10000));
+        } catch (Throwable) {
+            return 10000;
+        }
     }
 
     /**
