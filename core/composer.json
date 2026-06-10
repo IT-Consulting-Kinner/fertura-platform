@@ -10,10 +10,12 @@
         "cakephp/cakephp": "5.3.*",
         "cakephp/migrations": "^5.0",
         "cakephp/plugin-installer": "^2.0",
+        "dompdf/dompdf": "^3",
         "league/flysystem": "^3.0",
         "league/flysystem-async-aws-s3": "^3.0",
         "mobiledetect/mobiledetectlib": "^4.8.03",
         "onelogin/php-saml": "^4.1",
+        "phpoffice/phpspreadsheet": "^3",
         "symfony/uid": "^7.0",
         "web-token/jwt-library": "^3.3"
     },

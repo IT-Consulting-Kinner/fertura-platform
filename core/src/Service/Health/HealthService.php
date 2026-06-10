@@ -44,6 +44,29 @@ class HealthService
     }
 
     /**
+     * Readiness (Programm Tier-3, P15): Soll diese Instanz Verkehr erhalten?
+     *
+     * Für rollierende/Blue-Green-Deployments: ein Load-Balancer/Orchestrator
+     * leitet nur an **ready** Instanzen. Während eines Updates schaltet der
+     * Wartungsmodus (Kap. 28) die Instanz auf **not ready** (503), sodass sie
+     * ohne 503-Antworten an echte Nutzer gedrosselt/entleert werden kann.
+     *
+     * @return array{ready: bool, checks: array<string, bool>}
+     */
+    public function readiness(): array
+    {
+        $db = $this->liveness();
+        $maintenance = false;
+        try {
+            $maintenance = (bool)(new \App\Service\Settings\SettingsManager())->get('core', 'maintenance_mode', false);
+        } catch (Throwable) {
+            // Settings nicht lesbar -> wie nicht im Wartungsmodus behandeln.
+        }
+
+        return ['ready' => $db && !$maintenance, 'checks' => ['database' => $db, 'not_maintenance' => !$maintenance]];
+    }
+
+    /**
      * Voller Subsystem-Status (auth-/token-geschützt, Kap. 20.2.1).
      *
      * @return array{status: string, subsystems: array<string, mixed>, features: array<string, bool>}

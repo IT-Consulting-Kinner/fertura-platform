@@ -12,9 +12,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
     && apt-get update && apt-get install -y --no-install-recommends \
         git unzip postgresql-client-17 \
         libicu-dev libpq-dev libzip-dev libonig-dev \
+        libpng-dev libjpeg62-turbo-dev libfreetype6-dev \
     && docker-php-ext-configure intl \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j"$(nproc)" \
-        intl mbstring pdo_pgsql pgsql zip opcache pcntl \
+        intl mbstring pdo_pgsql pgsql zip opcache pcntl gd \
     && rm -rf /var/lib/apt/lists/*
 
 # Composer aus dem offiziellen Image übernehmen

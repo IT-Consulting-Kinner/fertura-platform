@@ -69,6 +69,8 @@ return function (RouteBuilder $routes): void {
         // Health-Endpoint (Step 12, Kap. 20.2.1): öffentlicher Liveness + geschützter Detailstatus.
         $builder->connect('/health', ['controller' => 'Health', 'action' => 'index']);
         $builder->connect('/health/detail', ['controller' => 'Health', 'action' => 'detail']);
+        // Readiness-Probe (P15): rollierende/Blue-Green-Deployments.
+        $builder->connect('/health/ready', ['controller' => 'Health', 'action' => 'ready']);
 
         // Prometheus-Metriken (P04): geschützt wie der Health-Detailpfad.
         $builder->connect('/metrics', ['controller' => 'Metrics', 'action' => 'index']);

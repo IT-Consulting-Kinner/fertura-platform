@@ -25,7 +25,7 @@ class HealthController extends AppController
     {
         parent::beforeFilter($event);
         // Health ist nicht auth-pflichtig; der Detailpfad prüft selbst.
-        $this->Authentication->allowUnauthenticated(['index', 'detail']);
+        $this->Authentication->allowUnauthenticated(['index', 'detail', 'ready']);
     }
 
     public function index(): Response
@@ -33,6 +33,17 @@ class HealthController extends AppController
         $up = (new HealthService())->liveness();
 
         return $this->jsonResponse(['status' => $up ? 'up' : 'down'], $up ? 200 : 503);
+    }
+
+    /**
+     * Readiness-Probe (P15) für rollierende/Blue-Green-Deployments: 200 = bereit
+     * für Verkehr, 503 = entleeren (z. B. Wartungsmodus während eines Updates).
+     */
+    public function ready(): Response
+    {
+        $r = (new HealthService())->readiness();
+
+        return $this->jsonResponse(['ready' => $r['ready'], 'checks' => $r['checks']], $r['ready'] ? 200 : 503);
     }
 
     public function detail(): Response

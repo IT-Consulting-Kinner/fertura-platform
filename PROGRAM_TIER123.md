@@ -71,12 +71,12 @@ Tests, Doku (Anforderungsdokument-Kapitel + Changelog) und eigenem Commit/Push
   Service-Call), Admin-UI, Audit.
 
 ### Phase E — Auswertung & Betrieb
-- [ ] **P13 — Reporting/Export-Primitive.** Generische CSV/XLSX/PDF-Erzeugung
-  (PhpSpreadsheet + PDF), gestreamt/abgelegt über P03, mit Audit.
-- [ ] **P14 — Off-Site-Backup + PITR.** WAL-Archivierung + Backup-Ziel auf
-  Objekt-Storage (P03), Point-in-Time-Recovery-Runbook.
-- [ ] **P15 — Zero-Downtime-Updates.** Expand/Contract-Migrationsmuster,
-  blue-green/rolling-fähiger Update-Fluss statt 503-Wartungsmodus.
+- [x] **P13 — Reporting/Export-Primitive** (E88). CSV/XLSX (PhpSpreadsheet) +
+  PDF (dompdf), Ablage über P03, Audit. (gd-Extension im Image ergänzt.)
+- [x] **P14 — Off-Site-Backup + PITR** (E89). `OffsiteBackupService` (Upload/
+  List/Download über P03/S3) + CLI; PITR als Runbook.
+- [x] **P15 — Zero-Downtime-Updates** (E90). Readiness-Probe `/health/ready` +
+  Migrations-Sicherheits-Check (Expand/Contract-Hinweise).
 
 ### Phase F — Ökosystem
 - [ ] **P16 — Modul-SDK / Scaffolding / Dev-Mode / Manifest-Linter.** CLI zum
@@ -104,10 +104,13 @@ Abgeschlossene Punkte werden oben abgehakt und hier mit E-Nummer + Commit notier
 
 | P10 Volltext-Suche | E85 | 228d025 | fertig — 145 Tests grün, /search live |
 | P11 AI/LLM (pgvector) | E86 | 8f6b199 | fertig — 153 Tests grün, 4 Provider |
-| P12 Workflow-Engine | E87 | (folgt) | fertig — 160 Tests grün |
+| P12 Workflow-Engine | E87 | 0004c80 | fertig — 160 Tests grün |
+| P13 Reporting/Export | E88 | (folgt) | fertig — 171 Tests grün |
+| P14 Off-Site-Backup | E89 | (folgt) | fertig — Upload/List/Download |
+| P15 Zero-Downtime | E90 | (folgt) | fertig — /health/ready + Migr.-Check |
 
-**Phasen A–D abgeschlossen** (P01–P12). Nächster Halt: Zwischenstand, dann
-Phase E (P13 Reporting/Export, P14 Off-Site-Backup/PITR, P15 Zero-Downtime).
+**Phasen A–E abgeschlossen** (P01–P15). Nächster Halt: Zwischenstand, dann
+Phase F (P16 Modul-SDK/Scaffolding).
 
 **Phasen A–C abgeschlossen** (P01–P09). Phase D läuft: P10 fertig, als Nächstes
 P11 AI/LLM (Provider: OpenAI/Anthropic/xAI/Google), P12 Workflow-Engine.
