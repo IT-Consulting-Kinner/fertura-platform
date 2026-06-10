@@ -37,6 +37,20 @@ class ExportServiceTest extends TestCase
         $this->assertSame("'=1+1", $e->antiFormula('=1+1'));
     }
 
+    public function testAntiFormulaCatchesLeadingWhitespaceAndNewline(): void
+    {
+        $e = new ExportService();
+        // Tabellenprogramme trimmen führenden Whitespace/Newline vor dem Parsen —
+        // ein Auslöser dahinter (oder der Whitespace selbst) muss entwertet werden.
+        $this->assertSame("' =HYPERLINK(\"x\")", $e->antiFormula(' =HYPERLINK("x")'));
+        $this->assertSame("'\n=1+1", $e->antiFormula("\n=1+1"));
+        $this->assertSame("'\t@cmd", $e->antiFormula("\t@cmd"));
+        $this->assertSame("'  -2+3", $e->antiFormula('  -2+3'));
+        // Harmlose Werte bleiben unangetastet.
+        $this->assertSame('Müller', $e->antiFormula('Müller'));
+        $this->assertSame('100', $e->antiFormula('100'));
+    }
+
     public function testXlsxIsZipContainer(): void
     {
         $xlsx = (new ExportService())->xlsx(self::COLUMNS, self::ROWS);

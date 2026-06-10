@@ -91,13 +91,10 @@ class CacheStore
                 return $n;
             }
         } catch (Throwable) {
-            // Engine ohne atomares increment -> Fallback unten.
+            // Engine ohne atomares increment -> gesperrter Fallback unten.
         }
         try {
-            $new = (int)(@Cache::read($k, $this->config) ?: 0) + $offset;
-            @Cache::write($k, $new, $this->config);
-
-            return $new;
+            return $this->lockedRmw($k, static fn (int $cur): int => $cur + $offset);
         } catch (Throwable) {
             return 0; // Cache aus -> fail-open
         }
@@ -115,12 +112,42 @@ class CacheStore
         } catch (Throwable) {
         }
         try {
-            $new = max(0, (int)(@Cache::read($k, $this->config) ?: 0) - $offset);
+            return $this->lockedRmw($k, static fn (int $cur): int => max(0, $cur - $offset));
+        } catch (Throwable) {
+            return 0;
+        }
+    }
+
+    /**
+     * Atomares read-modify-write für den nicht-atomaren Engine-Fallback (FileEngine
+     * kann nicht atomar inc/dec). Eine prozessübergreifende Sperrdatei (`flock`)
+     * umschließt Lesen+Schreiben, damit nebenläufige inc/dec **kein verlorenes
+     * Update** erzeugen — sonst driftet z. B. der SSE-Stream-Zähler nach oben und
+     * sperrt einen Benutzer dauerhaft aus (oder nach unten und hebelt das Limit aus).
+     * Atomare Engines (Redis/APCu) nehmen diesen Pfad gar nicht erst.
+     *
+     * @param callable(int):int $mutate
+     */
+    private function lockedRmw(string $k, callable $mutate): int
+    {
+        $lockFile = sys_get_temp_dir() . '/fertura_cnt_' . hash('sha256', $this->config . '|' . $k) . '.lock';
+        $fh = @fopen($lockFile, 'c');
+        if ($fh === false) {
+            // Sperre nicht möglich -> best-effort ohne Lock (wie zuvor).
+            $new = $mutate((int)(@Cache::read($k, $this->config) ?: 0));
             @Cache::write($k, $new, $this->config);
 
             return $new;
-        } catch (Throwable) {
-            return 0;
+        }
+        try {
+            @flock($fh, LOCK_EX);
+            $new = $mutate((int)(@Cache::read($k, $this->config) ?: 0));
+            @Cache::write($k, $new, $this->config);
+
+            return $new;
+        } finally {
+            @flock($fh, LOCK_UN);
+            @fclose($fh);
         }
     }
 

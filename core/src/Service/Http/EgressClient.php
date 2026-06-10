@@ -51,6 +51,16 @@ class EgressClient
         }
         $this->assertUrlAllowed($url);
 
+        // Die SSRF-Garantien (IP-Pinning gegen DNS-Rebinding, In-Flight-Größenlimit)
+        // werden über den Curl-Adapter durchgesetzt. Fehlt ext-curl, fiele Cake still
+        // auf den Stream-Adapter zurück, der die `curl`-Optionen ignoriert — der Schutz
+        // wäre wirkungslos. Bei aktivem SSRF-Schutz dann lieber fail-closed.
+        if (empty($this->config['allow_private']) && !extension_loaded('curl')) {
+            throw new EgressException(
+                'Outbound-HTTP erfordert die curl-Erweiterung (SSRF-Pinning/Größenlimit) — nicht verfügbar.',
+            );
+        }
+
         $headers = array_merge(
             ['User-Agent' => (string)$this->config['user_agent']],
             (array)($options['headers'] ?? []),
@@ -74,6 +84,12 @@ class EgressClient
         $pin = $this->pinTarget($url);
         if ($pin !== null) {
             $opts['curl'][CURLOPT_RESOLVE] = [$pin];
+            // Nur auf die gepinnte (IPv4-)Adresse verbinden. Verhindert, dass curl bei
+            // einem Dual-Stack-Host über eine NICHT geprüfte IPv6-Adresse ausweicht
+            // (die IPv4-only-Auflösung in resolveHostIps validiert keine AAAA-Records).
+            if (defined('CURL_IPRESOLVE_V4')) {
+                $opts['curl'][CURLOPT_IPRESOLVE] = CURL_IPRESOLVE_V4;
+            }
         }
         // Antwortgrößen-Limit BEREITS WÄHREND des Transfers durchsetzen (statt erst
         // nach dem vollständigen Puffern): ein bösartiger Server kann `Content-Length`

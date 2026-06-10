@@ -185,6 +185,18 @@ class SsoService
                     . 'bitte zuerst lokal anmelden und SSO in den Kontoeinstellungen verknüpfen.',
                 );
             }
+            // Account-Takeover-Schutz für **offene Einladungen**: ein passwortloses
+            // Konto im Status `invited` (oft frisch eingeladen, ggf. privilegiert)
+            // darf NICHT allein über eine nicht ausdrücklich verifizierte IdP-E-Mail
+            // (SAML liefert `email_verified`=null) beansprucht werden. Sonst könnte
+            // ein IdP, der eine fremde E-Mail behauptet, eine ausstehende Einladung
+            // kapern. Verifizierte OIDC-E-Mails (email_verified=true) sind erlaubt.
+            if ($user['status'] === 'invited' && $emailVerified !== true) {
+                throw new RuntimeException(
+                    'Zu dieser E-Mail existiert eine offene Einladung — bitte zuerst die '
+                    . 'Einladung abschließen, bevor eine SSO-Verknüpfung möglich ist.',
+                );
+            }
             $userId = (string)$user['id'];
         }
 

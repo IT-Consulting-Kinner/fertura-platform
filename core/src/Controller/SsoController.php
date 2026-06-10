@@ -110,9 +110,14 @@ class SsoController extends AppController
         $session = $this->request->getSession();
         $flow = $session->read('sso_saml');
         $session->delete('sso_saml');
-        $expectedId = is_array($flow) && (string)($flow['provider'] ?? '') === $providerId
-            ? ($flow['request_id'] ?? null)
-            : null;
+        // Existiert ein gemerkter Flow, MUSS sein Provider zur Antwort passen —
+        // sonst hart ablehnen (kein stilles Herabstufen auf „ungebunden").
+        if (is_array($flow) && (string)($flow['provider'] ?? '') !== $providerId) {
+            $this->Flash->error('SAML-Login fehlgeschlagen: Sitzungs-/Provider-Konflikt.');
+
+            return $this->redirect('/login');
+        }
+        $expectedId = is_array($flow) ? ($flow['request_id'] ?? null) : null;
 
         try {
             $provider = (new SsoService())->provider($providerId);
@@ -143,6 +148,9 @@ class SsoController extends AppController
             $identity['email_verified'] ?? null,
         );
         $user = $this->fetchTable('Users')->get($userId);
+        // Session-Fixation-Schutz: vor dem Setzen der Identität die Session-ID
+        // erneuern (der Pre-Auth-Flow lief in derselben Session).
+        $this->request->getSession()->renew();
         $this->Authentication->setIdentity($user);
         $this->Flash->success(__('flash.auth.loggedin'));
 

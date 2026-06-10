@@ -480,6 +480,17 @@ class BackupService
 
     private function buildZip(string $zip, string $dump, string $tar, string $manifestJson, string $pw): void
     {
+        // Fail-closed: Ist ein Backup-Passwort gesetzt, libzip aber ohne AES-256,
+        // würde `setPassword()` allein NICHTS verschlüsseln — das Archiv läge im
+        // Klartext vor, während DB/Manifest/Audit es als „verschlüsselt" führen.
+        // Lieber abbrechen als ein scheinbar verschlüsseltes Klartext-Backup
+        // (enthält den kompletten DB-Dump inkl. aller übrigen Geheimnisse) ablegen.
+        if ($pw !== '' && !defined('ZipArchive::EM_AES_256')) {
+            throw new RuntimeException(
+                'Backup-Verschlüsselung verlangt (backup.password gesetzt), aber libzip ohne '
+                . 'AES-256-Support — Abbruch statt unverschlüsselter Ablage.',
+            );
+        }
         $za = new ZipArchive();
         if ($za->open($zip, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
             throw new RuntimeException('ZIP nicht erstellbar: ' . $zip);
@@ -490,9 +501,15 @@ class BackupService
         $za->addFile($dump, 'database.dump');
         $za->addFile($tar, 'files.tar.gz');
         $za->addFromString('manifest.json', $manifestJson);
-        if ($pw !== '' && defined('ZipArchive::EM_AES_256')) {
+        if ($pw !== '') {
             foreach (['database.dump', 'files.tar.gz', 'manifest.json'] as $e) {
-                $za->setEncryptionName($e, ZipArchive::EM_AES_256);
+                // Jeder Eintrag MUSS verschlüsselt werden — schlägt das fehl, abbrechen.
+                if (!$za->setEncryptionName($e, ZipArchive::EM_AES_256)) {
+                    $za->close();
+                    @unlink($zip);
+
+                    throw new RuntimeException("Backup-Eintrag '$e' nicht verschlüsselbar — Abbruch.");
+                }
             }
         }
         $za->close();

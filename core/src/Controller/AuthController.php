@@ -39,27 +39,36 @@ class AuthController extends AppController
 
         $result = $this->Authentication->getResult();
         $throttle = new LoginThrottle();
+        $username = (string)($this->request->getData('username') ?? '');
+
+        // Echte Sperre: Ist das Konto gedrosselt, wird die Anmeldung verweigert —
+        // AUCH bei korrektem Passwort. Sonst prüft die Authentication-Middleware
+        // die Zugangsdaten bei jedem POST und der `isBlocked`-Zweig würde nur die
+        // Fehlermeldung unterdrücken, die Anmeldung aber durchlassen (wirkungslose
+        // Drosselung, Brute-Force-Schutz ausgehebelt).
+        if ($this->request->is('post') && $username !== '' && $throttle->isBlocked($username)) {
+            $this->Flash->error(__('flash.auth.throttled'));
+
+            return null;
+        }
 
         if ($result !== null && $result->isValid()) {
-            $username = (string)($this->request->getData('username') ?? '');
             if ($username !== '') {
                 $throttle->clear($username);
             }
+            // Session-Fixation-Schutz: nach erfolgreicher Anmeldung die Session-ID
+            // erneuern, damit eine vor dem Login fixierte ID nicht authentifiziert wird.
+            $this->request->getSession()->renew();
             $target = $this->Authentication->getLoginRedirect() ?? '/admin';
 
             return $this->redirect($target);
         }
 
         if ($this->request->is('post')) {
-            $username = (string)$this->request->getData('username');
-            if ($username !== '' && $throttle->isBlocked($username)) {
-                $this->Flash->error(__('flash.auth.throttled'));
-            } else {
-                if ($username !== '') {
-                    $throttle->recordFailure($username, $this->request->clientIp());
-                }
-                $this->Flash->error(__('flash.auth.invalid'));
+            if ($username !== '') {
+                $throttle->recordFailure($username, $this->request->clientIp());
             }
+            $this->Flash->error(__('flash.auth.invalid'));
         }
 
         return null;

@@ -40,14 +40,30 @@ class ExportService
     }
 
     /**
-     * Neutralisiert Formel-Injection (CSV/XLSX): ein Wert, der mit `=`,`+`,`-`,`@`,
-     * Tab oder CR beginnt, wird von Tabellen-Programmen als Formel ausgewertet
-     * (Datenexfiltration/DDE). Voranstellen eines `'` entwertet die Formel.
+     * Neutralisiert Formel-Injection (CSV/XLSX): ein Wert, der mit `=`,`+`,`-`,`@`
+     * beginnt, wird von Tabellen-Programmen als Formel ausgewertet (Datenexfiltration/
+     * DDE). Voranstellen eines `'` entwertet die Formel.
+     *
+     * WICHTIG: Tabellenprogramme **trimmen führenden Whitespace/Zeilenumbruch**, bevor
+     * sie die Zelle parsen — daher zählt ein Auslöser auch NACH führenden Leerzeichen/
+     * Tabs/CR/LF (z. B. `" =cmd"`, `"\n=1+1"`). Führender Whitespace selbst kann eine
+     * Formel maskieren und wird ebenfalls entwertet.
      */
     public function antiFormula(mixed $value): string
     {
         $s = (string)$value;
-        if ($s !== '' && in_array($s[0], ['=', '+', '-', '@', "\t", "\r"], true)) {
+        if ($s === '') {
+            return $s;
+        }
+        $first = $s[0];
+        // Erstes Nicht-Whitespace-Zeichen (Tabellenprogramme ignorieren führenden
+        // Whitespace beim Formel-Parsing).
+        $trimmed = ltrim($s, " \t\r\n");
+        $lead = $trimmed === '' ? '' : $trimmed[0];
+        if (
+            in_array($first, [' ', "\t", "\r", "\n"], true)
+            || in_array($lead, ['=', '+', '-', '@'], true)
+        ) {
             return "'" . $s;
         }
 
