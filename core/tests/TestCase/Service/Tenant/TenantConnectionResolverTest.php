@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Test\TestCase\Service\Tenant;
 
+use App\Service\Tenant\Tenancy;
 use App\Service\Tenant\TenantConnectionResolver;
 use App\Service\Tenant\TenantService;
 use Cake\Datasource\ConnectionManager;
@@ -21,6 +22,13 @@ class TenantConnectionResolverTest extends TestCase
         $r = new TenantConnectionResolver();
         $this->assertSame(ConnectionManager::get('default'), $r->for(null));
         $this->assertSame(ConnectionManager::get('default'), $r->for(TenantService::DEFAULT_TENANT_ID));
+    }
+
+    public function testTenancyFacadeCentralAndDataDefaultToPool(): void
+    {
+        // Ohne DB-isolierten Mandanten im Kontext: zentral UND daten = geteilte DB.
+        $this->assertSame(ConnectionManager::get('default'), Tenancy::central());
+        $this->assertSame(ConnectionManager::get('default'), Tenancy::data());
     }
 
     public function testIsolatedWithoutDsnFailsClosed(): void

@@ -79,6 +79,16 @@ Fail-closed-Garantie.
   Mandanten **inkl. Daten** (Such-/Embedding-Index, Settings/SAML via Cascade);
   Default-Mandant geschützt, Mandanten mit Benutzern abgelehnt; in der GUI als
   Sammelaktion (mit Bestätigung).
+- ✅ **DB-pro-Mandant-Option** (`tenants.db_isolated`) + **Konvention zentral vs.
+  mandantendaten** (`App\Service\Tenant\Tenancy`):
+  - `Tenancy::central()` → geteilte DB für **mandanten­übergreifende** Tabellen
+    (`users`, `tenants`, `sessions`, `settings`, `audit_log`, `groups`,
+    `event_outbox`, Lizenz/Trust/Modul …). Diese liegen IMMER zentral — sonst
+    bräche der Auth-/Session-Bootstrap (Henne-Ei).
+  - `Tenancy::data()` → bei `db_isolated` die **eigene DB** des Mandanten
+    (out-of-band DSN `TENANT_DB_<KEY>`, fail-closed), sonst die geteilte (Pool).
+    Dienste/Module für Mandantendaten nutzen `Tenancy::data()` statt `get('default')`.
+  - Provisionierung: `bin/cake tenant_db_provision <key>` (siehe `SCALING.md`).
 
 **Verbleibende Schritte (Modul/Extension, nicht Core):**
 1. **Tenant-Scoping in den Modulen** — Modul-Datentabellen adoptieren das
