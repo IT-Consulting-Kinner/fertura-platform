@@ -4,7 +4,9 @@ declare(strict_types=1);
 namespace App\Test\TestCase\Service\Search;
 
 use App\Service\Ai\EmbeddingService;
+use App\Service\Cache\CacheStore;
 use App\Service\Search\SearchService;
+use App\Service\Settings\SettingsManager;
 use App\Service\Tenant\TenantService;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\TestCase;
@@ -221,6 +223,35 @@ class SearchServiceTest extends TestCase
             $this->assertNotContains('t2', $idsD);
         } finally {
             $conn->rollback(); // setzt set_config (tx-lokal) zurück und verwirft die Test-Indexe
+        }
+    }
+
+    public function testLanguageStemming(): void
+    {
+        $conn = ConnectionManager::get('default');
+        $sm = new SettingsManager();
+        $s = new SearchService();
+        $s->index('zztest', 'doc', 'lang1', 'Bücher und Zeitungen');
+
+        try {
+            // Mit deutscher Konfiguration findet die Beugung „Büchern" das Dokument „Bücher".
+            $sm->set('core', 'search.text_config', 'german');
+            $this->assertContains(
+                'lang1',
+                array_column($s->search('Büchern'), 'entity_id'),
+                'Stemming: Büchern findet Bücher',
+            );
+
+            // Ohne Stemming (simple) matcht die andere Beugung nicht.
+            $sm->set('core', 'search.text_config', 'simple');
+            $this->assertNotContains(
+                'lang1',
+                array_column($s->search('Büchern'), 'entity_id'),
+                'simple: keine Stamm-Übereinstimmung',
+            );
+        } finally {
+            $conn->execute("DELETE FROM settings WHERE namespace = 'core' AND config_key = 'search.text_config'");
+            (new CacheStore('_app_settings_'))->clear();
         }
     }
 

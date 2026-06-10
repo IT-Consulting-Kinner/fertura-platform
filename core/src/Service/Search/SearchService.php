@@ -32,6 +32,21 @@ class SearchService
         return $this->embeddings ??= new EmbeddingService();
     }
 
+    /**
+     * Volltext-Sprachkonfiguration (muss zur tsvector-Spalte passen). Streng auf
+     * `[a-z_]` validiert (sichere Interpolation in die regconfig-Position).
+     */
+    private function textConfig(): string
+    {
+        try {
+            $cfg = (string)(new SettingsManager())->get('core', 'search.text_config', 'simple');
+        } catch (Throwable) {
+            $cfg = 'simple';
+        }
+
+        return preg_match('/^[a-z_]+$/', $cfg) === 1 ? $cfg : 'simple';
+    }
+
     /** Aktueller Mandant aus dem RLS-Kontext (Fallback Default-Mandant). */
     private function tenantId(): string
     {
@@ -157,11 +172,17 @@ class SearchService
             $params['uid'] = $userId;
         }
 
+        // Sprachbewusst: `simple` (exakt) ODER die konfigurierte Sprache (Stemming).
+        $cfg = $this->textConfig();
+        $tsq = $cfg === 'simple'
+            ? "websearch_to_tsquery('simple', :q)"
+            : "(websearch_to_tsquery('simple', :q) || websearch_to_tsquery('$cfg', :q))";
+
         $rows = $this->conn()->execute(
-            "SELECT source, entity_type, entity_id, title, url, "
-            . "ts_rank(tsv, websearch_to_tsquery('simple', :q)) AS rank "
-            . "FROM search_index "
-            . "WHERE tenant_id = :tid AND tsv @@ websearch_to_tsquery('simple', :q)" . $scope . ' '
+            'SELECT source, entity_type, entity_id, title, url, '
+            . "ts_rank(tsv, $tsq) AS rank "
+            . 'FROM search_index '
+            . "WHERE tenant_id = :tid AND tsv @@ $tsq" . $scope . ' '
             . 'ORDER BY rank DESC, updated_at DESC LIMIT :l',
             $params,
         )->fetchAll('assoc');

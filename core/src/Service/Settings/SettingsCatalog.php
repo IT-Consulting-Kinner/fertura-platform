@@ -107,6 +107,11 @@ class SettingsCatalog
             // Multi-Tenancy: angemeldeten Benutzer auf der Domain eines FREMDEN
             // Mandanten abweisen (Cross-Tenant-Host-Policy). Single-Org unberührt.
             'tenancy.enforce_host_match' => ['type' => 'bool', 'default' => true],
+            // Volltext-Sprachkonfiguration (Postgres regconfig) für Stemming/Stopwords.
+            // Wird von der Migration aus `SEARCH_TEXT_CONFIG` (Default `german`) gesetzt
+            // und muss zur tsvector-Spalte passen; der Index trägt zusätzlich `simple`
+            // (exakte/sprachunabhängige Treffer). `simple` = kein Stemming.
+            'search.text_config' => ['type' => 'string', 'default' => 'simple'],
             // AI/LLM-Gateway (P11): Provider openai|anthropic|xai|google. Schlüssel
             // out-of-band über *_API_KEY-Env. Leer = AI deaktiviert.
             'ai.chat.provider' => ['type' => 'string', 'default' => null],
