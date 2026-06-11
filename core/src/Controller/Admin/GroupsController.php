@@ -49,6 +49,9 @@ class GroupsController extends AdminController
 
     public function view(string $id)
     {
+        if (!$this->isUuid($id)) {
+            return $this->notFound();
+        }
         $conn = ConnectionManager::get('default');
         $group = $conn->execute('SELECT * FROM "groups" WHERE id = :id', ['id' => $id])->fetch('assoc');
         if ($group === false) {
@@ -84,6 +87,9 @@ class GroupsController extends AdminController
     public function setActive(string $id, string $flag)
     {
         $this->request->allowMethod('post');
+        if (!$this->isUuid($id)) {
+            return $this->notFound();
+        }
         $active = $flag === 'on';
         // PostgreSQL-Boolean: CakePHPs raw execute() bindet PHP-`false` als ''
         // (→ "invalid input syntax for type boolean"); daher explizit 'true'/'false'.
@@ -100,8 +106,11 @@ class GroupsController extends AdminController
     public function addMember(string $id)
     {
         $this->request->allowMethod('post');
+        if (!$this->isUuid($id)) {
+            return $this->notFound();
+        }
         $userId = (string)$this->request->getData('user_id');
-        if ($userId !== '') {
+        if ($this->isUuid($userId)) {
             ConnectionManager::get('default')->execute(
                 'INSERT INTO groups_users (group_id, user_id) VALUES (:g, :u) ON CONFLICT DO NOTHING',
                 ['g' => $id, 'u' => $userId],
@@ -116,6 +125,9 @@ class GroupsController extends AdminController
     public function removeMember(string $id, string $userId)
     {
         $this->request->allowMethod('post');
+        if (!$this->isUuid($id, $userId)) {
+            return $this->notFound();
+        }
         ConnectionManager::get('default')->execute(
             'DELETE FROM groups_users WHERE group_id = :g AND user_id = :u',
             ['g' => $id, 'u' => $userId],
@@ -129,6 +141,9 @@ class GroupsController extends AdminController
     public function setPermission(string $id)
     {
         $this->request->allowMethod('post');
+        if (!$this->isUuid($id)) {
+            return $this->notFound();
+        }
         $data = $this->request->getData();
         [$moduleKey, $resourceType] = array_pad(explode('::', (string)($data['resource'] ?? ''), 2), 2, '');
         if ($moduleKey === '' || $resourceType === '') {
@@ -164,5 +179,13 @@ class GroupsController extends AdminController
         }
 
         return $this->redirect(['action' => 'view', $id]);
+    }
+
+    /** Fehlgeformte ID (UUID-Guard): wie unbekannte Gruppe behandeln. */
+    private function notFound(): ?\Cake\Http\Response
+    {
+        $this->Flash->error(__('flash.group.not_found'));
+
+        return $this->redirect(['action' => 'index']);
     }
 }

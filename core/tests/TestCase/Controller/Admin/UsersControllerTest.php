@@ -109,6 +109,28 @@ class UsersControllerTest extends TestCase
         $this->assertRedirect(['action' => 'index']);
     }
 
+    public function testMalformedIdRedirectsInsteadOf500(): void
+    {
+        // Fehlgeformte UUID in der URL: UUID-Guard -> Redirect statt
+        // 22P02 ("invalid input syntax for type uuid") -> 500.
+        $this->login();
+
+        $this->get('/admin/users/view/garbage');
+        $this->assertRedirect(['action' => 'index']);
+
+        $this->post('/admin/users/setStatus/garbage/disabled');
+        $this->assertRedirect(['action' => 'index']);
+
+        $this->post('/admin/users/toggleArea/garbage/user_group_admin');
+        $this->assertRedirect(['action' => 'index']);
+
+        $this->post('/admin/users/invite/garbage');
+        $this->assertRedirect(['action' => 'index']);
+
+        $this->post('/admin/users/anonymize/garbage');
+        $this->assertRedirect(['action' => 'index']);
+    }
+
     public function testAddCreatesInvitedUser(): void
     {
         $this->login();

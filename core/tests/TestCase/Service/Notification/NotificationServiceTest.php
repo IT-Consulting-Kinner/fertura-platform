@@ -55,6 +55,17 @@ class NotificationServiceTest extends TestCase
         $this->assertSame(0, $svc->unreadCount($this->userId));
     }
 
+    public function testMarkReadIgnoresMalformedId(): void
+    {
+        // Fehlgeformte ID aus der API-URL (POST /notifications/{id}/read):
+        // UUID-Guard -> no-op statt 22P02 ("invalid input syntax for type uuid").
+        $svc = new NotificationService(null, new FakeMail());
+        $svc->notify($this->userId, 'sys.test', 'Hallo');
+
+        $svc->markRead($this->userId, 'garbage');
+        $this->assertSame(1, $svc->unreadCount($this->userId));
+    }
+
     public function testPrefDisablesInApp(): void
     {
         $svc = new NotificationService(null, new FakeMail());

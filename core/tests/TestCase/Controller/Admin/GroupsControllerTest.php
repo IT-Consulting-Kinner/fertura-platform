@@ -123,6 +123,31 @@ class GroupsControllerTest extends TestCase
         $this->assertRedirect(['action' => 'index']);
     }
 
+    public function testMalformedIdsRedirectInsteadOf500(): void
+    {
+        // Fehlgeformte UUID in URL/Formular: UUID-Guard -> Redirect statt
+        // 22P02 ("invalid input syntax for type uuid") -> 500.
+        $gid = $this->makeGroup('uuid-');
+        $this->login();
+
+        $this->get('/admin/groups/view/garbage');
+        $this->assertRedirect(['action' => 'index']);
+
+        $this->post('/admin/groups/setActive/garbage/on');
+        $this->assertRedirect(['action' => 'index']);
+
+        $this->post('/admin/groups/setPermission/garbage', ['resource' => 'core::doc', 'can_read' => '1']);
+        $this->assertRedirect(['action' => 'index']);
+
+        $this->post('/admin/groups/removeMember/' . $gid . '/garbage');
+        $this->assertRedirect(['action' => 'index']);
+
+        // Fehlgeformte Benutzer-ID im Formular: kein Insert, kein 500.
+        $this->post('/admin/groups/addMember/' . $gid, ['user_id' => 'garbage']);
+        $this->assertRedirect(['action' => 'view', $gid]);
+        $this->assertSame(0, $this->memberCount($gid));
+    }
+
     public function testViewRendersMembersAndCandidates(): void
     {
         $gid = $this->makeGroup('view-');

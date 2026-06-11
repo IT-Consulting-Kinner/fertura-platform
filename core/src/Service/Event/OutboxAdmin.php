@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Service\Event;
 
 use App\Audit\AuditLogger;
+use App\Infrastructure\Uuid;
 use Cake\Datasource\ConnectionManager;
 
 /**
@@ -56,6 +57,11 @@ class OutboxAdmin
     /** Stellt ein Dead-Letter-Event wieder ein (Retry). */
     public function retry(string $id): bool
     {
+        // UUID-Guard: die ID kommt aus der URL; fehlgeformte Werte wie
+        // unbekannte behandeln statt 22P02 -> 500 (vgl. \App\Infrastructure\Uuid).
+        if (!Uuid::isValid($id)) {
+            return false;
+        }
         $n = $this->conn()->execute(
             "UPDATE event_outbox SET status = 'pending', attempt_count = 0, available_at = now(), "
             . "locked_at = NULL, last_error = NULL WHERE id = :id AND status = 'dead_letter'",
@@ -71,6 +77,9 @@ class OutboxAdmin
     /** Verwirft ein Dead-Letter-Event endgültig (discarded). */
     public function discard(string $id): bool
     {
+        if (!Uuid::isValid($id)) {
+            return false;
+        }
         $n = $this->conn()->execute(
             "UPDATE event_outbox SET status = 'discarded', processed_at = now() "
             . "WHERE id = :id AND status = 'dead_letter'",

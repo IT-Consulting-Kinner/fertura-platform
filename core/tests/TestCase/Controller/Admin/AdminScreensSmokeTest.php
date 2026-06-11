@@ -99,6 +99,23 @@ class AdminScreensSmokeTest extends TestCase
         $this->assertResponseCode(302); // zurück zur Liste statt Datei
     }
 
+    public function testOutboxAndTokenActionsFailGracefullyForMalformedId(): void
+    {
+        // Fehlgeformte UUID in der URL: UUID-Guard an der Service-Grenze
+        // (OutboxAdmin/TokenService) -> not_found-Flash + Redirect statt
+        // 22P02 ("invalid input syntax for type uuid") -> 500.
+        $this->login();
+
+        $this->post('/admin/outbox/retry/garbage');
+        $this->assertRedirect(['action' => 'index']);
+
+        $this->post('/admin/outbox/discard/garbage');
+        $this->assertRedirect(['action' => 'index']);
+
+        $this->post('/admin/tokens/revoke/garbage');
+        $this->assertRedirect(['action' => 'index']);
+    }
+
     public function testAdminScreensRequireTheirArea(): void
     {
         // Benutzer OHNE Bereiche: Admin-Screens verweigern (Redirect/403, kein Inhalt).

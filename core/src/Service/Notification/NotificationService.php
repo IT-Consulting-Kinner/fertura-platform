@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Service\Notification;
 
+use App\Infrastructure\Uuid;
 use App\Service\Event\OutboxPublisher;
 use App\Service\Mail\MailService;
 use App\Service\Module\ContributionRuntime;
@@ -182,6 +183,11 @@ class NotificationService
 
     public function markRead(string $userId, string $id): void
     {
+        // UUID-Guard: die ID kommt aus der API-URL; fehlgeformte Werte wie
+        // unbekannte behandeln (no-op) statt 22P02 -> 500 (vgl. \App\Infrastructure\Uuid).
+        if (!Uuid::isValid($id)) {
+            return;
+        }
         $this->conn()->execute(
             'UPDATE notifications SET read_at = now() WHERE id = :id AND user_id = :u AND read_at IS NULL',
             ['id' => $id, 'u' => $userId],

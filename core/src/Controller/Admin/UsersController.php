@@ -30,6 +30,11 @@ class UsersController extends AdminController
 
     public function view(string $id): void
     {
+        if (!$this->isUuid($id)) {
+            $this->notFound();
+
+            return;
+        }
         $conn = ConnectionManager::get('default');
         $user = $conn->execute('SELECT * FROM users WHERE id = :id', ['id' => $id])->fetch('assoc');
         if ($user === false) {
@@ -73,6 +78,9 @@ class UsersController extends AdminController
     public function setStatus(string $id, string $status)
     {
         $this->request->allowMethod('post');
+        if (!$this->isUuid($id)) {
+            return $this->notFound();
+        }
         if (!in_array($status, [User::STATUS_ACTIVE, User::STATUS_DISABLED], true)) {
             $this->Flash->error(__('flash.user.invalid_status'));
 
@@ -112,6 +120,9 @@ class UsersController extends AdminController
     public function toggleArea(string $id, string $area)
     {
         $this->request->allowMethod('post');
+        if (!$this->isUuid($id)) {
+            return $this->notFound();
+        }
         $conn = ConnectionManager::get('default');
         $exists = $conn->execute('SELECT 1 FROM user_admin_areas WHERE user_id = :u AND admin_area_key = :a', ['u' => $id, 'a' => $area])->fetch();
         if ($exists) {
@@ -166,6 +177,9 @@ class UsersController extends AdminController
     public function invite(string $id)
     {
         $this->request->allowMethod('post');
+        if (!$this->isUuid($id)) {
+            return $this->notFound();
+        }
         $conn = ConnectionManager::get('default');
         $row = $conn->execute('SELECT username, email, status FROM users WHERE id = :id', ['id' => $id])->fetch('assoc');
         if ($row === false || $row['status'] === User::STATUS_ANONYMIZED) {
@@ -220,6 +234,9 @@ class UsersController extends AdminController
     public function anonymize(string $id)
     {
         $this->request->allowMethod('post');
+        if (!$this->isUuid($id)) {
+            return $this->notFound();
+        }
         if ($id === $this->currentUserId()) {
             $this->Flash->error(__('flash.user.self_anonymize'));
 
@@ -237,6 +254,14 @@ class UsersController extends AdminController
         } else {
             $this->Flash->error(__('flash.user.anonymize_failed'));
         }
+
+        return $this->redirect(['action' => 'index']);
+    }
+
+    /** Fehlgeformte ID (UUID-Guard): wie unbekannten Benutzer behandeln. */
+    private function notFound(): ?\Cake\Http\Response
+    {
+        $this->Flash->error(__('flash.user.not_found'));
 
         return $this->redirect(['action' => 'index']);
     }

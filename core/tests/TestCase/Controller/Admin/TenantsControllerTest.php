@@ -120,6 +120,26 @@ class TenantsControllerTest extends TestCase
         $this->assertSame($tid, (new TenantService())->tenantIdForUser($uid));
     }
 
+    public function testMalformedTenantIdsFailGracefully(): void
+    {
+        // Fehlgeformte UUID im Formular: UUID-Guard an der Service-Grenze
+        // (TenantService) -> Fehler-Flash + Redirect statt 22P02 -> 500.
+        ConnectionManager::get('default')->execute(
+            "INSERT INTO users (username, email, status) VALUES (:u, :e, 'active')",
+            ['u' => 'zztest_badassign_' . bin2hex(random_bytes(3)), 'e' => 'badassign@zztenant.local'],
+        );
+
+        $this->login();
+        $this->enableCsrfToken();
+        $this->enableSecurityToken();
+
+        $this->post('/admin/tenants/assign', ['email' => 'badassign@zztenant.local', 'tenant_id' => 'garbage']);
+        $this->assertRedirect(['action' => 'index']);
+
+        $this->post('/admin/tenants/bulk', ['op' => 'suspend', 'ids' => ['garbage']]);
+        $this->assertRedirect(['action' => 'index']);
+    }
+
     public function testBulkSuspendAndActivate(): void
     {
         $conn = ConnectionManager::get('default');

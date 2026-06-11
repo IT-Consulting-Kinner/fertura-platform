@@ -57,4 +57,26 @@ class IntegrationsControllerTest extends TestCase
         $this->assertResponseContains('Outbound webhooks');
         $this->assertResponseContains('Workflows');
     }
+
+    public function testActionsFailGracefullyForMalformedId(): void
+    {
+        // Fehlgeformte UUID in der URL: UUID-Guard -> Flash + Redirect statt
+        // 22P02 ("invalid input syntax for type uuid") -> 500.
+        $this->session(['Auth' => [
+            'id' => $this->userId,
+            'username' => 'zztest_intadmin',
+            'email' => 'i@zztest.local',
+        ]]);
+        $this->enableCsrfToken();
+        $this->enableSecurityToken();
+
+        $actions = [
+            'webhookToggle', 'webhookDelete', 'deliveryRetry', 'ssoToggle', 'ssoDelete',
+            'automationToggle', 'automationDelete', 'workflowToggle', 'workflowDelete',
+        ];
+        foreach ($actions as $action) {
+            $this->post('/admin/integrations/' . $action . '/garbage');
+            $this->assertRedirect(['action' => 'index'], "Aktion $action muss umleiten statt 500");
+        }
+    }
 }

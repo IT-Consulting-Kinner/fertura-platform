@@ -120,6 +120,11 @@ class SsoService
 
     public function setActive(string $id, bool $active): void
     {
+        // UUID-Guard: die ID kommt aus der Admin-GUI-URL; fehlgeformte Werte
+        // wie unbekannte behandeln statt 22P02 -> 500 (vgl. \App\Infrastructure\Uuid).
+        if (!\App\Infrastructure\Uuid::isValid($id)) {
+            return;
+        }
         $this->conn()->execute(
             'UPDATE sso_providers SET active = :a WHERE id = :id',
             ['a' => $active ? 'true' : 'false', 'id' => $id],
@@ -128,6 +133,9 @@ class SsoService
 
     public function deleteProvider(string $id): void
     {
+        if (!\App\Infrastructure\Uuid::isValid($id)) {
+            return;
+        }
         $this->conn()->execute('DELETE FROM sso_providers WHERE id = :id', ['id' => $id]);
         $this->audit()->log('sso.provider.delete', 'sso_provider', $id, []);
     }

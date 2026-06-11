@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Service\Tenant;
 
 use App\Audit\AuditLogger;
+use App\Infrastructure\Uuid;
 use Cake\Datasource\ConnectionInterface;
 use Cake\Datasource\ConnectionManager;
 use InvalidArgumentException;
@@ -75,6 +76,11 @@ class TenantService
     /** @return array{id:string,key:string,name:string,active:bool}|null */
     public function get(string $id): ?array
     {
+        // UUID-Guard: die ID kommt aus GUI-Formularen; fehlgeformte Werte wie
+        // unbekannte behandeln statt 22P02 -> 500 (vgl. \App\Infrastructure\Uuid).
+        if (!Uuid::isValid($id)) {
+            return null;
+        }
         $row = $this->conn()->execute(
             'SELECT id, key, name, active FROM tenants WHERE id = :id',
             ['id' => $id],
@@ -145,6 +151,9 @@ class TenantService
      *  kann nicht deaktiviert werden (Single-Org-/Break-Glass-Schutz). */
     public function setActive(string $tenantId, bool $active): void
     {
+        if (!Uuid::isValid($tenantId)) {
+            throw new InvalidArgumentException('Unbekannter Mandant.');
+        }
         if (!$active && $tenantId === self::DEFAULT_TENANT_ID) {
             throw new InvalidArgumentException('Der Default-Mandant kann nicht deaktiviert werden.');
         }
@@ -163,6 +172,9 @@ class TenantService
      */
     public function delete(string $tenantId): void
     {
+        if (!Uuid::isValid($tenantId)) {
+            throw new InvalidArgumentException('Unbekannter Mandant.');
+        }
         if ($tenantId === self::DEFAULT_TENANT_ID) {
             throw new InvalidArgumentException('Der Default-Mandant kann nicht gelöscht werden.');
         }

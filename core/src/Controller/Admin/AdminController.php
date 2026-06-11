@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Controller\Admin;
 
 use App\Controller\AppController;
+use App\Infrastructure\Uuid;
 use Cake\Datasource\ConnectionManager;
 use Cake\Event\EventInterface;
 use Cake\Http\Exception\ForbiddenException;
@@ -91,6 +92,23 @@ class AdminController extends AppController
         $this->set('activeArea', $this->requiredArea);
 
         return null;
+    }
+
+    /**
+     * UUID-Guard für Routen-/Formular-Parameter, die in raw SQL gegen
+     * PG-uuid-Spalten gebunden werden: fehlgeformte Werte würden dort 22P02
+     * (-> HTTP 500) auslösen, statt wie unbekannte IDs als "nicht gefunden"
+     * zu enden (vgl. \App\Infrastructure\Uuid).
+     */
+    protected function isUuid(string ...$values): bool
+    {
+        foreach ($values as $value) {
+            if (!Uuid::isValid($value)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /** @return list<string> */

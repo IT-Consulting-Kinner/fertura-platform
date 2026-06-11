@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Service\Webhook;
 
 use App\Audit\AuditLogger;
+use App\Infrastructure\Uuid;
 use App\Service\Http\EgressClient;
 use Cake\Datasource\ConnectionInterface;
 use Cake\Datasource\ConnectionManager;
@@ -210,6 +211,11 @@ class WebhookService
 
     public function setActive(string $id, bool $active): void
     {
+        // UUID-Guard: die ID kommt aus der Admin-GUI-URL; fehlgeformte Werte
+        // wie unbekannte behandeln statt 22P02 -> 500 (vgl. \App\Infrastructure\Uuid).
+        if (!Uuid::isValid($id)) {
+            return;
+        }
         $this->conn()->execute(
             'UPDATE webhook_subscriptions SET active = :a WHERE id = :id',
             ['a' => $active ? 'true' : 'false', 'id' => $id],
@@ -219,6 +225,9 @@ class WebhookService
 
     public function deleteSubscription(string $id): void
     {
+        if (!Uuid::isValid($id)) {
+            return;
+        }
         $this->conn()->execute('DELETE FROM webhook_subscriptions WHERE id = :id', ['id' => $id]);
         $this->audit()->log('webhook.delete', 'webhook_subscription', $id, []);
     }
@@ -258,6 +267,9 @@ class WebhookService
     /** Stellt eine (fehlgeschlagene/Dead-Letter-)Zustellung erneut ein. */
     public function retryDelivery(string $id): void
     {
+        if (!Uuid::isValid($id)) {
+            return;
+        }
         $this->conn()->execute(
             "UPDATE webhook_deliveries SET status = 'pending', available_at = now(), attempt_count = 0, "
             . 'last_error = NULL WHERE id = :id',

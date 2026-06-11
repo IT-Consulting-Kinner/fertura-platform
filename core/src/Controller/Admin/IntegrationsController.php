@@ -34,7 +34,9 @@ class IntegrationsController extends AdminController
 
     public function webhookToggle(string $id)
     {
-        $this->request->allowMethod('post');
+        if ($denied = $this->guardId($id)) {
+            return $denied;
+        }
         (new WebhookService())->setActive($id, !$this->isActive('webhook_subscriptions', $id));
 
         return $this->back();
@@ -42,7 +44,9 @@ class IntegrationsController extends AdminController
 
     public function webhookDelete(string $id)
     {
-        $this->request->allowMethod('post');
+        if ($denied = $this->guardId($id)) {
+            return $denied;
+        }
         (new WebhookService())->deleteSubscription($id);
 
         return $this->back();
@@ -50,7 +54,9 @@ class IntegrationsController extends AdminController
 
     public function deliveryRetry(string $id)
     {
-        $this->request->allowMethod('post');
+        if ($denied = $this->guardId($id)) {
+            return $denied;
+        }
         (new WebhookService())->retryDelivery($id);
 
         return $this->back();
@@ -58,7 +64,9 @@ class IntegrationsController extends AdminController
 
     public function ssoToggle(string $id)
     {
-        $this->request->allowMethod('post');
+        if ($denied = $this->guardId($id)) {
+            return $denied;
+        }
         (new SsoService())->setActive($id, !$this->isActive('sso_providers', $id));
 
         return $this->back();
@@ -66,7 +74,9 @@ class IntegrationsController extends AdminController
 
     public function ssoDelete(string $id)
     {
-        $this->request->allowMethod('post');
+        if ($denied = $this->guardId($id)) {
+            return $denied;
+        }
         (new SsoService())->deleteProvider($id);
 
         return $this->back();
@@ -74,7 +84,9 @@ class IntegrationsController extends AdminController
 
     public function automationToggle(string $id)
     {
-        $this->request->allowMethod('post');
+        if ($denied = $this->guardId($id)) {
+            return $denied;
+        }
         $this->setActive('automation_rules', $id, !$this->isActive('automation_rules', $id));
 
         return $this->back();
@@ -82,7 +94,9 @@ class IntegrationsController extends AdminController
 
     public function automationDelete(string $id)
     {
-        $this->request->allowMethod('post');
+        if ($denied = $this->guardId($id)) {
+            return $denied;
+        }
         $this->conn()->execute('DELETE FROM automation_rules WHERE id = :id', ['id' => $id]);
 
         return $this->back();
@@ -90,7 +104,9 @@ class IntegrationsController extends AdminController
 
     public function workflowToggle(string $id)
     {
-        $this->request->allowMethod('post');
+        if ($denied = $this->guardId($id)) {
+            return $denied;
+        }
         $this->setActive('workflow_definitions', $id, !$this->isActive('workflow_definitions', $id));
 
         return $this->back();
@@ -98,10 +114,28 @@ class IntegrationsController extends AdminController
 
     public function workflowDelete(string $id)
     {
-        $this->request->allowMethod('post');
+        if ($denied = $this->guardId($id)) {
+            return $denied;
+        }
         $this->conn()->execute('DELETE FROM workflow_definitions WHERE id = :id', ['id' => $id]);
 
         return $this->back();
+    }
+
+    /**
+     * Gemeinsamer Eingangs-Check aller ID-Aktionen: nur POST, und fehlgeformte
+     * IDs (UUID-Guard) wie unbekannte Einträge behandeln. Liefert die
+     * Redirect-Response oder null (Aktion darf weiterlaufen).
+     */
+    private function guardId(string $id): ?\Cake\Http\Response
+    {
+        $this->request->allowMethod('post');
+        if ($this->isUuid($id)) {
+            return null;
+        }
+        $this->Flash->error(__('flash.integrations.not_found'));
+
+        return $this->redirect(['action' => 'index']);
     }
 
     private function conn(): \Cake\Datasource\ConnectionInterface

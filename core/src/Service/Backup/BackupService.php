@@ -334,7 +334,7 @@ class BackupService
     {
         // UUID-Guard: die ID kommt aus URL/CLI; ein fehlgeformter Wert würde im
         // PG-uuid-Vergleich werfen (22P02) -> 500 statt sauberem "unbekannt".
-        if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $id)) {
+        if (!\App\Infrastructure\Uuid::isValid($id)) {
             return null;
         }
         $row = $this->conn()->execute('SELECT * FROM backups WHERE id = :id', ['id' => $id])->fetch('assoc');

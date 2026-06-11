@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Service\Api;
 
 use App\Audit\AuditLogger;
+use App\Infrastructure\Uuid;
 use Cake\Datasource\ConnectionManager;
 
 /**
@@ -127,6 +128,11 @@ class TokenService
     /** Widerruft ein Token des Benutzers (idempotent). */
     public function revoke(string $tokenId, string $userId): bool
     {
+        // UUID-Guard: die Token-ID kommt aus der URL; fehlgeformte Werte wie
+        // unbekannte behandeln statt 22P02 -> 500 (vgl. \App\Infrastructure\Uuid).
+        if (!Uuid::isValid($tokenId)) {
+            return false;
+        }
         $n = $this->conn()->execute(
             'UPDATE api_tokens SET revoked_at = now() WHERE id = :id AND user_id = :u AND revoked_at IS NULL',
             ['id' => $tokenId, 'u' => $userId],
