@@ -5,7 +5,16 @@
  * @var list<array<string,mixed>> $results
  */
 ?>
-<h1 class="h3 mb-3"><?= h(__('admin.search.title')) ?></h1>
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0"><?= h(__('admin.search.title')) ?></h1>
+    <?php if (in_array('core_config', $userAreas ?? [], true)): ?>
+        <?= $this->Form->postLink(
+            __('admin.search.reindex'),
+            ['action' => 'reindex'],
+            ['class' => 'btn btn-sm btn-outline-secondary', 'confirm' => __('admin.search.reindex_confirm')],
+        ) ?>
+    <?php endif; ?>
+</div>
 
 <?= $this->Form->create(null, ['type' => 'get', 'class' => 'row g-2 mb-3']) ?>
     <div class="col flex-grow-1">

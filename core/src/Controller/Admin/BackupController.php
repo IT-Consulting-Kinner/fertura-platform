@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Controller\Admin;
 
 use App\Service\Backup\BackupService;
+use App\Service\Backup\OffsiteBackupService;
 use App\Service\Settings\SettingsManager;
 
 /**
@@ -35,6 +36,18 @@ class BackupController extends AdminController
         $this->set('retention', (int)$settings->get('core', 'backup.retention', 14));
         $this->set('retentionDays', (int)$settings->get('core', 'backup.retention_days', 0));
         $this->set('encryptionOn', $svc->encryptionEnabled());
+
+        // Off-Site (P14): nur anzeigen, wenn aktiviert; Storage-Fehler tolerieren.
+        $offsiteEnabled = (bool)$settings->get('core', 'backup.offsite.enabled', false);
+        $offsiteBackups = [];
+        if ($offsiteEnabled) {
+            try {
+                $offsiteBackups = (new OffsiteBackupService())->list();
+            } catch (\Throwable) {
+                $offsiteBackups = [];
+            }
+        }
+        $this->set(compact('offsiteEnabled', 'offsiteBackups'));
     }
 
     public function create()
@@ -93,5 +106,54 @@ class BackupController extends AdminController
             'download' => true,
             'name' => basename((string)$row['path']),
         ]);
+    }
+
+    /** Lädt ein lokales Backup ins Off-Site-Objekt-Storage (P14). */
+    public function offsiteUpload(string $id): ?\Cake\Http\Response
+    {
+        $this->request->allowMethod('post');
+        if (!$this->offsiteEnabled()) {
+            $this->Flash->error(__('flash.backup.offsite_disabled'));
+
+            return $this->redirect(['action' => 'index']);
+        }
+        $row = (new BackupService())->get($id);
+        if ($row === null || !is_file((string)$row['path'])) {
+            $this->Flash->error(__('flash.backup.not_found'));
+
+            return $this->redirect(['action' => 'index']);
+        }
+        try {
+            (new OffsiteBackupService())->upload((string)$row['path']);
+            $this->Flash->success(__('flash.backup.offsite_uploaded'));
+        } catch (\Throwable $e) {
+            $this->Flash->error(__('flash.backup.offsite_failed', $e->getMessage()));
+        }
+
+        return $this->redirect(['action' => 'index']);
+    }
+
+    /** Löscht ein Off-Site-Backup (Name = Dateiname, kein Pfad-Traversal). */
+    public function offsiteDelete(string $name): ?\Cake\Http\Response
+    {
+        $this->request->allowMethod('post');
+        if (!$this->offsiteEnabled() || !preg_match('/^[A-Za-z0-9._-]+\z/', $name)) {
+            $this->Flash->error(__('flash.backup.offsite_disabled'));
+
+            return $this->redirect(['action' => 'index']);
+        }
+        try {
+            (new OffsiteBackupService())->delete($name);
+            $this->Flash->success(__('flash.backup.offsite_deleted'));
+        } catch (\Throwable $e) {
+            $this->Flash->error(__('flash.backup.offsite_failed', $e->getMessage()));
+        }
+
+        return $this->redirect(['action' => 'index']);
+    }
+
+    private function offsiteEnabled(): bool
+    {
+        return (bool)(new SettingsManager())->get('core', 'backup.offsite.enabled', false);
     }
 }

@@ -26,4 +26,28 @@ class SearchController extends AdminController
         }
         $this->set(compact('q', 'results'));
     }
+
+    /**
+     * Stößt den Volltext-Reindex an und zieht fehlende Embeddings nach (GUI-
+     * Pendant zu `bin/cake search_reindex`). Wartungsaktion → nur core_config.
+     */
+    public function reindex(): ?\Cake\Http\Response
+    {
+        $this->request->allowMethod('post');
+        if (!in_array('core_config', $this->userAreaKeys, true)) {
+            $this->Flash->error(__('flash.search.reindex_denied'));
+
+            return $this->redirect(['action' => 'index']);
+        }
+        try {
+            $svc = new SearchService();
+            $indexers = $svc->reindexAll();
+            $embeddings = $svc->backfillEmbeddings(500);
+            $this->Flash->success(__('flash.search.reindexed', $indexers, $embeddings));
+        } catch (\Throwable $e) {
+            $this->Flash->error(__('flash.search.reindex_failed', $e->getMessage()));
+        }
+
+        return $this->redirect(['action' => 'index']);
+    }
 }

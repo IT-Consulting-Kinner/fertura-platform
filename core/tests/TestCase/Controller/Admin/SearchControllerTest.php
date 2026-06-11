@@ -68,4 +68,34 @@ class SearchControllerTest extends TestCase
         $this->get('/admin/search');
         $this->assertResponseOk();
     }
+
+    public function testReindexForCoreConfigAdmin(): void
+    {
+        $this->session(['Auth' => ['id' => $this->userId, 'username' => 'zztest_sadmin', 'email' => 's@zzsearch.local']]);
+        $this->enableCsrfToken();
+        $this->enableSecurityToken();
+        $this->post('/admin/search/reindex');
+        $this->assertRedirect(['action' => 'index']); // angestoßen, kein 500
+    }
+
+    public function testReindexDeniedWithoutCoreConfig(): void
+    {
+        // Benutzer mit einem ANDEREN Admin-Bereich (kein core_config).
+        $conn = ConnectionManager::get('default');
+        $conn->execute(
+            "INSERT INTO admin_areas (area_key, label, sort_order) VALUES ('user_group_admin', 'U', 10) "
+            . 'ON CONFLICT (area_key) DO NOTHING',
+        );
+        $plain = (string)$conn->execute(
+            "INSERT INTO users (username, email, status) VALUES (:u, :e, 'active') RETURNING id",
+            ['u' => 'zztest_plain_' . bin2hex(random_bytes(3)), 'e' => 'plain_' . bin2hex(random_bytes(3)) . '@zzsearch.local'],
+        )->fetch('assoc')['id'];
+        $conn->execute('INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a)', ['u' => $plain, 'a' => 'user_group_admin']);
+
+        $this->session(['Auth' => ['id' => $plain, 'username' => 'zztest_plain', 'email' => 'p@zzsearch.local']]);
+        $this->enableCsrfToken();
+        $this->enableSecurityToken();
+        $this->post('/admin/search/reindex');
+        $this->assertRedirect(['action' => 'index']); // Flash-Fehler, kein Reindex
+    }
 }

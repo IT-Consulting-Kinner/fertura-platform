@@ -101,6 +101,9 @@ $human = static function ($b): string {
                 <?= $this->Html->link(__('admin.backup.download'), ['action' => 'download', $b['id']], ['class' => 'btn btn-outline-primary btn-sm']) ?>
                 <?= $this->Form->postLink(__('admin.backup.verify'), ['action' => 'verify', $b['id']], ['class' => 'btn btn-outline-secondary btn-sm']) ?>
                 <?= $this->Form->postLink(__('admin.backup.test_restore'), ['action' => 'testRestore', $b['id']], ['class' => 'btn btn-outline-info btn-sm']) ?>
+                <?php if (!empty($offsiteEnabled)): ?>
+                    <?= $this->Form->postLink(__('admin.backup.offsite_upload'), ['action' => 'offsiteUpload', $b['id']], ['class' => 'btn btn-outline-secondary btn-sm']) ?>
+                <?php endif; ?>
                 <?= $this->Form->postLink(__('admin.backup.delete'), ['action' => 'delete', $b['id']],
                     ['class' => 'btn btn-outline-danger btn-sm', 'confirm' => __('admin.backup.confirm_delete')]) ?>
             </td>
@@ -110,6 +113,25 @@ $human = static function ($b): string {
     </tbody>
 </table>
 </div>
+
+<?php if (!empty($offsiteEnabled)): ?>
+<h2 class="h5 mt-4"><?= h(__('admin.backup.offsite_heading')) ?></h2>
+<div class="table-responsive"><table class="table table-sm align-middle">
+    <thead><tr><th scope="col"><?= h(__('admin.backup.offsite_col_name')) ?></th><th scope="col" class="text-end"></th></tr></thead>
+    <tbody>
+    <?php foreach (($offsiteBackups ?? []) as $name): $base = basename((string)$name); ?>
+        <tr>
+            <td class="small text-break"><?= h($base) ?></td>
+            <td class="text-end">
+                <?= $this->Form->postLink(__('admin.backup.delete'), ['action' => 'offsiteDelete', $base],
+                    ['class' => 'btn btn-outline-danger btn-sm', 'confirm' => __('admin.backup.confirm_delete')]) ?>
+            </td>
+        </tr>
+    <?php endforeach; ?>
+    <?php if (($offsiteBackups ?? []) === []): ?><tr><td colspan="2" class="text-muted"><?= h(__('admin.backup.offsite_empty')) ?></td></tr><?php endif; ?>
+    </tbody>
+</table></div>
+<?php endif; ?>
 
 <h2 class="h5 mt-4"><?= h(__('admin.backup.log_heading')) ?></h2>
 <div class="table-responsive">

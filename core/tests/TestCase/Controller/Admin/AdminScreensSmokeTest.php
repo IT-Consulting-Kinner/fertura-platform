@@ -97,6 +97,12 @@ class AdminScreensSmokeTest extends TestCase
 
         $this->get('/admin/backup/download/zz-no-such-backup');
         $this->assertResponseCode(302); // zurück zur Liste statt Datei
+
+        // Off-Site standardmäßig deaktiviert -> Upload-Aktion lehnt ab (kein 500).
+        $this->post('/admin/backup/offsiteUpload/00000000-0000-0000-0000-000000000000');
+        $this->assertRedirect(['action' => 'index']);
+        $this->post('/admin/backup/offsiteDelete/whatever.zip');
+        $this->assertRedirect(['action' => 'index']);
     }
 
     public function testOutboxAndTokenActionsFailGracefullyForMalformedId(): void
