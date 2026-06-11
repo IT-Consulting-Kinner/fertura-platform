@@ -8,11 +8,12 @@ use App\Service\Webhook\WebhookService;
 use Cake\Datasource\ConnectionManager;
 
 /**
- * Admin-GUI „Integrationen & Automatisierung" (zurückgestellter GUI-Ausbau) im
- * Bereich Core-Konfiguration: Übersicht + sichere Aktionen für Webhooks, SSO,
- * Automations-Regeln und Workflows. Anlage erfolgt weiterhin über CLI/API
- * (die formularlastige Konfiguration); die GUI deckt Monitoring + aktivieren/
- * deaktivieren/löschen/Zustellung-erneut ab.
+ * Admin-GUI „Integrationen & Automatisierung" im Bereich Core-Konfiguration:
+ * Übersicht + sichere Aktionen für Webhooks, SSO, Automations-Regeln und
+ * Workflows. **Anlegen per GUI** für die formular­geeigneten Typen (Webhooks,
+ * SSO/OIDC+SAML); **Automations-Regeln & Workflows bleiben CLI** (regel-/
+ * JSON-lastig — eine Regel-Builder-GUI gehört an das deklarative Form-Schema,
+ * nicht spekulativ vorgezogen).
  */
 class IntegrationsController extends AdminController
 {
@@ -30,6 +31,78 @@ class IntegrationsController extends AdminController
         $this->set('workflows', $this->conn()->execute(
             'SELECT id, name, entity_type, initial_state, active FROM workflow_definitions ORDER BY created_at',
         )->fetchAll('assoc'));
+    }
+
+    /** Legt ein Webhook-Abo an (Name, URL, Event-Filter, optionales HMAC-Secret). */
+    public function webhookCreate(): ?\Cake\Http\Response
+    {
+        $this->request->allowMethod('post');
+        $name = trim((string)$this->request->getData('name'));
+        $url = trim((string)$this->request->getData('url'));
+        $filter = trim((string)$this->request->getData('event_filter')) ?: '*';
+        $secret = trim((string)$this->request->getData('secret')) ?: null;
+        if ($name === '' || $url === '') {
+            $this->Flash->error(__('flash.integrations.webhook_fields'));
+
+            return $this->redirect(['action' => 'index']);
+        }
+        try {
+            (new WebhookService())->createSubscription($name, $url, $filter, $secret);
+            $this->Flash->success(__('flash.integrations.webhook_created'));
+        } catch (\Throwable $e) {
+            $this->Flash->error(__('flash.integrations.webhook_failed', $e->getMessage()));
+        }
+
+        return $this->redirect(['action' => 'index']);
+    }
+
+    /** Legt einen SSO-Provider an (OIDC oder SAML); Secret wird verschlüsselt abgelegt. */
+    public function ssoCreate(): ?\Cake\Http\Response
+    {
+        $this->request->allowMethod('post');
+        $type = (string)$this->request->getData('type');
+        $name = trim((string)$this->request->getData('name'));
+        $label = trim((string)$this->request->getData('button_label')) ?: $name;
+        if (!in_array($type, ['oidc', 'saml'], true) || $name === '') {
+            $this->Flash->error(__('flash.integrations.sso_fields'));
+
+            return $this->redirect(['action' => 'index']);
+        }
+
+        try {
+            if ($type === 'oidc') {
+                $issuer = trim((string)$this->request->getData('issuer'));
+                $clientId = trim((string)$this->request->getData('client_id'));
+                if ($issuer === '' || $clientId === '') {
+                    $this->Flash->error(__('flash.integrations.sso_fields'));
+
+                    return $this->redirect(['action' => 'index']);
+                }
+                $config = [
+                    'issuer' => $issuer,
+                    'client_id' => $clientId,
+                    'scopes' => trim((string)$this->request->getData('scopes')) ?: 'openid email profile',
+                ];
+                $secret = trim((string)$this->request->getData('client_secret')) ?: null;
+            } else {
+                $entityId = trim((string)$this->request->getData('idp_entity_id'));
+                $ssoUrl = trim((string)$this->request->getData('idp_sso_url'));
+                $cert = trim((string)$this->request->getData('idp_x509cert'));
+                if ($entityId === '' || $ssoUrl === '' || $cert === '') {
+                    $this->Flash->error(__('flash.integrations.sso_fields'));
+
+                    return $this->redirect(['action' => 'index']);
+                }
+                $config = ['idp_entity_id' => $entityId, 'idp_sso_url' => $ssoUrl, 'idp_x509cert' => $cert];
+                $secret = null; // SP-Signierung (Privatschlüssel) bleibt CLI-Pfad
+            }
+            (new SsoService())->createProvider($type, $name, $config, $secret, $label);
+            $this->Flash->success(__('flash.integrations.sso_created'));
+        } catch (\Throwable $e) {
+            $this->Flash->error(__('flash.integrations.sso_failed', $e->getMessage()));
+        }
+
+        return $this->redirect(['action' => 'index']);
     }
 
     public function webhookToggle(string $id)

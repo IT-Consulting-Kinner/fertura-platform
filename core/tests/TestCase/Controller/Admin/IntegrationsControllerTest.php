@@ -38,8 +38,18 @@ class IntegrationsControllerTest extends TestCase
 
     protected function tearDown(): void
     {
-        ConnectionManager::get('default')->execute("DELETE FROM users WHERE email LIKE '%@zztest.local'");
+        $conn = ConnectionManager::get('default');
+        $conn->execute("DELETE FROM webhook_subscriptions WHERE name LIKE 'zztest-%'");
+        $conn->execute("DELETE FROM sso_providers WHERE name LIKE 'zztest-%'");
+        $conn->execute("DELETE FROM users WHERE email LIKE '%@zztest.local'");
         parent::tearDown();
+    }
+
+    private function login(): void
+    {
+        $this->session(['Auth' => ['id' => $this->userId, 'username' => 'zztest_intadmin', 'email' => 'i@zztest.local']]);
+        $this->enableCsrfToken();
+        $this->enableSecurityToken();
     }
 
     public function testIndexRendersForCoreConfigAdmin(): void
@@ -78,5 +88,76 @@ class IntegrationsControllerTest extends TestCase
             $this->post('/admin/integrations/' . $action . '/garbage');
             $this->assertRedirect(['action' => 'index'], "Aktion $action muss umleiten statt 500");
         }
+    }
+
+    public function testWebhookCreateViaGui(): void
+    {
+        $this->login();
+        $name = 'zztest-wh-' . bin2hex(random_bytes(2));
+        $this->post('/admin/integrations/webhookCreate', [
+            'name' => $name, 'url' => 'https://hook.example/in', 'event_filter' => 'user.*', 'secret' => 's3cr3t',
+        ]);
+        $this->assertRedirect(['action' => 'index']);
+        $row = ConnectionManager::get('default')->execute(
+            'SELECT url, event_filter, secret FROM webhook_subscriptions WHERE name = :n',
+            ['n' => $name],
+        )->fetch('assoc');
+        $this->assertNotFalse($row);
+        $this->assertSame('https://hook.example/in', $row['url']);
+        $this->assertSame('user.*', $row['event_filter']);
+
+        // Ungültige URL (kein http/https) -> Fehler-Flash, kein Datensatz.
+        $bad = 'zztest-wh-bad-' . bin2hex(random_bytes(2));
+        $this->post('/admin/integrations/webhookCreate', ['name' => $bad, 'url' => 'ftp://nope']);
+        $this->assertRedirect(['action' => 'index']);
+        $this->assertFalse(ConnectionManager::get('default')->execute(
+            'SELECT 1 FROM webhook_subscriptions WHERE name = :n', ['n' => $bad],
+        )->fetch());
+    }
+
+    public function testSsoCreateOidcEncryptsSecret(): void
+    {
+        $this->login();
+        $name = 'zztest-oidc-' . bin2hex(random_bytes(2));
+        $this->post('/admin/integrations/ssoCreate', [
+            'type' => 'oidc', 'name' => $name, 'button_label' => 'Login via IdP',
+            'issuer' => 'https://idp.example/', 'client_id' => 'abc', 'client_secret' => 'topsecret',
+            'scopes' => 'openid email',
+        ]);
+        $this->assertRedirect(['action' => 'index']);
+        $row = ConnectionManager::get('default')->execute(
+            'SELECT type, config, secret_encrypted FROM sso_providers WHERE name = :n',
+            ['n' => $name],
+        )->fetch('assoc');
+        $this->assertNotFalse($row);
+        $this->assertSame('oidc', $row['type']);
+        $this->assertStringContainsString('idp.example', (string)$row['config']);
+        // Client-Secret verschlüsselt abgelegt — nie im Klartext.
+        $this->assertNotNull($row['secret_encrypted']);
+        $this->assertStringNotContainsString('topsecret', (string)$row['secret_encrypted']);
+    }
+
+    public function testSsoCreateSamlAndValidation(): void
+    {
+        $this->login();
+        $name = 'zztest-saml-' . bin2hex(random_bytes(2));
+        $this->post('/admin/integrations/ssoCreate', [
+            'type' => 'saml', 'name' => $name,
+            'idp_entity_id' => 'https://idp.example/meta', 'idp_sso_url' => 'https://idp.example/sso',
+            'idp_x509cert' => '-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----',
+        ]);
+        $this->assertRedirect(['action' => 'index']);
+        $this->assertNotFalse(ConnectionManager::get('default')->execute(
+            "SELECT 1 FROM sso_providers WHERE name = :n AND type = 'saml'", ['n' => $name],
+        )->fetch());
+
+        // Fehlende Pflichtfelder (SAML ohne Zertifikat) -> kein Datensatz.
+        $bad = 'zztest-saml-bad-' . bin2hex(random_bytes(2));
+        $this->post('/admin/integrations/ssoCreate', [
+            'type' => 'saml', 'name' => $bad, 'idp_entity_id' => 'x', 'idp_sso_url' => 'y',
+        ]);
+        $this->assertFalse(ConnectionManager::get('default')->execute(
+            'SELECT 1 FROM sso_providers WHERE name = :n', ['n' => $bad],
+        )->fetch());
     }
 }
