@@ -166,6 +166,23 @@ $badge = static fn (bool $a): string => $a
 </table></div>
 <?php endif; ?>
 
+<details class="mt-2">
+    <summary class="btn btn-sm btn-outline-primary"><?= h(__('admin.integrations.automation_add')) ?></summary>
+    <?= $this->Form->create(null, ['url' => ['action' => 'automationCreate'], 'class' => 'mt-2', 'style' => 'max-width:680px']) ?>
+        <div class="row g-2 mb-2">
+            <div class="col-md-6"><label class="form-label small mb-0">Name</label>
+                <?= $this->Form->control('name', ['label' => false, 'required' => true, 'class' => 'form-control form-control-sm']) ?></div>
+            <div class="col-md-6"><label class="form-label small mb-0"><?= h(__('admin.integrations.event_pattern')) ?></label>
+                <?= $this->Form->control('event', ['label' => false, 'required' => true, 'class' => 'form-control form-control-sm', 'placeholder' => 'ticket.created | user.* | *']) ?></div>
+        </div>
+        <div class="mb-2"><label class="form-label small mb-0"><?= h(__('admin.integrations.condition_json')) ?></label>
+            <?= $this->Form->control('condition', ['label' => false, 'type' => 'textarea', 'rows' => 2, 'class' => 'form-control form-control-sm font-monospace', 'placeholder' => '{"field":"data.priority","op":"eq","value":"high"}']) ?></div>
+        <div class="mb-2"><label class="form-label small mb-0"><?= h(__('admin.integrations.actions_json')) ?></label>
+            <?= $this->Form->control('actions', ['label' => false, 'type' => 'textarea', 'rows' => 2, 'class' => 'form-control form-control-sm font-monospace', 'placeholder' => '[{"type":"notify","user_field":"user_id","title":"…"}]']) ?></div>
+        <?= $this->Form->button(__('admin.integrations.add'), ['class' => 'btn btn-sm btn-primary']) ?>
+    <?= $this->Form->end() ?>
+</details>
+
 <h2 class="h5 mt-4"><?= h(__('admin.integrations.workflows')) ?></h2>
 <?php if ($workflows === []): ?>
     <p class="text-muted"><?= h(__('admin.integrations.none')) ?></p>
@@ -188,5 +205,22 @@ $badge = static fn (bool $a): string => $a
     </tbody>
 </table></div>
 <?php endif; ?>
+
+<details class="mt-2">
+    <summary class="btn btn-sm btn-outline-primary"><?= h(__('admin.integrations.workflow_add')) ?></summary>
+    <?= $this->Form->create(null, ['url' => ['action' => 'workflowCreate'], 'class' => 'row g-2 align-items-end mt-1', 'style' => 'max-width:900px']) ?>
+        <div class="col-md-3"><label class="form-label small mb-0">Name</label>
+            <?= $this->Form->control('name', ['label' => false, 'required' => true, 'class' => 'form-control form-control-sm']) ?></div>
+        <div class="col-md-3"><label class="form-label small mb-0">Entity-Type</label>
+            <?= $this->Form->control('entity_type', ['label' => false, 'required' => true, 'class' => 'form-control form-control-sm', 'placeholder' => 'ticket']) ?></div>
+        <div class="col-md-3"><label class="form-label small mb-0"><?= h(__('admin.integrations.entity_id_field')) ?></label>
+            <?= $this->Form->control('entity_id_field', ['label' => false, 'class' => 'form-control form-control-sm', 'placeholder' => 'entity_id']) ?></div>
+        <div class="col-md-3"><label class="form-label small mb-0"><?= h(__('admin.integrations.initial_state')) ?></label>
+            <?= $this->Form->control('initial_state', ['label' => false, 'required' => true, 'class' => 'form-control form-control-sm', 'placeholder' => 'open']) ?></div>
+        <div class="col-12"><label class="form-label small mb-0"><?= h(__('admin.integrations.transitions_json')) ?></label>
+            <?= $this->Form->control('transitions', ['label' => false, 'type' => 'textarea', 'rows' => 2, 'class' => 'form-control form-control-sm font-monospace', 'placeholder' => '[{"from":"open","to":"closed","on":"close"}]']) ?></div>
+        <div class="col-auto"><?= $this->Form->button(__('admin.integrations.add'), ['class' => 'btn btn-sm btn-primary']) ?></div>
+    <?= $this->Form->end() ?>
+</details>
 
 <p class="text-muted small mt-4"><?= h(__('admin.integrations.cli_hint')) ?></p>

@@ -9,11 +9,11 @@ use Cake\Datasource\ConnectionManager;
 
 /**
  * Admin-GUI „Integrationen & Automatisierung" im Bereich Core-Konfiguration:
- * Übersicht + sichere Aktionen für Webhooks, SSO, Automations-Regeln und
- * Workflows. **Anlegen per GUI** für die formular­geeigneten Typen (Webhooks,
- * SSO/OIDC+SAML); **Automations-Regeln & Workflows bleiben CLI** (regel-/
- * JSON-lastig — eine Regel-Builder-GUI gehört an das deklarative Form-Schema,
- * nicht spekulativ vorgezogen).
+ * Übersicht + Anlegen/Schalten/Löschen für **alle** Core-Integrationstypen
+ * (Webhooks, SSO/OIDC+SAML, Automations-Regeln, Workflows) — volle CLI↔GUI-
+ * Parität. Bedingungen/Aktionen/Übergänge werden (wie in der CLI) als validiertes
+ * JSON entgegengenommen; ein komfortabler visueller Regel-Builder ist eine
+ * spätere, ebenfalls Core-seitige Komfortstufe, keine Voraussetzung der Parität.
  */
 class IntegrationsController extends AdminController
 {
@@ -101,6 +101,69 @@ class IntegrationsController extends AdminController
         } catch (\Throwable $e) {
             $this->Flash->error(__('flash.integrations.sso_failed', $e->getMessage()));
         }
+
+        return $this->redirect(['action' => 'index']);
+    }
+
+    /** Legt eine Automations-Regel an (Name/Event + JSON-Bedingung/-Aktionen, wie CLI). */
+    public function automationCreate(): ?\Cake\Http\Response
+    {
+        $this->request->allowMethod('post');
+        $name = trim((string)$this->request->getData('name'));
+        $event = trim((string)$this->request->getData('event'));
+        $condition = trim((string)$this->request->getData('condition')) ?: '{}';
+        $actions = trim((string)$this->request->getData('actions')) ?: '[]';
+        if ($name === '' || $event === '') {
+            $this->Flash->error(__('flash.integrations.automation_fields'));
+
+            return $this->redirect(['action' => 'index']);
+        }
+        // Gleiche JSON-Validierung wie die CLI: Bedingung = Objekt, Aktionen = Array.
+        if (!is_array(json_decode($condition, true))) {
+            $this->Flash->error(__('flash.integrations.bad_json', 'condition'));
+
+            return $this->redirect(['action' => 'index']);
+        }
+        if (!is_array(json_decode($actions, true)) || !array_is_list((array)json_decode($actions, true))) {
+            $this->Flash->error(__('flash.integrations.bad_json', 'actions'));
+
+            return $this->redirect(['action' => 'index']);
+        }
+        $this->conn()->execute(
+            'INSERT INTO automation_rules (name, event, condition, actions) '
+            . 'VALUES (:n, :e, CAST(:c AS jsonb), CAST(:a AS jsonb))',
+            ['n' => $name, 'e' => $event, 'c' => $condition, 'a' => $actions],
+        );
+        $this->Flash->success(__('flash.integrations.automation_created'));
+
+        return $this->redirect(['action' => 'index']);
+    }
+
+    /** Legt eine Workflow-Definition an (Name/Entity/Startzustand + JSON-Übergänge, wie CLI). */
+    public function workflowCreate(): ?\Cake\Http\Response
+    {
+        $this->request->allowMethod('post');
+        $name = trim((string)$this->request->getData('name'));
+        $entityType = trim((string)$this->request->getData('entity_type'));
+        $entityIdField = trim((string)$this->request->getData('entity_id_field')) ?: 'entity_id';
+        $initial = trim((string)$this->request->getData('initial_state'));
+        $transitions = trim((string)$this->request->getData('transitions')) ?: '[]';
+        if ($name === '' || $entityType === '' || $initial === '') {
+            $this->Flash->error(__('flash.integrations.workflow_fields'));
+
+            return $this->redirect(['action' => 'index']);
+        }
+        if (!is_array(json_decode($transitions, true)) || !array_is_list((array)json_decode($transitions, true))) {
+            $this->Flash->error(__('flash.integrations.bad_json', 'transitions'));
+
+            return $this->redirect(['action' => 'index']);
+        }
+        $this->conn()->execute(
+            'INSERT INTO workflow_definitions (name, entity_type, entity_id_field, initial_state, transitions) '
+            . 'VALUES (:n, :et, :ef, :is, CAST(:tr AS jsonb))',
+            ['n' => $name, 'et' => $entityType, 'ef' => $entityIdField, 'is' => $initial, 'tr' => $transitions],
+        );
+        $this->Flash->success(__('flash.integrations.workflow_created'));
 
         return $this->redirect(['action' => 'index']);
     }
@@ -211,9 +274,12 @@ class IntegrationsController extends AdminController
         return $this->redirect(['action' => 'index']);
     }
 
-    private function conn(): \Cake\Datasource\ConnectionInterface
+    private function conn(): \Cake\Database\Connection
     {
-        return ConnectionManager::get('default');
+        /** @var \Cake\Database\Connection $conn */
+        $conn = ConnectionManager::get('default');
+
+        return $conn;
     }
 
     private function isActive(string $table, string $id): bool

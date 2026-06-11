@@ -41,6 +41,8 @@ class IntegrationsControllerTest extends TestCase
         $conn = ConnectionManager::get('default');
         $conn->execute("DELETE FROM webhook_subscriptions WHERE name LIKE 'zztest-%'");
         $conn->execute("DELETE FROM sso_providers WHERE name LIKE 'zztest-%'");
+        $conn->execute("DELETE FROM automation_rules WHERE name LIKE 'zztest-%'");
+        $conn->execute("DELETE FROM workflow_definitions WHERE name LIKE 'zztest-%'");
         $conn->execute("DELETE FROM users WHERE email LIKE '%@zztest.local'");
         parent::tearDown();
     }
@@ -158,6 +160,60 @@ class IntegrationsControllerTest extends TestCase
         ]);
         $this->assertFalse(ConnectionManager::get('default')->execute(
             'SELECT 1 FROM sso_providers WHERE name = :n', ['n' => $bad],
+        )->fetch());
+    }
+
+    public function testAutomationCreateWithJsonValidation(): void
+    {
+        $this->login();
+        $name = 'zztest-rule-' . bin2hex(random_bytes(2));
+        $this->post('/admin/integrations/automationCreate', [
+            'name' => $name, 'event' => 'ticket.created',
+            'condition' => '{"field":"data.priority","op":"eq","value":"high"}',
+            'actions' => '[{"type":"notify","user_field":"user_id","title":"X"}]',
+        ]);
+        $this->assertRedirect(['action' => 'index']);
+        $row = ConnectionManager::get('default')->execute(
+            'SELECT event, condition, actions FROM automation_rules WHERE name = :n',
+            ['n' => $name],
+        )->fetch('assoc');
+        $this->assertNotFalse($row);
+        $this->assertSame('ticket.created', $row['event']);
+        $this->assertStringContainsString('priority', (string)$row['condition']);
+
+        // Aktionen kein JSON-Array (Objekt) -> abgelehnt, kein Datensatz.
+        $bad = 'zztest-rule-bad-' . bin2hex(random_bytes(2));
+        $this->post('/admin/integrations/automationCreate', [
+            'name' => $bad, 'event' => 'x', 'actions' => '{"not":"a-list"}',
+        ]);
+        $this->assertFalse(ConnectionManager::get('default')->execute(
+            'SELECT 1 FROM automation_rules WHERE name = :n', ['n' => $bad],
+        )->fetch());
+    }
+
+    public function testWorkflowCreateWithDefaults(): void
+    {
+        $this->login();
+        $name = 'zztest-wf-' . bin2hex(random_bytes(2));
+        $this->post('/admin/integrations/workflowCreate', [
+            'name' => $name, 'entity_type' => 'ticket', 'initial_state' => 'open',
+            'transitions' => '[{"from":"open","to":"closed","on":"close"}]',
+        ]);
+        $this->assertRedirect(['action' => 'index']);
+        $row = ConnectionManager::get('default')->execute(
+            'SELECT entity_type, entity_id_field, initial_state FROM workflow_definitions WHERE name = :n',
+            ['n' => $name],
+        )->fetch('assoc');
+        $this->assertNotFalse($row);
+        $this->assertSame('ticket', $row['entity_type']);
+        $this->assertSame('entity_id', $row['entity_id_field']); // Default greift
+        $this->assertSame('open', $row['initial_state']);
+
+        // Fehlender Startzustand -> kein Datensatz.
+        $bad = 'zztest-wf-bad-' . bin2hex(random_bytes(2));
+        $this->post('/admin/integrations/workflowCreate', ['name' => $bad, 'entity_type' => 'ticket']);
+        $this->assertFalse(ConnectionManager::get('default')->execute(
+            'SELECT 1 FROM workflow_definitions WHERE name = :n', ['n' => $bad],
         )->fetch());
     }
 }
