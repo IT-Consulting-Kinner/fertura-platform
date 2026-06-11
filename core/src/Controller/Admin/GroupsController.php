@@ -85,9 +85,11 @@ class GroupsController extends AdminController
     {
         $this->request->allowMethod('post');
         $active = $flag === 'on';
+        // PostgreSQL-Boolean: CakePHPs raw execute() bindet PHP-`false` als ''
+        // (→ "invalid input syntax for type boolean"); daher explizit 'true'/'false'.
         ConnectionManager::get('default')->execute(
             'UPDATE "groups" SET active = :a, deactivated_at = CASE WHEN :a THEN NULL ELSE now() END WHERE id = :id',
-            ['a' => $active, 'id' => $id],
+            ['a' => $active ? 'true' : 'false', 'id' => $id],
         );
         (new AuditLogger())->log($active ? 'group.activate' : 'group.deactivate', 'group', $id, ['newValue' => ['active' => $active]]);
         $this->Flash->success(__('flash.group.status_updated'));
