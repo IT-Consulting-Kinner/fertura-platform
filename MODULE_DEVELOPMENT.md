@@ -53,7 +53,7 @@ final class FetchMailsTask implements \App\Service\Schedule\ScheduledTaskInterfa
 Registrierung im Manifest über den Collector `core.collector.scheduled`:
 ```json
 "collectors_registered": [
-  { "collector": "core.collector.scheduled", "version": ">=1.0.0 <2.0.0",
+  { "contract": "core.collector.scheduled", "version": ">=1.0.0 <2.0.0",
     "class": "Ticketing\\Schedule\\FetchMailsTask" }
 ]
 ```

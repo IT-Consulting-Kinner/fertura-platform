@@ -1,58 +1,48 @@
-# CakePHP Application Skeleton
+# Fertura Core
 
-![Build Status](https://github.com/cakephp/app/actions/workflows/ci.yml/badge.svg?branch=5.x)
-[![Total Downloads](https://img.shields.io/packagist/dt/cakephp/app.svg?style=flat-square)](https://packagist.org/packages/cakephp/app)
-[![PHPStan](https://img.shields.io/badge/PHPStan-level%208-brightgreen.svg?style=flat-square)](https://github.com/phpstan/phpstan)
+Die technische Plattform von **Fertura** auf Basis von **CakePHP 5 / PHP 8.3 /
+PostgreSQL 17**. Der Core stellt Authentifizierung (lokal + MFA/Passkeys, SSO via
+OIDC/SAML, SCIM-Provisioning), das BREAD-/RLS-Rechtemodell, Modul-Lifecycle mit
+Out-of-Process-Isolation, die Contract-/Capability-Registry, Outbox/Events,
+Automatisierung/Workflows, Suche (Volltext + Vektor), Backup/Restore (inkl.
+Off-Site), die Lizenz-/Signaturkette, Audit-Log mit SIEM-Export sowie
+Health/Metrics und eine vollständige Admin-GUI (gebündeltes Bootstrap 5) bereit.
+Fachlogik liegt in installierbaren Main- und Extension-Modulen.
 
-A skeleton for creating applications with [CakePHP](https://cakephp.org) 5.x.
+## Entwicklung
 
-The framework source code can be found here: [cakephp/cakephp](https://github.com/cakephp/cakephp).
-
-## Installation
-
-1. Download [Composer](https://getcomposer.org/doc/00-intro.md) or update `composer self-update`.
-2. Run `php composer.phar create-project --prefer-dist cakephp/app [app_name]`.
-
-If Composer is installed globally, run
-
-```bash
-composer create-project --prefer-dist cakephp/app
-```
-
-In case you want to use a custom app dir name (e.g. `/myapp/`):
+Der Stack läuft über Docker Compose (Dienste `db`, `core`, `web`, `worker`,
+`mail`, `redis`, `marketplace`):
 
 ```bash
-composer create-project --prefer-dist cakephp/app myapp
+docker compose up -d
+docker compose exec core bin/cake core_migrate     # Schema/Migrationen
+docker compose exec core vendor/bin/phpunit        # Testsuite (gegen echtes PostgreSQL)
 ```
 
-You can now either use your machine's webserver to view the default home page, or start
-up the built-in webserver with:
+CLI-Kommandos: `docker compose exec core bin/cake <command>` (z. B. `backup`,
+`module`, `trust`, `sso`, `permission`, `lang`, `secret`). Eine Übersicht aller
+Kommandos liefert `bin/cake`.
 
-```bash
-bin/cake server -p 8765
-```
+## Qualität
 
-Then visit `http://localhost:8765` to see the welcome page.
+- **PHPStan Level 8** (Baseline-gated): `vendor/bin/phpstan analyse`
+- **Coding-Standard:** `composer cs-check` (CakePHP-Standard)
+- **Coverage-Ratschet (Gate):** `composer test-coverage` (gegen `coverage-min.txt`)
+- **Mutation-Testing (Sicherheitskerne):** `composer mutation` (Infection)
 
-## Demo app
+Details in [`../TESTING.md`](../TESTING.md).
 
-Check out the [5.x-demo branch](https://github.com/cakephp/app/tree/5.x-demo), which contains demo migrations and a seeder.
-See the [README](https://github.com/cakephp/app/blob/5.x-demo/README.md) on how to get it running.
+## Dokumentation
 
-## Update
+Die maßgebliche Projekt- und Betriebsdokumentation liegt im Repository-Wurzel­
+verzeichnis — Einstieg über [`../README.md`](../README.md). Themen-Leitfäden u. a.:
+[`../API.md`](../API.md), [`../SIGNING.md`](../SIGNING.md),
+[`../BACKUP.md`](../BACKUP.md), [`../TENANCY.md`](../TENANCY.md),
+[`../MODULE_DEVELOPMENT.md`](../MODULE_DEVELOPMENT.md).
 
-Since this skeleton is a starting point for your application and various files
-would have been modified as per your needs, there isn't a way to provide
-automated upgrades, so you have to do any updates manually.
+## Lizenz
 
-## Configuration
-
-Read and edit the environment specific `config/app_local.php` and set up the
-`'Datasources'` and any other configuration relevant for your application.
-Other environment agnostic settings can be changed in `config/app.php`.
-
-## Layout
-
-The app skeleton uses [Milligram](https://milligram.io/) (v1.3) minimalist CSS
-framework by default. You can, however, replace it with any other library or
-custom styles.
+**AGPL-3.0-only** für den Core (siehe `../LICENSE`). Module außerhalb des Core
+sind über eine Section-7-Zusatzerlaubnis ausgenommen — Details in
+[`../LICENSING.md`](../LICENSING.md).
