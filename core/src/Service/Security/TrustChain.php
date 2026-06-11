@@ -4,13 +4,13 @@ declare(strict_types=1);
 namespace App\Service\Security;
 
 /**
- * Verifiziert die Vertrauenskette Root -> Publisher (Kap. 24.9.2).
+ * Verifies the trust chain Root -> Publisher (ch. 24.9.2).
  *
- * Ein Publisher-Schlüssel ist nur vertrauenswürdig, wenn ein aktiver,
- * nicht-widerrufener Root-Schlüssel sein Zertifikat — die kanonische Aussage
- * über (key_id, public_key, publisher) — signiert hat. Diese Signatur
- * (`key_signature`) wird vom Betreiber-Werkzeug (`mp_tool sign-key`) erzeugt und
- * je Anker persistiert, sodass sie jederzeit nachprüfbar ist.
+ * A publisher key is only trustworthy if an active, non-revoked root key has
+ * signed its certificate — the canonical statement over
+ * (key_id, public_key, publisher). This signature (`key_signature`) is produced
+ * by the operator tool (`mp_tool sign-key`) and persisted per anchor, so it can
+ * be re-verified at any time.
  */
 class TrustChain
 {
@@ -24,8 +24,8 @@ class TrustChain
     }
 
     /**
-     * Kanonische, signierbare Aussage über die Identität eines Publisher-
-     * Schlüssels. Stabile Feldreihenfolge -> deterministisch.
+     * Canonical, signable statement about the identity of a publisher key.
+     * Stable field order -> deterministic.
      */
     public static function keyStatement(string $keyId, string $publicKey, ?string $publisher): string
     {
@@ -36,7 +36,7 @@ class TrustChain
     }
 
     /**
-     * Prüft, ob ein Publisher-Zertifikat von einem aktiven Root signiert wurde.
+     * Checks whether a publisher certificate was signed by an active root.
      *
      * @param array{key_id?: mixed, public_key?: mixed, publisher?: mixed, signed_by?: mixed, key_signature?: mixed} $cert
      * @return array{ok: bool, reason?: string}
@@ -66,7 +66,7 @@ class TrustChain
         if (($root['key_type'] ?? '') !== 'root') {
             return ['ok' => false, 'reason' => "Signierender Anker ist kein Root: $signedBy"];
         }
-        // Gültigkeitsfenster des Roots durchsetzen (Kap. 24.9.2).
+        // Enforce the root's validity window (ch. 24.9.2).
         $rootValidity = TrustStore::validity($root);
         if (!$rootValidity['ok']) {
             return ['ok' => false, 'reason' => "Signierender Root $signedBy: " . $rootValidity['reason']];

@@ -7,8 +7,8 @@ use RuntimeException;
 use Throwable;
 
 /**
- * Ed25519-Signatur (libsodium), Entscheidung Step 8.
- * Schlüssel/Signaturen werden base64-kodiert ausgetauscht.
+ * Ed25519 signatures (libsodium), Decision Step 8.
+ * Keys/signatures are exchanged base64-encoded.
  */
 class Signer
 {

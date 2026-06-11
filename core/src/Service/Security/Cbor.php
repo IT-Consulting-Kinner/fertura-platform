@@ -6,16 +6,17 @@ namespace App\Service\Security;
 use RuntimeException;
 
 /**
- * Minimaler CBOR-Codec (RFC 8949) für die WebAuthn-Strukturen — bewusst
- * abhängigkeitsfrei (wie {@see Totp}). Unterstützt genau die von
- * attestationObject/COSE-Keys benötigte Teilmenge: unsigned/negative Integer,
- * Byte-/Text-Strings, Arrays und Maps (definite length). Der Encoder dient den
- * Tests (Konstruktion echter Attestation-Objekte ohne Browser).
+ * Minimal CBOR codec (RFC 8949) for the WebAuthn structures — deliberately
+ * dependency-free (like {@see Totp}). Supports exactly the subset required by
+ * attestationObject/COSE keys: unsigned/negative integers, byte/text strings,
+ * arrays and maps (definite length). The encoder exists for the tests
+ * (constructing real attestation objects without a browser).
  */
 final class Cbor
 {
     /**
-     * Dekodiert EIN CBOR-Item ab `$offset`; `$offset` zeigt danach hinter das Item.
+     * Decodes ONE CBOR item starting at `$offset`; afterwards `$offset` points
+     * just past the decoded item.
      */
     public static function decode(string $bytes, int &$offset = 0): mixed
     {
@@ -86,7 +87,7 @@ final class Cbor
         return $value;
     }
 
-    /** Kodiert int|string(byte)|array (Liste oder Map mit int/string-Keys). */
+    /** Encodes int|string(byte)|array (list or map with int/string keys). */
     public static function encode(mixed $value): string
     {
         if (is_int($value)) {
@@ -95,7 +96,7 @@ final class Cbor
                 : self::head(1, -1 - $value);
         }
         if (is_string($value)) {
-            return self::head(2, strlen($value)) . $value; // immer Byte-String
+            return self::head(2, strlen($value)) . $value; // always a byte string
         }
         if (is_array($value)) {
             $isList = array_is_list($value);

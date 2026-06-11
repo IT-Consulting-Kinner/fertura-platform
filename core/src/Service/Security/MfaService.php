@@ -11,16 +11,16 @@ use App\Service\Settings\SettingsManager;
 use Cake\Datasource\ConnectionManager;
 
 /**
- * MFA-Verwaltung (TOTP) für lokale Konten (Kap. 27.16.3-Ergänzung):
+ * MFA management (TOTP) for local accounts (ch. 27.16.3 addendum):
  *
- * - **Enrollment** zweistufig: Secret erzeugen → Benutzer bestätigt mit einem
- *   gültigen Code → erst dann wird das Secret (AES-verschlüsselt, SecretCipher)
- *   persistiert und MFA aktiv. Dabei entstehen **Einmal-Recovery-Codes**
- *   (nur SHA-256-Hashes in der DB, Klartext einmalige Anzeige).
- * - **Verifikation** timing-sicher mit ±1 Zeitfenster und **Replay-Schutz**
- *   (derselbe Zeitschritt wird je Benutzer nicht zweimal akzeptiert).
- * - **SSO unberührt**: MFA gilt für die lokale Passwort-Anmeldung; bei
- *   Föderation setzt der IdP die MFA-Policy durch.
+ * - **Enrollment** is two-stage: generate the secret → the user confirms with a
+ *   valid code → only then is the secret persisted (AES-encrypted via
+ *   SecretCipher) and MFA activated. This also produces **single-use recovery
+ *   codes** (only SHA-256 hashes stored in the DB; plaintext shown once).
+ * - **Verification** is timing-safe with a ±1 time window and **replay
+ *   protection** (the same time step is not accepted twice per user).
+ * - **SSO is unaffected**: MFA applies to local password login; under
+ *   federation the IdP enforces the MFA policy.
  */
 class MfaService
 {
@@ -35,8 +35,8 @@ class MfaService
     {
         $this->cipher = $cipher ?? new SecretCipher();
         $this->audit = $audit ?? new AuditLogger();
-        // Kurzlebiger Zustand "zuletzt akzeptierter Zeitschritt" (Replay-Schutz);
-        // _app_ reicht (TTL >> 2 Zeitschritte à 30 s).
+        // Short-lived "last accepted time step" state (replay protection);
+        // _app_ is sufficient (TTL >> 2 time steps of 30 s each).
         $this->replay = $replay ?? new CacheStore('_app_');
     }
 
@@ -48,7 +48,7 @@ class MfaService
         return $conn;
     }
 
-    /** Ist MFA für diesen Benutzer aktiv? */
+    /** Is MFA active for this user? */
     public function enabled(string $userId): bool
     {
         if (!Uuid::isValid($userId)) {
@@ -62,7 +62,7 @@ class MfaService
         return $row !== false && $row['totp_enabled_at'] !== null;
     }
 
-    /** Ist MFA für lokale Logins erzwungen (Betreiber-Setting)? */
+    /** Is MFA enforced for local logins (operator setting)? */
     public function required(): bool
     {
         try {
@@ -73,9 +73,9 @@ class MfaService
     }
 
     /**
-     * Schließt das Enrollment ab: prüft den Bestätigungs-Code gegen das (noch
-     * unpersistierte) Secret und aktiviert MFA. Gibt bei Erfolg die
-     * **Klartext-Recovery-Codes** zurück (einmalige Anzeige), sonst null.
+     * Completes enrollment: validates the confirmation code against the (not yet
+     * persisted) secret and activates MFA. On success returns the **plaintext
+     * recovery codes** (shown once), otherwise null.
      *
      * @return list<string>|null
      */
@@ -94,8 +94,8 @@ class MfaService
             );
             $conn->execute('DELETE FROM user_mfa_recovery_codes WHERE user_id = :u', ['u' => $userId]);
             foreach ($codes as $plain) {
-                // Gehasht wird die NORMALISIERTE Form (ohne Bindestrich/Spaces,
-                // uppercase) — identisch zur Normalisierung beim Einlösen.
+                // The NORMALISED form is hashed (no hyphens/spaces, uppercase) —
+                // identical to the normalisation applied on redemption.
                 $conn->execute(
                     'INSERT INTO user_mfa_recovery_codes (user_id, code_hash) VALUES (:u, :h)',
                     ['u' => $userId, 'h' => hash('sha256', str_replace('-', '', $plain))],
@@ -108,8 +108,8 @@ class MfaService
     }
 
     /**
-     * Prüft einen TOTP-Code (mit Replay-Schutz) ODER einen Recovery-Code
-     * (einmal verwendbar, atomar entwertet).
+     * Verifies a TOTP code (with replay protection) OR a recovery code
+     * (single-use, atomically invalidated).
      */
     public function verify(string $userId, string $code): bool
     {
@@ -118,7 +118,7 @@ class MfaService
         }
         $code = trim($code);
 
-        // Recovery-Code? (Format-Heuristik: nicht 6-stellig numerisch.)
+        // Recovery code? (Format heuristic: not 6 numeric digits.)
         if (!preg_match('/^[0-9]{6}\z/', $code)) {
             return $this->redeemRecoveryCode($userId, $code);
         }
@@ -133,15 +133,15 @@ class MfaService
         try {
             $secret = $this->cipher->decrypt((string)$row['totp_secret']);
         } catch (\Throwable) {
-            return false; // Schlüssel falsch/Manipulation -> fail-closed
+            return false; // wrong key/tampering -> fail-closed
         }
 
         $step = Totp::verify($secret, $code);
         if ($step === null) {
             return false;
         }
-        // Replay-Schutz: denselben (oder einen älteren) Zeitschritt nicht erneut
-        // akzeptieren — ein mitgelesener Code ist damit nicht wiederverwendbar.
+        // Replay protection: do not accept the same (or an older) time step
+        // again — an intercepted code is therefore not reusable.
         $key = 'mfa.last_step.' . $userId;
         $last = (int)$this->replay->get($key, 0);
         if ($step <= $last) {
@@ -152,7 +152,7 @@ class MfaService
         return true;
     }
 
-    /** Deaktiviert MFA (Aufrufer hat den Benutzer bereits re-authentifiziert). */
+    /** Disables MFA (the caller has already re-authenticated the user). */
     public function disable(string $userId): void
     {
         if (!Uuid::isValid($userId)) {
@@ -167,7 +167,7 @@ class MfaService
         $this->audit->log('mfa.disable', 'user', $userId, []);
     }
 
-    /** Anzahl noch unverbrauchter Recovery-Codes. */
+    /** Number of recovery codes still unused. */
     public function recoveryCodesLeft(string $userId): int
     {
         if (!Uuid::isValid($userId)) {
@@ -179,7 +179,7 @@ class MfaService
         )->fetch('assoc')['c'];
     }
 
-    /** Löst einen Recovery-Code atomar ein (einmal verwendbar). */
+    /** Redeems a recovery code atomically (single-use). */
     private function redeemRecoveryCode(string $userId, string $code): bool
     {
         $normalized = strtoupper(str_replace([' ', '-'], '', $code));
@@ -202,10 +202,10 @@ class MfaService
         return false;
     }
 
-    /** @return list<string> 8 Codes à 10 Zeichen (Crockford-ähnlich, gut abtippbar). */
+    /** @return list<string> 8 codes of 10 characters each (Crockford-like, easy to transcribe). */
     private function generateRecoveryCodes(): array
     {
-        $alphabet = 'ABCDEFGHJKMNPQRSTVWXYZ23456789'; // ohne I/L/O/0/1/U (Verwechslung)
+        $alphabet = 'ABCDEFGHJKMNPQRSTVWXYZ23456789'; // without I/L/O/0/1/U (confusable)
         $codes = [];
         for ($i = 0; $i < self::RECOVERY_CODE_COUNT; $i++) {
             $code = '';

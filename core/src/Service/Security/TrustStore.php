@@ -6,8 +6,8 @@ namespace App\Service\Security;
 use Cake\Datasource\ConnectionManager;
 
 /**
- * Verwaltet Vertrauensanker (Root-/Publisher-Schlüssel) und die Sperrliste
- * (Kap. 24.9.2).
+ * Manages trust anchors (root/publisher keys) and the revocation list
+ * (ch. 24.9.2).
  */
 class TrustStore
 {
@@ -42,9 +42,8 @@ class TrustStore
     }
 
     /**
-     * Prüft das Gültigkeitsfenster eines Ankers (Kap. 24.9.2). NULL-Grenzen sind
-     * unbegrenzt. Wird an allen Verifikationspfaden (Paket, Kette, Lizenz)
-     * durchgesetzt.
+     * Checks an anchor's validity window (ch. 24.9.2). NULL bounds mean
+     * unbounded. Enforced on all verification paths (package, chain, license).
      *
      * @param array<string, mixed> $anchor
      * @return array{ok: bool, reason: ?string}
@@ -90,17 +89,17 @@ class TrustStore
             . 'ON CONFLICT (key_id) DO NOTHING',
             ['id' => $keyId, 'r' => $reason, 's' => $source],
         );
-        // Installierte Module, die mit diesem Schlüssel signiert wurden, als
-        // „Signatur widerrufen" kennzeichnen (Kap. 24.9.2).
+        // Mark installed modules signed with this key as "signature revoked"
+        // (ch. 24.9.2).
         $this->reconcileModuleSignatures();
     }
 
     /**
-     * Gleicht installierte Module gegen die Sperrliste ab und markiert
-     * betroffene als signature_status='revoked' (Kap. 24.9.2). Keine
-     * Auto-Deaktivierung; nur Kennzeichnung + Adminwarnung.
+     * Reconciles installed modules against the revocation list and marks
+     * affected ones as signature_status='revoked' (ch. 24.9.2). No
+     * auto-disabling; just flagging plus an admin warning.
      *
-     * @return int Anzahl neu als widerrufen markierter Module.
+     * @return int Number of modules newly marked as revoked.
      */
     public function reconcileModuleSignatures(): int
     {

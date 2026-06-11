@@ -4,13 +4,13 @@ declare(strict_types=1);
 namespace App\Service\Security;
 
 /**
- * Prüft die Signatur eines Modulpakets (Verzeichnis) gegen einen aktiven,
- * nicht-widerrufenen Vertrauensanker — VOR dem Entpacken/Installieren
- * (Kap. 24.9.1/24.9.2).
+ * Verifies the signature of a module package (directory) against an active,
+ * non-revoked trust anchor — BEFORE unpacking/installing
+ * (ch. 24.9.1/24.9.2).
  *
- * Paket-Signatur: `signature.json` = {"key_id": "...", "signature": "<base64>"}.
- * Signiert wird der Paket-Digest (SHA-256 über alle Dateien außer signature.json),
- * sodass jede Manipulation an Manifest ODER Code erkannt wird.
+ * Package signature: `signature.json` = {"key_id": "...", "signature": "<base64>"}.
+ * What is signed is the package digest (SHA-256 over all files except signature.json),
+ * so any tampering with the manifest OR the code is detected.
  */
 class PackageVerifier
 {
@@ -26,7 +26,7 @@ class PackageVerifier
     }
 
     /**
-     * Deterministischer Paket-Digest über alle Dateien (außer signature.json).
+     * Deterministic package digest over all files (except signature.json).
      */
     public function packageDigest(string $dir): string
     {
@@ -61,9 +61,9 @@ class PackageVerifier
     }
 
     /**
-     * Prüft die Paketsignatur. Wirft PackageVerificationException bei Fehler.
+     * Verifies the package signature. Throws PackageVerificationException on error.
      *
-     * @return array{key_id: string} Schlüssel-ID der gültigen Signatur.
+     * @return array{key_id: string} Key ID of the valid signature.
      */
     public function verify(string $dir, ?string $manifestPublisher): array
     {
@@ -84,23 +84,23 @@ class PackageVerifier
         if ($anchor === null) {
             throw new PackageVerificationException("Unbekannter/inaktiver Vertrauensanker: $keyId");
         }
-        // Gültigkeitsfenster des Ankers durchsetzen (Kap. 24.9.2).
+        // Enforce the anchor's validity window (ch. 24.9.2).
         $validity = TrustStore::validity($anchor);
         if (!$validity['ok']) {
             throw new PackageVerificationException("Vertrauensanker $keyId: " . $validity['reason']);
         }
-        // Publisher-Bindung (Kap. 24.9.2): Publisher-Schlüssel müssen zum
-        // Manifest-Publisher passen.
+        // Publisher binding (ch. 24.9.2): publisher keys must match the
+        // manifest publisher.
         if ($anchor['key_type'] === 'publisher'
             && $manifestPublisher !== null
             && $anchor['publisher'] !== $manifestPublisher) {
             throw new PackageVerificationException('Publisher des Schlüssels passt nicht zum Manifest.');
         }
 
-        // Vertrauenskette (Kap. 24.9.2): Publisher-Anker müssen weiterhin von
-        // einem aktiven, nicht-widerrufenen Root signiert sein. So entzieht ein
-        // Root-Widerruf nachträglich allen darunter signierten Paketen das
-        // Vertrauen (Defense-in-Depth über die Insert-Zeit-Prüfung hinaus).
+        // Trust chain (ch. 24.9.2): publisher anchors must still be signed by an
+        // active, non-revoked root. This way a root revocation retroactively
+        // withdraws trust from all packages signed below it (defense-in-depth
+        // beyond the insert-time check).
         if ($anchor['key_type'] === 'publisher') {
             $chain = (new TrustChain($this->signer, $this->trust))->verifyPublisherCert($anchor);
             if (!$chain['ok']) {

@@ -6,7 +6,7 @@ namespace App\Service\Security;
 use RuntimeException;
 
 /**
- * Signatur-/Vertrauensfehler bei der Paketprüfung (Kap. 24.9).
+ * Signature/trust error raised during package verification (ch. 24.9).
  */
 class PackageVerificationException extends RuntimeException
 {

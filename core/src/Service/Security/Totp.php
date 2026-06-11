@@ -4,29 +4,29 @@ declare(strict_types=1);
 namespace App\Service\Security;
 
 /**
- * TOTP (RFC 6238) auf HOTP-Basis (RFC 4226) — bewusst abhängigkeitsfrei
- * (Supply-Chain schlank halten): HMAC-SHA1, 6 Ziffern, 30-s-Schritt, wie von
- * allen gängigen Authenticator-Apps (Google/Microsoft/Aegis/1Password) erwartet.
+ * TOTP (RFC 6238) built on HOTP (RFC 4226) — deliberately dependency-free
+ * (to keep the supply chain lean): HMAC-SHA1, 6 digits, 30-second step, as
+ * expected by all common authenticator apps (Google/Microsoft/Aegis/1Password).
  *
- * Verifikation mit ±1 Zeitfenster (Uhren-Drift) und `hash_equals`
- * (timing-sicher). Replay-Schutz auf Code-Ebene (denselben Code nicht zweimal
- * akzeptieren) übernimmt der Aufrufer ({@see MfaService}).
+ * Verification uses a ±1 time window (clock drift) and `hash_equals`
+ * (timing-safe). Code-level replay protection (not accepting the same code
+ * twice) is the caller's responsibility ({@see MfaService}).
  */
 final class Totp
 {
     public const PERIOD = 30;
     public const DIGITS = 6;
-    private const SECRET_BYTES = 20; // 160 Bit, RFC-4226-Empfehlung
+    private const SECRET_BYTES = 20; // 160 bits, RFC 4226 recommendation
 
     private const B32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 
-    /** Neues Secret, Base32-kodiert (Eingabeformat der Authenticator-Apps). */
+    /** New secret, Base32-encoded (the input format of authenticator apps). */
     public static function generateSecret(): string
     {
         return self::base32Encode(random_bytes(self::SECRET_BYTES));
     }
 
-    /** Aktueller Code für ein Base32-Secret (für Anzeige/Tests). */
+    /** Current code for a Base32 secret (for display/tests). */
     public static function code(string $base32Secret, ?int $timestamp = null): string
     {
         $counter = intdiv($timestamp ?? time(), self::PERIOD);
@@ -35,9 +35,9 @@ final class Totp
     }
 
     /**
-     * Prüft einen Code timing-sicher mit ±`$window` Zeitschritten Toleranz.
-     * Gibt bei Erfolg den **Zeitschritt** des Treffers zurück (für den
-     * Replay-Schutz des Aufrufers), sonst null.
+     * Verifies a code timing-safely with a tolerance of ±`$window` time steps.
+     * On success returns the **time step** of the match (for the caller's replay
+     * protection), otherwise null.
      */
     public static function verify(string $base32Secret, string $code, int $window = 1, ?int $timestamp = null): ?int
     {
@@ -56,7 +56,7 @@ final class Totp
         return null;
     }
 
-    /** otpauth://-URI für die Einrichtung (manuell oder als QR-Inhalt). */
+    /** otpauth:// URI for setup (manual entry or as QR content). */
     public static function provisioningUri(string $base32Secret, string $accountLabel, string $issuer): string
     {
         return 'otpauth://totp/' . rawurlencode($issuer) . ':' . rawurlencode($accountLabel)
@@ -68,7 +68,7 @@ final class Totp
     /** HOTP (RFC 4226): HMAC-SHA1 + Dynamic Truncation. */
     private static function hotp(string $key, int $counter): string
     {
-        $binCounter = pack('J', $counter); // 64 Bit big-endian
+        $binCounter = pack('J', $counter); // 64-bit big-endian
         $hash = hash_hmac('sha1', $binCounter, $key, true);
         $offset = ord($hash[19]) & 0x0F;
         $value = ((ord($hash[$offset]) & 0x7F) << 24)
@@ -108,7 +108,7 @@ final class Totp
         foreach (str_split($encoded) as $char) {
             $pos = strpos(self::B32_ALPHABET, $char);
             if ($pos === false) {
-                continue; // fremde Zeichen (Bindestriche etc.) überspringen
+                continue; // skip foreign characters (hyphens etc.)
             }
             $value = ($value << 5) | $pos;
             $bits += 5;

@@ -9,27 +9,28 @@ use Cake\Datasource\ConnectionManager;
 use RuntimeException;
 
 /**
- * Passkeys/WebAuthn als **zweiter Faktor** (Kür zu E129) — abhängigkeitsfrei
- * (eigener CBOR-Codec, OpenSSL-Verifikation), bewusst enger Umfang:
+ * Passkeys/WebAuthn as a **second factor** (stretch goal for E129) —
+ * dependency-free (own CBOR codec, OpenSSL verification), deliberately narrow
+ * in scope:
  *
- * - Attestation `none` (Browser-Default; Geräte-Attestierung ist für 2FA ohne
- *   Hersteller-Policy bedeutungslos), Algorithmen **ES256** (-7) und **RS256**
- *   (-257) — deckt Plattform-Authenticatoren (TouchID/Windows Hello/Android)
- *   und gängige Security-Keys ab.
- * - Registrierung prüft clientData (type/challenge/origin), rpIdHash und
- *   User-Presence; gespeichert wird der **Public Key als PEM** + Sign-Counter.
- * - Assertion prüft zusätzlich die **Signatur** über
- *   `authenticatorData || sha256(clientDataJSON)` und den **Sign-Counter**
- *   (Klon-Erkennung: rückläufiger Zähler wird abgewiesen, wenn der
- *   Authenticator überhaupt zählt).
+ * - Attestation `none` (the browser default; device attestation is meaningless
+ *   for 2FA without a vendor policy), algorithms **ES256** (-7) and **RS256**
+ *   (-257) — covering platform authenticators (TouchID/Windows Hello/Android)
+ *   and common security keys.
+ * - Registration validates clientData (type/challenge/origin), rpIdHash and
+ *   user presence; the **public key is stored as PEM** plus the sign counter.
+ * - Assertion additionally verifies the **signature** over
+ *   `authenticatorData || sha256(clientDataJSON)` and the **sign counter**
+ *   (clone detection: a regressing counter is rejected, provided the
+ *   authenticator counts at all).
  *
- * Passwortloser First-Factor-Login bleibt bewusst außen vor (2FA-Scope).
+ * Passwordless first-factor login is deliberately out of scope (2FA scope).
  */
 class WebAuthnService
 {
     private const COSE_ES256 = -7;
     private const COSE_RS256 = -257;
-    /** DER-SPKI-Prefix für EC P-256 (ecPublicKey + prime256v1, 65-Byte-Punkt). */
+    /** DER SPKI prefix for EC P-256 (ecPublicKey + prime256v1, 65-byte point). */
     private const P256_SPKI_PREFIX = '3059301306072a8648ce3d020106082a8648ce3d030107034200';
 
     private AuditLogger $audit;
@@ -47,14 +48,14 @@ class WebAuthnService
         return $conn;
     }
 
-    /** Zufalls-Challenge (base64url, für Session-Ablage + Options-JSON). */
+    /** Random challenge (base64url, for session storage + options JSON). */
     public static function challenge(): string
     {
         return self::b64uEncode(random_bytes(32));
     }
 
     /**
-     * Optionen für `navigator.credentials.create()` (Registrierung).
+     * Options for `navigator.credentials.create()` (registration).
      *
      * @return array<string,mixed>
      */
@@ -79,7 +80,7 @@ class WebAuthnService
     }
 
     /**
-     * Optionen für `navigator.credentials.get()` (Login-Assertion).
+     * Options for `navigator.credentials.get()` (login assertion).
      *
      * @return array<string,mixed>
      */
@@ -98,8 +99,8 @@ class WebAuthnService
     }
 
     /**
-     * Schließt die Registrierung ab (Antwort von `credentials.create()`).
-     * Wirft bei JEDER Abweichung (fail-closed).
+     * Completes registration (the response from `credentials.create()`).
+     * Throws on ANY deviation (fail-closed).
      */
     public function register(
         string $userId,
@@ -123,7 +124,7 @@ class WebAuthnService
         $authData = $att['authData'];
         $this->assertAuthData($authData, $rpId, true);
 
-        // Attested Credential Data: aaguid(16) | credIdLen(2) | credId | COSE-Key.
+        // Attested credential data: aaguid(16) | credIdLen(2) | credId | COSE key.
         $credIdLen = (ord($authData[53]) << 8) | ord($authData[54]);
         $credentialId = substr($authData, 55, $credIdLen);
         if (strlen($credentialId) !== $credIdLen || $credIdLen < 1) {
@@ -152,8 +153,8 @@ class WebAuthnService
     }
 
     /**
-     * Verifiziert eine Login-Assertion (Antwort von `credentials.get()`).
-     * Gibt true bei gültiger Signatur + Counter zurück.
+     * Verifies a login assertion (the response from `credentials.get()`).
+     * Returns true on a valid signature + counter.
      */
     public function verifyAssertion(
         string $userId,
@@ -196,9 +197,9 @@ class WebAuthnService
             return false;
         }
 
-        // Sign-Counter (Klon-Erkennung): zählt der Authenticator, muss der Wert
-        // streng wachsen; 0 = Authenticator zählt nicht (z. B. manche Plattform-
-        // Authenticatoren) -> Prüfung entfällt per Spezifikation.
+        // Sign counter (clone detection): if the authenticator counts, the value
+        // must strictly increase; 0 = the authenticator does not count (e.g. some
+        // platform authenticators) -> the check is skipped per the specification.
         $newCount = self::signCount($authData);
         $oldCount = (int)$row['sign_count'];
         if ($newCount !== 0 && $newCount <= $oldCount) {
@@ -253,9 +254,9 @@ class WebAuthnService
         return $n > 0;
     }
 
-    // ---- intern ---------------------------------------------------------------
+    // ---- internal -------------------------------------------------------------
 
-    /** clientDataJSON: type, challenge (base64url) und Origin-Host müssen passen. */
+    /** clientDataJSON: type, challenge (base64url) and origin host must match. */
     private function assertClientData(string $clientDataJson, string $expectedType, string $expectedChallenge, string $rpId): void
     {
         $data = json_decode($clientDataJson, true);
@@ -274,7 +275,7 @@ class WebAuthnService
         }
     }
 
-    /** authenticatorData: rpIdHash + User-Presence (+ Attested Data bei Registrierung). */
+    /** authenticatorData: rpIdHash + user presence (+ attested data on registration). */
     private function assertAuthData(string $authData, string $rpId, bool $requireAttestedData): void
     {
         if (strlen($authData) < 37) {
@@ -284,7 +285,7 @@ class WebAuthnService
             throw new RuntimeException('WebAuthn: rpIdHash stimmt nicht.');
         }
         $flags = ord($authData[32]);
-        if (($flags & 0x01) === 0) { // UP: User Presence
+        if (($flags & 0x01) === 0) { // UP: user presence
             throw new RuntimeException('WebAuthn: User-Presence fehlt.');
         }
         if ($requireAttestedData && (($flags & 0x40) === 0 || strlen($authData) < 56)) { // AT
@@ -300,7 +301,7 @@ class WebAuthnService
     }
 
     /**
-     * COSE-Key -> PEM (SubjectPublicKeyInfo) für openssl_verify.
+     * COSE key -> PEM (SubjectPublicKeyInfo) for openssl_verify.
      *
      * @param array<int|string,mixed> $cose
      */
@@ -360,7 +361,7 @@ class WebAuthnService
     {
         $bytes = ltrim($bytes, "\x00");
         if ($bytes === '' || (ord($bytes[0]) & 0x80) !== 0) {
-            $bytes = "\x00" . $bytes; // Vorzeichen-Byte (DER-Integer ist signed)
+            $bytes = "\x00" . $bytes; // sign byte (a DER integer is signed)
         }
 
         return "\x02" . self::derLength(strlen($bytes)) . $bytes;
