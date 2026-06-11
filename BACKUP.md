@@ -105,7 +105,26 @@ Wiederherstellung bleibt der CLI vorbehalten.
 - **Automatik (Scheduler):** `backup.schedule.enabled`,
   `backup.schedule.interval_hours`, `backup.retention` (kappt älteste). Läuft im
   Core-Worker (`BackupScheduledTask` über `core.collector.scheduled`).
-- **Off-Site:** Den Ablageort zusätzlich extern replizieren (Infra-Aufgabe, 20.1.1).
+## Off-Site-Ablage (Core-Funktion, E134)
+
+Über die reine Infrastruktur-Replikation (20.1.1) hinaus kann der Core eine
+lokale Sicherung **gezielt in ein Objekt-Storage** (S3-kompatibel, über den
+Core-`StorageManager`) hochladen — als zweite, räumlich getrennte Kopie.
+
+- **Standardmäßig aus**, per Setting `backup.offsite.enabled` zu aktivieren; die
+  zugehörigen GUI-Aktionen erscheinen **nur dann**.
+- **CLI:**
+  ```bash
+  bin/cake backup_offsite push /path/to/backup.zip   # lokale Sicherung hochladen
+  bin/cake backup_offsite list                        # Off-Site-Dateien auflisten
+  bin/cake backup_offsite pull <name> --to /path/local.zip
+  bin/cake backup_offsite rm <name>                   # Off-Site-Datei löschen
+  ```
+- **GUI:** in `/admin/backup` je Sicherung „Off-Site hochladen" sowie Auflisten/
+  Löschen der Off-Site-Dateien (nur bei aktivierter Funktion). Upload und Löschen
+  werden auditiert (`backup.offsite.upload` / `backup.offsite.delete`).
+- Die übergreifende Volume-/Host-Replikation bleibt davon unberührt eine
+  Infrastruktur-Aufgabe (20.1.1).
 
 ## Wiederherstellungspunkt vor Updates
 

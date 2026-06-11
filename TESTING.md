@@ -12,6 +12,12 @@ docker compose exec core vendor/bin/phpunit
 
 # Einzelner Pfad:
 docker compose exec core vendor/bin/phpunit --filter ModuleLifecycleTest
+
+# Mit Coverage + Ratschet-Gate (schlägt fehl, wenn unter coverage-min.txt):
+docker compose exec core composer test-coverage
+
+# Mutation-Testing der Sicherheitskerne (langsam; optionales Qualitätswerkzeug):
+docker compose exec core composer mutation
 ```
 
 Die Test-DB-Verbindung kommt aus `DATABASE_TEST_URL` (in `docker-compose.yml`
@@ -36,6 +42,11 @@ Integrationstests gegen DB + echte Services (Review-Punkt 1):
 | **Sessions (HA)** | `Session/DatabaseSessionTest` | DB-Session-Store: Schreiben/Lesen/Update/Löschen, Sichtbarkeit über zweite Instanz, GC |
 | **Feature-Flags** | `Service/System/FeatureFlagsTest`, `Controller/ApiFeatureFlagTest` | env-Parsing; API-Gating (404 aus / 401 an); Health-`features` |
 | **Upgrade-Pfad** | `Service/Update/ModuleUpdateTest` | Migrationsvorschau, Update mit Wiederherstellungspunkt (nur bei ausstehenden Migrationen), Downgrade-Schutz, Rollback-Kaskade (erhält installierte Daten) |
+| **MFA (TOTP)** | `Service/Security/MfaServiceTest`, `Controller/MfaControllerTest`, `Controller/AuthMfaFlowTest` | Zwei-Stufen-Enrollment mit Bestätigung, Replay-Schutz (±1 Zeitfenster, Zeitschritt nicht doppelt), Recovery-Codes (Hash-only, Single-Use), Login-Gate bei aktivem TOTP |
+| **Passkeys (WebAuthn)** | `Service/Security/WebAuthnServiceTest` | Eigener CBOR/COSE-Codec, ES256/RS256-Assertion-Verifikation, Sign-Counter, Challenge-Bindung |
+| **SSO (OIDC/SAML)** | `Controller/SsoControllerTest` | RelayState-/Nonce-Bindung, Single-Redeem, Session-Fixation-Erneuerung, lokale-MFA-vs-Föderation |
+| **SCIM 2.0** | `Controller/Api/Scim/ScimUsersTest` | Provisioning nach RFC 7643/7644 (List/Get/Create/Replace/Patch/Delete), Scope `scim:manage` |
+| **Audit-Export** | `Controller/AuditExportEndpointTest` | NDJSON-Export (`/api/v1/audit`), Keyset-Pagination, Filter, Scope `audit:read` |
 
 Zusätzlich Unit-Tests: `BackupPathTest`, `TrustValidityTest`, `TokenScopeTest`,
 `PoDocumentTest`, `ApplicationTest` (Middleware-Reihenfolge).
@@ -64,24 +75,37 @@ Ergänzend zu PHPUnit, im Container ausführbar (`docker compose exec core sh �
 
 ## CI
 
-`.github/workflows/ci.yml` startet einen PostgreSQL-17-Dienst, installiert den
-PG-17-Client (für den Backup-Roundtrip), PHP 8.3 mit `sodium`/`zip` und führt
-`vendor/bin/phpunit` aus.
+> **Stand `.github/workflows/ci.yml`:** Die Workflow-Datei ist noch weitgehend das
+> CakePHP-App-Skeleton-CI. Der `testsuite`-Job läuft gegen **SQLite**
+> (`DATABASE_TEST_URL=sqlite://…`) und deckt damit die **PostgreSQL-abhängige
+> Integrationssuite nicht** ab (RLS, `pg_dump`-Roundtrip, pgvector,
+> Advisory-Locks brauchen echtes PostgreSQL). **Maßgeblich** ist daher der
+> lokale/Docker-Lauf gegen PostgreSQL 17 (siehe „Ausführen"). Der
+> `coding-standard`-Job ist hingegen wirksam: er führt PHPStan und PHPCS aus.
+>
+> Offen (Folgeaufgabe): den `testsuite`-Job auf einen PostgreSQL-17-Service +
+> PG-Client umstellen, damit die Integrationssuite auch in CI greift.
 
-## Statische Analyse & Coverage (CI)
+## Statische Analyse & Coverage
 
-Die CI (`.github/workflows/ci.yml`) führt neben PHPUnit aus:
-
-- **PHPStan Level 8 (blockierend, Baseline-gated):** `vendor/bin/phpstan analyse`.
-  Bestehende Befunde sind in `core/phpstan-baseline.neon` grandfathered (456 zum
-  Einführungszeitpunkt); **neue** Fehler lassen die CI rot werden. Die Baseline
-  ist schrittweise abzubauen — beim Anfassen einer Datei deren Einträge entfernen
-  und die echten Befunde beheben. Baseline neu erzeugen:
+- **PHPStan Level 8 (blockierend, Baseline-gated):** im `coding-standard`-CI-Job
+  und lokal via `vendor/bin/phpstan analyse`. Bestehende
+  Befunde sind in `core/phpstan-baseline.neon` grandfathered; **neue** Fehler
+  lassen den Lauf rot werden. Die Baseline wird schrittweise abgebaut (beim
+  Anfassen einer Datei deren Einträge entfernen und die echten Befunde beheben).
+  Neu erzeugen:
   `php -d memory_limit=2G vendor/bin/phpstan analyse --generate-baseline phpstan-baseline.neon`.
-- **PHPCS (informativ, nicht blockierend):** `vendor/bin/phpcs --report=summary`
-  (CakePHP-Standard; Altbestand fehlender Docblocks, daher vorerst nicht als Gate).
-- **Coverage:** PHPUnit läuft mit `--coverage-text` (pcov) — sichtbar im CI-Log.
-  Noch kein hartes Mindest-Gate; sobald ein Basiswert etabliert ist, kann eine
-  Schwelle ergänzt werden.
+- **PHPCS (informativ, nicht blockierend):** `composer cs-check` (CakePHP-Standard).
+- **Coverage-Ratschet (Gate):** `composer test-coverage` erzeugt einen
+  Clover-Bericht und ruft `php bin/coverage-check.php` auf — der Lauf **schlägt
+  fehl**, wenn die Zeilenabdeckung unter den committeten Schwellwert in
+  `core/coverage-min.txt` fällt. Der Schwellwert wird über die Zeit **nur
+  angehoben** (Ratschet), nie gesenkt. Derzeit lokal/manuell ausgeführt (im CI
+  läuft `phpunit` ohne Coverage).
+- **Mutation-Testing (optional):** `composer mutation` (Infection), eng begrenzt
+  auf die `security`-Testsuite (Krypto/Signaturkette, TOTP/WebAuthn, Lizenz-
+  Statusmaschine, BREAD-Permissions, Auth). Rechenintensiv → kein blockierendes
+  Gate, sondern gezieltes Härtungswerkzeug. Konfiguration in `core/infection.json5`.
 
-Lokal (im `core`-Container): `vendor/bin/phpstan analyse`, `composer cs-check`.
+Lokal (im `core`-Container): `vendor/bin/phpstan analyse`, `composer cs-check`,
+`composer test-coverage`, `composer mutation`.

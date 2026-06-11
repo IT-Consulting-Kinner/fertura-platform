@@ -30,12 +30,17 @@ Authorization: Bearer ftra_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 ## Scopes
 
-| Scope          | Erlaubt                          |
-|----------------|----------------------------------|
-| `me:read`      | `GET /api/v1/me`                 |
-| `health:read`  | `GET /api/v1/health`             |
-| `modules:read` | `GET /api/v1/modules`            |
-| `*`            | alle Scopes (Wildcard)           |
+| Scope          | Erlaubt                                                              |
+|----------------|---------------------------------------------------------------------|
+| `me:read`      | `GET /api/v1/me`, `/api/v1/notifications*`, `GET /api/v1/search`     |
+| `health:read`  | `GET /api/v1/health`                                                 |
+| `modules:read` | `GET /api/v1/modules`                                                |
+| `audit:read`   | `GET /api/v1/audit` (NDJSON-Export für Compliance/SIEM)              |
+| `scim:manage`  | `/api/scim/v2/*` (SCIM-2.0-Provisioning)                            |
+| `*`            | alle Scopes (Wildcard)                                               |
+
+Die in der GUI auswählbaren Scopes stehen in `TokenService::KNOWN_SCOPES`; `*`
+deckt zusätzlich jeden modul-registrierten Endpunkt-Scope (P07) ab.
 
 ## Endpunkte
 
@@ -57,6 +62,28 @@ Authorization: Bearer ftra_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
   "count": 1 }
 ```
 
+### `GET /api/v1/audit` — Scope `audit:read`
+NDJSON-Export des Audit-Logs für externe Compliance-/SIEM-Pulls (keyset-paginiert,
+gestreamt). Filter per Query (`from`, `to`, `action`, `entity_type`, `entity_id`,
+`module_key`, `actor_user_id`, `with_values`). Eine JSON-Zeile je Ereignis.
+
+### `GET /api/v1/search` — Scope `me:read`
+Volltext-/Hybrid-Suche, auf den Token-Inhaber gefiltert (`q`, `mode=fts|hybrid`).
+
+### `GET /api/v1/notifications` · `POST /{id}/read` · `POST /read-all` — Scope `me:read`
+Benachrichtigungen des Token-Inhabers (P09).
+
+### `GET /api/v1/openapi.json`
+Maschinenlesbare OpenAPI-3.1-Beschreibung der v1-API (P07).
+
+### `… /api/v1/m/{moduleKey}[/{path}]` — modul-definierter Scope
+Von Modulen registrierte Endpunkte (P07); der geforderte Scope kommt aus der
+Routen-Registrierung des Moduls.
+
+### SCIM 2.0 — `…/api/scim/v2/Users` · `/ServiceProviderConfig` — Scope `scim:manage`
+Identity-Provisioning nach RFC 7643/7644 (Users-Ressource: List/Get/Create/
+Replace/Patch/Delete, RFC-konforme Filter/Fehlerform), E130.
+
 ## Beispiel
 
 ```bash
@@ -67,7 +94,11 @@ curl -s -H "Authorization: Bearer $TOKEN" https://host/api/v1/me
 
 Neue Endpunkte: Controller unter `src/Controller/Api/V1/` (von `ApiController`
 ableiten, `requireScope()` nutzen, `json()` zurückgeben) + Route in
-`config/routes.php` (Prefix `Api/V1`) + ggf. neuen Scope in
-`TokenService::KNOWN_SCOPES`. Die `ApiAuthMiddleware` deckt alle `/api/`-Pfade ab.
+`config/routes.php` (Prefix `Api/V1`) + **neuen Scope in
+`TokenService::KNOWN_SCOPES` eintragen**, damit er per GUI als Least-Privilege-
+Token vergeben werden kann (sonst nur über `*`). Die `ApiAuthMiddleware` deckt
+alle `/api/`-Pfade ab.
 
-> Hinweis: Rate-Limiting/Quotas sind für v1 nicht enthalten (späterer Ausbau).
+> **Rate-Limiting:** Aktiv über `ApiRateLimitMiddleware` (P07), direkt nach der
+> Token-Auth eingehängt — Begrenzung pro Token (bzw. pro IP ohne Token). Greift
+> nur bei aktivem `FEATURE_API`. Grenzwerte über die Settings konfigurierbar.

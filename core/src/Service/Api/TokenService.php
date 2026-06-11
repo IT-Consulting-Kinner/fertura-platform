@@ -19,8 +19,14 @@ class TokenService
 {
     public const PREFIX = 'ftra_';
 
-    /** Known scopes (for the GUI; the check also accepts `*`). */
-    public const KNOWN_SCOPES = ['me:read', 'health:read', 'modules:read'];
+    /**
+     * Known scopes offered in the GUI when minting a token (the check in
+     * {@see hasScope()} also accepts the `*` wildcard). Must list every scope
+     * that an endpoint actually enforces, otherwise a least-privilege token for
+     * that endpoint could only be granted via `*`. Kept in sync with the
+     * `requireScope()` calls in src/Controller/Api.
+     */
+    public const KNOWN_SCOPES = ['me:read', 'health:read', 'modules:read', 'audit:read', 'scim:manage'];
 
     public function __construct(private ?AuditLogger $audit = null)
     {
