@@ -12,7 +12,10 @@ jobs:
 
     services:
       postgres:
-        image: postgres:17
+        # pgvector-Image (basiert auf postgres:17): die CoreAi-Migration legt
+        # `CREATE EXTENSION vector` an (AI-Embeddings, P11) — reines postgres:17
+        # kennt die Extension nicht und der Test-Bootstrap-Migrator bräche ab.
+        image: pgvector/pgvector:pg17
         env:
           POSTGRES_USER: fertura
           POSTGRES_PASSWORD: fertura

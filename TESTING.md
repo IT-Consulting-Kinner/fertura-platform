@@ -75,33 +75,43 @@ Ergänzend zu PHPUnit, im Container ausführbar (`docker compose exec core sh �
 
 ## CI
 
-> **Stand `.github/workflows/ci.yml`:** Die Workflow-Datei ist noch weitgehend das
-> CakePHP-App-Skeleton-CI. Der `testsuite`-Job läuft gegen **SQLite**
-> (`DATABASE_TEST_URL=sqlite://…`) und deckt damit die **PostgreSQL-abhängige
-> Integrationssuite nicht** ab (RLS, `pg_dump`-Roundtrip, pgvector,
-> Advisory-Locks brauchen echtes PostgreSQL). **Maßgeblich** ist daher der
-> lokale/Docker-Lauf gegen PostgreSQL 17 (siehe „Ausführen"). Der
-> `coding-standard`-Job ist hingegen wirksam: er führt PHPStan und PHPCS aus.
->
-> Offen (Folgeaufgabe): den `testsuite`-Job auf einen PostgreSQL-17-Service +
-> PG-Client umstellen, damit die Integrationssuite auch in CI greift.
+Der **aktive** Workflow ist `.github/workflows/ci.yml` im Repository-Wurzel­
+verzeichnis (Trigger: Push auf `main` + Pull Requests). Er führt die
+**vollständige Suite gegen echtes PostgreSQL** aus:
+
+- **Service-Container:** `pgvector/pgvector:pg17` (die Migrationen legen
+  `CREATE EXTENSION vector` an) als Test-DB `fertura_test` + `redis:7` (für den
+  Redis-Streams-Queue-Test). PHP 8.3 mit `intl/pdo_pgsql/zip/mbstring/ctype/
+  sodium/gd` und `pcov`; zusätzlich wird der **PostgreSQL-17-Client** installiert
+  (für den `pg_dump`-Backup-Roundtrip).
+- **Schritte (alle blockierend außer PHPCS):** `composer install` → `phpunit`
+  mit Coverage → **Coverage-Ratschet** (`bin/coverage-check.php` gegen
+  `coverage-min.txt`) → **PHPStan Level 8** (Baseline-gated) → **`composer audit`
+  `--no-dev`** (SCA der Produktiv-Abhängigkeiten) → **PHPCS** (informativ,
+  `continue-on-error`). Die Test-DB-Schema wird vom Migrator aus
+  `tests/bootstrap.php` gebaut.
+
+> Hinweis: Die Datei `core/.github/workflows/` existiert nicht mehr — das frühere
+> CakePHP-App-Skeleton-CI (SQLite, Branches `5.x`) lag dort tot herum (GitHub
+> liest nur das Wurzel-`.github/`) und wurde entfernt.
 
 ## Statische Analyse & Coverage
 
-- **PHPStan Level 8 (blockierend, Baseline-gated):** im `coding-standard`-CI-Job
-  und lokal via `vendor/bin/phpstan analyse`. Bestehende
-  Befunde sind in `core/phpstan-baseline.neon` grandfathered; **neue** Fehler
-  lassen den Lauf rot werden. Die Baseline wird schrittweise abgebaut (beim
-  Anfassen einer Datei deren Einträge entfernen und die echten Befunde beheben).
-  Neu erzeugen:
+- **PHPStan Level 8 (blockierend, Baseline-gated):** im CI-Lauf und lokal via
+  `vendor/bin/phpstan analyse`. Bestehende Befunde sind in
+  `core/phpstan-baseline.neon` grandfathered; **neue** Fehler lassen den Lauf rot
+  werden. Die Baseline wird schrittweise abgebaut (beim Anfassen einer Datei deren
+  Einträge entfernen und die echten Befunde beheben). Neu erzeugen:
   `php -d memory_limit=2G vendor/bin/phpstan analyse --generate-baseline phpstan-baseline.neon`.
+- **`composer audit --no-dev` (blockierend):** SCA der Produktiv-Abhängigkeiten;
+  bekannte Sicherheitslücken brechen die CI.
 - **PHPCS (informativ, nicht blockierend):** `composer cs-check` (CakePHP-Standard).
 - **Coverage-Ratschet (Gate):** `composer test-coverage` erzeugt einen
   Clover-Bericht und ruft `php bin/coverage-check.php` auf — der Lauf **schlägt
   fehl**, wenn die Zeilenabdeckung unter den committeten Schwellwert in
   `core/coverage-min.txt` fällt. Der Schwellwert wird über die Zeit **nur
-  angehoben** (Ratschet), nie gesenkt. Derzeit lokal/manuell ausgeführt (im CI
-  läuft `phpunit` ohne Coverage).
+  angehoben** (Ratschet), nie gesenkt. Läuft **sowohl im CI** (eigener Schritt
+  nach den Tests) **als auch lokal**.
 - **Mutation-Testing (optional):** `composer mutation` (Infection), eng begrenzt
   auf die `security`-Testsuite (Krypto/Signaturkette, TOTP/WebAuthn, Lizenz-
   Statusmaschine, BREAD-Permissions, Auth). Rechenintensiv → kein blockierendes
