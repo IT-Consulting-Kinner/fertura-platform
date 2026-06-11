@@ -20,7 +20,7 @@ class AuthController extends AppController
     public function initialize(): void
     {
         parent::initialize();
-        $this->Authentication->allowUnauthenticated(['login', 'mfa', 'setPassword', 'forgotPassword']);
+        $this->Authentication->allowUnauthenticated(['login', 'mfa', 'mfaPasskeys', 'setPassword', 'forgotPassword']);
     }
 
     public function beforeFilter(EventInterface $event): void
@@ -130,6 +130,8 @@ class AuthController extends AppController
             return $this->redirect('/login');
         }
 
+        $this->set('hasPasskeys', (new \App\Service\Security\WebAuthnService())->hasCredentials((string)$pending['id']));
+
         if (!$this->request->is('post')) {
             return null;
         }
@@ -142,8 +144,25 @@ class AuthController extends AppController
             return null;
         }
 
-        $code = (string)$this->request->getData('code');
-        if (!(new \App\Service\Security\MfaService())->verify((string)$pending['id'], $code)) {
+        // Zweiter Faktor: Passkey-Assertion (JS-befüllte Felder) ODER TOTP-/Recovery-Code.
+        $verified = false;
+        if ((string)$this->request->getData('credential_id') !== '') {
+            $challenge = (string)($session->read('Mfa.passkey_challenge') ?? '');
+            $session->delete('Mfa.passkey_challenge');
+            $verified = $challenge !== '' && (new \App\Service\Security\WebAuthnService())->verifyAssertion(
+                (string)$pending['id'],
+                (string)$this->request->getData('credential_id'),
+                (string)$this->request->getData('client_data'),
+                (string)$this->request->getData('auth_data'),
+                (string)$this->request->getData('signature'),
+                $challenge,
+                (string)$this->request->getUri()->getHost(),
+            );
+        } else {
+            $code = (string)$this->request->getData('code');
+            $verified = (new \App\Service\Security\MfaService())->verify((string)$pending['id'], $code);
+        }
+        if (!$verified) {
             $throttle->recordFailure($username, $this->request->clientIp() ?: null);
             $this->Flash->error(__('flash.mfa.invalid'));
 
@@ -163,6 +182,30 @@ class AuthController extends AppController
         $this->Authentication->setIdentity($user);
 
         return $this->redirect((string)$pending['target'] ?: '/admin');
+    }
+
+    /**
+     * JSON-Optionen für `navigator.credentials.get()` im Challenge-Schritt
+     * (nur mit gültigem Pending aus dem Passwort-Schritt).
+     */
+    public function mfaPasskeys(): \Cake\Http\Response
+    {
+        $session = $this->request->getSession();
+        /** @var array{id:string,expires:int}|null $pending */
+        $pending = $session->read('Mfa.pending');
+        if (!is_array($pending) || (int)($pending['expires'] ?? 0) < time()) {
+            return $this->response->withStatus(410)->withType('application/json')
+                ->withStringBody((string)json_encode(['error' => 'expired']));
+        }
+        $challenge = \App\Service\Security\WebAuthnService::challenge();
+        $session->write('Mfa.passkey_challenge', $challenge);
+        $options = (new \App\Service\Security\WebAuthnService())->assertionOptions(
+            (string)$pending['id'],
+            (string)$this->request->getUri()->getHost(),
+            $challenge,
+        );
+
+        return $this->response->withType('application/json')->withStringBody((string)json_encode($options));
     }
 
     public function logout()

@@ -5,6 +5,7 @@ namespace App\Controller;
 
 use App\Service\Security\MfaService;
 use App\Service\Security\Totp;
+use App\Service\Security\WebAuthnService;
 
 /**
  * Self-Service-MFA-Verwaltung (TOTP) für den ANGEMELDETEN Benutzer:
@@ -24,6 +25,74 @@ class MfaController extends AppController
         $this->set('enabled', $mfa->enabled($userId));
         $this->set('recoveryLeft', $mfa->recoveryCodesLeft($userId));
         $this->set('required', $mfa->required());
+        $this->set('passkeys', (new WebAuthnService())->credentials($userId));
+    }
+
+    /**
+     * JSON-Optionen für `navigator.credentials.create()` (Passkey-Registrierung).
+     * Voraussetzung: TOTP ist eingerichtet (Recovery-Codes existieren) — der
+     * Passkey ist die bequemere Alternative, nicht der einzige zweite Faktor
+     * (keine Aussperrung bei Geräteverlust).
+     */
+    public function passkeyOptions(): \Cake\Http\Response
+    {
+        if (!(new MfaService())->enabled($this->userId())) {
+            return $this->response->withStatus(409)->withType('application/json')
+                ->withStringBody((string)json_encode(['error' => 'totp_required']));
+        }
+        $service = new WebAuthnService();
+        $challenge = WebAuthnService::challenge();
+        $this->request->getSession()->write('Mfa.passkey_challenge', $challenge);
+        $options = $service->registrationOptions($this->userId(), $this->accountLabel(), $this->rpId(), $challenge);
+
+        return $this->response->withType('application/json')->withStringBody((string)json_encode($options));
+    }
+
+    /** Schließt die Passkey-Registrierung ab (Formular-POST mit JS-befüllten Feldern). */
+    public function passkeyRegister(): ?\Cake\Http\Response
+    {
+        $this->request->allowMethod('post');
+        $session = $this->request->getSession();
+        $challenge = (string)($session->read('Mfa.passkey_challenge') ?? '');
+        $session->delete('Mfa.passkey_challenge');
+        if ($challenge === '' || !(new MfaService())->enabled($this->userId())) {
+            $this->Flash->error(__('flash.mfa.setup_restart'));
+
+            return $this->redirect(['action' => 'index']);
+        }
+        try {
+            (new WebAuthnService())->register(
+                $this->userId(),
+                (string)$this->request->getData('client_data'),
+                (string)$this->request->getData('attestation'),
+                $challenge,
+                $this->rpId(),
+                (string)$this->request->getData('label'),
+            );
+            $this->Flash->success(__('flash.mfa.passkey_added'));
+        } catch (\Throwable) {
+            $this->Flash->error(__('flash.mfa.passkey_failed'));
+        }
+
+        return $this->redirect(['action' => 'index']);
+    }
+
+    public function passkeyDelete(string $id): ?\Cake\Http\Response
+    {
+        $this->request->allowMethod('post');
+        if ((new WebAuthnService())->delete($this->userId(), $id)) {
+            $this->Flash->success(__('flash.mfa.passkey_deleted'));
+        } else {
+            $this->Flash->error(__('flash.mfa.passkey_failed'));
+        }
+
+        return $this->redirect(['action' => 'index']);
+    }
+
+    /** Relying-Party-ID = Request-Host ohne Port (WebAuthn-Origin-Bindung). */
+    private function rpId(): string
+    {
+        return (string)$this->request->getUri()->getHost();
     }
 
     /** Typ-sichere Benutzer-ID der angemeldeten Identität. */

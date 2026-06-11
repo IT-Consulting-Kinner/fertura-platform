@@ -67,6 +67,13 @@ class SettingsCatalog
             // TOTP werden nach dem Login zur Einrichtung gezwungen. SSO-Logins
             // sind unberührt (MFA-Durchsetzung liegt beim IdP).
             'security.mfa.required' => ['type' => 'bool', 'default' => false],
+            // Session-Anomalie-Erkennung (SessionGuardMiddleware): UA-Bindung
+            // (Cookie-Diebstahl in anderem Browser -> Session-Ende), strenger
+            // IP-Wechsel-Modus (Default aus: mobile Netze/NAT wechseln legitim)
+            // und In-App-Hinweis bei Anmeldung von einem neuen Gerät.
+            'security.session.bind_ua' => ['type' => 'bool', 'default' => true],
+            'security.session.ip_strict' => ['type' => 'bool', 'default' => false],
+            'security.session.notify_new_device' => ['type' => 'bool', 'default' => true],
 
             // Daten-Backup (Kap. 20.1.2). Pfad als Container-/Linux- bzw.
             // Windows-Pfad; leer = Standard-Volume. Scheduler läuft im Worker.

@@ -57,8 +57,9 @@ return function (RouteBuilder $routes): void {
         $builder->connect('/logout', ['controller' => 'Auth', 'action' => 'logout']);
         // MFA: zweiter Faktor nach Passwort (Challenge) + Self-Service-Verwaltung.
         $builder->connect('/login/mfa', ['controller' => 'Auth', 'action' => 'mfa']);
+        $builder->connect('/login/mfa/passkeys', ['controller' => 'Auth', 'action' => 'mfaPasskeys']);
         $builder->connect('/mfa', ['controller' => 'Mfa', 'action' => 'index']);
-        $builder->connect('/mfa/{action}', ['controller' => 'Mfa']);
+        $builder->connect('/mfa/{action}/*', ['controller' => 'Mfa']);
         // Passwort vergessen + setzen per Einladungs-/Reset-Token (Kap. 27.2/27.15).
         $builder->connect('/forgot-password', ['controller' => 'Auth', 'action' => 'forgotPassword']);
         $builder->connect('/set-password', ['controller' => 'Auth', 'action' => 'setPassword']);
@@ -116,6 +117,23 @@ return function (RouteBuilder $routes): void {
                         ->setPass(['moduleKey', 'path'])
                         ->setPatterns(['moduleKey' => '[a-z0-9_]+', 'path' => '.*'])
                         ->setMethods(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
+                });
+                // SCIM 2.0 Provisioning (RFC 7644): Users-Ressource, Scope scim:manage.
+                $api->prefix('Scim', function (RouteBuilder $scim): void {
+                    $scim->connect('/v2/ServiceProviderConfig', ['controller' => 'ScimUsers', 'action' => 'serviceProviderConfig'])
+                        ->setMethods(['GET']);
+                    $scim->connect('/v2/Users', ['controller' => 'ScimUsers', 'action' => 'index'])
+                        ->setMethods(['GET']);
+                    $scim->connect('/v2/Users', ['controller' => 'ScimUsers', 'action' => 'add'])
+                        ->setMethods(['POST']);
+                    $scim->connect('/v2/Users/{id}', ['controller' => 'ScimUsers', 'action' => 'view'])
+                        ->setPass(['id'])->setMethods(['GET']);
+                    $scim->connect('/v2/Users/{id}', ['controller' => 'ScimUsers', 'action' => 'replace'])
+                        ->setPass(['id'])->setMethods(['PUT']);
+                    $scim->connect('/v2/Users/{id}', ['controller' => 'ScimUsers', 'action' => 'patch'])
+                        ->setPass(['id'])->setMethods(['PATCH']);
+                    $scim->connect('/v2/Users/{id}', ['controller' => 'ScimUsers', 'action' => 'delete'])
+                        ->setPass(['id'])->setMethods(['DELETE']);
                 });
             });
         }

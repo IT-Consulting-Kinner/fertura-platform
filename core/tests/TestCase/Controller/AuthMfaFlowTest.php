@@ -148,6 +148,58 @@ class AuthMfaFlowTest extends TestCase
         $this->assertArrayHasKey('Auth', $_SESSION);
     }
 
+    public function testPasskeyAssertionCompletesLogin(): void
+    {
+        // Passkey direkt über den Service registrieren (echtes EC-P-256-Paar).
+        $key = openssl_pkey_new(['curve_name' => 'prime256v1', 'private_key_type' => OPENSSL_KEYTYPE_EC]);
+        assert($key !== false);
+        $credentialId = random_bytes(16);
+        $rpId = 'localhost'; // Host der Test-Requests
+        $details = openssl_pkey_get_details($key);
+        $coseKey = \App\Service\Security\Cbor::encode([
+            1 => 2, 3 => -7, -1 => 1, -2 => $details['ec']['x'], -3 => $details['ec']['y'],
+        ]);
+        $regChallenge = \App\Service\Security\WebAuthnService::challenge();
+        $authData = hash('sha256', $rpId, true) . chr(0x41) . pack('N', 0)
+            . str_repeat("\x00", 16) . pack('n', strlen($credentialId)) . $credentialId . $coseKey;
+        (new \App\Service\Security\WebAuthnService())->register(
+            $this->userId,
+            \App\Service\Security\WebAuthnService::b64uEncode((string)json_encode(
+                ['type' => 'webauthn.create', 'challenge' => $regChallenge, 'origin' => 'http://' . $rpId],
+            )),
+            \App\Service\Security\WebAuthnService::b64uEncode(\App\Service\Security\Cbor::encode(
+                ['fmt' => 'none', 'attStmt' => [], 'authData' => $authData],
+            )),
+            $regChallenge,
+            $rpId,
+        );
+
+        // Passwort-Schritt -> Challenge-Optionen holen (Challenge landet in der Session).
+        $this->postLogin();
+        $this->carrySession(['Mfa']);
+        $this->get('/login/mfa/passkeys');
+        $this->assertResponseOk();
+        $options = (array)json_decode((string)$this->_response->getBody(), true);
+        $this->assertNotEmpty($options['allowCredentials']);
+        $challenge = (string)$options['challenge'];
+
+        // Assertion clientseitig "signieren" und als Formular-POST einreichen.
+        $clientData = (string)json_encode(['type' => 'webauthn.get', 'challenge' => $challenge, 'origin' => 'http://' . $rpId]);
+        $assertAuthData = hash('sha256', $rpId, true) . chr(0x01) . pack('N', 7);
+        openssl_sign($assertAuthData . hash('sha256', $clientData, true), $signature, $key, OPENSSL_ALGO_SHA256);
+
+        $this->carrySession(['Mfa']); // pending + passkey_challenge übernehmen
+        $this->post('/login/mfa', [
+            'credential_id' => \App\Service\Security\WebAuthnService::b64uEncode($credentialId),
+            'client_data' => \App\Service\Security\WebAuthnService::b64uEncode($clientData),
+            'auth_data' => \App\Service\Security\WebAuthnService::b64uEncode($assertAuthData),
+            'signature' => \App\Service\Security\WebAuthnService::b64uEncode($signature),
+        ]);
+
+        $this->assertRedirect('/admin');
+        $this->assertArrayHasKey('Auth', $_SESSION); // Anmeldung abgeschlossen
+    }
+
     public function testChallengeWithoutPendingRedirectsToLogin(): void
     {
         $this->enableCsrfToken();

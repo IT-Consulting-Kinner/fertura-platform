@@ -170,6 +170,10 @@ class Application extends BaseApplication implements AuthenticationServiceProvid
             // Erzwingt selbst keinen Login; Controller/Adminbereich entscheiden.
             ->add(new AuthenticationMiddleware($this))
 
+            // Session-Anomalie-Erkennung (UA-Bindung, IP-Wechsel, neues Gerät) —
+            // direkt nach der Authentifizierung (braucht die Identity).
+            ->add(new \App\Middleware\SessionGuardMiddleware())
+
             // Externe API: Bearer-Token-Authentifizierung (nur /api/-Pfade);
             // setzt Identitaet + Scopes, sonst JSON 401. Nach der Session-Auth,
             // damit die Token-Identitaet fuer API-Requests Vorrang hat. Nur
