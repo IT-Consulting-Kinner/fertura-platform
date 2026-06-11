@@ -6,14 +6,13 @@ namespace App\Service\Registry;
 use InvalidArgumentException;
 
 /**
- * Versions-Anforderung gemäß Kap. 26.6.4: entweder eine **exakte** Version
- * (`2.3.1`) oder ein **expliziter Bereich** mit Vergleichsoperatoren
- * (`>=2.1.0 <3.0.0`). Caret/Tilde-Kurzformen sind unzulässig.
+ * Version requirement per ch. 26.6.4: either an **exact** version (`2.3.1`) or an
+ * **explicit range** with comparison operators (`>=2.1.0 <3.0.0`). Caret/tilde
+ * shorthands are not permitted.
  *
- * Kompatibilitätsregel: Eine exakte Anforderung A.B.C ist mit einem Angebot
- * X.Y.Z kompatibel, wenn gleiche Major-Version (X = A) UND das Angebot
- * mindestens so neu ist (>= A.B.C). Das wird als Bereich [>=A.B.C, <(A+1).0.0]
- * abgebildet.
+ * Compatibility rule: an exact requirement A.B.C is compatible with an offer
+ * X.Y.Z when the major version matches (X = A) AND the offer is at least as new
+ * (>= A.B.C). This is expressed as the range [>=A.B.C, <(A+1).0.0].
  */
 final class VersionConstraint
 {
@@ -40,7 +39,7 @@ final class VersionConstraint
             );
         }
 
-        // Exakte Version -> [>=A.B.C, <(A+1).0.0].
+        // Exact version -> [>=A.B.C, <(A+1).0.0].
         if (preg_match('/^\d+\.\d+\.\d+$/', $spec)) {
             $v = SemVer::parse($spec);
 
@@ -50,7 +49,7 @@ final class VersionConstraint
             ]);
         }
 
-        // Bereich: leerzeichengetrennte Vergleiche, z. B. ">=2.1.0 <3.0.0".
+        // Range: whitespace-separated comparisons, e.g. ">=2.1.0 <3.0.0".
         $clauses = [];
         foreach (preg_split('/\s+/', $spec) as $part) {
             if (!preg_match('/^(>=|<=|>|<|=)(\d+\.\d+\.\d+)$/', $part, $m)) {

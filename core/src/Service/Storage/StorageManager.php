@@ -11,13 +11,13 @@ use League\Flysystem\Local\LocalFilesystemAdapter;
 use Throwable;
 
 /**
- * Einheitliche Objekt-Storage-Abstraktion des Core (Programm Tier-2, P03).
+ * The core's uniform object-storage abstraction (program Tier-2, P03).
  *
- * Kapselt Flysystem hinter einer schmalen Core-API, sodass Backups (P14),
- * Exporte (P13), Modul-Anhänge u. a. unabhängig vom konkreten Ablageort sind:
- * **lokal** (Default) oder **S3-kompatibel** (AWS, MinIO, …). Treiber/Wurzel über
- * `core.storage.driver`/`core.storage.path`; S3-Zugangsdaten **out-of-band** über
- * Env (`STORAGE_S3_*`), nie in der DB.
+ * Wraps Flysystem behind a thin core API so that backups (P14), exports (P13),
+ * module attachments, etc. are independent of the concrete storage location:
+ * **local** (default) or **S3-compatible** (AWS, MinIO, …). Driver/root via
+ * `core.storage.driver`/`core.storage.path`; S3 credentials **out-of-band** via
+ * env (`STORAGE_S3_*`), never in the DB.
  */
 class StorageManager
 {
@@ -85,7 +85,7 @@ class StorageManager
     }
 
     /**
-     * Listet Pfade (Dateien) unter `$path` auf.
+     * Lists paths (files) under `$path`.
      *
      * @return list<string>
      */
@@ -104,7 +104,7 @@ class StorageManager
     }
 
     /**
-     * Übersetzt Flysystem-Fehler in {@see StorageException}.
+     * Translates Flysystem errors into {@see StorageException}.
      *
      * @template T
      * @param callable():T $op
@@ -146,7 +146,7 @@ class StorageManager
             'endpoint' => getenv('STORAGE_S3_ENDPOINT') ?: null,
             'accessKeyId' => getenv('STORAGE_S3_KEY') ?: null,
             'accessKeySecret' => getenv('STORAGE_S3_SECRET') ?: null,
-            // Für S3-kompatible Dienste (MinIO etc.) Path-Style erzwingen.
+            // Force path-style for S3-compatible services (MinIO etc.).
             'pathStyleEndpoint' => (bool)(getenv('STORAGE_S3_PATH_STYLE') ?: false),
         ], static fn ($v) => $v !== null);
 

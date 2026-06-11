@@ -7,9 +7,9 @@ use App\Service\Settings\SettingsManager;
 use Throwable;
 
 /**
- * Factory für den konfigurierten {@see QueueTransportInterface} (#10). Treiber aus
- * Setting `queue.transport` (`db`|`redis`; Default `db`). Der DB-Treiber braucht
- * keine externe Infrastruktur; `redis` aktiviert den Redis-Streams-Broker.
+ * Factory for the configured {@see QueueTransportInterface} (#10). Driver from the
+ * setting `queue.transport` (`db`|`redis`; default `db`). The DB driver needs no
+ * external infrastructure; `redis` enables the Redis Streams broker.
  */
 final class QueueTransport
 {

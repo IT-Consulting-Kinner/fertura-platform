@@ -7,12 +7,12 @@ use Cake\Core\Configure;
 use RuntimeException;
 
 /**
- * Authentifizierte Verschlüsselung für geheime Settings (AES-256-GCM,
- * Entscheidung 159). Der Schlüssel stammt aus der Infrastruktur-Konfiguration
- * (config/app.php -> Security.encryptionKey, gespeist aus env), NICHT aus der DB
- * -> ein DB-Leak allein gibt die Geheimnisse nicht preis.
+ * Authenticated encryption for secret settings (AES-256-GCM, Decision 159). The
+ * key comes from the infrastructure configuration (config/app.php ->
+ * Security.encryptionKey, sourced from env), NOT from the DB -> a DB leak alone
+ * does not expose the secrets.
  *
- * Format der Ablage: base64( iv[12] || tag[16] || ciphertext ).
+ * Storage format: base64( iv[12] || tag[16] || ciphertext ).
  */
 class SecretCipher
 {
@@ -30,7 +30,7 @@ class SecretCipher
         if (empty($material)) {
             throw new RuntimeException('Kein Verschlüsselungsschlüssel konfiguriert (Security.encryptionKey).');
         }
-        // Auf 32 Byte normalisieren (AES-256).
+        // Normalize to 32 bytes (AES-256).
         $this->key = hash('sha256', (string)$material, true);
     }
 

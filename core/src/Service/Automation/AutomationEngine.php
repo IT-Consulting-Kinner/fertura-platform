@@ -10,12 +10,12 @@ use Cake\Datasource\ConnectionManager;
 use Throwable;
 
 /**
- * Automations-Engine (Programm Tier-2, P12): wertet beim Event-Dispatch
- * passende, aktive Regeln aus (Event-Muster → Bedingung → Aktionen).
+ * Automation engine (program tier-2, P12): on event dispatch, evaluates the
+ * matching, active rules (event pattern → condition → actions).
  *
- * Aktionen: `notify` (Benachrichtigung an einen Benutzer) und `event`
- * (weiteres Outbox-Event publizieren → löst Listener/Webhooks aus). Fehler sind
- * isoliert (eine fehlerhafte Regel stoppt die anderen nicht).
+ * Actions: `notify` (notification to a user) and `event` (publish a further
+ * outbox event → triggers listeners/webhooks). Failures are isolated (a faulty
+ * rule does not stop the others).
  */
 class AutomationEngine
 {
@@ -35,8 +35,8 @@ class AutomationEngine
     }
 
     /**
-     * Wertet alle passenden, aktiven Regeln für ein Event aus und führt deren
-     * Aktionen aus. Gibt die Anzahl ausgelöster Regeln zurück.
+     * Evaluates all matching, active rules for an event and runs their actions.
+     * Returns the number of fired rules.
      *
      * @param array<string,mixed> $payload
      */
@@ -60,21 +60,21 @@ class AutomationEngine
                 ($this->executor ??= new ActionExecutor($this->notifications, $this->outbox))->run($actions, $payload);
                 $fired++;
             } catch (Throwable) {
-                // Regelfehler isolieren.
+                // Isolate rule failures.
             }
         }
 
         return $fired;
     }
 
-    /** Event-Muster: exakt, `*` (alle) oder `prefix.*`. */
+    /** Event pattern: exact, `*` (all) or `prefix.*`. */
     private function matches(string $pattern, string $event): bool
     {
         if ($pattern === '*' || $pattern === $event) {
             return true;
         }
         if (str_ends_with($pattern, '.*')) {
-            return str_starts_with($event, substr($pattern, 0, -1)); // "core." Prefix inkl. Punkt
+            return str_starts_with($event, substr($pattern, 0, -1)); // "core." prefix incl. the dot
         }
 
         return false;

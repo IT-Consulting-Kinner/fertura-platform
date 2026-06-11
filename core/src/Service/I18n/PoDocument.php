@@ -4,12 +4,12 @@ declare(strict_types=1);
 namespace App\Service\I18n;
 
 /**
- * Verlustfreies PO-Dokument-Modell für den Feld-Editor (i18n-6, E41).
+ * Lossless PO document model for the field editor (i18n-6, E41).
  *
- * Bewahrt Kommentare (`#`, `#.`, `#:`, `#|`, `#~`), `msgctxt`, `msgid`,
- * `msgid_plural` und die `msgstr`/`msgstr[n]`-Werte je Eintrag. Editiert wird
- * im Editor nur die Übersetzung (`msgstr`); Struktur/Schlüssel bleiben erhalten
- * und werden beim Serialisieren unverändert zurückgeschrieben.
+ * Preserves comments (`#`, `#.`, `#:`, `#|`, `#~`), `msgctxt`, `msgid`,
+ * `msgid_plural` and the `msgstr`/`msgstr[n]` values per entry. The editor only
+ * edits the translation (`msgstr`); structure/keys are kept and written back
+ * unchanged when serializing.
  */
 class PoDocument
 {
@@ -50,7 +50,7 @@ class PoDocument
         foreach ($lines as $raw) {
             $line = trim($raw);
             if ($line === '') {
-                // Leerzeile trennt Einträge (Kommentare ohne Eintrag werden verworfen).
+                // Blank line separates entries (comments without an entry are discarded).
                 if ($have) {
                     $flush();
                 }
@@ -59,7 +59,7 @@ class PoDocument
             }
             if ($line[0] === '#') {
                 if ($have && $msgid !== null) {
-                    // Kommentar nach abgeschlossenem Eintrag → neuer Eintrag.
+                    // Comment after a completed entry → new entry.
                     $flush();
                 }
                 $comments[] = $raw;
@@ -78,8 +78,8 @@ class PoDocument
                 continue;
             }
             if (str_starts_with($line, 'msgid ')) {
-                // Neuer msgid = Eintragsgrenze, auch ohne trennende Leerzeile
-                // (msgctxt davor gehört noch zum selben Eintrag → msgid noch null).
+                // A new msgid = entry boundary, even without a separating blank
+                // line (a preceding msgctxt still belongs to the same entry → msgid still null).
                 if ($have && $msgid !== null) {
                     $flush();
                 }
@@ -100,7 +100,7 @@ class PoDocument
                 continue;
             }
             if ($line[0] === '"') {
-                // Fortsetzungszeile zum aktuellen Feld.
+                // Continuation line for the current field.
                 $val = self::decode($line);
                 if ($state === 'ctxt') {
                     $msgctxt = (string)$msgctxt . $val;
@@ -146,7 +146,7 @@ class PoDocument
     }
 
     /**
-     * Editierbare Einträge (ohne den PO-Header = leere msgid).
+     * Editable entries (excluding the PO header = empty msgid).
      *
      * @return list<array{index:int,ctx:?string,id:string,plural:?string,msgstr:list<string>,comments:list<string>}>
      */
@@ -155,7 +155,7 @@ class PoDocument
         $out = [];
         foreach ($this->entries as $i => $e) {
             if ($e['msgid'] === '') {
-                continue; // Header
+                continue; // header
             }
             $out[] = [
                 'index' => $i,
@@ -170,7 +170,7 @@ class PoDocument
         return $out;
     }
 
-    /** Setzt die msgstr-Werte eines Eintrags (per Index). */
+    /** Sets the msgstr values of an entry (by index). */
     public function setMsgstr(int $index, array $values): void
     {
         if (!isset($this->entries[$index])) {

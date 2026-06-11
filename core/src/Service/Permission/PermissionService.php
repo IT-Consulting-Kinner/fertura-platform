@@ -7,10 +7,10 @@ use App\Audit\AuditLogger;
 use Cake\Datasource\ConnectionManager;
 
 /**
- * BREAD-Rechteprüfung (Kap. 25 / 27.16). Additive Aggregation über die aktiven
- * Gruppen eines aktiven Benutzers **plus explizite Deny-Regeln**: ein Deny auf
- * einer der Gruppen überschreibt jede Erlaubnis (deny-wins). Immer serverseitig;
- * gleich für GUI/API/CLI.
+ * BREAD permission check (ch. 25 / 27.16). Additive aggregation across the active
+ * groups of an active user **plus explicit deny rules**: a deny on any of the
+ * groups overrides every allow (deny-wins). Always server-side; identical for
+ * GUI/API/CLI.
  */
 class PermissionService
 {
@@ -43,7 +43,7 @@ class PermissionService
     }
 
     /**
-     * Aktive Gruppen-IDs eines AKTIVEN Benutzers (für Aggregation + RLS-Kontext).
+     * Active group IDs of an ACTIVE user (for aggregation + RLS context).
      *
      * @return list<string>
      */
@@ -67,8 +67,8 @@ class PermissionService
     }
 
     /**
-     * Darf der Benutzer die BREAD-Aktion oder Zusatzaktion auf der Ressource?
-     * resourceKey = null prüft die Objektklasse; gesetzt prüft Klasse UND Objekt.
+     * May the user perform the BREAD action or extra action on the resource?
+     * resourceKey = null checks the object class; if set, checks class AND object.
      */
     public function canPerform(
         string $userId,
@@ -101,7 +101,7 @@ class PermissionService
         $allowed = false;
         foreach ($rows as $row) {
             if (isset(self::BREAD[$action])) {
-                // Deny-wins: ein explizites Verbot überschreibt jede Erlaubnis.
+                // Deny-wins: an explicit deny overrides every allow.
                 if ($this->truthy($row[self::DENY[$action]] ?? false)) {
                     return false;
                 }
@@ -124,7 +124,7 @@ class PermissionService
     }
 
     /**
-     * Effektive Rechte (Vereinigung) eines Benutzers auf eine Ressource.
+     * Effective permissions (union) of a user on a resource.
      *
      * @return array{bread: array<string,bool>, extra_actions: array<string,bool>}
      */
@@ -144,7 +144,7 @@ class PermissionService
     }
 
     /**
-     * Vergibt/aktualisiert Rechte einer Gruppe auf eine Ressource (additiv).
+     * Grants/updates a group's permissions on a resource (additive).
      *
      * @param array<string,bool> $bread
      * @param array<string,bool> $extraActions
@@ -181,11 +181,11 @@ class PermissionService
     }
 
     /**
-     * Setzt **Deny-Regeln** einer Gruppe auf eine Ressource (deny-wins). Aktualisiert
-     * nur die Deny-Spalten — bestehende Allow-Rechte derselben Zeile bleiben erhalten.
+     * Sets a group's **deny rules** on a resource (deny-wins). Updates only the
+     * deny columns — existing allow permissions on the same row are preserved.
      *
-     * @param array<string,bool> $bread Deny je BREAD-Aktion
-     * @param array<string,bool> $extraActions Deny je Zusatzaktion
+     * @param array<string,bool> $bread deny per BREAD action
+     * @param array<string,bool> $extraActions deny per extra action
      */
     public function deny(
         string $groupId,

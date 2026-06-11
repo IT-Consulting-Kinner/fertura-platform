@@ -8,11 +8,11 @@ use App\Infrastructure\Uuid;
 use Cake\Datasource\ConnectionManager;
 
 /**
- * Dead-Letter-Verwaltung für die Admin-GUI (Kap. 26.9.2).
+ * Dead-letter management for the admin GUI (ch. 26.9.2).
  *
- * Listet fehlgeschlagene Events (`dead_letter`) und erlaubt manuelles
- * Wiedereinstellen (Retry → `pending`, Zähler/Lock/Fehler zurückgesetzt) oder
- * Verwerfen (`discarded`). Beide Aktionen werden auditiert.
+ * Lists failed events (`dead_letter`) and allows manual requeuing
+ * (retry → `pending`, with counter/lock/error reset) or discarding
+ * (`discarded`). Both actions are audited.
  */
 class OutboxAdmin
 {
@@ -26,7 +26,7 @@ class OutboxAdmin
         return ConnectionManager::get('default');
     }
 
-    /** @return array<string,int> Zähler je Status. */
+    /** @return array<string,int> Counts per status. */
     public function counts(): array
     {
         $rows = $this->conn()->execute(
@@ -41,7 +41,7 @@ class OutboxAdmin
     }
 
     /**
-     * Dead-Letter-Events (neueste zuerst).
+     * Dead-letter events (newest first).
      *
      * @return list<array<string,mixed>>
      */
@@ -54,11 +54,11 @@ class OutboxAdmin
         )->fetchAll('assoc');
     }
 
-    /** Stellt ein Dead-Letter-Event wieder ein (Retry). */
+    /** Requeues a dead-letter event (retry). */
     public function retry(string $id): bool
     {
-        // UUID-Guard: die ID kommt aus der URL; fehlgeformte Werte wie
-        // unbekannte behandeln statt 22P02 -> 500 (vgl. \App\Infrastructure\Uuid).
+        // UUID guard: the ID comes from the URL; treat malformed values as
+        // unknown instead of 22P02 -> 500 (cf. \App\Infrastructure\Uuid).
         if (!Uuid::isValid($id)) {
             return false;
         }
@@ -74,7 +74,7 @@ class OutboxAdmin
         return $n > 0;
     }
 
-    /** Verwirft ein Dead-Letter-Event endgültig (discarded). */
+    /** Discards a dead-letter event permanently (discarded). */
     public function discard(string $id): bool
     {
         if (!Uuid::isValid($id)) {
@@ -92,7 +92,7 @@ class OutboxAdmin
         return $n > 0;
     }
 
-    /** Stellt alle Dead-Letter-Events wieder ein. Gibt die Anzahl zurück. */
+    /** Requeues all dead-letter events. Returns the count. */
     public function retryAll(): int
     {
         $n = $this->conn()->execute(

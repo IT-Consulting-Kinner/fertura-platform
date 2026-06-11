@@ -6,24 +6,24 @@ namespace App\Service\System;
 use function Cake\Core\env;
 
 /**
- * Deployment-Feature-Flags (Kap. 23.3 — schlanker Core je Installation).
+ * Deployment feature flags (ch. 23.3 — a lean core per installation).
  *
- * Optionale Subsysteme lassen sich **pro Deployment** über Umgebungsvariablen
- * `FEATURE_<NAME>` abschalten, sodass je Installation nur das Nötige läuft
- * (kleinere Angriffs-/Wartungsfläche). Bewusst **env-basiert** (nicht als
- * DB-Setting): ein harter Betreiber-Schalter, der nicht über eine kompromittierte
- * Admin-Sitzung wieder aktiviert werden kann. Standard: alle aktiv (kompatibel).
+ * Optional subsystems can be turned off **per deployment** via the environment
+ * variables `FEATURE_<NAME>`, so each installation runs only what it needs
+ * (smaller attack/maintenance surface). Deliberately **env-based** (not a DB
+ * setting): a hard operator switch that cannot be re-enabled through a
+ * compromised admin session. Default: all active (backward-compatible).
  *
- * Werte: alles außer `false`/`0`/`off`/`no`/`disabled` (case-insensitiv) gilt als
- * aktiv; ist die Variable nicht gesetzt, greift der Default.
+ * Values: anything other than `false`/`0`/`off`/`no`/`disabled` (case-insensitive)
+ * counts as active; if the variable is unset, the default applies.
  */
 final class FeatureFlags
 {
-    /** Bekannte Flags und ihr Default (true = aktiv). */
+    /** Known flags and their default (true = active). */
     public const DEFAULTS = [
-        'api' => true,              // Externe API v1 (/api/v1, Bearer-Token)
-        'marketplace' => true,      // Marketplace-Client/-Sync (ausgehende Aufrufe)
-        'backup_scheduler' => true, // Automatische (geplante) Backups
+        'api' => true,              // External API v1 (/api/v1, bearer token)
+        'marketplace' => true,      // Marketplace client/sync (outbound calls)
+        'backup_scheduler' => true, // Automatic (scheduled) backups
     ];
 
     public static function enabled(string $feature): bool

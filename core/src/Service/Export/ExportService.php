@@ -11,9 +11,9 @@ use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 /**
- * Reporting-/Export-Primitiv (Programm Tier-2, P13): erzeugt tabellarische
- * Reports als **CSV/XLSX/PDF** und legt sie optional über den Objekt-Storage
- * (P03, lokal/S3) ab. Modulen als gemeinsame Export-Funktion verfügbar.
+ * Reporting/export primitive (program tier-2, P13): produces tabular reports as
+ * **CSV/XLSX/PDF** and optionally stores them via object storage (P03,
+ * local/S3). Available to modules as a shared export function.
  */
 class ExportService
 {
@@ -40,14 +40,14 @@ class ExportService
     }
 
     /**
-     * Neutralisiert Formel-Injection (CSV/XLSX): ein Wert, der mit `=`,`+`,`-`,`@`
-     * beginnt, wird von Tabellen-Programmen als Formel ausgewertet (Datenexfiltration/
-     * DDE). Voranstellen eines `'` entwertet die Formel.
+     * Neutralizes formula injection (CSV/XLSX): a value starting with `=`,`+`,`-`,`@`
+     * is evaluated as a formula by spreadsheet programs (data exfiltration/DDE).
+     * Prepending a `'` defuses the formula.
      *
-     * WICHTIG: Tabellenprogramme **trimmen führenden Whitespace/Zeilenumbruch**, bevor
-     * sie die Zelle parsen — daher zählt ein Auslöser auch NACH führenden Leerzeichen/
-     * Tabs/CR/LF (z. B. `" =cmd"`, `"\n=1+1"`). Führender Whitespace selbst kann eine
-     * Formel maskieren und wird ebenfalls entwertet.
+     * IMPORTANT: spreadsheet programs **trim leading whitespace/newlines** before
+     * parsing a cell — so a trigger counts even AFTER leading spaces/tabs/CR/LF
+     * (e.g. `" =cmd"`, `"\n=1+1"`). Leading whitespace itself can mask a formula
+     * and is likewise defused.
      */
     public function antiFormula(mixed $value): string
     {
@@ -56,8 +56,8 @@ class ExportService
             return $s;
         }
         $first = $s[0];
-        // Erstes Nicht-Whitespace-Zeichen (Tabellenprogramme ignorieren führenden
-        // Whitespace beim Formel-Parsing).
+        // First non-whitespace character (spreadsheet programs ignore leading
+        // whitespace when parsing formulas).
         $trimmed = ltrim($s, " \t\r\n");
         $lead = $trimmed === '' ? '' : $trimmed[0];
         if (
@@ -124,8 +124,8 @@ class ExportService
     }
 
     /**
-     * Erzeugt den Report und legt ihn im Objekt-Storage unter `reports/…` ab.
-     * Gibt den Storage-Pfad zurück.
+     * Generates the report and stores it in object storage under `reports/…`.
+     * Returns the storage path.
      *
      * @param list<string> $columns
      * @param list<array<int|string,mixed>> $rows

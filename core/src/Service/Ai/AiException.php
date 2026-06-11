@@ -5,7 +5,7 @@ namespace App\Service\Ai;
 
 use RuntimeException;
 
-/** Fehler im AI-Gateway (P11): nicht konfiguriert, Provider-Fehler, nicht unterstützt. */
+/** Error in the AI gateway (P11): not configured, provider failure, or unsupported. */
 class AiException extends RuntimeException
 {
 }

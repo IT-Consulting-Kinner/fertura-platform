@@ -9,15 +9,15 @@ use Cake\Datasource\ConnectionManager;
 use RuntimeException;
 
 /**
- * Orchestriert die Sprachverwaltungs-GUI (i18n-6, E41/E42).
+ * Orchestrates the language-management GUI (i18n-6, E41/E42).
  *
- * Operiert auf den **Store**-Packs (Module + nachgeladene Core-/Extension-
- * Sprachen). Die mitgelieferten Core-Kataloge (resources/locales) werden in der
- * Übersicht read-only ausgewiesen (E43), aber nicht über den Editor verändert.
+ * Operates on the **store** packs (modules + dynamically loaded core/extension
+ * languages). The shipped core catalogs (resources/locales) are shown read-only
+ * in the overview (E43) but are not modified via the editor.
  *
- * Import per GUI = unsignierter `.po`-Upload (E42): `source=upload`,
- * `signed=false`, `reviewed=false` bis zum Review. Editieren setzt
- * `edited=true` und `reviewed=true` (Admin-Edit = Review, E38).
+ * Import via GUI = unsigned `.po` upload (E42): `source=upload`,
+ * `signed=false`, `reviewed=false` until review. Editing sets `edited=true`
+ * and `reviewed=true` (admin edit = review, E38).
  */
 class LanguagePackAdmin
 {
@@ -31,7 +31,7 @@ class LanguagePackAdmin
         $this->audit ??= new AuditLogger();
     }
 
-    /** Audit-Eintrag für eine Sprachpaket-Aktion (i18n-8). */
+    /** Audit entry for a language-pack action (i18n-8). */
     private function audit(string $action, string $componentKey, string $version, string $locale, mixed $detail = null): void
     {
         try {
@@ -43,7 +43,7 @@ class LanguagePackAdmin
                 'newValue' => $detail,
             ]);
         } catch (\Throwable) {
-            // Audit darf die Fachaktion nicht scheitern lassen.
+            // Auditing must not cause the business action to fail.
         }
     }
 
@@ -53,8 +53,8 @@ class LanguagePackAdmin
     }
 
     /**
-     * Übersicht: aktive/inaktive Komponenten mit gruppierten Store-Packs +
-     * berechnetem Versions-Status. Core zusätzlich mit mitgelieferten Locales.
+     * Overview: active/inactive components with grouped store packs + computed
+     * version status. Core additionally with its shipped locales.
      *
      * @return list<array<string,mixed>>
      */
@@ -111,7 +111,7 @@ class LanguagePackAdmin
             return [true, Application::CORE_VERSION, 'Core'];
         }
         if ($r['module_status'] === null) {
-            // Komponente entfernt, Dateien verblieben (E41): inaktiv.
+            // Component removed, files remained (E41): inactive.
             return [false, (string)$r['version'], $key];
         }
 
@@ -131,7 +131,7 @@ class LanguagePackAdmin
         return explode('.', $packVersion)[0] === explode('.', $activeVersion)[0] ? 'notice' : 'error';
     }
 
-    /** Englisch darf bei aktiver Komponente nicht gelöscht werden (E41). */
+    /** English must not be deleted while the component is active (E41). */
     public function mayDelete(bool $componentActive, string $locale): bool
     {
         if (!$componentActive) {
@@ -174,7 +174,7 @@ class LanguagePackAdmin
     }
 
     /**
-     * Editierbare Einträge eines Packs.
+     * Editable entries of a pack.
      *
      * @return list<array{index:int,ctx:?string,id:string,plural:?string,msgstr:list<string>,comments:list<string>}>
      */
@@ -189,8 +189,8 @@ class LanguagePackAdmin
     }
 
     /**
-     * Speichert geänderte Übersetzungen (msgstr je Eintrags-Index) verlustfrei.
-     * Setzt edited=true, reviewed=true (Admin-Edit = Review, E38).
+     * Saves changed translations (msgstr per entry index) losslessly.
+     * Sets edited=true, reviewed=true (admin edit = review, E38).
      *
      * @param array<int, list<string>> $msgstrByIndex
      */
@@ -220,7 +220,7 @@ class LanguagePackAdmin
         $this->audit('lang.edit', $componentKey, $version, $locale, ['changed' => count($msgstrByIndex)]);
     }
 
-    /** Setzt reviewed=true ohne inhaltliche Änderung. */
+    /** Sets reviewed=true without any content change. */
     public function review(string $componentKey, string $version, string $locale, string $domain): void
     {
         $meta = $this->meta($componentKey, $version, $locale);
@@ -235,8 +235,8 @@ class LanguagePackAdmin
     }
 
     /**
-     * Löscht ein Pack unter Beachtung der Regeln (E41): aktive Komponente darf
-     * Englisch nicht löschen; inaktive darf alles (inkl. Englisch).
+     * Deletes a pack subject to the rules (E41): an active component must not
+     * delete English; an inactive one may delete anything (incl. English).
      */
     public function deletePack(string $componentKey, string $version, string $locale, string $domain): void
     {
@@ -262,8 +262,8 @@ class LanguagePackAdmin
     }
 
     /**
-     * Bereitet einen GUI-Import vor: parst die hochgeladene `.po` und meldet
-     * Eintragszahl + Warnung, falls ein vorhandenes Ziel bereits editiert wurde.
+     * Prepares a GUI import: parses the uploaded `.po` and reports the entry
+     * count + a warning if an existing target has already been edited.
      *
      * @return array{ok:bool,error:?string,count:int,exists:bool,existing_edited:bool,sample:list<string>}
      */
@@ -288,7 +288,7 @@ class LanguagePackAdmin
     }
 
     /**
-     * Führt den Import aus: speichert als unsigniertes Upload-Pack
+     * Performs the import: saves as an unsigned upload pack
      * (signed=false, reviewed=false, edited=false, source=upload).
      */
     public function importCommit(string $tmpPath, string $componentType, string $componentKey, string $version, string $locale, string $domain, ?string $actorId): void
@@ -297,7 +297,7 @@ class LanguagePackAdmin
         if (trim($content) === '' || !str_contains($content, 'msgid')) {
             throw new RuntimeException('Keine gültige PO-Datei.');
         }
-        // Re-Serialisieren normalisiert + validiert die Struktur.
+        // Re-serializing normalizes + validates the structure.
         $normalized = PoDocument::parse($content)->serialize();
         $this->store->save($componentKey, $version, $locale, $normalized, [
             'type' => $componentType,
@@ -312,8 +312,8 @@ class LanguagePackAdmin
     }
 
     /**
-     * Installierte Komponenten (für die Import-Auswahl): Core + Module mit
-     * Version/Typ/Domain.
+     * Installed components (for the import selector): core + modules with
+     * version/type/domain.
      *
      * @return list<array{key:string,type:string,version:string,domain:string,name:string}>
      */

@@ -4,14 +4,14 @@ declare(strict_types=1);
 namespace App\Service\Api;
 
 /**
- * Vertrag für einen von einem Modul bereitgestellten API-Endpunkt
- * (Programm Tier-1, P07; Core-Contract `core.api.route`).
+ * Contract for an API endpoint provided by a module
+ * (program Tier-1, P07; core contract `core.api.route`).
  *
- * Module deklarieren Endpunkte im Manifest (`api_routes`: method/path/class)
- * und implementieren dieses Interface. Der Core routet `/api/v1/m/<key>/…` auf
- * die passende Klasse — in-process oder (out_of_process) über RPC, wie alle
- * Erweiterungspunkte (Kap. 23.16.2/29). Autorisierung bleibt Core-Sache
- * (Bearer-Token + optionaler Scope + RLS des gebundenen Benutzers).
+ * Modules declare endpoints in the manifest (`api_routes`: method/path/class)
+ * and implement this interface. The core routes `/api/v1/m/<key>/…` to the
+ * matching class — in-process or (out_of_process) via RPC, like all extension
+ * points (ch. 23.16.2/29). Authorization stays a core responsibility
+ * (bearer token + optional scope + RLS of the bound user).
  */
 interface ApiEndpointInterface
 {
@@ -20,7 +20,7 @@ interface ApiEndpointInterface
      *   method:string, path:string, params:array<string,string>,
      *   query:array<string,mixed>, body:mixed, user_id:string, scopes:list<string>
      * } $request
-     * @return array{status?:int, body?:mixed} Antwort (status default 200; body = Nutzlast)
+     * @return array{status?:int, body?:mixed} Response (status defaults to 200; body = payload)
      */
     public function handle(array $request): array;
 }

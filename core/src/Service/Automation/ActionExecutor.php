@@ -8,10 +8,10 @@ use App\Service\Notification\NotificationService;
 use Throwable;
 
 /**
- * Führt deklarative Aktionen aus (Programm Tier-2, P12/State-Machines): `notify`
- * (Benachrichtigung) und `event` (weiteres Outbox-Event). Gemeinsam genutzt von
- * der {@see AutomationEngine} (ECA-Regeln) und der Workflow-State-Machine.
- * Aktionsfehler sind isoliert.
+ * Executes declarative actions (program tier-2, P12/state machines): `notify`
+ * (notification) and `event` (a further outbox event). Shared by the
+ * {@see AutomationEngine} (ECA rules) and the workflow state machine. Action
+ * failures are isolated.
  */
 class ActionExecutor
 {
@@ -35,7 +35,7 @@ class ActionExecutor
                     default => null,
                 };
             } catch (Throwable) {
-                // Aktionsfehler isolieren.
+                // Isolate action failures.
             }
         }
     }

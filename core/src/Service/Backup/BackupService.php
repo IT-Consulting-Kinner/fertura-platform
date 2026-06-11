@@ -14,23 +14,24 @@ use Symfony\Component\Uid\Uuid;
 use ZipArchive;
 
 /**
- * Konsistente Daten-Sicherung & -Wiederherstellung (Kap. 20.1.2, E53/E55/E56).
+ * Consistent data backup & restore (ch. 20.1.2, E53/E55/E56).
  *
- * Eine Sicherung umfasst die **gesamte Datenbank** (`pg_dump -Fc`) **und** die
- * persistenten Datei-Stores und wird als **ein ZIP-Archiv** abgelegt, dessen
- * Name den **UTC-Zeitstempel** trägt (`<YYYYMMDD-HHMMSS>_<id>.zip`). Erstellung
- * unter dem **Lifecycle-Lock** (DB↔Storage konsistent); je Artefakt SHA-256.
+ * A backup covers the **entire database** (`pg_dump -Fc`) **and** the persistent
+ * file stores and is stored as **a single ZIP archive** whose name carries the
+ * **UTC timestamp** (`<YYYYMMDD-HHMMSS>_<id>.zip`). Creation runs under the
+ * **lifecycle lock** (keeping DB and storage consistent); each artifact gets a
+ * SHA-256.
  *
- * Härtung (E56): optionale **AES-256-Verschlüsselung** des Archivinhalts
- * (`backup.password`, Segregation of Duty), **Verifikation vor Abschluss**
- * (Integrität immer, Probe-Restore optional) und ein **Operationsprotokoll**
- * (`backup_log`) über Backups *und* Restores.
+ * Hardening (E56): optional **AES-256 encryption** of the archive contents
+ * (`backup.password`, segregation of duty), **verification before completion**
+ * (integrity always, probe-restore optional), and an **operations log**
+ * (`backup_log`) covering both backups *and* restores.
  */
 class BackupService
 {
     private const LIFECYCLE_LOCK = 778899001;
 
-    /** @var list<string> Persistente Datei-Stores relativ zu ROOT. */
+    /** @var list<string> Persistent file stores relative to ROOT. */
     private const STORES = ['language-store', 'marketplace-data', 'modules'];
 
     private string $base;
@@ -53,7 +54,7 @@ class BackupService
         $this->audit ??= new AuditLogger();
     }
 
-    /** Setzt Herkunft (cli|gui|scheduler) + Akteur für das Protokoll. */
+    /** Sets the origin (cli|gui|scheduler) and actor for the log. */
     public function context(string $source, ?string $actor = null): self
     {
         $this->source = $source;
@@ -67,7 +68,7 @@ class BackupService
         return $this->base;
     }
 
-    /** Ob Backups verschlüsselt werden (Passwort aus Env/Secret/DB-Setting gesetzt). */
+    /** Whether backups are encrypted (password set via env/secret/DB setting). */
     public function encryptionEnabled(): bool
     {
         return $this->password() !== '';
@@ -79,15 +80,15 @@ class BackupService
     }
 
     /**
-     * Backup-Passwort. Präzedenz für **Desaster-Recovery-Tauglichkeit**:
-     *   1. Secret-Datei `BACKUP_PASSWORD_FILE` (out-of-band, nicht im Backup)
-     *   2. Umgebungsvariable `BACKUP_PASSWORD`
-     *   3. DB-Setting `backup.password` (Komfort-Fallback)
+     * Backup password. Precedence chosen for **disaster-recovery viability**:
+     *   1. Secret file `BACKUP_PASSWORD_FILE` (out-of-band, not in the backup)
+     *   2. Environment variable `BACKUP_PASSWORD`
+     *   3. DB setting `backup.password` (convenience fallback)
      *
-     * **Wichtig:** Das DB-Setting liegt selbst im Datenbank-Dump — ein damit
-     * verschlüsseltes Backup ließe sich auf einem frischen System nicht
-     * entschlüsseln (Henne-Ei). Für DR muss das Passwort daher über
-     * Env/Secret (1./2.) bereitgestellt werden, nicht über das DB-Setting.
+     * **Important:** the DB setting itself lives in the database dump — a backup
+     * encrypted with it could not be decrypted on a fresh system (chicken-and-egg).
+     * For DR the password must therefore be provided via env/secret (1./2.), not
+     * via the DB setting.
      */
     private function password(): string
     {
@@ -129,17 +130,16 @@ class BackupService
     }
 
     /**
-     * Wertet die Ausgabe eines `pg_restore`-Laufs aus und wirft bei einem
-     * **echten** Fehler. `pg_restore` läuft hier bewusst ohne
-     * `--exit-on-error` (ein Restore soll möglichst vollständig durchlaufen),
-     * signalisiert harmlose Situationen aber dennoch über Exitcode/Notices:
-     * `--clean --if-exists` erzeugt „… does not exist, skipping"-Notices und am
-     * Ende ggf. „errors ignored on restore: N" — beides tolerierbar. Echte
-     * `pg_restore: error:`/`ERROR:`-Zeilen sind es nicht: sie dürfen nicht (wie
-     * zuvor, als der Exitcode gar nicht geprüft wurde) verschluckt werden und
-     * eine halb-restaurierte DB als „ok" durchgehen lassen (M6/B1).
+     * Evaluates the output of a `pg_restore` run and throws on a **genuine**
+     * error. `pg_restore` deliberately runs here without `--exit-on-error` (a
+     * restore should run as completely as possible), yet it still signals
+     * harmless situations via exit code/notices: `--clean --if-exists` produces
+     * "… does not exist, skipping" notices and possibly a final "errors ignored
+     * on restore: N" — both tolerable. Genuine `pg_restore: error:`/`ERROR:`
+     * lines are not: they must not (as previously, when the exit code was never
+     * checked) be swallowed and let a half-restored DB pass as "ok" (M6/B1).
      *
-     * @param list<string> $out Gesammelte (stdout+stderr) Ausgabe des Laufs.
+     * @param list<string> $out Collected (stdout+stderr) output of the run.
      */
     private function assertRestoreOk(array $out, int $rc, string $context): void
     {
@@ -158,13 +158,12 @@ class BackupService
                 $context . ' meldete Fehler: ' . implode(' | ', array_slice($errors, 0, 5)),
             );
         }
-        // Kein erkennbarer Fehlertext, aber Exitcode != 0: reine
-        // „does not exist, skipping"-Notices eines `--clean`-Laufs sind
-        // tolerierbar (genau der Fehlalarm, den der reine Exitcode-Check
-        // erzeugen würde). Alles andere — unbekannte Ausgabe oder gar keine
-        // Ausgabe bei rc != 0 (pg_restore nicht gefunden, Verbindung
-        // abgebrochen) — ist ein strukturelles Problem und darf nicht still als
-        // Erfolg gelten.
+        // No recognizable error text but exit code != 0: pure
+        // "does not exist, skipping" notices from a `--clean` run are tolerable
+        // (exactly the false alarm a plain exit-code check would raise).
+        // Anything else — unknown output, or no output at all with rc != 0
+        // (pg_restore not found, connection dropped) — is a structural problem
+        // and must not silently count as success.
         if ($rc !== 0) {
             $unexpected = array_values(array_filter($out, fn ($l) => !$this->isIgnorableRestoreLine($l)));
             if ($unexpected !== [] || $out === []) {
@@ -176,7 +175,7 @@ class BackupService
         }
     }
 
-    /** Tolerierbare (nicht-fatale) Ausgabezeile eines `pg_restore --clean --if-exists`-Laufs. */
+    /** Tolerable (non-fatal) output line of a `pg_restore --clean --if-exists` run. */
     private function isIgnorableRestoreLine(string $line): bool
     {
         if (trim($line) === '') {
@@ -192,8 +191,8 @@ class BackupService
     }
 
     /**
-     * Erstellt eine konsistente, verifizierte (ggf. verschlüsselte) Sicherung.
-     * Gibt die Backup-ID zurück. `$targetDir` überschreibt optional den Ort.
+     * Creates a consistent, verified (possibly encrypted) backup. Returns the
+     * backup ID. `$targetDir` optionally overrides the storage location.
      */
     public function create(?string $note, ?string $actorId, ?string $targetDir = null): string
     {
@@ -204,7 +203,7 @@ class BackupService
         if (!is_dir($dir) && !@mkdir($dir, 0o775, true) && !is_dir($dir)) {
             throw new RuntimeException('Backup-Verzeichnis nicht anlegbar/erreichbar: ' . $dir);
         }
-        // Pre-Flight VOR allem anderen; Fehlschlag wird protokolliert + alarmiert.
+        // Pre-flight BEFORE anything else; a failure is logged and alerted.
         try {
             $this->preflightSpace($dir);
         } catch (\Throwable $e) {
@@ -234,12 +233,12 @@ class BackupService
         );
 
         try {
-            // Der Lifecycle-Lock ist Pflicht, nicht „nice to have": ein Backup
-            // ohne ihn wäre ein DB↔Storage-inkonsistenter Snapshot, sobald eine
-            // parallele Lifecycle-/Update-/Restore-Operation zwischen pg_dump und
-            // tar Daten oder Datei-Stores verändert. Erhalten wir ihn nicht
-            // (eine andere Operation hält ihn), brechen wir laut ab, statt still
-            // ohne Lock weiterzulaufen (B2).
+            // The lifecycle lock is mandatory, not "nice to have": without it a
+            // backup would be a DB-vs-storage-inconsistent snapshot the moment a
+            // concurrent lifecycle/update/restore operation changes data or file
+            // stores between pg_dump and tar. If we cannot acquire it (another
+            // operation holds it), we abort loudly instead of silently proceeding
+            // without the lock (B2).
             if (!$this->lock()) {
                 throw new RuntimeException(
                     'Backup nicht möglich: Der Lifecycle-Lock wird von einer anderen Operation '
@@ -274,7 +273,7 @@ class BackupService
             $this->buildZip($zip, $dumpFile, $filesTar, (string)json_encode($manifest, JSON_PRETTY_PRINT), $pw);
             @exec('rm -rf ' . escapeshellarg($work));
 
-            // --- Verifikation VOR dem Abschluss (E56) ---
+            // --- Verification BEFORE completion (E56) ---
             if (!$this->archiveIntact($zip, $dbSha, $filesSha, $pw)) {
                 throw new RuntimeException('Integritätsprüfung des Archivs fehlgeschlagen.');
             }
@@ -315,7 +314,7 @@ class BackupService
     }
 
     /**
-     * Operationsprotokoll (Backups + Restores), neueste zuerst.
+     * Operations log (backups + restores), newest first.
      *
      * @return list<array<string,mixed>>
      */
@@ -332,8 +331,8 @@ class BackupService
     /** @return array<string,mixed>|null */
     public function get(string $id): ?array
     {
-        // UUID-Guard: die ID kommt aus URL/CLI; ein fehlgeformter Wert würde im
-        // PG-uuid-Vergleich werfen (22P02) -> 500 statt sauberem "unbekannt".
+        // UUID guard: the ID comes from URL/CLI; a malformed value would throw in
+        // the PG uuid comparison (22P02) -> 500 instead of a clean "unknown".
         if (!\App\Infrastructure\Uuid::isValid($id)) {
             return null;
         }
@@ -343,7 +342,7 @@ class BackupService
     }
 
     /**
-     * Prüft Integrität (ZIP lesbar + innere Prüfsummen wie gespeichert).
+     * Checks integrity (ZIP readable + inner checksums as stored).
      *
      * @return array{ok:bool, db:bool, files:bool, reason:?string}
      */
@@ -365,7 +364,7 @@ class BackupService
     }
 
     /**
-     * Probe-Restore einer gespeicherten Sicherung in eine Scratch-DB.
+     * Probe-restores a stored backup into a scratch DB.
      *
      * @return array{ok:bool, tables:int, reason:?string}
      */
@@ -380,7 +379,7 @@ class BackupService
         return $this->probeRestore((string)$row['path'], $pw);
     }
 
-    /** **Destruktive** Wiederherstellung einer gespeicherten Sicherung. */
+    /** **Destructive** restore of a stored backup. */
     public function restore(string $id): void
     {
         $row = $this->get($id);
@@ -388,9 +387,9 @@ class BackupService
             throw new RuntimeException('Backup unbekannt.');
         }
         $pw = $this->bool($row['encrypted']) ? $this->password() : '';
-        // Kontrollierter Cutover: Wartungsmodus (503) für die Dauer des
-        // destruktiven Restores, damit kein Request auf eine halb-restaurierte
-        // DB trifft (Kap. 20.1.2). Datei-Flag überlebt den DB-Restore.
+        // Controlled cutover: maintenance mode (503) for the duration of the
+        // destructive restore, so no request hits a half-restored DB
+        // (ch. 20.1.2). The file flag survives the DB restore.
         $engaged = MaintenanceMode::engage('restore');
         try {
             $this->restoreArchive((string)$row['path'], $pw);
@@ -407,8 +406,8 @@ class BackupService
     }
 
     /**
-     * **Destruktive** Wiederherstellung aus einer beliebigen Archivdatei
-     * (Linux-/Windows-Pfad). `$password` überschreibt das konfigurierte Passwort.
+     * **Destructive** restore from an arbitrary archive file (Linux/Windows
+     * path). `$password` overrides the configured password.
      */
     public function restoreFromFile(string $zipPath, ?string $password = null): void
     {
@@ -427,7 +426,7 @@ class BackupService
         $this->log('restore_from', null, 'ok', $zipPath);
     }
 
-    /** Behält die jüngsten $keep Sicherungen, löscht ältere. */
+    /** Keeps the most recent $keep backups and deletes older ones. */
     public function prune(int $keep): int
     {
         if ($keep < 1) {
@@ -441,7 +440,7 @@ class BackupService
         return count($old);
     }
 
-    /** Löscht erfolgreiche Sicherungen, die älter als $days Tage sind. */
+    /** Deletes successful backups older than $days days. */
     public function pruneByAge(int $days): int
     {
         if ($days < 1) {
@@ -458,7 +457,7 @@ class BackupService
         return count($rows);
     }
 
-    /** Protokolliert einen Archiv-Download (Datenexport). */
+    /** Logs an archive download (data export). */
     public function logDownload(string $id): void
     {
         $this->log('download', $id, 'ok', null);
@@ -481,15 +480,15 @@ class BackupService
         return true;
     }
 
-    // ---- intern --------------------------------------------------------------
+    // ---- internal ------------------------------------------------------------
 
     private function buildZip(string $zip, string $dump, string $tar, string $manifestJson, string $pw): void
     {
-        // Fail-closed: Ist ein Backup-Passwort gesetzt, libzip aber ohne AES-256,
-        // würde `setPassword()` allein NICHTS verschlüsseln — das Archiv läge im
-        // Klartext vor, während DB/Manifest/Audit es als „verschlüsselt" führen.
-        // Lieber abbrechen als ein scheinbar verschlüsseltes Klartext-Backup
-        // (enthält den kompletten DB-Dump inkl. aller übrigen Geheimnisse) ablegen.
+        // Fail-closed: if a backup password is set but libzip lacks AES-256,
+        // `setPassword()` alone would encrypt NOTHING — the archive would be in
+        // plaintext while DB/manifest/audit record it as "encrypted". Better to
+        // abort than to store a seemingly encrypted plaintext backup (which
+        // contains the entire DB dump including all other secrets).
         if ($pw !== '' && !defined('ZipArchive::EM_AES_256')) {
             throw new RuntimeException(
                 'Backup-Verschlüsselung verlangt (backup.password gesetzt), aber libzip ohne '
@@ -508,7 +507,7 @@ class BackupService
         $za->addFromString('manifest.json', $manifestJson);
         if ($pw !== '') {
             foreach (['database.dump', 'files.tar.gz', 'manifest.json'] as $e) {
-                // Jeder Eintrag MUSS verschlüsselt werden — schlägt das fehl, abbrechen.
+                // Every entry MUST be encrypted — if that fails, abort.
                 if (!$za->setEncryptionName($e, ZipArchive::EM_AES_256)) {
                     $za->close();
                     @unlink($zip);
@@ -521,8 +520,8 @@ class BackupService
     }
 
     /**
-     * Wirft, wenn das tar.gz unsichere Einträge enthält (absolute Pfade oder
-     * `..`-Traversal). Wird vor dem Entpacken nach ROOT geprüft (Zip-Slip-Schutz).
+     * Throws if the tar.gz contains unsafe entries (absolute paths or `..`
+     * traversal). Checked before extracting into ROOT (Zip-Slip protection).
      */
     private function assertSafeTar(string $tarGz): void
     {
@@ -551,7 +550,7 @@ class BackupService
     }
 
     /**
-     * Probe-Restore einer Archivdatei in eine Scratch-DB.
+     * Probe-restores an archive file into a scratch DB.
      *
      * @return array{ok:bool, tables:int, reason:?string}
      */
@@ -613,15 +612,16 @@ class BackupService
             $base = '-h ' . escapeshellarg($pg['host']) . ' -p ' . escapeshellarg($pg['port']) . ' -U ' . escapeshellarg($pg['user']);
             exec($env . 'pg_restore --clean --if-exists --no-owner -d ' . escapeshellarg($pg['db'])
                 . ' ' . $base . ' ' . escapeshellarg($tmp . '/database.dump') . ' 2>&1', $o, $rc);
-            // Exitcode + Ausgabe prüfen, BEVOR die Datei-Stores entpackt werden
-            // und (über restore()) der Wartungsmodus wieder freigegeben wird —
-            // sonst käme eine halb-restaurierte DB still wieder online (M6/B1).
+            // Check exit code + output BEFORE the file stores are extracted and
+            // (via restore()) maintenance mode is released again — otherwise a
+            // half-restored DB would silently come back online (M6/B1).
             $this->assertRestoreOk($o, $rc, 'Wiederherstellung (pg_restore)');
             if ($hasFiles && (int)filesize($tmp . '/files.tar.gz') > 0) {
-                // Pfad-Traversal-Schutz: das (potenziell operator-gelieferte) Archiv
-                // VOR dem Entpacken nach ROOT prüfen — keine absoluten Pfade, kein
-                // `..`. Verhindert das Überschreiben von Dateien außerhalb der Stores
-                // (z. B. config/webroot) durch ein manipuliertes Archiv (Zip-Slip).
+                // Path-traversal protection: check the (potentially
+                // operator-supplied) archive BEFORE extracting into ROOT — no
+                // absolute paths, no `..`. Prevents a tampered archive from
+                // overwriting files outside the stores (e.g. config/webroot)
+                // (Zip-Slip).
                 $this->assertSafeTar($tmp . '/files.tar.gz');
                 $this->run('tar xzf ' . escapeshellarg($tmp . '/files.tar.gz')
                     . ' -C ' . escapeshellarg(ROOT) . ' --no-same-owner');
@@ -682,7 +682,7 @@ class BackupService
         fclose($out);
         fclose($s);
         $za->close();
-        // Bei AES + falschem Passwort liefert getStream ggf. leere/kaputte Daten.
+        // With AES + a wrong password, getStream may yield empty/corrupt data.
         return filesize($dest) > 0;
     }
 
@@ -695,7 +695,7 @@ class BackupService
                 ['op' => $operation, 'bid' => $backupId, 'src' => $this->source, 'actor' => $this->actor, 'res' => $result, 'msg' => $message],
             );
         } catch (\Throwable) {
-            // Protokoll darf die Fachaktion nicht scheitern lassen.
+            // Logging must not make the business action fail.
         }
     }
 
@@ -723,12 +723,12 @@ class BackupService
         return [$conn, $name];
     }
 
-    /** Pre-Flight: bricht VOR dem Dump ab, wenn am Zielort zu wenig Platz ist. */
+    /** Pre-flight: aborts BEFORE the dump if the target location has too little free space. */
     private function preflightSpace(string $dir): void
     {
         $free = @disk_free_space($dir);
         if ($free === false) {
-            return; // nicht ermittelbar → nicht blockieren
+            return; // cannot be determined → do not block
         }
         $minFree = (int)(new SettingsManager())->get('core', 'backup.min_free_mb', 500) * 1024 * 1024;
         $required = max($minFree, (int)($this->estimatedSize() * 1.1));
@@ -742,7 +742,7 @@ class BackupService
         }
     }
 
-    /** Geschätzte Backup-Größe (DB-Größe + Datei-Stores), als Obergrenze. */
+    /** Estimated backup size (DB size + file stores), as an upper bound. */
     private function estimatedSize(): int
     {
         $size = 0;
@@ -765,7 +765,7 @@ class BackupService
         return $size;
     }
 
-    /** Schickt bei konfiguriertem Empfänger einen Alarm bei Backup-Fehlschlag. */
+    /** Sends an alert on backup failure if a recipient is configured. */
     private function alertFailure(string $message): void
     {
         try {
@@ -779,7 +779,7 @@ class BackupService
                 __('mail.backup_failed.body', gmdate('c'), $this->source, $message),
             );
         } catch (\Throwable) {
-            // Alarm darf nichts weiter auslösen.
+            // The alert itself must not trigger anything further.
         }
     }
 

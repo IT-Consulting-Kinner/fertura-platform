@@ -7,19 +7,19 @@ use Cake\Datasource\ConnectionInterface;
 use Cake\Datasource\ConnectionManager;
 
 /**
- * Verbindungs-Konvention für DB-pro-Mandant (#10/4). Macht die Trennung
- * **zentral vs. mandantendaten** explizit und ergonomisch — statt ein pauschales
- * Re-Aliasing von `default` (das den Auth-/Session-Bootstrap bräche).
+ * Connection convention for DB-per-tenant (#10/4). Makes the split **central vs.
+ * tenant data** explicit and ergonomic — instead of a blanket re-aliasing of
+ * `default` (which would break the auth/session bootstrap).
  *
- * - {@see central()} — **zentrale, mandanten­übergreifende** Tabellen liegen IMMER
- *   auf der geteilten DB: `users`, `tenants`, `sessions`, `settings`, `audit_log`,
+ * - {@see central()} — **central, cross-tenant** tables ALWAYS live on the shared
+ *   DB: `users`, `tenants`, `sessions`, `settings`, `audit_log`,
  *   `groups`/`groups_users`, `user_admin_areas`, `sso_providers`, `auth_failures`,
- *   `event_outbox`, Lizenz-/Trust-/Modul-Tabellen. Grund (Henne-Ei): Session/Auth/
- *   Benutzer→Mandant müssen aufgelöst sein, BEVOR ein Mandant geroutet werden kann.
- * - {@see data()} — **Mandanten-Geschäftsdaten** laufen bei `db_isolated` auf der
- *   eigenen DB des Mandanten (sonst auf der geteilten, Pool-Modell mit RLS/
- *   `tenant_id`-Scoping). Dienste/Module für Mandantendaten holen ihre Connection
- *   hierüber statt fest über `get('default')`.
+ *   `event_outbox`, license/trust/module tables. Reason (chicken-and-egg):
+ *   session/auth/user→tenant must be resolved BEFORE a tenant can be routed.
+ * - {@see data()} — **tenant business data** runs on the tenant's own DB when
+ *   `db_isolated` (otherwise on the shared one, pool model with RLS/`tenant_id`
+ *   scoping). Services/modules for tenant data obtain their connection through
+ *   this instead of hard-coding `get('default')`.
  */
 final class Tenancy
 {

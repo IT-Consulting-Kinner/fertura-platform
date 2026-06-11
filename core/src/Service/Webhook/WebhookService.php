@@ -11,16 +11,16 @@ use Cake\Datasource\ConnectionManager;
 use Throwable;
 
 /**
- * Outbound-Webhooks (Programm Tier-1, P05).
+ * Outbound webhooks (program Tier-1, P05).
  *
- * Stellt Plattform-Events extern über HTTP zu — auf dem **gehärteten Egress**
- * (P01, SSRF-Schutz) und nach dem Outbox-Muster: pro (Subscription, Event) eine
- * idempotent eingereihte Zustell-Aufgabe, die der Worker mit **HMAC-Signatur**,
- * Retry/Backoff und Dead-Letter zustellt.
+ * Delivers platform events externally over HTTP — on the **hardened egress**
+ * (P01, SSRF protection) and following the outbox pattern: one idempotently
+ * enqueued delivery task per (subscription, event), which the worker delivers
+ * with an **HMAC signature**, retry/backoff and dead-letter.
  *
- * Signatur (wie üblich, replay-fest): `X-Fertura-Signature: sha256=<hmac>` über
- * `"<timestamp>.<body>"` mit dem Subscription-Geheimnis; der Empfänger prüft
- * Signatur **und** `X-Fertura-Timestamp`.
+ * Signature (as usual, replay-resistant): `X-Fertura-Signature: sha256=<hmac>`
+ * over `"<timestamp>.<body>"` with the subscription secret; the recipient checks
+ * the signature **and** `X-Fertura-Timestamp`.
  */
 class WebhookService
 {
@@ -41,7 +41,7 @@ class WebhookService
         return $this->audit ??= new AuditLogger();
     }
 
-    /** Berechnet die HMAC-Signatur über `"<timestamp>.<body>"`. */
+    /** Computes the HMAC signature over `"<timestamp>.<body>"`. */
     public function signature(string $secret, string $timestamp, string $body): string
     {
         return hash_hmac('sha256', $timestamp . '.' . $body, $secret);
@@ -53,11 +53,11 @@ class WebhookService
     }
 
     /**
-     * Reiht für ein Event Zustell-Aufgaben für alle passenden, aktiven
-     * Subscriptions ein (idempotent via UNIQUE(subscription_id, event_id)).
+     * Enqueues delivery tasks for an event for all matching, active subscriptions
+     * (idempotent via UNIQUE(subscription_id, event_id)).
      *
      * @param array<string, mixed> $payload
-     * @return int Anzahl neu eingereihter Zustellungen
+     * @return int Number of newly enqueued deliveries
      */
     public function enqueueForEvent(string $eventName, array $payload, string $eventId): int
     {
@@ -77,8 +77,7 @@ class WebhookService
     }
 
     /**
-     * Stellt fällige, ausstehende Zustellungen zu. Gibt die Anzahl bearbeiteter
-     * Zustellungen zurück.
+     * Delivers due, pending deliveries. Returns the number of deliveries processed.
      */
     public function deliverPending(?int $limit = null): int
     {
@@ -182,7 +181,7 @@ class WebhookService
         );
     }
 
-    // ---- Verwaltung ---------------------------------------------------------
+    // ---- Administration -----------------------------------------------------
 
     /**
      * @return array{id:string}
@@ -211,8 +210,8 @@ class WebhookService
 
     public function setActive(string $id, bool $active): void
     {
-        // UUID-Guard: die ID kommt aus der Admin-GUI-URL; fehlgeformte Werte
-        // wie unbekannte behandeln statt 22P02 -> 500 (vgl. \App\Infrastructure\Uuid).
+        // UUID guard: the ID comes from the admin GUI URL; treat malformed values
+        // like unknown ones instead of 22P02 -> 500 (cf. \App\Infrastructure\Uuid).
         if (!Uuid::isValid($id)) {
             return;
         }
@@ -264,7 +263,7 @@ class WebhookService
         )->fetchAll('assoc');
     }
 
-    /** Stellt eine (fehlgeschlagene/Dead-Letter-)Zustellung erneut ein. */
+    /** Re-enqueues a (failed/dead-letter) delivery. */
     public function retryDelivery(string $id): void
     {
         if (!Uuid::isValid($id)) {

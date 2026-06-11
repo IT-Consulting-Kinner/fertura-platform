@@ -18,12 +18,12 @@ use Jose\Component\Signature\Serializer\CompactSerializer;
 use Throwable;
 
 /**
- * OpenID-Connect-Provider (Programm Tier-1, P06): Authorization-Code-Flow mit
- * **PKCE**, Discovery + JWKS-Validierung des ID-Tokens (web-token/jwt-library).
+ * OpenID Connect provider (program tier-1, P06): authorization code flow with
+ * **PKCE**, discovery + JWKS validation of the ID token (web-token/jwt-library).
  *
- * Netzzugriffe laufen über den gehärteten Egress (P01); Discovery/JWKS werden
- * gecacht (P02). Die ID-Token-Validierung ({@see validateIdToken}) ist rein und
- * damit ohne Netzwerk testbar.
+ * Network access goes through the hardened egress (P01); discovery/JWKS are
+ * cached (P02). ID token validation ({@see validateIdToken}) is pure and thus
+ * testable without a network.
  */
 class OidcProvider
 {
@@ -36,7 +36,7 @@ class OidcProvider
     }
 
     /**
-     * Baut die Authorization-URL und die im Flow zu speichernden Geheimnisse.
+     * Builds the authorization URL and the secrets to persist during the flow.
      *
      * @param array<string,mixed> $provider
      * @return array{url:string,state:string,nonce:string,code_verifier:string}
@@ -66,8 +66,8 @@ class OidcProvider
     }
 
     /**
-     * Tauscht den Code gegen Tokens, validiert das ID-Token und liefert die
-     * Identitätsdaten.
+     * Exchanges the code for tokens, validates the ID token and returns the
+     * identity data.
      *
      * @param array<string,mixed> $provider
      * @return array{sub:string,email:string,first:?string,last:?string}
@@ -109,10 +109,10 @@ class OidcProvider
     }
 
     /**
-     * Validiert ein ID-Token gegen ein JWKSet (Signatur + iss/aud/exp/nonce).
-     * Rein/ohne Netzwerk -> testbar.
+     * Validates an ID token against a JWKSet (signature + iss/aud/exp/nonce).
+     * Pure/no network -> testable.
      *
-     * @return array<string,mixed> die geprüften Claims
+     * @return array<string,mixed> the verified claims
      */
     public function validateIdToken(string $idToken, JWKSet $jwks, string $issuer, string $clientId, ?string $expectedNonce): array
     {
@@ -139,9 +139,9 @@ class OidcProvider
         if (!$audOk) {
             throw new SsoException('ID-Token: aud stimmt nicht.');
         }
-        // Bei mehreren Audiences (oder vorhandenem azp) muss azp == client_id sein
-        // (OIDC-Spec) — verhindert Token-Substitution von einem anderen Client
-        // desselben IdP.
+        // With multiple audiences (or a present azp), azp must equal client_id
+        // (OIDC spec) — prevents token substitution from another client of the
+        // same IdP.
         if ((is_array($aud) && count($aud) > 1) || isset($claims['azp'])) {
             if (($claims['azp'] ?? null) !== $clientId) {
                 throw new SsoException('ID-Token: azp stimmt nicht.');

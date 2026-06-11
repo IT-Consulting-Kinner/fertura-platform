@@ -12,10 +12,10 @@ use Cake\Datasource\ConnectionManager;
 use Throwable;
 
 /**
- * Volltext-Suche (Programm Tier-1, P10) über ein zentrales `search_index`
- * (Postgres `tsvector`). Core/Module legen Dokumente ab; Treffer werden nach
- * `ts_rank` sortiert und **sichtbarkeits-gefiltert** (Eigentümer): ein Aufrufer
- * sieht nur eigene Dokumente und solche ohne Eigentümer (öffentlich).
+ * Full-text search (program tier 1, P10) over a central `search_index`
+ * (Postgres `tsvector`). Core/modules store documents; hits are sorted by
+ * `ts_rank` and **visibility-filtered** (by owner): a caller sees only their own
+ * documents and those without an owner (public).
  */
 class SearchService
 {
@@ -33,8 +33,8 @@ class SearchService
     }
 
     /**
-     * Volltext-Sprachkonfiguration (muss zur tsvector-Spalte passen). Streng auf
-     * `[a-z_]` validiert (sichere Interpolation in die regconfig-Position).
+     * Full-text language configuration (must match the tsvector column). Strictly
+     * validated against `[a-z_]` (safe interpolation into the regconfig position).
      */
     private function textConfig(): string
     {
@@ -47,7 +47,7 @@ class SearchService
         return preg_match('/^[a-z_]+$/', $cfg) === 1 ? $cfg : 'simple';
     }
 
-    /** Aktueller Mandant aus dem RLS-Kontext (Fallback Default-Mandant). */
+    /** Current tenant from the RLS context (falls back to the default tenant). */
     private function tenantId(): string
     {
         try {
@@ -68,7 +68,7 @@ class SearchService
     }
 
     /**
-     * Legt ein durchsuchbares Dokument ab bzw. aktualisiert es (idempotent über
+     * Stores or updates a searchable document (idempotent over
      * source+entity_type+entity_id).
      */
     public function index(
@@ -91,9 +91,9 @@ class SearchService
             ['tid' => $tenantId, 's' => $source, 'et' => $entityType, 'ei' => $entityId, 'ti' => $title, 'b' => $body, 'o' => $ownerId, 'u' => $url],
         );
 
-        // Optional dasselbe Dokument für die Hybrid-Suche einbetten (best-effort:
-        // Volltext bleibt maßgeblich, ein Embedding-Fehler darf das Indexieren nie
-        // brechen). Gesteuert pro Aufruf ($embed) oder global (ai.embed.auto_index).
+        // Optionally embed the same document for hybrid search (best-effort:
+        // full-text stays authoritative, an embedding failure must never break
+        // indexing). Controlled per call ($embed) or globally (ai.embed.auto_index).
         if ($this->shouldEmbed($embed)) {
             try {
                 $content = trim($title . "\n" . $body);
@@ -109,8 +109,8 @@ class SearchService
             'DELETE FROM search_index WHERE tenant_id = :tid AND source = :s AND entity_type = :et AND entity_id = :ei',
             ['tid' => $this->tenantId(), 's' => $source, 'et' => $entityType, 'ei' => $entityId],
         );
-        // Embedding synchron mit entfernen (best-effort), damit beide Indizes
-        // konsistent bleiben.
+        // Remove the embedding synchronously as well (best-effort), so both
+        // indexes stay consistent.
         try {
             $this->embeddings()->remove($source, $entityType, $entityId);
         } catch (Throwable) {
@@ -130,9 +130,9 @@ class SearchService
     }
 
     /**
-     * Entscheidet, ob beim Indexieren zusätzlich eingebettet wird: expliziter
-     * Parameter hat Vorrang, sonst das Setting `ai.embed.auto_index`; in beiden
-     * Fällen nur, wenn überhaupt ein Embedding-Provider verfügbar ist.
+     * Decides whether to additionally embed during indexing: the explicit
+     * parameter takes precedence, otherwise the `ai.embed.auto_index` setting; in
+     * both cases only if an embedding provider is available at all.
      */
     private function shouldEmbed(?bool $explicit): bool
     {
@@ -153,8 +153,8 @@ class SearchService
     }
 
     /**
-     * Volltextsuche. `$userId === null` = System/Admin (keine Sichtbarkeits-
-     * Einschränkung); sonst nur eigene + öffentliche Dokumente.
+     * Full-text search. `$userId === null` = system/admin (no visibility
+     * restriction); otherwise only own + public documents.
      *
      * @return list<array{source:string,entity_type:string,entity_id:string,title:string,url:?string,rank:float}>
      */
@@ -164,15 +164,15 @@ class SearchService
         if ($q === '') {
             return [];
         }
-        // Mandantenscharf (schließt das mandantenübergreifende Leck öffentlicher
-        // Dokumente) + Owner-Sichtbarkeit (eigene + öffentliche INNERHALB des Mandanten).
+        // Tenant-scoped (closes the cross-tenant leak of public documents) +
+        // owner visibility (own + public WITHIN the tenant).
         $scope = $userId === null ? '' : ' AND (owner_id IS NULL OR owner_id = :uid)';
         $params = ['q' => $q, 'l' => $limit, 'tid' => $this->tenantId()];
         if ($userId !== null) {
             $params['uid'] = $userId;
         }
 
-        // Sprachbewusst: `simple` (exakt) ODER die konfigurierte Sprache (Stemming).
+        // Language-aware: `simple` (exact) OR the configured language (stemming).
         $cfg = $this->textConfig();
         $tsq = $cfg === 'simple'
             ? "websearch_to_tsquery('simple', :q)"
@@ -198,13 +198,13 @@ class SearchService
     }
 
     /**
-     * **Hybride Suche**: fusioniert Volltext (`tsvector`/`ts_rank`) und semantische
-     * Vektor-Ähnlichkeit (pgvector-Embeddings) über **Reciprocal Rank Fusion** (RRF).
-     * Vereint lexikalische Präzision (exakte Begriffe) mit semantischem Recall
-     * (Bedeutung/Synonyme). Ist kein Embedding-Provider konfiguriert (oder schlägt
-     * die Einbettung fehl), degradiert die Methode sauber auf reine Volltextsuche.
+     * **Hybrid search**: fuses full-text (`tsvector`/`ts_rank`) and semantic vector
+     * similarity (pgvector embeddings) via **Reciprocal Rank Fusion** (RRF).
+     * Combines lexical precision (exact terms) with semantic recall
+     * (meaning/synonyms). If no embedding provider is configured (or the embedding
+     * fails), the method degrades cleanly to pure full-text search.
      *
-     * Sichtbarkeit (Eigentümer) wird in beiden Hälften gleich gefiltert.
+     * Visibility (by owner) is filtered identically in both halves.
      *
      * @return list<array{source:string,entity_type:string,entity_id:string,title:string,url:?string,score:float}>
      */
@@ -214,7 +214,7 @@ class SearchService
         if ($q === '') {
             return [];
         }
-        // Breitere Kandidatenmengen je Seite -> bessere Fusion, dann auf $limit kürzen.
+        // Wider candidate sets per side -> better fusion, then trim to $limit.
         $candidates = max($limit, 50);
         $fts = $this->search($q, $userId, $candidates);
 
@@ -225,18 +225,18 @@ class SearchService
                 $vec = $emb->semantic($q, $userId, $candidates);
             }
         } catch (Throwable) {
-            $vec = []; // AI/Embeddings nicht verfügbar -> reine Volltextsuche
+            $vec = []; // AI/embeddings unavailable -> pure full-text search
         }
 
         return $this->fuse($fts, $vec, $limit);
     }
 
     /**
-     * Reciprocal Rank Fusion zweier gerankter Trefferlisten über den Schlüssel
-     * (source, entity_type, entity_id). Score = Σ 1/(k + Rang); k=60 (Standard).
+     * Reciprocal Rank Fusion of two ranked hit lists keyed by
+     * (source, entity_type, entity_id). Score = Σ 1/(k + rank); k=60 (default).
      *
-     * @param list<array<string,mixed>> $fts Volltext-Treffer (mit title/url)
-     * @param list<array<string,mixed>> $vec Vektor-Treffer (mit content)
+     * @param list<array<string,mixed>> $fts Full-text hits (with title/url)
+     * @param list<array<string,mixed>> $vec Vector hits (with content)
      * @return list<array{source:string,entity_type:string,entity_id:string,title:string,url:?string,score:float}>
      */
     private function fuse(array $fts, array $vec, int $limit): array
@@ -249,9 +249,9 @@ class SearchService
                 $key = $r['source'] . '|' . $r['entity_type'] . '|' . $r['entity_id'];
                 $scores[$key] = ($scores[$key] ?? 0.0) + 1.0 / ($k + $i + 1);
                 if (!isset($meta[$key])) {
-                    // Erste Quelle gewinnt die Metadaten — FTS (mit title/url) wird
-                    // zuerst eingespeist, daher bevorzugt; reine Vektor-Treffer
-                    // fallen auf einen Inhalts-Ausschnitt als Titel zurück.
+                    // First source wins the metadata — FTS (with title/url) is fed
+                    // in first and therefore preferred; pure vector hits fall back
+                    // to a content excerpt as the title.
                     $meta[$key] = [
                         'source' => (string)$r['source'],
                         'entity_type' => (string)$r['entity_type'],
@@ -276,11 +276,11 @@ class SearchService
     }
 
     /**
-     * Erzeugt Embeddings für bereits indexierte Suchdokumente, die noch keines
-     * haben (z. B. solche, die vor Aktivierung von `ai.embed.auto_index` indexiert
-     * wurden). Macht die Hybrid-Suche für Bestandsdaten nutzbar, ohne die Modul-
-     * Indexer erneut laufen zu lassen. Gibt die Zahl neu eingebetteter Dokumente
-     * zurück (0, wenn kein Embedding-Provider verfügbar ist).
+     * Generates embeddings for already-indexed search documents that have none yet
+     * (e.g. those indexed before `ai.embed.auto_index` was enabled). Makes hybrid
+     * search usable for existing data without re-running the module indexers.
+     * Returns the number of newly embedded documents (0 if no embedding provider
+     * is available).
      */
     public function backfillEmbeddings(int $limit = 500): int
     {
@@ -308,7 +308,7 @@ class SearchService
                     (string)$r['entity_id'],
                     $content,
                     $r['owner_id'] !== null ? (string)$r['owner_id'] : null,
-                    (string)$r['tenant_id'], // Mandant der Quellzeile übernehmen
+                    (string)$r['tenant_id'], // carry over the tenant of the source row
                 );
                 $done++;
             } catch (Throwable) {
@@ -319,8 +319,8 @@ class SearchService
     }
 
     /**
-     * Stößt den vollständigen Neuaufbau über die Modul-Indexer an
-     * (`core.collector.search`). Gibt die Anzahl angesprochener Indexer zurück.
+     * Triggers a full rebuild via the module indexers (`core.collector.search`).
+     * Returns the number of indexers invoked.
      */
     public function reindexAll(): int
     {

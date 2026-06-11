@@ -6,14 +6,14 @@ namespace App\Service\Sdk;
 use RuntimeException;
 
 /**
- * Modul-Scaffolder (Programm Tier-3, P16): erzeugt ein lauffähiges Modul-Gerüst
- * (Manifest, Beispiel-API-Endpunkt, Migration, README), das den
- * {@see ManifestLinter} sauber besteht — beschleunigt Drittanbieter-Module.
+ * Module scaffolder (program tier 3, P16): generates a runnable module skeleton
+ * (manifest, example API endpoint, migration, README) that passes the
+ * {@see ManifestLinter} cleanly — accelerates third-party modules.
  */
 class ModuleScaffolder
 {
     /**
-     * @return list<string> erzeugte Dateien (relativ)
+     * @return list<string> generated files (relative)
      */
     public function scaffold(string $key, string $namespace, string $targetDir): array
     {

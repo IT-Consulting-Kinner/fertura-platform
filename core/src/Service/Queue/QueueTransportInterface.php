@@ -4,40 +4,40 @@ declare(strict_types=1);
 namespace App\Service\Queue;
 
 /**
- * Generischer, durabler Job-Queue-Transport (Skalierungs-/Broker-Pfad, #10).
+ * Generic, durable job-queue transport (scaling/broker path, #10).
  *
- * Bewusst getrennt vom **Event-Outbox**: Domänen-Events (mit Automation/Workflow/
- * Webhooks/Retry/Mandanten-Fairness) bleiben DB-gestützt; diese Queue ist ein
- * schmales Primitiv für **durchsatzstarke/Broker-Workloads**. Treiber: `db`
- * (Default, Postgres `FOR UPDATE SKIP LOCKED`) oder `redis` (Redis Streams,
- * Consumer-Group). Auswahl über Setting/Env (`queue.transport`).
+ * Deliberately separate from the **event outbox**: domain events (with
+ * automation/workflow/webhooks/retry/tenant fairness) stay DB-backed; this queue
+ * is a thin primitive for **high-throughput/broker workloads**. Drivers: `db`
+ * (default, Postgres `FOR UPDATE SKIP LOCKED`) or `redis` (Redis Streams,
+ * consumer group). Selected via setting/env (`queue.transport`).
  */
 interface QueueTransportInterface
 {
     /**
-     * Reiht einen Job ein und gibt seine Transport-ID zurück.
+     * Enqueues a job and returns its transport ID.
      *
      * @param array<string,mixed> $payload
      */
     public function push(string $queue, array $payload): string;
 
     /**
-     * Reserviert bis zu $max bereitstehende Jobs (sichtbar nur dem Aufrufer, bis
-     * ack/release). Konkurrierende Consumer erhalten disjunkte Mengen.
+     * Reserves up to $max ready jobs (visible only to the caller until
+     * ack/release). Competing consumers receive disjoint sets.
      *
      * @return list<array{id:string, payload:array<string,mixed>}>
      */
     public function reserve(string $queue, int $max = 1): array;
 
-    /** Bestätigt die erfolgreiche Verarbeitung (entfernt den Job endgültig). */
+    /** Acknowledges successful processing (removes the job permanently). */
     public function ack(string $queue, string $id): void;
 
-    /** Gibt einen reservierten Job zur erneuten Zustellung frei (Fehlschlag). */
+    /** Releases a reserved job for redelivery (failure). */
     public function release(string $queue, string $id): void;
 
-    /** Anzahl noch nicht reservierter (bereitstehender) Jobs. */
+    /** Number of not-yet-reserved (ready) jobs. */
     public function size(string $queue): int;
 
-    /** Treibername (`db`|`redis`). */
+    /** Driver name (`db`|`redis`). */
     public function name(): string;
 }

@@ -8,8 +8,8 @@ use App\Service\Ai\LlmProviderInterface;
 use App\Service\Http\EgressClient;
 
 /**
- * Anthropic/Claude-Provider (P11). System-Nachrichten werden als `system`-Feld
- * übergeben; Embeddings bietet Anthropic nicht.
+ * Anthropic/Claude provider (P11). System messages are passed via the `system`
+ * field; Anthropic does not offer embeddings.
  */
 class AnthropicProvider implements LlmProviderInterface
 {

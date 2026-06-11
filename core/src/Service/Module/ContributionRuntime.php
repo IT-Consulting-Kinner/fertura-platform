@@ -8,14 +8,15 @@ use App\Service\Registry\ContractRegistry;
 use RuntimeException;
 
 /**
- * Führt Modul-Beiträge zu Erweiterungspunkten aus — **in-process** oder, bei
- * `out_of_process`-Modulen, **über RPC im isolierten Host** (Kap. 23.16.2,
- * Phase 3). Einheitliche Weiche für Collector (Health/Scheduled/Anonymize),
- * Event-Listener und (über {@see CapabilityHandle}) Resolver/Service.
+ * Executes module contributions to extension points — **in-process** or, for
+ * `out_of_process` modules, **via RPC in the isolated host** (ch. 23.16.2,
+ * phase 3). A single dispatch point for collectors (Health/Scheduled/Anonymize),
+ * event listeners and (via {@see CapabilityHandle}) resolvers/services.
  *
- * In-Process-Beiträge laufen im aktuellen Request-/Worker-Kontext (ambienter
- * RLS-Kontext der Default-Connection). Out-of-Process-Beiträge erhalten den
- * RLS-Kontext explizit über die RPC-Grenze ({@see RemoteInvoker::call()}).
+ * In-process contributions run in the current request/worker context (the
+ * ambient RLS context of the default connection). Out-of-process contributions
+ * receive the RLS context explicitly across the RPC boundary
+ * ({@see RemoteInvoker::call()}).
  */
 class ContributionRuntime
 {
@@ -37,7 +38,8 @@ class ContributionRuntime
     }
 
     /**
-     * Ruft einen Beitrag auf. Out-of-Process → über den Host (RPC), sonst lokal.
+     * Invokes a contribution. Out-of-process → via the host (RPC), otherwise
+     * locally.
      *
      * @param array{class:string, module_key:string, isolation?:string} $contrib
      * @param list<mixed> $args
@@ -57,7 +59,7 @@ class ContributionRuntime
     }
 
     /**
-     * Reichert die Beiträge um den Isolationsmodus ihres Moduls an (eine Abfrage).
+     * Enriches the contributions with their module's isolation mode (one query).
      *
      * @param list<array{class:string, module_key:string}> $contribs
      * @return list<array{class:string, module_key:string, isolation:string}>

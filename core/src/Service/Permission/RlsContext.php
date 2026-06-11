@@ -6,14 +6,13 @@ namespace App\Service\Permission;
 use Cake\Database\Connection;
 
 /**
- * Setzt den Row-Level-Security-Zugriffskontext pro Transaktion via SET LOCAL
- * (pooling-kompatibel, Entscheidung 175). MUSS innerhalb einer Transaktion
- * aufgerufen werden.
+ * Sets the row-level-security access context per transaction via SET LOCAL
+ * (pooling-compatible, Decision 175). MUST be called within a transaction.
  *
- * Session-Variablen:
+ * Session variables:
  *   app.current_user_id, app.current_group_ids (CSV uuids), app.bypass_rls,
- *   app.current_tenant_id (Mandant; leer = kein Mandantenkontext -> mandanten-
- *   bezogene Daten sind unsichtbar, fail-closed)
+ *   app.current_tenant_id (tenant; empty = no tenant context -> tenant-scoped
+ *   data is invisible, fail-closed)
  */
 class RlsContext
 {

@@ -7,9 +7,9 @@ use Cake\Datasource\ConnectionInterface;
 use Cake\Datasource\ConnectionManager;
 
 /**
- * Default-Treiber des Job-Queue-Transports: Postgres-Tabelle `job_queue`,
- * reserviert mit `FOR UPDATE SKIP LOCKED` (mehrere Consumer kollisionsfrei).
- * Keine externe Infrastruktur nötig.
+ * Default driver of the job-queue transport: Postgres table `job_queue`,
+ * reserved with `FOR UPDATE SKIP LOCKED` (multiple consumers without collisions).
+ * No external infrastructure required.
  */
 class DbQueueTransport implements QueueTransportInterface
 {

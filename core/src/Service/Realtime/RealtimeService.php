@@ -9,32 +9,32 @@ use Throwable;
 use function Cake\Core\env;
 
 /**
- * Echtzeit-Zustellung an Benutzer (Programm Tier-2, P08) über PostgreSQL
+ * Real-time delivery to users (Program Tier-2, P08) via PostgreSQL
  * `LISTEN/NOTIFY`.
  *
- * Jeder Benutzer hat einen eigenen Kanal (`rt_<hash>`). {@see publish()} sendet
- * ein Ereignis (`pg_notify`), das die SSE-Verbindung des Benutzers
- * ({@see \App\Controller\SseController}) ausliefert. Kein zusätzlicher Broker
- * nötig (gleiche Strömung wie der Outbox-Worker).
+ * Each user has its own channel (`rt_<hash>`). {@see publish()} sends an event
+ * (`pg_notify`) that the user's SSE connection
+ * ({@see \App\Controller\SseController}) delivers. No additional broker required
+ * (same approach as the outbox worker).
  */
 class RealtimeService
 {
-    /** Stabiler, identifier-sicherer Kanalname je Benutzer. */
+    /** Stable, identifier-safe channel name per user. */
     public static function channel(string $userId): string
     {
         return 'rt_' . substr((string)preg_replace('/[^a-z0-9]/i', '', $userId), 0, 50);
     }
 
     /**
-     * Veröffentlicht ein Ereignis an den Kanal eines Benutzers.
+     * Publishes an event to a user's channel.
      *
      * @param array<string,mixed> $data
      */
     public function publish(string $userId, string $event, array $data): void
     {
         $payload = (string)json_encode(['event' => $event, 'data' => $data], JSON_UNESCAPED_UNICODE);
-        // pg_notify nimmt den Kanal als Parameter (keine Identifier-Quoting-Frage);
-        // Payload-Grenze 8000 Bytes -> Benachrichtigungen klein halten.
+        // pg_notify takes the channel as a parameter (no identifier-quoting issue);
+        // payload limit 8000 bytes -> keep notifications small.
         ConnectionManager::get('default')->execute(
             'SELECT pg_notify(:channel, :payload)',
             ['channel' => self::channel($userId), 'payload' => mb_substr($payload, 0, 7900)],
@@ -42,9 +42,9 @@ class RealtimeService
     }
 
     /**
-     * Öffnet eine eigene PDO-Verbindung für `LISTEN` (getrennt von der ORM-
-     * Connection, da die SSE-Schleife lange offen bleibt). App-Rolle genügt
-     * (LISTEN/NOTIFY ist nicht rechtebeschränkt).
+     * Opens a dedicated PDO connection for `LISTEN` (separate from the ORM
+     * connection, since the SSE loop stays open for a long time). The app role
+     * suffices (LISTEN/NOTIFY is not permission-restricted).
      */
     public static function listenPdo(): ?PDO
     {

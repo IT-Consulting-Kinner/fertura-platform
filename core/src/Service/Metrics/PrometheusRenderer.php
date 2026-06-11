@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace App\Service\Metrics;
 
 /**
- * Rendert Metrik-Samples in das Prometheus-Textformat (Exposition 0.0.4).
+ * Renders metric samples into the Prometheus text format (exposition 0.0.4).
  *
  * @phpstan-type Sample array{name:string, type?:string, help?:string, labels?:array<string,scalar>, value:int|float}
  */

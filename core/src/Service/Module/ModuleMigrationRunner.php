@@ -8,26 +8,26 @@ use RuntimeException;
 use Throwable;
 
 /**
- * Führt Modul-Migrationen aus. Modul-Migrationen sind versionierte SQL-Dateien
- * (`migrations/NNN_name.sql`) mit einem `-- @DOWN`-Trenner (oben up, unten down).
- * Sie laufen transaktional im Modul-Schema (mod_<key>) und werden in
- * core.module_migrations_log getrackt (Step 7, E21).
+ * Runs module migrations. Module migrations are versioned SQL files
+ * (`migrations/NNN_name.sql`) with a `-- @DOWN` separator (up above, down below).
+ * They run transactionally in the module schema (mod_<key>) and are tracked in
+ * core.module_migrations_log (Step 7, E21).
  *
- * (Der Core selbst nutzt weiterhin cakephp/migrations; für Module ist die
- * Core-gesteuerte SQL-Variante robuster als per-Modul-Phinx-Instanzen.)
+ * (The core itself still uses cakephp/migrations; for modules the core-driven
+ * SQL approach is more robust than per-module Phinx instances.)
  */
 class ModuleMigrationRunner
 {
     /**
-     * @param ?string $roleDsn Wenn gesetzt, läuft die Migrations-DDL über eine als
-     *   **eingeschränkte Modul-Login-Rolle** authentifizierte Verbindung (PDO-DSN)
-     *   statt als Superuser (Out-of-Process-Isolation, Kap. 23.16.2). Als echte
-     *   Login-Rolle kann eine bösartige Migration den Core **nicht** beschädigen:
-     *   `RESET ROLE`/`SET ROLE`/`SET SESSION AUTHORIZATION` führen nicht zu
-     *   Superuser zurück (kein `SET LOCAL ROLE` auf einer Superuser-Session). Der
-     *   Tracking-Insert läuft auf der Superuser-Verbindung (die Rolle hat keinen
-     *   Zugriff auf core.*).
-     * @return list<string> Namen der ausgeführten Migrationen.
+     * @param ?string $roleDsn If set, the migration DDL runs over a connection
+     *   (PDO DSN) authenticated as the **restricted module login role** instead
+     *   of as superuser (out-of-process isolation, ch. 23.16.2). As a genuine
+     *   login role, a malicious migration **cannot** harm the core:
+     *   `RESET ROLE`/`SET ROLE`/`SET SESSION AUTHORIZATION` do not lead back to
+     *   superuser (there is no `SET LOCAL ROLE` on a superuser session). The
+     *   tracking insert runs on the superuser connection (the role has no access
+     *   to core.*).
+     * @return list<string> Names of the migrations that were run.
      */
     public function runUp(string $moduleId, string $schema, string $migrationsDir, ?string $roleDsn = null): array
     {
@@ -55,14 +55,14 @@ class ModuleMigrationRunner
 
             try {
                 if ($rolePdo !== null) {
-                    // DDL als eingeschränkte Login-Rolle (kein Superuser-Code).
+                    // DDL as the restricted login role (no superuser code).
                     $rolePdo->beginTransaction();
                     $rolePdo->exec("SET LOCAL search_path TO $schema, core, public");
                     foreach ($statements as $stmt) {
                         $rolePdo->exec($stmt);
                     }
                     $rolePdo->commit();
-                    // Tracking als Superuser (Rolle hat keinen core.*-Zugriff).
+                    // Tracking as superuser (the role has no core.* access).
                     $connection->execute(
                         "INSERT INTO core.module_migrations_log (module_id, migration_name, status) VALUES (:m, :n, 'success')",
                         ['m' => $moduleId, 'n' => $name],
@@ -84,8 +84,8 @@ class ModuleMigrationRunner
                 if ($rolePdo !== null && $rolePdo->inTransaction()) {
                     $rolePdo->rollBack();
                 }
-                // Kein 'failed'-Log (sonst Unique-Konflikt beim Retry); die
-                // fehlgeschlagene Migrationstransaktion ist bereits zurückgerollt.
+                // No 'failed' log entry (it would cause a unique conflict on
+                // retry); the failed migration transaction has already been rolled back.
                 throw new RuntimeException("Modul-Migration $name fehlgeschlagen: " . $e->getMessage(), 0, $e);
             }
         }
@@ -94,10 +94,10 @@ class ModuleMigrationRunner
     }
 
     /**
-     * Führt die down-Operation einer bereits angewendeten Modul-Migration aus
-     * (Rollback). Liest den @DOWN-Teil aus der Paketdatei, führt ihn im
-     * Modul-Schema aus und entfernt den Log-Eintrag. Bei isolierten Modulen
-     * (`$roleDsn`) läuft auch die down-DDL als Login-Rolle.
+     * Runs the down operation of an already applied module migration (rollback).
+     * Reads the @DOWN part from the package file, runs it in the module schema
+     * and removes the log entry. For isolated modules (`$roleDsn`) the down DDL
+     * also runs as the login role.
      */
     public function runDown(string $moduleId, string $schema, string $migrationsDir, string $name, ?string $roleDsn = null): void
     {
@@ -106,9 +106,9 @@ class ModuleMigrationRunner
             return;
         }
         $statements = $this->statements($this->downPart((string)file_get_contents($file)));
-        // Eine leere @DOWN-Sektion ist kein gültiger Rückbau: den Tracking-Eintrag
-        // OHNE tatsächliches Zurücksetzen zu löschen würde den Stand inkonsistent
-        // machen (Re-Update scheitert dann an „Objekt existiert bereits").
+        // An empty @DOWN section is not a valid rollback: deleting the tracking
+        // entry WITHOUT actually reverting would leave the state inconsistent (a
+        // re-update would then fail with "object already exists").
         if ($statements === []) {
             throw new RuntimeException("Migration $name hat keine @DOWN-Sektion – Rückbau nicht möglich.");
         }
@@ -149,7 +149,7 @@ class ModuleMigrationRunner
         }
     }
 
-    /** Verbindung als eingeschränkte Modul-Login-Rolle (für Migrationen-als-Rolle). */
+    /** Connection as the restricted module login role (for migrations-as-role). */
     private function roleConnection(string $dsn): \PDO
     {
         $pdo = new \PDO($dsn);
@@ -167,10 +167,10 @@ class ModuleMigrationRunner
     }
 
     /**
-     * Listet die noch nicht angewendeten Migrationen eines Pakets, OHNE sie
-     * auszuführen (Migrationsvorschau, Kap. 24.13/28.8.1).
+     * Lists the not-yet-applied migrations of a package WITHOUT running them
+     * (migration preview, ch. 24.13/28.8.1).
      *
-     * @return list<string> Dateinamen der ausstehenden Migrationen (sortiert).
+     * @return list<string> File names of the pending migrations (sorted).
      */
     public function listPending(string $moduleId, string $migrationsDir): array
     {
@@ -207,8 +207,8 @@ class ModuleMigrationRunner
     /** @return list<string> */
     private function statements(string $sql): array
     {
-        // Zuerst Kommentarzeilen entfernen, damit ein führender Kommentar nicht
-        // die ganze Anweisung verschluckt; dann an ';' in Anweisungen trennen.
+        // First strip comment lines, so a leading comment does not swallow the
+        // whole statement; then split into statements on ';'.
         $clean = [];
         foreach (preg_split('/\r?\n/', $sql) ?: [] as $line) {
             if (str_starts_with(ltrim($line), '--')) {

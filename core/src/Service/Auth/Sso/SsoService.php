@@ -11,14 +11,14 @@ use RuntimeException;
 use Symfony\Component\Uid\Uuid;
 
 /**
- * SSO-Identitätsföderation (Programm Tier-1, P06): Verwaltung der Identity
- * Provider (OIDC/SAML) und **Just-in-Time-Provisioning/Account-Linking**.
+ * SSO identity federation (program tier-1, P06): management of identity
+ * providers (OIDC/SAML) and **just-in-time provisioning/account linking**.
  *
- * Identitäten und Autorisierung bleiben Core-verwaltet (Kap. 27.2.1): ein
- * externer Provider authentifiziert nur; dieser Dienst ordnet die externe
- * Identität einem Core-Benutzer zu (über `identity_links` oder die E-Mail) bzw.
- * legt ihn an (Status `active`, ohne Passwort). Lokale Anmeldung bleibt parallel
- * möglich (Break-Glass).
+ * Identities and authorization stay core-managed (ch. 27.2.1): an external
+ * provider only authenticates; this service maps the external identity to a
+ * core user (via `identity_links` or the email) or creates one (status
+ * `active`, without a password). Local login remains possible in parallel
+ * (break-glass).
  */
 class SsoService
 {
@@ -44,7 +44,7 @@ class SsoService
     }
 
     /**
-     * Aktive Provider für die Login-Auswahl (ohne Geheimnisse).
+     * Active providers for the login selection (without secrets).
      *
      * @return list<array{id:string,type:string,name:string,button_label:string}>
      */
@@ -66,16 +66,16 @@ class SsoService
     }
 
     /**
-     * Voller Provider inkl. dekodierter Konfig + entschlüsseltem Geheimnis.
+     * Full provider including decoded config + decrypted secret.
      *
      * @return array<string,mixed>|null
      */
     public function provider(string $id): ?array
     {
-        // `id` ist eine uuid-Spalte: ein nicht-UUID-Wert (z. B. aus einem
-        // Route-Parameter, der SAML-RelayState oder der Session) löst sonst eine
-        // Postgres-`QueryException` (SQLSTATE 22P02) aus, die als 500 endet und
-        // SQL/Stacktrace ins Log streut. Unbekannte ID == unbekannter Provider.
+        // `id` is a uuid column: a non-UUID value (e.g. from a route parameter,
+        // the SAML RelayState or the session) would otherwise trigger a Postgres
+        // `QueryException` (SQLSTATE 22P02) that ends as a 500 and leaks
+        // SQL/stack trace into the log. An unknown ID == an unknown provider.
         if (!Uuid::isValid($id)) {
             return null;
         }
@@ -120,8 +120,8 @@ class SsoService
 
     public function setActive(string $id, bool $active): void
     {
-        // UUID-Guard: die ID kommt aus der Admin-GUI-URL; fehlgeformte Werte
-        // wie unbekannte behandeln statt 22P02 -> 500 (vgl. \App\Infrastructure\Uuid).
+        // UUID guard: the ID comes from the admin GUI URL; treat malformed
+        // values like unknown ones instead of 22P02 -> 500 (cf. \App\Infrastructure\Uuid).
         if (!\App\Infrastructure\Uuid::isValid($id)) {
             return;
         }
@@ -141,9 +141,8 @@ class SsoService
     }
 
     /**
-     * Ordnet eine externe Identität einem Core-Benutzer zu (Link → E-Mail →
-     * Provisioning) und gibt die Benutzer-ID zurück. Der Aufrufer etabliert die
-     * Session.
+     * Maps an external identity to a core user (link → email → provisioning) and
+     * returns the user ID. The caller establishes the session.
      */
     public function loginExternalUser(string $providerId, string $subject, string $email, ?string $first, ?string $last, ?bool $emailVerified = null): string
     {
@@ -160,8 +159,8 @@ class SsoService
         if ($email === '') {
             throw new RuntimeException('SSO-Antwort ohne E-Mail — keine Zuordnung möglich.');
         }
-        // Sagt der Provider die E-Mail ausdrücklich als unverifiziert (OIDC
-        // email_verified=false), niemals darüber zuordnen (Spoofing-Schutz).
+        // If the provider explicitly reports the email as unverified (OIDC
+        // email_verified=false), never map via it (spoofing protection).
         if ($emailVerified === false) {
             throw new RuntimeException('SSO-Antwort mit unverifizierter E-Mail — Zuordnung abgelehnt.');
         }
@@ -182,23 +181,23 @@ class SsoService
             if (in_array($user['status'], ['disabled', 'anonymized'], true)) {
                 throw new RuntimeException('Konto ist deaktiviert.');
             }
-            // SICHERHEIT (Account-Takeover-Schutz): niemals automatisch in ein
-            // bestehendes Konto mit **lokalem Passwort** einloggen, nur weil ein
-            // (möglicherweise fremder) IdP dessen E-Mail behauptet. Nur
-            // passwortlose Konten (SSO-/eingeladen) dürfen per E-Mail verknüpft
-            // werden; lokale Konten verknüpfen den IdP explizit nach Login.
+            // SECURITY (account-takeover protection): never automatically log
+            // into an existing account with a **local password** just because a
+            // (possibly foreign) IdP claims its email. Only passwordless accounts
+            // (SSO/invited) may be linked by email; local accounts link the IdP
+            // explicitly after login.
             if ($user['password_hash'] !== null) {
                 throw new RuntimeException(
                     'Ein Konto mit dieser E-Mail und lokalem Login existiert bereits — '
                     . 'bitte zuerst lokal anmelden und SSO in den Kontoeinstellungen verknüpfen.',
                 );
             }
-            // Account-Takeover-Schutz für **offene Einladungen**: ein passwortloses
-            // Konto im Status `invited` (oft frisch eingeladen, ggf. privilegiert)
-            // darf NICHT allein über eine nicht ausdrücklich verifizierte IdP-E-Mail
-            // (SAML liefert `email_verified`=null) beansprucht werden. Sonst könnte
-            // ein IdP, der eine fremde E-Mail behauptet, eine ausstehende Einladung
-            // kapern. Verifizierte OIDC-E-Mails (email_verified=true) sind erlaubt.
+            // Account-takeover protection for **open invitations**: a passwordless
+            // account in status `invited` (often freshly invited, possibly
+            // privileged) must NOT be claimed solely via a not-explicitly-verified
+            // IdP email (SAML reports `email_verified`=null). Otherwise an IdP that
+            // claims a foreign email could hijack a pending invitation. Verified
+            // OIDC emails (email_verified=true) are allowed.
             if ($user['status'] === 'invited' && $emailVerified !== true) {
                 throw new RuntimeException(
                     'Zu dieser E-Mail existiert eine offene Einladung — bitte zuerst die '
@@ -219,10 +218,10 @@ class SsoService
     }
 
     /**
-     * Merkt eine ausstehende SAML-AuthnRequest serverseitig und bindet den
-     * (zufälligen) `RelayState` an Provider + Request-ID. Cookie-unabhängiger
-     * Replay-Schutz: der IdP spiegelt den RelayState zurück, beim ACS wird er
-     * **einmalig** eingelöst. Räumt abgelaufene Einträge opportunistisch ab.
+     * Remembers a pending SAML AuthnRequest server-side and binds the (random)
+     * `RelayState` to provider + request ID. Cookie-independent replay
+     * protection: the IdP mirrors the RelayState back, and at the ACS it is
+     * redeemed **once**. Opportunistically cleans up expired entries.
      */
     public function rememberSamlRequest(
         string $relayState,
@@ -240,10 +239,10 @@ class SsoService
     }
 
     /**
-     * Löst einen `RelayState` **einmalig** ein (atomar via `DELETE ... RETURNING`)
-     * und liefert die gebundene Provider-ID + erwartete Request-ID — oder null,
-     * wenn der RelayState unbekannt, abgelaufen oder bereits verbraucht ist
-     * (Replay). Der ACS bindet die SAML-Antwort an genau diese Request-ID.
+     * Redeems a `RelayState` **once** (atomically via `DELETE ... RETURNING`) and
+     * returns the bound provider ID + expected request ID — or null if the
+     * RelayState is unknown, expired or already consumed (replay). The ACS binds
+     * the SAML response to exactly this request ID.
      *
      * @return array{provider_id:string, request_id:string}|null
      */

@@ -4,24 +4,24 @@ declare(strict_types=1);
 namespace App\Service\Privacy;
 
 /**
- * Beitrag eines Moduls zur Benutzer-Anonymisierung (Collector
- * `core.collector.anonymize`, Kap. 27.15.3).
+ * A module's contribution to user anonymization (collector
+ * `core.collector.anonymize`, ch. 27.15.3).
  *
- * Wird vom Core aufgerufen, wenn ein Benutzer **irreversibel anonymisiert**
- * wird. Das Modul bereinigt **seine eigenen** personenbezogenen Daten (z. B.
- * Freitextfelder in Modultabellen) zu diesem Benutzer — der Core kennt die
- * Modul-Datenmodelle nicht. Technische IDs/Referenzen sollen erhalten bleiben
- * (wie im Core), nur personenbezogene Inhalte werden ersetzt/entfernt.
+ * Invoked by the core when a user is **irreversibly anonymized**. The module
+ * cleans up **its own** personal data (e.g. free-text fields in module tables)
+ * relating to that user — the core does not know the module data models.
+ * Technical IDs/references should be preserved (as in the core); only personal
+ * content is replaced/removed.
  *
- * Läuft in der Anonymisierungs-Transaktion des Core (atomar). Out-of-Process-
- * Module führen ihren Beitrag im isolierten Host aus (Kap. 23.16.2).
+ * Runs inside the core's anonymization transaction (atomic). Out-of-process
+ * modules execute their contribution in the isolated host (ch. 23.16.2).
  */
 interface AnonymizeContributorInterface
 {
     /**
-     * Bereinigt die personenbezogenen Daten des Benutzers `$userId` (UUID).
+     * Cleans up the personal data of the user `$userId` (UUID).
      *
-     * @return int Anzahl bereinigter Datensätze (für Protokoll/Audit).
+     * @return int number of records cleaned up (for log/audit).
      */
     public function anonymizeUser(string $userId): int;
 }

@@ -6,37 +6,38 @@ namespace App\Service\Backup;
 use RuntimeException;
 
 /**
- * Pfad-Normalisierung/-Validierung für Backup-Ablage und -Restore (Kap. 20.1.2).
+ * Path normalization/validation for backup storage and restore (ch. 20.1.2).
  *
- * Akzeptiert **Linux-** (`/mnt/backups`) und **Windows-Pfade** (`C:\Backups`,
- * `\\server\share`) syntaktisch und normalisiert auf Forward-Slashes (die PHP auf
- * beiden Plattformen versteht). Operativ nutzbar ist ein Pfad nur, wenn er zum
- * Laufzeit-OS passt — läuft Fertura im (Linux-)Container, muss ein **gemounteter
- * Linux-Pfad** angegeben werden (ein Windows-Ordner wird per Volume gemountet).
+ * Accepts both **Linux** (`/mnt/backups`) and **Windows paths** (`C:\Backups`,
+ * `\\server\share`) syntactically and normalizes them to forward slashes (which
+ * PHP understands on both platforms). A path is only operationally usable if it
+ * matches the runtime OS — when Fertura runs inside the (Linux) container, a
+ * **mounted Linux path** must be supplied (a Windows folder is exposed via a
+ * volume mount).
  */
 class BackupPath
 {
-    /** Normalisiert Separatoren auf `/`, entfernt Mehrfach-Slashes + Trailing-Slash. */
+    /** Normalizes separators to `/`, collapses repeated slashes and strips a trailing slash. */
     public static function normalize(string $path): string
     {
         $p = str_replace('\\', '/', trim($path));
         $unc = str_starts_with($p, '//');
         $p = (string)preg_replace('#/{2,}#', '/', $p);
         if ($unc) {
-            $p = '/' . $p; // führendes // für UNC erhalten
+            $p = '/' . $p; // preserve the leading // for UNC paths
         }
         $p = rtrim($p, '/');
 
         return $p === '' ? '/' : $p;
     }
 
-    /** Windows-Stil: Laufwerk `C:/…` oder UNC `//server/share` (nach normalize). */
+    /** Windows-style: drive letter `C:/…` or UNC `//server/share` (after normalize). */
     public static function isWindows(string $normalized): bool
     {
         return (bool)preg_match('#^[A-Za-z]:/#', $normalized) || str_starts_with($normalized, '//');
     }
 
-    /** Linux-Stil: absoluter Pfad `/…` (kein UNC). */
+    /** Linux-style: absolute path `/…` (not UNC). */
     public static function isLinux(string $normalized): bool
     {
         return str_starts_with($normalized, '/') && !str_starts_with($normalized, '//');
@@ -48,8 +49,9 @@ class BackupPath
     }
 
     /**
-     * Validiert einen Pfad für das aktuelle Laufzeit-OS. Wirft mit klarer
-     * Meldung, wenn der Stil nicht passt (z. B. Windows-Pfad im Linux-Container).
+     * Validates a path against the current runtime OS. Throws with a clear
+     * message when the style does not match (e.g. a Windows path inside the
+     * Linux container).
      */
     public static function assertUsable(string $path): string
     {

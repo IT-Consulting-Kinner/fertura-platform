@@ -9,17 +9,17 @@ use Cake\Database\Connection;
 use Throwable;
 
 /**
- * Orchestriert die Modul-Teilnahme an der Benutzer-Anonymisierung (Kap.
- * 27.15.3). Beim irreversiblen Anonymisieren eines Benutzers ruft der Core
- * über den Collector `core.collector.anonymize` jedes registrierte Modul auf,
- * damit es **seine eigenen** personenbezogenen Daten zu dem Benutzer bereinigt.
+ * Orchestrates module participation in user anonymization (ch. 27.15.3). When a
+ * user is irreversibly anonymized, the core invokes every registered module via
+ * the collector `core.collector.anonymize` so that it cleans up **its own**
+ * personal data relating to that user.
  *
- * Läuft in der Anonymisierungs-Transaktion (atomar, all-or-nothing): scheitert
- * ein Beitrag, scheitert die gesamte Anonymisierung — besser laut als eine
- * unvollständige Löschung. Für die Dauer der Beiträge wird `app.bypass_rls`
- * gesetzt (privilegierte Core-Operation ohne laufenden Benutzerkontext, damit
- * die Beiträge die Zeilen des Zielnutzers erreichen) und danach wieder auf den
- * vorherigen Wert zurückgesetzt.
+ * Runs inside the anonymization transaction (atomic, all-or-nothing): if a
+ * contribution fails, the entire anonymization fails — better loud than an
+ * incomplete deletion. For the duration of the contributions `app.bypass_rls`
+ * is set (a privileged core operation with no running user context, so the
+ * contributions can reach the target user's rows) and afterwards reset to its
+ * previous value.
  */
 class AnonymizationService
 {
@@ -31,7 +31,7 @@ class AnonymizationService
     }
 
     /**
-     * @return int Summe der von allen Modulen bereinigten Datensätze.
+     * @return int sum of records cleaned up by all modules.
      */
     public function run(string $userId, Connection $conn): int
     {
@@ -39,15 +39,15 @@ class AnonymizationService
         try {
             $contribs = $runtime->collectors(self::COLLECTOR);
         } catch (Throwable) {
-            // Contract (noch) nicht vorhanden -> keine Modul-Beiträge.
+            // Contract not (yet) present -> no module contributions.
             return 0;
         }
         if ($contribs === []) {
             return 0;
         }
 
-        // In-Process-Beiträge nutzen den ambienten Kontext dieser Connection ->
-        // hier bypass setzen; Out-of-Process-Beiträge erhalten bypass über RPC.
+        // In-process contributions use the ambient context of this connection ->
+        // set bypass here; out-of-process contributions receive bypass via RPC.
         $prev = (string)($conn->execute("SELECT current_setting('app.bypass_rls', true) AS v")->fetch('assoc')['v'] ?? '');
         $conn->execute("SELECT set_config('app.bypass_rls', 'true', true)");
         try {

@@ -11,11 +11,11 @@ use Cake\Log\Log;
 use Throwable;
 
 /**
- * Health-Alert-Hook (#12): meldet **Statuswechsel** des Gesamt-Health
- * (`up` ↔ `degraded`/`down`) per signiertem Webhook an `health.alert_url`. Nur bei
- * **Übergang** (kein Spam pro Zyklus); Signatur HMAC-SHA256 (`health.alert_secret`),
- * Versand über den gehärteten {@see EgressClient}. Routing/Eskalation übernimmt der
- * externe Empfänger (Alertmanager/PagerDuty/…).
+ * Health alert hook (#12): reports **status changes** of the overall health
+ * (`up` ↔ `degraded`/`down`) via a signed webhook to `health.alert_url`. Only on
+ * **transition** (no spam every cycle); signature HMAC-SHA256 (`health.alert_secret`),
+ * sent via the hardened {@see EgressClient}. Routing/escalation is handled by the
+ * external recipient (Alertmanager/PagerDuty/…).
  */
 class HealthAlertService
 {
@@ -35,14 +35,14 @@ class HealthAlertService
         $this->health = $health ?? new HealthService();
         $this->egress = $egress ?? new EgressClient();
         $this->settings = $settings ?? new SettingsManager();
-        // Langlebiger Zustands-Cache (kein +1h-TTL): sonst löst eine >1h anhaltende
-        // Störung nach Ablauf des Schlüssels denselben Alarm fälschlich erneut aus.
+        // Long-lived state cache (no +1h TTL): otherwise an outage lasting >1h would
+        // wrongly re-trigger the same alert once the key expires.
         $this->cache = $cache ?? new CacheStore('_app_health_');
     }
 
     /**
-     * Prüft den Health-Status und alarmiert bei Übergang. Gibt true zurück, wenn
-     * ein Alarm gesendet wurde.
+     * Checks the health status and alerts on transition. Returns true if an
+     * alert was sent.
      */
     public function check(): bool
     {
@@ -51,13 +51,13 @@ class HealthAlertService
         $previous = (string)($this->cache->get(self::STATE_KEY, 'up'));
 
         if ($status === $previous) {
-            return false; // kein Wechsel -> kein Alarm
+            return false; // no change -> no alert
         }
         $this->cache->set(self::STATE_KEY, $status);
 
         $url = (string)($this->settings->get('core', 'health.alert_url', '') ?? '');
         if ($url === '') {
-            return false; // Wechsel registriert, aber kein Empfänger konfiguriert
+            return false; // change registered, but no recipient configured
         }
 
         try {
@@ -82,9 +82,9 @@ class HealthAlertService
 
             return $resp->isSuccess();
         } catch (Throwable $e) {
-            // Sichtbar machen (kein stilles Schlucken): ein interner Alert-Empfänger
-            // auf privater IP wird vom Egress-SSRF-Schutz blockiert, bis er in
-            // core.http.egress.allowlist steht. Kein Body/Secret im Log.
+            // Make it visible (no silent swallowing): an internal alert recipient
+            // on a private IP is blocked by the egress SSRF protection until it is
+            // in core.http.egress.allowlist. No body/secret in the log.
             Log::warning('[health-alert] Zustellung fehlgeschlagen (' . $url . '): ' . $e->getMessage());
 
             return false;

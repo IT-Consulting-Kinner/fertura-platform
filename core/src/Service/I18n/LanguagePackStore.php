@@ -10,14 +10,14 @@ use Throwable;
 /**
  * Managed Locale Store (i18n-3, E38/E40).
  *
- * Verwaltet die Sprachdateien (PO) im persistenten Store und die zugehörigen
- * Metadaten (core.language_packs). Sicheres Schreiben: `.tmp` + fsync →
- * **atomarer Rename** (kein Lösch-Fenster). Recovery unterscheidet laufende
- * Speichervorgänge (PostgreSQL-Advisory-Lock gehalten) von verwaisten `.tmp`
- * (Lock frei) und heilt bzw. bereinigt sie.
+ * Manages the language files (PO) in the persistent store and the associated
+ * metadata (core.language_packs). Safe writing: `.tmp` + fsync →
+ * **atomic rename** (no delete window). Recovery distinguishes in-progress
+ * saves (PostgreSQL advisory lock held) from orphaned `.tmp` files (lock free)
+ * and heals or cleans them up.
  *
  * Layout: <store>/<component_key>/<version>/<locale>/<domain>.po
- * CakePHP liest PO zur Laufzeit direkt → kein separates MO nötig.
+ * CakePHP reads PO directly at runtime → no separate MO needed.
  */
 class LanguagePackStore
 {
@@ -49,9 +49,9 @@ class LanguagePackStore
     }
 
     /**
-     * Speichert eine Sprachdatei atomar und aktualisiert die Metadaten.
-     * Serialisiert pro Datei über einen Advisory-Lock (paralleler Save →
-     * RuntimeException „wird gerade gespeichert").
+     * Saves a language file atomically and updates the metadata.
+     * Serialized per file via an advisory lock (a concurrent save →
+     * RuntimeException "currently being saved").
      *
      * @param array{type:string,domain:string,signed?:bool,reviewed?:bool,edited?:bool,source?:string,uploadedBy?:?string} $meta
      */
@@ -101,9 +101,9 @@ class LanguagePackStore
     }
 
     /**
-     * Recovery (Start/periodisch/lazy): geht alle verwaisten `.tmp` durch.
-     * In-flight (Lock gehalten) wird übersprungen. Original fehlt + vollständige
-     * `.tmp` → promoten (Selbstheilung); sonst verwaiste `.tmp` löschen.
+     * Recovery (startup/periodic/lazy): walks all orphaned `.tmp` files.
+     * In-flight ones (lock held) are skipped. Original missing + complete
+     * `.tmp` → promote (self-healing); otherwise delete the orphaned `.tmp`.
      *
      * @return array{promoted: list<string>, cleaned: list<string>, skipped: list<string>}
      */
@@ -128,17 +128,17 @@ class LanguagePackStore
 
             $got = $this->tryLockPath($original);
             if (!$got) {
-                $skipped[] = $tmp; // laufender Speichervorgang
+                $skipped[] = $tmp; // save in progress
                 continue;
             }
             try {
                 $origOk = is_file($original) && filesize($original) > 0;
                 $tmpComplete = is_file($tmp) && filesize($tmp) > 0 && str_contains((string)file_get_contents($tmp), 'msgid');
                 if (!$origOk && $tmpComplete) {
-                    rename($tmp, $original); // Selbstheilung
+                    rename($tmp, $original); // self-healing
                     $promoted[] = $original;
                 } else {
-                    @unlink($tmp); // verwaist / abgebrochen
+                    @unlink($tmp); // orphaned / aborted
                     $cleaned[] = $tmp;
                 }
             } finally {
@@ -149,7 +149,7 @@ class LanguagePackStore
         return compact('promoted', 'cleaned', 'skipped');
     }
 
-    // ---- intern --------------------------------------------------------------
+    // ---- internal ------------------------------------------------------------
 
     private function atomicWrite(string $file, string $content): void
     {
@@ -167,14 +167,14 @@ class LanguagePackStore
                 throw new RuntimeException("Schreiben fehlgeschlagen: $tmp");
             }
             fflush($h);
-            // Vollständig auf Platte zwingen, bevor der Rename committet (PHP 8.1+).
+            // Force fully to disk before the rename commits (PHP 8.1+).
             if (function_exists('fsync')) {
                 @fsync($h);
             }
         } finally {
             fclose($h);
         }
-        if (!rename($tmp, $file)) {  // atomar auf POSIX: ersetzt das Original
+        if (!rename($tmp, $file)) {  // atomic on POSIX: replaces the original
             @unlink($tmp);
             throw new RuntimeException("Atomarer Rename fehlgeschlagen: $file");
         }
@@ -205,7 +205,7 @@ class LanguagePackStore
 
     private function lockKey(string $path): int
     {
-        // hashtext liefert int4; als bigint an pg_advisory_lock.
+        // hashtext returns int4; pass it as bigint to pg_advisory_lock.
         $row = $this->conn()->execute('SELECT hashtext(:p)::bigint AS k', ['p' => $path])->fetch('assoc');
 
         return (int)$row['k'];

@@ -10,12 +10,12 @@ use Cake\Datasource\ConnectionManager;
 use Throwable;
 
 /**
- * Aggregiert den Systemzustand über alle Core-Subsysteme (Kap. 20.2.1) und die
- * registrierten Modul-Health-Beiträge (Collector, Kap. 20.2.2).
+ * Aggregates the system state across all core subsystems (ch. 20.2.1) and the
+ * registered module health contributions (collector, ch. 20.2.2).
  *
- * Statuswerte je Subsystem: up | degraded | down. Gesamtstatus: down, sobald
- * die Datenbank nicht erreichbar ist (Liveness), sonst degraded bei mindestens
- * einem nicht-„up"-Subsystem, sonst up.
+ * Status values per subsystem: up | degraded | down. Overall status: down as
+ * soon as the database is unreachable (liveness), otherwise degraded if at
+ * least one subsystem is not "up", otherwise up.
  */
 class HealthService
 {
@@ -31,7 +31,7 @@ class HealthService
         $this->license ??= new LicenseService();
     }
 
-    /** Minimaler Liveness-Check (Kap. 20.2.1): nur up/down, ohne Detail. */
+    /** Minimal liveness check (ch. 20.2.1): only up/down, no detail. */
     public function liveness(): bool
     {
         try {
@@ -44,12 +44,12 @@ class HealthService
     }
 
     /**
-     * Readiness (Programm Tier-3, P15): Soll diese Instanz Verkehr erhalten?
+     * Readiness (program tier-3, P15): should this instance receive traffic?
      *
-     * Für rollierende/Blue-Green-Deployments: ein Load-Balancer/Orchestrator
-     * leitet nur an **ready** Instanzen. Während eines Updates schaltet der
-     * Wartungsmodus (Kap. 28) die Instanz auf **not ready** (503), sodass sie
-     * ohne 503-Antworten an echte Nutzer gedrosselt/entleert werden kann.
+     * For rolling/blue-green deployments: a load balancer/orchestrator only
+     * routes to **ready** instances. During an update, maintenance mode
+     * (ch. 28) flips the instance to **not ready** (503), so it can be
+     * throttled/drained without returning 503 responses to real users.
      *
      * @return array{ready: bool, checks: array<string, bool>}
      */
@@ -60,14 +60,14 @@ class HealthService
         try {
             $maintenance = (bool)(new \App\Service\Settings\SettingsManager())->get('core', 'maintenance_mode', false);
         } catch (Throwable) {
-            // Settings nicht lesbar -> wie nicht im Wartungsmodus behandeln.
+            // Settings not readable -> treat as if not in maintenance mode.
         }
 
         return ['ready' => $db && !$maintenance, 'checks' => ['database' => $db, 'not_maintenance' => !$maintenance]];
     }
 
     /**
-     * Voller Subsystem-Status (auth-/token-geschützt, Kap. 20.2.1).
+     * Full subsystem status (auth-/token-protected, ch. 20.2.1).
      *
      * @return array{status: string, subsystems: array<string, mixed>, features: array<string, bool>}
      */
@@ -82,8 +82,8 @@ class HealthService
             'modules' => $this->checkModules(),
             'outbox' => $this->checkOutbox(),
             'licenses' => $this->checkLicenses(),
-            // Abgeschaltete optionale Subsysteme nicht prüfen (kein Netz, kein
-            // falsches „degraded") – nur als deaktiviert ausweisen.
+            // Don't probe disabled optional subsystems (no network, no false
+            // "degraded") – just report them as disabled.
             'marketplace' => $features['marketplace'] ? $this->checkMarketplace() : ['status' => 'up', 'detail' => 'deaktiviert'],
             'localization' => $this->checkLocalization(),
             'backup' => $this->checkBackup(),
@@ -114,8 +114,8 @@ class HealthService
 
             return [
                 'status' => 'up',
-                // Betriebssignal (E26): zeigt, dass der Request-Pfad als
-                // NOBYPASSRLS-App-Rolle läuft (RLS greift).
+                // Operational signal (E26): shows that the request path runs
+                // as the NOBYPASSRLS app role (RLS is in effect).
                 'detail' => [
                     'role' => $row['current_user'] ?? null,
                     'bypass_rls' => $row['bypass_rls'] ?? null,
@@ -153,8 +153,8 @@ class HealthService
         $maxAge = (int)$this->settings->get('core', 'health.worker_max_age_seconds', 120);
         $beats = WorkerHeartbeat::all();
         if ($beats === []) {
-            // Noch kein Worker-Lauf protokolliert -> als degraded melden (Soll:
-            // Worker-Aktualität ist Teil der Aggregation).
+            // No worker run logged yet -> report as degraded (by design:
+            // worker freshness is part of the aggregation).
             return ['status' => 'degraded', 'detail' => 'kein Worker-Heartbeat vorhanden'];
         }
         $workers = [];
@@ -163,9 +163,9 @@ class HealthService
             $age = (int)$b['age_seconds'];
             $detail = is_string($b['detail'] ?? null) ? (json_decode((string)$b['detail'], true) ?: []) : (array)($b['detail'] ?? []);
             $interval = (int)($detail['interval_seconds'] ?? 0);
-            // Überfällig = älter als 2× das erwartete Intervall des Workers
-            // (Kap. 20.3); ohne bekanntes Intervall greift der globale Max-Alter-
-            // Schwellwert.
+            // Overdue = older than 2x the worker's expected interval
+            // (ch. 20.3); without a known interval the global max-age
+            // threshold applies.
             $threshold = $interval > 0 ? 2 * $interval : $maxAge;
             $stale = $age > $threshold;
             $wStatus = $b['last_status'] === 'error' ? 'down' : ($stale ? 'degraded' : 'up');
@@ -219,7 +219,7 @@ class HealthService
                     $errors += (int)$r['n'];
                 }
             }
-            // Module mit nachträglich widerrufener Signatur (Kap. 24.9.2).
+            // Modules whose signature was revoked after the fact (ch. 24.9.2).
             $revoked = (int)$conn->execute(
                 "SELECT count(*) FROM modules WHERE signature_status = 'revoked'",
             )->fetch()[0];
@@ -300,9 +300,10 @@ class HealthService
     }
 
     /**
-     * Lokalisierung (i18n-8): fehlende Englisch-Basis aktiver Komponenten,
-     * Versionsfehler (Major-Mismatch genutzter Packs) und verwaiste/in-flight
-     * `.tmp` im Store. Read-only (heilt nicht; dafür `bin/cake lang recover`).
+     * Localization (i18n-8): missing English base of active components,
+     * version errors (major mismatch of the packs in use) and orphaned/in-flight
+     * `.tmp` files in the store. Read-only (does not heal; use
+     * `bin/cake lang recover` for that).
      */
     private function checkLocalization(): array
     {
@@ -336,8 +337,8 @@ class HealthService
                 }
             }
 
-            // Fehlende Englisch-Basis: aktive Nicht-Core-Komponente ohne nutzbares
-            // en_US (Core liefert Englisch via resources/locales immer mit).
+            // Missing English base: active non-core component without a usable
+            // en_US (the core always ships English via resources/locales).
             $missingBase = [];
             foreach ($activeComponents as $key => $ver) {
                 if ($key === 'core') {
@@ -367,9 +368,9 @@ class HealthService
     }
 
     /**
-     * Daten-Backup (Kap. 20.1.2): bei aktivem Scheduler degraded, wenn das
-     * jüngste Backup fehlte, fehlschlug oder älter als 2× Intervall ist; meldet
-     * Alter/Anzahl/Verschlüsselung.
+     * Data backup (ch. 20.1.2): with the scheduler active, degraded if the most
+     * recent backup is missing, failed, or older than 2x the interval; reports
+     * age/count/encryption.
      */
     private function checkBackup(): array
     {
@@ -437,8 +438,8 @@ class HealthService
     }
 
     /**
-     * Aggregiert die Modul-Health-Beiträge (Collector, Kap. 20.2.2). Ohne
-     * registrierte Beiträge: Leerergebnis (status up, contributions []).
+     * Aggregates the module health contributions (collector, ch. 20.2.2). With
+     * no registered contributions: empty result (status up, contributions []).
      */
     private function collectModuleHealth(): array
     {
@@ -451,7 +452,7 @@ class HealthService
         }
         foreach ($contribs as $contrib) {
             try {
-                // In-Process lokal, out_of_process über den isolierten Host (RPC).
+                // In-process locally, out_of_process via the isolated host (RPC).
                 $result = (array)(new \App\Service\Module\ContributionRuntime($this->registry))->call($contrib, 'check', []);
                 $contributions[] = $result;
                 if (($result['status'] ?? 'up') !== 'up') {

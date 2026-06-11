@@ -4,15 +4,15 @@ declare(strict_types=1);
 namespace App\Service\Automation;
 
 /**
- * Wertet eine deklarative Bedingung (JSON) gegen einen Kontext (Event-Nutzlast)
- * aus (Programm Tier-2, P12). Rein/ohne Seiteneffekte → gut testbar.
+ * Evaluates a declarative condition (JSON) against a context (event payload)
+ * (program tier-2, P12). Pure/no side effects → easily testable.
  *
- * Struktur:
- *   - `{}`                                → immer wahr (keine Bedingung)
+ * Structure:
+ *   - `{}`                                → always true (no condition)
  *   - `{"all":[…]}` / `{"any":[…]}` / `{"not":{…}}`
- *   - Blatt: `{"field":"data.priority","op":"eq","value":"high"}`
- * Operatoren: eq, ne, gt, lt, gte, lte, contains, in, exists.
- * Feldpfade adressieren den Kontext per Punktnotation (`data.priority`).
+ *   - leaf: `{"field":"data.priority","op":"eq","value":"high"}`
+ * Operators: eq, ne, gt, lt, gte, lte, contains, in, exists.
+ * Field paths address the context via dot notation (`data.priority`).
  */
 class ConditionEvaluator
 {
@@ -74,9 +74,9 @@ class ConditionEvaluator
 
     private function compare(mixed $actual, string $op, mixed $value): bool
     {
-        // Strikte Vergleiche (===/!==, in_array strict): keine PHP-Typ-Juggling-
-        // Fehltreffer (z. B. "high"==true, ""==null, 100=="1e2"), die Regeln
-        // sonst auf manipulierten Nutzlasten fälschlich auslösen ließen.
+        // Strict comparisons (===/!==, in_array strict): no PHP type-juggling
+        // false matches (e.g. "high"==true, ""==null, 100=="1e2") that would
+        // otherwise let rules fire erroneously on manipulated payloads.
         return match ($op) {
             'eq' => $actual === $value,
             'ne' => $actual !== $value,

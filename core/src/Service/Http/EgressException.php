@@ -6,8 +6,8 @@ namespace App\Service\Http;
 use RuntimeException;
 
 /**
- * Fehler beim gehärteten Outbound-HTTP-Zugriff (Kap. 20 / 23.16): Policy-Verstoß
- * (SSRF/Allowlist/Schema), Größenüberschreitung oder Transportfehler.
+ * Error during hardened outbound-HTTP access (ch. 20 / 23.16): policy violation
+ * (SSRF/allowlist/scheme), size overrun, or transport failure.
  */
 class EgressException extends RuntimeException
 {

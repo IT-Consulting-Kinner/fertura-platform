@@ -4,9 +4,9 @@ declare(strict_types=1);
 namespace App\Service\Ai;
 
 /**
- * Vertrag für einen LLM-Provider (P11). Konkrete Provider (OpenAI/Anthropic/
- * xAI/Google) kapseln das jeweilige HTTP-API hinter einer einheitlichen
- * Schnittstelle; der Netzzugriff läuft über den gehärteten Egress (P01).
+ * Contract for an LLM provider (P11). Concrete providers (OpenAI/Anthropic/
+ * xAI/Google) wrap their respective HTTP API behind a uniform interface;
+ * network access goes through the hardened egress (P01).
  */
 interface LlmProviderInterface
 {
@@ -18,7 +18,7 @@ interface LlmProviderInterface
     public function chat(array $messages, array $opts = []): array;
 
     /**
-     * @return list<float> Embedding-Vektor
+     * @return list<float> Embedding vector
      */
     public function embed(string $text, ?string $model = null): array;
 }

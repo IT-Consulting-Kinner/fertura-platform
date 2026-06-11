@@ -11,12 +11,12 @@ use Cake\Datasource\ConnectionManager;
 use RuntimeException;
 
 /**
- * Offline-first-Lizenzierung (Kap. 28.7, Entscheidung 158).
+ * Offline-first licensing (ch. 28.7, Decision 158).
  *
- * Maßgeblich ist die **signierte Lizenzdatei**: Signatur (gegen Vertrauensanker),
- * Modulbezug und Gültigkeitszeitraum werden ohne Serverkontakt geprüft. Ablauf →
- * Modul deaktivierbar (kein Datenverlust). Optionale Online-Enforcement +
- * Karenzfenster sind in der Lizenz deklariert.
+ * The **signed license file** is authoritative: its signature (against a trust
+ * anchor), module binding and validity period are all verified without any
+ * server contact. On expiry the module can be deactivated (no data loss).
+ * Optional online enforcement and the grace window are declared in the license.
  */
 class LicenseService
 {
@@ -44,7 +44,8 @@ class LicenseService
     }
 
     /**
-     * Kanonische Serialisierung des Lizenz-Payloads (Signaturbasis).
+     * Canonical serialization of the license payload (the basis the signature
+     * is computed over).
      *
      * @param array<string, mixed> $payload
      */
@@ -54,7 +55,7 @@ class LicenseService
     }
 
     /**
-     * Validiert eine Lizenzdatei (offline) ohne sie zu speichern.
+     * Validates a license file (offline) without persisting it.
      *
      * @return array{ok: bool, reason?: string, payload?: array<string,mixed>, key_id?: string}
      */
@@ -84,7 +85,7 @@ class LicenseService
     }
 
     /**
-     * Installiert/aktualisiert eine Lizenz nach erfolgreicher Validierung.
+     * Installs/updates a license after successful validation.
      */
     public function install(string $licenseJson): array
     {
@@ -130,7 +131,7 @@ class LicenseService
     }
 
     /**
-     * Bewertet den aktuellen Lizenzstatus eines Moduls (offline).
+     * Evaluates the current license status of a module (offline).
      *
      * @return array{status: string, reason?: string}
      */
@@ -151,7 +152,7 @@ class LicenseService
         $now = time();
         $inGrace = false;
 
-        // Ablauf + Karenzfenster (Kap. 28.7.3.1).
+        // Expiry + grace window (ch. 28.7.3.1).
         if ($row['valid_to'] !== null) {
             $validTo = strtotime((string)$row['valid_to']);
             if ($validTo !== false && $validTo < $now) {
@@ -164,7 +165,7 @@ class LicenseService
             }
         }
 
-        // Online-Enforcement: die Server-Bestätigung muss aktuell sein.
+        // Online enforcement: the server confirmation must be recent.
         if ($this->truthy($row['online_enforcement'] ?? false)) {
             $maxAgeDays = (int)$this->settings()->get('core', 'license.online_max_age_days', 7);
             $lastCheck = $row['last_online_check'] !== null ? strtotime((string)$row['last_online_check']) : false;
@@ -185,13 +186,13 @@ class LicenseService
         return ['status' => 'valid'];
     }
 
-    /** Karenzfenster gilt als (eingeschränkt) gültig: Aktivierung bleibt erlaubt. */
+    /** A grace window counts as (limited) validity: activation stays allowed. */
     public function isValid(string $moduleKey): bool
     {
         return in_array($this->evaluate($moduleKey)['status'], ['valid', 'grace'], true);
     }
 
-    /** Vermerkt eine erfolgreiche Online-Bestätigung (setzt last_online_check). */
+    /** Records a successful online confirmation (sets last_online_check). */
     public function recordOnlineCheck(string $moduleKey): void
     {
         $this->conn()->execute(

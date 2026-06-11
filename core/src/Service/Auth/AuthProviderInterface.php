@@ -6,27 +6,27 @@ namespace App\Service\Auth;
 use Authentication\AuthenticationService;
 
 /**
- * Vertrag für einen austauschbaren Authentifizierungs-Provider (Kap. 27.2.2).
+ * Contract for a pluggable authentication provider (ch. 27.2.2).
  *
- * Der Core definiert den Resolver-Contract `core.auth.provider`; ein Extension-
- * Modul (z. B. OIDC/SAML/AD) registriert eine Implementierung als Provider. Der
- * aktive Provider konfiguriert den `AuthenticationService` (Identifier +
- * Authenticators). Ohne aktiven Provider greift der lokale Default
+ * The core defines the resolver contract `core.auth.provider`; an extension
+ * module (e.g. OIDC/SAML/AD) registers an implementation as a provider. The
+ * active provider configures the `AuthenticationService` (identifier +
+ * authenticators). With no active provider, the local default applies
  * ({@see LocalAuthProvider}).
  *
- * Benutzer/Identitäten bleiben Core-verwaltet (Kap. 27.2.1); ein externer
- * Provider authentifiziert nur und legt die Identität per Just-in-Time-
- * Provisioning an bzw. verknüpft sie. Autorisierung (Bereiche/Gruppen/BREAD)
- * bleibt unabhängig von der Methode.
+ * Users/identities stay core-managed (ch. 27.2.1); an external provider only
+ * authenticates and creates or links the identity via just-in-time
+ * provisioning. Authorization (scopes/groups/BREAD) remains independent of the
+ * method.
  */
 interface AuthProviderInterface
 {
     /**
-     * Konfiguriert den Authentifizierungsdienst (Identifier + Authenticators).
-     * Der Provider ist für Session-Persistenz selbst verantwortlich.
+     * Configures the authentication service (identifier + authenticators).
+     * The provider is itself responsible for session persistence.
      */
     public function configure(AuthenticationService $service): void;
 
-    /** Kurzname für Anzeige/Diagnose (z. B. „lokal", „OIDC"). */
+    /** Short name for display/diagnostics (e.g. "local", "OIDC"). */
     public function label(): string;
 }

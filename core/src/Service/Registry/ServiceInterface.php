@@ -4,22 +4,22 @@ declare(strict_types=1);
 namespace App\Service\Registry;
 
 /**
- * Vertrag für die Implementierung eines öffentlichen Modul-Interfaces
- * (Service-Contract, Kap. 29.3 / 26.3.4).
+ * Contract for implementing a public module interface
+ * (service contract, ch. 29.3 / 26.3.4).
  *
- * Das anbietende Main-Modul stellt die Implementierung bereit; nutzende Module
- * rufen sie ausschließlich über ein {@see CapabilityHandle} auf (Kap. 29.8.3).
- * Eingabe und Ausgabe sind maschinenlesbare, assoziative Strukturen gemäß der
- * Input-/Output-Spezifikation des Contracts (Kap. 29.6). Die fachliche Semantik
- * definiert allein das anbietende Modul (Kap. 29.6.3).
+ * The providing main module supplies the implementation; consuming modules
+ * invoke it exclusively through a {@see CapabilityHandle} (ch. 29.8.3). Input and
+ * output are machine-readable associative structures conforming to the contract's
+ * input/output specification (ch. 29.6). The business semantics are defined
+ * solely by the providing module (ch. 29.6.3).
  */
 interface ServiceInterface
 {
     /**
-     * Bearbeitet einen Interface-Aufruf.
+     * Handles an interface call.
      *
-     * @param array<string, mixed> $input Eingabe gemäß Input-Spezifikation.
-     * @return array<string, mixed> Antwort gemäß Output-Spezifikation.
+     * @param array<string, mixed> $input Input per the input specification.
+     * @return array<string, mixed> Response per the output specification.
      */
     public function handle(array $input): array;
 }

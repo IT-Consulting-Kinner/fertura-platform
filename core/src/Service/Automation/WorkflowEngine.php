@@ -8,14 +8,14 @@ use Cake\Datasource\ConnectionManager;
 use Throwable;
 
 /**
- * Workflow-State-Machine-Engine (Programm Tier-2; zurückgestellter P12-Ausbau).
+ * Workflow state-machine engine (program tier-2; deferred P12 expansion).
  *
- * Wertet beim Event-Dispatch aktive Definitionen aus: je Geschäftsobjekt
- * (aufgelöst über `entity_id_field` aus der Nutzlast) führt eine Instanz den
- * Zustand. Passt eine Transition (`from` == aktueller Zustand bzw. `*`,
- * `on_event` == Event, Bedingung erfüllt), wechselt der Zustand und die
- * Aktionen laufen (über den {@see ActionExecutor}). Eine Transition pro Event
- * und Instanz; Fehler isoliert.
+ * On event dispatch, evaluates active definitions: per business object
+ * (resolved via `entity_id_field` from the payload) an instance holds the
+ * state. If a transition matches (`from` == current state or `*`, `on_event` ==
+ * event, condition satisfied), the state changes and the actions run (via the
+ * {@see ActionExecutor}). One transition per event and instance; failures
+ * isolated.
  */
 class WorkflowEngine
 {
@@ -34,7 +34,7 @@ class WorkflowEngine
 
     /**
      * @param array<string,mixed> $payload
-     * @return int Anzahl Zustandsübergänge
+     * @return int number of state transitions
      */
     public function onEvent(string $event, array $payload): int
     {
@@ -62,20 +62,20 @@ class WorkflowEngine
                         continue;
                     }
                     $to = (string)($t['to'] ?? $instance['state']);
-                    // Atomarer Compare-And-Swap auf den beobachteten Zustand:
-                    // bei nebenläufigen Workern transitioniert nur EINER (kein
-                    // Doppel-Übergang/Doppel-Aktion durch Race).
+                    // Atomic compare-and-swap on the observed state: with
+                    // concurrent workers only ONE transitions (no double
+                    // transition/double action from a race).
                     if (!$this->transition((string)$instance['id'], (string)$instance['state'], $to)) {
-                        break; // ein anderer Worker war schneller
+                        break; // another worker was faster
                     }
                     $this->executor->run((array)($t['actions'] ?? []), $payload + [
                         'workflow' => ['entity_id' => $entityId, 'from' => $instance['state'], 'to' => $to],
                     ]);
                     $advanced++;
-                    break; // eine Transition pro Event/Instanz
+                    break; // one transition per event/instance
                 }
             } catch (Throwable) {
-                // Definitionsfehler isolieren.
+                // Isolate definition failures.
             }
         }
 
@@ -110,7 +110,7 @@ class WorkflowEngine
         return ['id' => (string)$row['id'], 'state' => (string)$row['state']];
     }
 
-    /** Atomarer Zustandswechsel; true nur, wenn der erwartete Ausgangszustand galt. */
+    /** Atomic state change; true only if the expected source state held. */
     private function transition(string $instanceId, string $from, string $to): bool
     {
         $stmt = $this->conn()->execute(

@@ -11,17 +11,17 @@ use InvalidArgumentException;
 use Throwable;
 
 /**
- * Mandantenverwaltung (Wettbewerbs-Hebel 1/3). Verwaltet `core.tenants` und die
- * Zuordnung Benutzer → Mandant. Der **aktive** Mandant wird pro Request über den
- * RLS-Kontext gesetzt (`app.current_tenant_id`, siehe `RlsContext`) und von
- * mandanten-bezogenen Policies (`core.current_tenant()`) ausgewertet.
+ * Tenant administration (competitive lever 1/3). Manages `core.tenants` and the
+ * user → tenant assignment. The **active** tenant is set per request via the RLS
+ * context (`app.current_tenant_id`, see `RlsContext`) and evaluated by
+ * tenant-scoped policies (`core.current_tenant()`).
  *
- * Single-Org = ein Default-Mandant; nichts ändert sich, bis weitere Mandanten
- * angelegt und Benutzer zugeordnet werden.
+ * Single-org = one default tenant; nothing changes until further tenants are
+ * created and users assigned.
  */
 class TenantService
 {
-    /** Stabile ID des Default-Mandanten (vgl. Migration CoreTenancy). */
+    /** Stable ID of the default tenant (cf. migration CoreTenancy). */
     public const DEFAULT_TENANT_ID = '00000000-0000-0000-0000-000000000001';
 
     public function __construct(private ?AuditLogger $audit = null)
@@ -39,8 +39,8 @@ class TenantService
     }
 
     /**
-     * Liefert die Mandanten-ID eines Benutzers (oder null). Fehlertolerant —
-     * bricht im RLS-Middleware-Pfad keinen Request ab.
+     * Returns a user's tenant ID (or null). Fault-tolerant — does not abort any
+     * request in the RLS-middleware path.
      */
     public function tenantIdForUser(string $userId): ?string
     {
@@ -76,8 +76,8 @@ class TenantService
     /** @return array{id:string,key:string,name:string,active:bool}|null */
     public function get(string $id): ?array
     {
-        // UUID-Guard: die ID kommt aus GUI-Formularen; fehlgeformte Werte wie
-        // unbekannte behandeln statt 22P02 -> 500 (vgl. \App\Infrastructure\Uuid).
+        // UUID guard: the ID comes from GUI forms; treat malformed values like
+        // unknown ones instead of 22P02 -> 500 (cf. \App\Infrastructure\Uuid).
         if (!Uuid::isValid($id)) {
             return null;
         }
@@ -95,7 +95,7 @@ class TenantService
     }
 
     /**
-     * Legt einen Mandanten an. Schlüssel: kleinbuchstaben/-ziffern/-bindestrich.
+     * Creates a tenant. Key: lowercase letters/digits/hyphens.
      *
      * @return array{id:string,key:string,name:string,active:bool}
      */
@@ -121,8 +121,8 @@ class TenantService
     }
 
     /**
-     * Branding des **aktuellen** Mandanten (aus dem RLS-Kontext, z. B. pre-auth aus
-     * dem Host aufgelöst) — für die Login-/SSO-Oberfläche. Null = kein/Default.
+     * Branding of the **current** tenant (from the RLS context, e.g. pre-auth
+     * resolved from the host) — for the login/SSO surface. Null = none/default.
      *
      * @return array{name:string, brand_name:?string, logo_url:?string}|null
      */
@@ -147,8 +147,8 @@ class TenantService
         }
     }
 
-    /** Aktiviert/deaktiviert (suspendiert) einen Mandanten. Der Default-Mandant
-     *  kann nicht deaktiviert werden (Single-Org-/Break-Glass-Schutz). */
+    /** Activates/deactivates (suspends) a tenant. The default tenant cannot be
+     *  deactivated (single-org/break-glass protection). */
     public function setActive(string $tenantId, bool $active): void
     {
         if (!Uuid::isValid($tenantId)) {
@@ -165,10 +165,10 @@ class TenantService
     }
 
     /**
-     * Löscht einen Mandanten **inklusive seiner Daten** (Lifecycle). Der Default-
-     * Mandant ist geschützt; Mandanten mit noch zugeordneten Benutzern werden
-     * abgelehnt (erst neu zuordnen). Such-/Embedding-Index werden mit gelöscht
-     * (kein ON-DELETE-CASCADE-FK), Settings/SAML-Anfragen cascaden über die FK.
+     * Deletes a tenant **including its data** (lifecycle). The default tenant is
+     * protected; tenants that still have assigned users are rejected (reassign
+     * first). The search/embedding index is deleted along with it (no ON DELETE
+     * CASCADE FK), settings/SAML requests cascade via the FK.
      */
     public function delete(string $tenantId): void
     {
@@ -191,13 +191,13 @@ class TenantService
             }
             $conn->execute('DELETE FROM search_index WHERE tenant_id = :t', ['t' => $tenantId]);
             $conn->execute('DELETE FROM embeddings WHERE tenant_id = :t', ['t' => $tenantId]);
-            // tenants-Löschung cascadet settings + saml_auth_requests (ON DELETE CASCADE).
+            // Deleting tenants cascades settings + saml_auth_requests (ON DELETE CASCADE).
             $conn->execute('DELETE FROM tenants WHERE id = :t', ['t' => $tenantId]);
             $this->audit()->log('tenant.delete', 'tenant', $tenantId, []);
         });
     }
 
-    /** Ordnet einen Benutzer einem Mandanten zu. */
+    /** Assigns a user to a tenant. */
     public function assignUser(string $userId, string $tenantId): void
     {
         if ($this->get($tenantId) === null) {

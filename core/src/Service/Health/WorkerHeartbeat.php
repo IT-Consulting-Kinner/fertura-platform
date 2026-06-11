@@ -6,14 +6,14 @@ namespace App\Service\Health;
 use Cake\Datasource\ConnectionManager;
 
 /**
- * Schreibt/liest Worker-Heartbeats (Kap. 20.3): letzter Lauf, Status, Detail
- * je CLI-Worker in core.worker_heartbeats. Quelle für die Worker-Aktualität im
- * Health-Endpoint (Kap. 20.2.1).
+ * Writes/reads worker heartbeats (ch. 20.3): last run, status, detail per
+ * CLI worker in core.worker_heartbeats. Source for worker freshness in the
+ * health endpoint (ch. 20.2.1).
  */
 class WorkerHeartbeat
 {
     /**
-     * Aktualisiert den Heartbeat eines Workers (Upsert).
+     * Updates a worker's heartbeat (upsert).
      *
      * @param array<string, mixed>|null $detail
      */
@@ -33,7 +33,7 @@ class WorkerHeartbeat
     }
 
     /**
-     * Alle Heartbeats mit Alter in Sekunden.
+     * All heartbeats with age in seconds.
      *
      * @return list<array<string, mixed>>
      */

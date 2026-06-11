@@ -7,14 +7,14 @@ use App\Infrastructure\Db;
 use Throwable;
 
 /**
- * Verwaltet die Out-of-Process-Modulhost-Prozesse (Kap. 23.16.2, Phase 2).
+ * Manages the out-of-process module host processes (ch. 23.16.2, phase 2).
  *
- * Startet je aktivem `out_of_process`-Modul einen isolierten Host
- * (`bin/module-host.php`) mit **bereinigter Umgebung** (`env -i`) und der
- * **eigenen DB-Rolle** (`MODULE_DB_URL`), überwacht ihn und stoppt ihn wieder.
- * Aufgerufen vom Lifecycle (aktivieren/deaktivieren) und periodisch vom Worker
- * (Selbstheilung: abgestürzte Hosts werden neu gestartet). Der Core ruft die
- * Hosts ausschließlich über ihren Unix-Socket auf ({@see RemoteInvoker}).
+ * For each active `out_of_process` module it starts an isolated host
+ * (`bin/module-host.php`) with a **sanitized environment** (`env -i`) and the
+ * module's **own DB role** (`MODULE_DB_URL`), supervises it and stops it again.
+ * Called by the lifecycle (activate/deactivate) and periodically by the worker
+ * (self-healing: crashed hosts are restarted). The core invokes the hosts
+ * exclusively over their Unix socket ({@see RemoteInvoker}).
  */
 class ModuleHostSupervisor
 {
@@ -58,8 +58,8 @@ class ModuleHostSupervisor
     }
 
     /**
-     * Optionales Launcher-Prefix (`core.module.host.launcher`) für zusätzliche
-     * OS-Isolation der Hosts (eigener Benutzer/Sandbox). Leer = kein Prefix.
+     * Optional launcher prefix (`core.module.host.launcher`) for additional OS
+     * isolation of the hosts (dedicated user/sandbox). Empty = no prefix.
      */
     private function launcherPrefix(): string
     {
@@ -67,7 +67,7 @@ class ModuleHostSupervisor
             return (string)(new \App\Service\Settings\SettingsManager())
                 ->get('core', 'module.host.launcher', '');
         } catch (Throwable) {
-            return ''; // Settings nicht verfügbar (z. B. früher Boot) -> kein Prefix
+            return ''; // settings unavailable (e.g. early boot) -> no prefix
         }
     }
 
@@ -83,18 +83,18 @@ class ModuleHostSupervisor
     }
 
     /**
-     * Startet den Host für ein Modul mit bereinigter Umgebung + eigener DB-Rolle.
-     * Idempotent: läuft er bereits, passiert nichts.
+     * Starts the host for a module with a sanitized environment + its own DB
+     * role. Idempotent: if it is already running, nothing happens.
      */
     public function spawn(string $key): void
     {
-        // Pro Key serialisieren (gegen Check->Spawn-Races, die doppelte oder
-        // verwaiste Hosts erzeugen würden).
+        // Serialize per key (against check->spawn races that would otherwise
+        // produce duplicate or orphaned hosts).
         $lock = fopen($this->pidDir . '/' . $key . '.lock', 'c');
         if ($lock !== false && !flock($lock, LOCK_EX | LOCK_NB)) {
             fclose($lock);
 
-            return; // ein anderer Spawn läuft bereits
+            return; // another spawn is already in progress
         }
         try {
             if ($this->isRunning($key)) {
@@ -107,25 +107,25 @@ class ModuleHostSupervisor
             if ($mod === false) {
                 throw new \RuntimeException("Kein aktives out_of_process-Modul: $key");
             }
-            // CakePHP-Connection-URL der Modul-Rolle für die ConnectionManager-
-            // Konfiguration im Host (Phase 3: Beitragsklassen nutzen die ORM-
-            // Connection, nicht nur rohes PDO).
+            // CakePHP connection URL of the module role for the ConnectionManager
+            // configuration in the host (phase 3: contribution classes use the
+            // ORM connection, not just raw PDO).
             $dsn = (new ModuleDbRole())->cakeUrl($key);
             if ($dsn === null) {
                 throw new \RuntimeException("Keine DB-Rolle provisioniert für: $key");
             }
 
-            // RPC-Geheimnis (HMAC-Schlüssel der Pro-Aufruf-Tokens): nur in die
-            // 0600-Datei geschrieben und dem Host als **Pfad** mitgegeben — der
-            // Wert selbst landet NICHT in der Prozess-Umgebung (`/proc/<pid>/environ`)
-            // oder Kommandozeile (Kap. 23.16.2). Core und Host lesen ihn aus der
-            // Datei (owner-only).
+            // RPC secret (the HMAC key for the per-call tokens): written only to
+            // the 0600 file and passed to the host as a **path** — the value
+            // itself does NOT end up in the process environment
+            // (`/proc/<pid>/environ`) or on the command line (ch. 23.16.2). Core
+            // and host read it from the (owner-only) file.
             $token = bin2hex(random_bytes(32));
             @file_put_contents($this->tokenPath($key), $token);
             @chmod($this->tokenPath($key), 0o600);
 
-            // Nur diese Variablen sind im isolierten Prozess sichtbar (env -i):
-            // KEIN Core-DATABASE_URL, KEIN BACKUP_PASSWORD, KEIN Klartext-Geheimnis.
+            // Only these variables are visible in the isolated process (env -i):
+            // NO core DATABASE_URL, NO BACKUP_PASSWORD, NO plaintext secret.
             $env = [
                 'PATH' => (string)(getenv('PATH') ?: '/usr/local/bin:/usr/bin:/bin'),
                 'MODULE_KEY' => $key,
@@ -141,14 +141,14 @@ class ModuleHostSupervisor
                 $assign .= $k . '=' . escapeshellarg($v) . ' ';
             }
             $log = $this->logDir . '/' . $key . '.log';
-            // Optionales Launcher-Prefix (Kap. 23.16.2): zusätzliche OS-Isolation
-            // (eigener Benutzer via setpriv/sudo, FS/Kernel-Sandbox via bwrap/
-            // firejail, …) ohne Core-Codeänderung. Wird zwischen `env -i <vars>`
-            // und `php` gesetzt, läuft also in der bereinigten Umgebung und
-            // wrapt/exec't `php`. Leer = kein Prefix (Default).
+            // Optional launcher prefix (ch. 23.16.2): additional OS isolation
+            // (dedicated user via setpriv/sudo, FS/kernel sandbox via bwrap/
+            // firejail, …) without changing core code. Placed between
+            // `env -i <vars>` and `php`, so it runs in the sanitized environment
+            // and wraps/exec's `php`. Empty = no prefix (default).
             $launcher = trim((string)$this->launcherPrefix());
             $prefix = $launcher === '' ? '' : $launcher . ' ';
-            // Bereinigte Umgebung (env -i), losgelöst (nohup &), PID einfangen.
+            // Sanitized environment (env -i), detached (nohup &), capture the PID.
             $cmd = 'nohup env -i ' . $assign . $prefix . 'php ' . escapeshellarg($this->hostScript())
                 . ' ' . escapeshellarg($key) . ' > ' . escapeshellarg($log) . ' 2>&1 & echo $!';
             $pid = trim((string)shell_exec('/bin/sh -c ' . escapeshellarg($cmd)));
@@ -156,12 +156,12 @@ class ModuleHostSupervisor
                 file_put_contents($this->pidPath($key), $pid);
             }
 
-            // Auf Socket-Bereitschaft warten (max ~3 s).
+            // Wait for the socket to become ready (max ~3 s).
             for ($i = 0; $i < 30 && !$this->isRunning($key); $i++) {
                 usleep(100_000);
             }
-            // Laut scheitern, wenn der Host nicht hochkam (z. B. php/shell_exec
-            // nicht verfügbar) — sonst glaubt der Aufrufer, alles sei in Ordnung.
+            // Fail loudly if the host did not come up (e.g. php/shell_exec
+            // unavailable) — otherwise the caller would assume all is well.
             if (!$this->isRunning($key)) {
                 throw new \RuntimeException("Modul-Host für $key nicht gestartet (siehe $log).");
             }
@@ -173,17 +173,17 @@ class ModuleHostSupervisor
         }
     }
 
-    /** Stoppt den Host (SIGTERM -> sauberes Herunterfahren) und räumt auf. */
+    /** Stops the host (SIGTERM -> clean shutdown) and cleans up. */
     public function stop(string $key): void
     {
-        // Den **tatsächlichen** Host-Prozess anhand seiner Kommandozeile finden
-        // (`module-host.php` + Key) und beenden — robust auch dann, wenn ein
-        // forkender Launcher (firejail u. ä.) die eingefangene `$!`-PID „verfälscht"
-        // hat (sonst bliebe der echte Host verwaist). Die Doppelbedingung
-        // (Skript UND Key) ist PID-Recycling-sicher.
+        // Find and terminate the **actual** host process by its command line
+        // (`module-host.php` + key) — robust even when a forking launcher
+        // (firejail and the like) has "distorted" the captured `$!` PID (otherwise
+        // the real host would be left orphaned). The double condition (script AND
+        // key) is safe against PID recycling.
         $pids = $this->findHostPids($key);
 
-        // Eingefangene PID zusätzlich berücksichtigen (exec-artige Launcher).
+        // Also consider the captured PID (exec-style launchers).
         $pidFile = $this->pidPath($key);
         if (is_file($pidFile)) {
             $stored = (int)trim((string)file_get_contents($pidFile));
@@ -200,9 +200,9 @@ class ModuleHostSupervisor
     }
 
     /**
-     * Findet die PID(s) des laufenden Modul-Hosts dieses Keys über `/proc`
-     * (Kommandozeile enthält `module-host.php` UND den Key als eigenes Token).
-     * Findet den **echten** `php`-Host auch hinter einem forkenden Launcher.
+     * Finds the PID(s) of the running module host for this key via `/proc` (the
+     * command line contains `module-host.php` AND the key as its own token).
+     * Finds the **real** `php` host even behind a forking launcher.
      *
      * @return list<int>
      */
@@ -224,28 +224,29 @@ class ModuleHostSupervisor
     }
 
     /**
-     * Prüft, ob $pid tatsächlich der Modul-Host dieses Keys ist (PID-Recycling-Schutz).
+     * Checks whether $pid really is the module host for this key (PID-recycling
+     * protection).
      *
-     * Wrapper-tolerant: ein Launcher-Prefix (setpriv/bwrap/firejail/…) erscheint
-     * in der `/proc/<pid>/cmdline` vor `php module-host.php <key>` und kann die
-     * Argumente entweder einzeln (exec-artige Wrapper) oder als kombinierten
-     * String (`sh -c "…"`) führen. Wir prüfen daher auf das **Vorkommen** von
-     * Host-Skript UND Modul-Key in der zusammengesetzten Kommandozeile statt auf
-     * ein exaktes argv-Token — beides zusammen ist für einen fremden, recycelten
-     * PID praktisch unmöglich, bleibt also recycling-sicher.
+     * Wrapper-tolerant: a launcher prefix (setpriv/bwrap/firejail/…) appears in
+     * `/proc/<pid>/cmdline` before `php module-host.php <key>` and may carry the
+     * arguments either individually (exec-style wrappers) or as one combined
+     * string (`sh -c "…"`). We therefore check for the **presence** of the host
+     * script AND the module key in the assembled command line rather than an
+     * exact argv token — both together are practically impossible for an
+     * unrelated, recycled PID, so this stays recycling-safe.
      */
     private function isOurHost(int $pid, string $key): bool
     {
         $cmdline = @file_get_contents('/proc/' . $pid . '/cmdline');
         if ($cmdline === false || $cmdline === '') {
-            return false; // Prozess weg / nicht lesbar -> nicht killen
+            return false; // process gone / unreadable -> do not kill
         }
         $joined = str_replace("\0", ' ', $cmdline);
 
         return str_contains($joined, 'module-host.php') && str_contains($joined, $key);
     }
 
-    /** Startet den Host, falls das Modul aktiv+isoliert ist und nicht läuft. */
+    /** Starts the host if the module is active+isolated and not running. */
     public function ensureRunning(string $key): void
     {
         if (!$this->isRunning($key)) {
@@ -254,8 +255,8 @@ class ModuleHostSupervisor
     }
 
     /**
-     * Stellt sicher, dass für ALLE aktiven out_of_process-Module ein Host läuft
-     * (Worker-Selbstheilung). Gibt die (neu) gestarteten Schlüssel zurück.
+     * Ensures a host is running for ALL active out_of_process modules (worker
+     * self-healing). Returns the (newly) started keys.
      *
      * @return list<string>
      */
@@ -272,7 +273,7 @@ class ModuleHostSupervisor
                     $this->spawn($key);
                     $started[] = $key;
                 } catch (Throwable) {
-                    // best effort; nächster Tick versucht es erneut
+                    // best effort; the next tick retries
                 }
             }
         }
@@ -281,7 +282,7 @@ class ModuleHostSupervisor
     }
 
     /**
-     * Stoppt Hosts, deren Modul nicht mehr aktiv+isoliert ist (Aufräumen).
+     * Stops hosts whose module is no longer active+isolated (cleanup).
      *
      * @return list<string>
      */

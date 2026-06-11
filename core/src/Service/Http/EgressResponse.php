@@ -4,8 +4,8 @@ declare(strict_types=1);
 namespace App\Service\Http;
 
 /**
- * Schmale, serialisierbare Antwort des {@see EgressClient} (entkoppelt Aufrufer
- * von der konkreten HTTP-Client-Implementierung).
+ * Slim, serializable response of the {@see EgressClient} (decouples callers
+ * from the concrete HTTP-client implementation).
  */
 final class EgressResponse
 {
@@ -25,7 +25,7 @@ final class EgressResponse
     }
 
     /**
-     * Dekodiert den Body als JSON (assoziativ) oder null bei ungültigem JSON.
+     * Decodes the body as JSON (associative), or null for invalid JSON.
      */
     public function json(): mixed
     {

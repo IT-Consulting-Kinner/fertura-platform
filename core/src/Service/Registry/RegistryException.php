@@ -6,8 +6,8 @@ namespace App\Service\Registry;
 use RuntimeException;
 
 /**
- * Fehler bei Contract-Registrierung/-Validierung (z. B. unbekannter Contract,
- * inkompatible Version, belegter Resolver-Slot).
+ * Error during contract registration/validation (e.g. unknown contract,
+ * incompatible version, occupied resolver slot).
  */
 class RegistryException extends RuntimeException
 {

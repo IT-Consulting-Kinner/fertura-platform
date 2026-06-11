@@ -9,10 +9,10 @@ use Cake\Datasource\ConnectionManager;
 use Throwable;
 
 /**
- * Automatisches Daten-Backup im konfigurierten Intervall (Kap. 20.1.2).
+ * Automatic data backup at the configured interval (ch. 20.1.2).
  *
- * Wird vom Core-Worker über den {@see \App\Service\Schedule\ScheduledTaskRunner}
- * getickt. Intervall + Aktivierung + Aufbewahrung stammen aus den Settings
+ * Ticked by the core worker via the {@see \App\Service\Schedule\ScheduledTaskRunner}.
+ * Interval, activation and retention come from settings
  * (`backup.schedule.enabled`, `backup.schedule.interval_hours`, `backup.retention`).
  */
 class BackupScheduledTask implements ScheduledTaskInterface
@@ -31,23 +31,23 @@ class BackupScheduledTask implements ScheduledTaskInterface
 
     public function run(): void
     {
-        // Harter Deployment-Schalter: schaltet automatische Backups ganz ab
-        // (manuelles Backup bleibt über CLI/GUI verfügbar).
+        // Hard deployment switch: disables automatic backups entirely
+        // (manual backups remain available via CLI/GUI).
         if (!\App\Service\System\FeatureFlags::enabled('backup_scheduler')) {
             return;
         }
         $settings = new SettingsManager();
         if (!(bool)$settings->get('core', 'backup.schedule.enabled', false)) {
-            return; // Scheduler deaktiviert – kein Backup.
+            return; // scheduler disabled – no backup.
         }
         $service = (new BackupService())->context('scheduler', null);
         $id = $service->create('scheduled', null);
         $service->prune((int)$settings->get('core', 'backup.retention', 14));
         $service->pruneByAge((int)$settings->get('core', 'backup.retention_days', 0));
 
-        // Off-Site-Geo-Redundanz (P14): das frisch erzeugte Archiv zusätzlich ins
-        // Objekt-Storage laden. Fehler hier dürfen das lokale Backup nicht
-        // entwerten (isoliert).
+        // Off-site geo-redundancy (P14): additionally upload the freshly created
+        // archive to object storage. Failures here must not invalidate the local
+        // backup (isolated).
         if ((bool)$settings->get('core', 'backup.offsite.enabled', false)) {
             try {
                 $row = ConnectionManager::get('default')

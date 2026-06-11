@@ -10,12 +10,12 @@ use InvalidArgumentException;
 use RuntimeException;
 
 /**
- * Zentraler Lese-/Schreibdienst für den Konfigurationsspeicher (Kap. 1.4 / 23.3).
+ * Central read/write service for the configuration store (ch. 1.4 / 23.3).
  *
- * - get(): liefert den DB-Wert oder den sicheren Vorgabewert aus dem Katalog
- *   (greift auch ohne DB-Eintrag, Kap. 27.16.3).
- * - set(): validiert gegen den Katalog, verschlüsselt Geheimnisse (AES-256-GCM),
- *   schreibt und auditiert in einer Transaktion. Footprint/UuidV7 via SettingsTable.
+ * - get(): returns the DB value or the safe default from the catalog (applies
+ *   even without a DB entry, ch. 27.16.3).
+ * - set(): validates against the catalog, encrypts secrets (AES-256-GCM), writes
+ *   and audits within a single transaction. Footprint/UuidV7 via SettingsTable.
  */
 class SettingsManager
 {
@@ -50,9 +50,9 @@ class SettingsManager
 
     public function get(string $namespace, string $key, mixed $default = null): mixed
     {
-        // Gecachte (nicht-geheime) Auflösung: Cache hält {useDefault, value} der
-        // DB-/Katalog-Ebene; der **aufrufer-spezifische** $default wird erst hier
-        // angewandt. Geheimnisse werden NIE gecacht (s. resolve()).
+        // Cached (non-secret) resolution: the cache holds {useDefault, value} of
+        // the DB/catalog level; the **caller-specific** $default is only applied
+        // here. Secrets are NEVER cached (see resolve()).
         $cached = $this->cache->get($this->cacheKey($namespace, $key));
         if (is_array($cached) && array_key_exists('value', $cached)) {
             return $cached['useDefault'] ? $default : $cached['value'];
@@ -67,7 +67,7 @@ class SettingsManager
     }
 
     /**
-     * Löst einen Wert aus DB + Katalog auf.
+     * Resolves a value from DB + catalog.
      *
      * @return array{0:bool,1:bool,2:mixed} [cacheable, useDefault, value]
      */
@@ -80,7 +80,7 @@ class SettingsManager
             : $cond + ['tenant_id IS' => null];
         $rows = $this->table()->find()->where($cond)->all()->toArray();
 
-        // Mandantenspezifischer Wert hat Vorrang vor dem globalen (tenant_id NULL).
+        // A tenant-specific value takes precedence over the global one (tenant_id NULL).
         $row = null;
         if ($tenant !== null) {
             foreach ($rows as $r) {
@@ -101,14 +101,14 @@ class SettingsManager
 
         if ($row === null) {
             $catalogDefault = $this->catalog->default($namespace, $key);
-            // Katalog-Default ist cachebar; ohne ihn entscheidet der Aufrufer-Default.
+            // The catalog default is cacheable; without it the caller default decides.
             return $catalogDefault !== null
                 ? [true, false, $catalogDefault]
                 : [true, true, null];
         }
 
         if ($row->is_secret) {
-            // Geheimnisse NICHT cachen (kein Klartext im Datei-Cache).
+            // Do NOT cache secrets (no plaintext in the file cache).
             $value = $row->value_encrypted !== null ? $this->cipher()->decrypt($row->value_encrypted) : null;
 
             return [false, false, $value];
@@ -119,12 +119,12 @@ class SettingsManager
 
     private function cacheKey(string $namespace, string $key): string
     {
-        // Mandant in den Cache-Schlüssel, damit pro-Mandant-Werte nicht über
-        // Mandanten hinweg geteilt werden. 'g' = global (kein Mandantenkontext).
+        // Include the tenant in the cache key so per-tenant values are not shared
+        // across tenants. 'g' = global (no tenant context).
         return $namespace . '.' . $key . '.' . ($this->currentTenant() ?? 'g');
     }
 
-    /** Aktueller Mandant aus dem RLS-Kontext (memoisiert je Instanz); NULL = global. */
+    /** Current tenant from the RLS context (memoized per instance); NULL = global. */
     private function currentTenant(): ?string
     {
         if ($this->tenantLoaded) {
@@ -145,7 +145,7 @@ class SettingsManager
 
     public function set(string $namespace, string $key, mixed $value, ?string $tenantId = null): void
     {
-        // Validierung: für core.* (oder bekannte Keys) verpflichtend.
+        // Validation: mandatory for core.* (or known keys).
         if ($namespace === 'core' || $this->catalog->isKnown($namespace, $key)) {
             $errors = $this->catalog->validate($namespace, $key, $value);
             if ($errors) {
@@ -157,12 +157,12 @@ class SettingsManager
         $table = $this->table();
 
         $table->getConnection()->transactional(function () use ($table, $namespace, $key, $value, $secret, $tenantId): void {
-            // Zeile für GENAU diese Ebene (global = tenant_id NULL, oder mandantenspezifisch).
+            // Row for EXACTLY this level (global = tenant_id NULL, or tenant-specific).
             $find = $table->find()->where(['namespace' => $namespace, 'config_key' => $key]);
             $find = $tenantId === null ? $find->where(['tenant_id IS' => null]) : $find->where(['tenant_id' => $tenantId]);
             $row = $find->first();
 
-            // Alten Wert für das Audit (Geheimnisse niemals im Klartext loggen).
+            // Old value for the audit (never log secrets in plaintext).
             $old = ($row === null || $row->is_secret) ? null : $row->value;
 
             if ($row === null) {
@@ -191,9 +191,9 @@ class SettingsManager
             ]);
         });
 
-        // Cache vollständig leeren: ein geänderter globaler Wert beeinflusst auch
-        // Mandanten, die auf ihn zurückfallen (deren Cache-Schlüssel sind nicht
-        // gezielt bekannt). Settings-Schreibvorgänge sind selten -> vertretbar.
+        // Clear the cache entirely: a changed global value also affects tenants
+        // that fall back to it (their cache keys are not specifically known).
+        // Settings writes are rare -> acceptable.
         $this->cache->clear();
     }
 }

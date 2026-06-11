@@ -7,22 +7,23 @@ use Predis\Client;
 use function Cake\Core\env;
 
 /**
- * Broker-Treiber des Job-Queue-Transports: **Redis Streams** mit Consumer-Group
- * (durabel, mehrere Consumer kollisionsfrei). Nutzt `predis` (reines PHP, keine
- * Erweiterung). Reserve = `XREADGROUP` neuer Einträge + `XAUTOCLAIM` verwaister
- * (Crash-Recovery); ack = `XACK`+`XDEL`. Verbindung über `QUEUE_REDIS_URL`.
+ * Broker driver of the job-queue transport: **Redis Streams** with a consumer
+ * group (durable, multiple consumers without collisions). Uses `predis` (pure
+ * PHP, no extension). Reserve = `XREADGROUP` for new entries + `XAUTOCLAIM` for
+ * orphaned ones (crash recovery); ack = `XACK`+`XDEL`. Connection via
+ * `QUEUE_REDIS_URL`.
  *
- * Stream-Befehle laufen über `executeRaw`, um von predis-Versionssignaturen
- * unabhängig zu sein.
+ * Stream commands run through `executeRaw` to be independent of predis version
+ * signatures.
  *
- * Bekannte, bewusst offene Punkte (für den späteren produktiven Consumer-Loop):
- * - **Stale Consumer:** der Consumer-Name ist `hostname:pid`; nach Neustart bleibt
- *   der alte (leere) Consumer in der Gruppe. Verwaiste *Einträge* werden per
- *   XAUTOCLAIM zurückgeholt (kein Verlust), aber leere Consumer häufen sich an —
- *   ein periodisches `XGROUP DELCONSUMER` (0 Pending) wäre die Housekeeping-Lösung.
- * - **release()-Latenz:** ein freigegebener (fehlgeschlagener) Job wird erst nach
- *   `RECLAIM_IDLE_MS` per XAUTOCLAIM erneut zugestellt (kein sofortiges Requeue);
- *   Absturz und explizites release() sind dadurch ununterscheidbar.
+ * Known, deliberately open items (for the later production consumer loop):
+ * - **Stale consumers:** the consumer name is `hostname:pid`; after a restart the
+ *   old (empty) consumer remains in the group. Orphaned *entries* are reclaimed via
+ *   XAUTOCLAIM (no loss), but empty consumers accumulate — a periodic
+ *   `XGROUP DELCONSUMER` (0 pending) would be the housekeeping solution.
+ * - **release() latency:** a released (failed) job is only redelivered after
+ *   `RECLAIM_IDLE_MS` via XAUTOCLAIM (no immediate requeue); a crash and an
+ *   explicit release() are therefore indistinguishable.
  */
 class RedisStreamTransport implements QueueTransportInterface
 {
@@ -52,13 +53,13 @@ class RedisStreamTransport implements QueueTransportInterface
         $this->ensureGroup($key);
         $max = max(1, $max);
 
-        // 1) Verwaiste (idle) Einträge anderer/abgestürzter Consumer zurückholen.
-        //    XAUTOCLAIM liefert je Aufruf nur EINE Seite (COUNT) ab dem Cursor; bei
-        //    großem Pending-Backlog würden Einträge jenseits der ersten Seite sonst
-        //    erst über viele reserve()-Aufrufe (je vom Anfang) zurückgeholt. Daher
-        //    paginieren wir mit dem zurückgegebenen Cursor, bis $max gedeckt ist oder
-        //    der Cursor zu '0' zurückkehrt (Scan vollständig). Harte Schleifengrenze
-        //    als Sicherheitsnetz gegen unerwartete Cursor-Zyklen.
+        // 1) Reclaim orphaned (idle) entries from other/crashed consumers.
+        //    XAUTOCLAIM returns only ONE page (COUNT) per call starting from the
+        //    cursor; with a large pending backlog, entries beyond the first page
+        //    would otherwise only be reclaimed across many reserve() calls (each
+        //    from the start). So we paginate with the returned cursor until $max is
+        //    covered or the cursor returns to '0' (scan complete). Hard loop bound
+        //    as a safety net against unexpected cursor cycles.
         $out = [];
         $cursor = '0';
         for ($page = 0; $page < 100 && count($out) < $max; $page++) {
@@ -67,7 +68,7 @@ class RedisStreamTransport implements QueueTransportInterface
                 'XAUTOCLAIM', $key, self::GROUP, $this->consumer,
                 (string)self::RECLAIM_IDLE_MS, $cursor, 'COUNT', (string)$need,
             ]);
-            // Antwort: [nextCursor, [[id,[f,v,...]],...], [deleted]] (Redis 7).
+            // Response: [nextCursor, [[id,[f,v,...]],...], [deleted]] (Redis 7).
             if (!is_array($claim)) {
                 break;
             }
@@ -76,17 +77,17 @@ class RedisStreamTransport implements QueueTransportInterface
             }
             $cursor = isset($claim[0]) ? (string)$claim[0] : '0';
             if ($cursor === '0') {
-                break; // Scan der Pending-Liste vollständig.
+                break; // scan of the pending list complete.
             }
         }
 
-        // 2) Neue Einträge lesen, falls noch Kapazität.
+        // 2) Read new entries if there is still capacity.
         $need = $max - count($out);
         if ($need > 0) {
             $read = $this->redis->executeRaw([
                 'XREADGROUP', 'GROUP', self::GROUP, $this->consumer, 'COUNT', (string)$need, 'STREAMS', $key, '>',
             ]);
-            // Antwort: [[streamKey, [[id,[f,v,...]],...]]] oder null.
+            // Response: [[streamKey, [[id,[f,v,...]],...]]] or null.
             if (is_array($read) && isset($read[0][1]) && is_array($read[0][1])) {
                 $out = array_merge($out, $this->parseEntries($read[0][1]));
             }
@@ -104,8 +105,8 @@ class RedisStreamTransport implements QueueTransportInterface
 
     public function release(string $queue, string $id): void
     {
-        // Kein XACK: der Eintrag bleibt in der Pending-Liste und wird von einer
-        // späteren reserve() per XAUTOCLAIM (nach Idle-Timeout) erneut zugestellt.
+        // No XACK: the entry stays in the pending list and is redelivered by a
+        // later reserve() via XAUTOCLAIM (after the idle timeout).
     }
 
     public function size(string $queue): int
@@ -126,11 +127,11 @@ class RedisStreamTransport implements QueueTransportInterface
     private function ensureGroup(string $key): void
     {
         try {
-            // Ab `0` (Stream-Anfang), damit auch VOR der (lazy) Gruppenerstellung
-            // eingereihte Einträge zugestellt werden — sonst gingen sie verloren.
+            // From `0` (stream start) so that entries enqueued BEFORE the (lazy)
+            // group creation are also delivered — otherwise they would be lost.
             $this->redis->executeRaw(['XGROUP', 'CREATE', $key, self::GROUP, '0', 'MKSTREAM']);
         } catch (\Throwable $e) {
-            // BUSYGROUP = Gruppe existiert bereits -> ok.
+            // BUSYGROUP = group already exists -> ok.
             if (!str_contains($e->getMessage(), 'BUSYGROUP')) {
                 throw $e;
             }
@@ -138,7 +139,7 @@ class RedisStreamTransport implements QueueTransportInterface
     }
 
     /**
-     * @param array<int,mixed> $entries Liste [[id, [field, value, ...]], ...]
+     * @param array<int,mixed> $entries list [[id, [field, value, ...]], ...]
      * @return list<array{id:string, payload:array<string,mixed>}>
      */
     private function parseEntries(array $entries): array

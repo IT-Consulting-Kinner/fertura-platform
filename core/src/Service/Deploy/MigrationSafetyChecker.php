@@ -4,13 +4,13 @@ declare(strict_types=1);
 namespace App\Service\Deploy;
 
 /**
- * Heuristischer Migrations-Sicherheits-Check (Programm Tier-3, P15): findet
- * **destruktive/abwärts-inkompatible** Muster in Migrationen, die ein
- * Zero-Downtime-Deployment (rolling/blue-green) brechen, und empfiehlt das
- * **Expand/Contract**-Muster.
+ * Heuristic migration safety check (program tier-3, P15): finds
+ * **destructive/backwards-incompatible** patterns in migrations that break a
+ * zero-downtime deployment (rolling/blue-green), and recommends the
+ * **expand/contract** pattern.
  *
- * Scannt nur den `up()`-Pfad (der `down()`-Rollback darf droppen). Advisory —
- * der Betreiber entscheidet.
+ * Scans only the `up()` path (the `down()` rollback is allowed to drop).
+ * Advisory — the operator decides.
  */
 class MigrationSafetyChecker
 {
@@ -33,7 +33,7 @@ class MigrationSafetyChecker
         foreach (glob(rtrim($dir, '/') . '/*.php') ?: [] as $file) {
             $lines = file($file) ?: [];
             foreach ($lines as $i => $line) {
-                // Ab dem down()-Rollback nicht mehr prüfen (Drops dort erwartet).
+                // Stop checking once the down() rollback begins (drops are expected there).
                 if (preg_match('/function\s+down\s*\(/i', $line)) {
                     break;
                 }

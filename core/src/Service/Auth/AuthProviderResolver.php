@@ -8,19 +8,19 @@ use Cake\Log\Log;
 use Throwable;
 
 /**
- * Löst den aktiven Authentifizierungs-Provider aus der Capability-Registry auf
- * (Resolver-Slot `core.auth.provider`, Kap. 27.2.2 / 26.7).
+ * Resolves the active authentication provider from the capability registry
+ * (resolver slot `core.auth.provider`, ch. 27.2.2 / 26.7).
  *
- * Sicherheitsleitlinie (Break-Glass): Lässt sich der registrierte Provider nicht
- * laden/instanziieren oder implementiert er nicht {@see AuthProviderInterface},
- * wird auf den lokalen Default zurückgefallen und gewarnt — die Plattform bleibt
- * so immer anmeldbar.
+ * Security policy (break-glass): if the registered provider cannot be
+ * loaded/instantiated or does not implement {@see AuthProviderInterface}, the
+ * code falls back to the local default and logs a warning — keeping the
+ * platform always able to authenticate.
  */
 class AuthProviderResolver
 {
     public const CONTRACT = 'core.auth.provider';
 
-    /** Klassenname des registrierten aktiven Providers oder null (= lokal). */
+    /** Class name of the registered active provider, or null (= local). */
     public function resolveClass(): ?string
     {
         try {
@@ -32,13 +32,13 @@ class AuthProviderResolver
                 ['n' => self::CONTRACT],
             )->fetch('assoc');
         } catch (Throwable) {
-            return null; // DB (noch) nicht verfügbar -> lokaler Default
+            return null; // DB not (yet) available -> local default
         }
 
         return $row !== false && !empty($row['implementation_class']) ? (string)$row['implementation_class'] : null;
     }
 
-    /** Der zu verwendende Provider (mit defensivem Fallback auf lokal). */
+    /** The provider to use (with a defensive fallback to local). */
     public function provider(): AuthProviderInterface
     {
         $class = $this->resolveClass();

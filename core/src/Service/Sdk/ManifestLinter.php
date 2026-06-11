@@ -4,10 +4,10 @@ declare(strict_types=1);
 namespace App\Service\Sdk;
 
 /**
- * Manifest-Linter (Programm Tier-3, P16): statische Prüfung eines Modul-Manifests
- * (ohne DB/Core-Version) — Pflichtfelder, Formate und die Form der
- * Registrierungs-Sektionen. Ergänzt {@see \App\Service\Module\ModuleManifest}
- * (Laufzeit-/Kompatibilitätsprüfung) um eine entwicklerfreundliche Frühprüfung.
+ * Manifest linter (program tier 3, P16): static validation of a module manifest
+ * (without DB/core version) — required fields, formats, and the shape of the
+ * registration sections. Complements {@see \App\Service\Module\ModuleManifest}
+ * (runtime/compatibility check) with a developer-friendly early check.
  */
 class ManifestLinter
 {
@@ -65,8 +65,8 @@ class ManifestLinter
             if ($path === '' || !str_starts_with($path, '/')) {
                 $errors[] = "api_routes [$i]: 'path' muss mit '/' beginnen";
             } elseif (!preg_match('#^(/([A-Za-z0-9._~-]+|\{[a-z_][a-z0-9_]*\}))+/?$#', $path)) {
-                // Nur einfache Segmente + {platzhalter} — keine Regex-Metazeichen
-                // (sonst Regex-Injection/ReDoS im API-Router, P07).
+                // Only simple segments + {placeholder} — no regex metacharacters
+                // (otherwise regex injection/ReDoS in the API router, P07).
                 $errors[] = "api_routes [$i]: 'path' enthält unzulässige Zeichen (nur Segmente + {platzhalter})";
             }
             if (empty($route['class'])) {

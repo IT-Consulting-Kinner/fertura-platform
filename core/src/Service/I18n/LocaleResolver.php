@@ -7,17 +7,17 @@ use Cake\Datasource\ConnectionManager;
 use Throwable;
 
 /**
- * Versions-Gate & Auflösung für Sprachpakete im Store (i18n-5, E39).
+ * Version gate & resolution for language packs in the store (i18n-5, E39).
  *
- * Wählt je (Komponente, Locale) die passende Pack-Version gegen die aktive
- * Komponentenversion:
- *   - exakt gleich          → genutzt, Status `clean`
- *   - gleiche Major, andere → genutzt, Status `notice` (höchste Same-Major)
- *   - andere Major / keine  → nicht genutzt → Englisch-Fallback, Status `error`
+ * Selects, per (component, locale), the matching pack version against the
+ * active component version:
+ *   - exactly equal         → used, status `clean`
+ *   - same major, different → used, status `notice` (highest same-major)
+ *   - different major / none → not used → English fallback, status `error`
  *
- * „Verfügbare" Sprachen = Locales, für die der Core einen nutzbaren Katalog hat
- * (mitgelieferte Core-Kataloge in resources/locales + nutzbare Core-Packs im
- * Store). Englisch ist immer verfügbar.
+ * "Available" languages = locales for which the core has a usable catalog
+ * (shipped core catalogs in resources/locales + usable core packs in the
+ * store). English is always available.
  */
 class LocaleResolver
 {
@@ -32,10 +32,10 @@ class LocaleResolver
     }
 
     /**
-     * Beste Pack-Version für (Komponente, Locale) gegen die aktive Version.
+     * Best pack version for (component, locale) against the active version.
      *
-     * @return array{version: string, status: string}|null  null = kein nutzbares
-     *   Pack (Major-Mismatch oder keines) → Aufrufer fällt auf Englisch zurück.
+     * @return array{version: string, status: string}|null  null = no usable
+     *   pack (major mismatch or none) → caller falls back to English.
      */
     public function resolveVersion(string $componentKey, string $activeVersion, string $locale): ?array
     {
@@ -66,8 +66,8 @@ class LocaleResolver
     }
 
     /**
-     * Status je gespeichertem Pack einer Komponente gegen die aktive Version
-     * (für Verwaltung/Health). clean | notice | error.
+     * Status per stored pack of a component against the active version
+     * (for management/health). clean | notice | error.
      *
      * @return list<array{locale: string, version: string, status: string}>
      */
@@ -89,8 +89,9 @@ class LocaleResolver
     }
 
     /**
-     * Vom Core angebotene (verfügbare) Locales: mitgelieferte Core-Kataloge
-     * (resources/locales) + nutzbare Core-Packs im Store. Englisch immer dabei.
+     * Locales offered (available) by the core: shipped core catalogs
+     * (resources/locales) + usable core packs in the store. English always
+     * included.
      *
      * @return list<string>
      */
@@ -98,7 +99,7 @@ class LocaleResolver
     {
         $locales = ['en_US'];
 
-        // Mitgelieferte Core-Kataloge.
+        // Shipped core catalogs.
         $shipped = defined('RESOURCES') ? RESOURCES . 'locales' : null;
         if ($shipped !== null && is_dir($shipped)) {
             foreach (glob($shipped . '/*', GLOB_ONLYDIR) ?: [] as $d) {
@@ -106,7 +107,7 @@ class LocaleResolver
             }
         }
 
-        // Nutzbare Core-Packs aus dem Store.
+        // Usable core packs from the store.
         try {
             $rows = $this->conn()->execute(
                 "SELECT DISTINCT locale FROM language_packs WHERE component_key = 'core'",
@@ -127,8 +128,8 @@ class LocaleResolver
     }
 
     /**
-     * Wählbare Locales für den Umschalter: aktivierte (`locale.enabled`) ∩
-     * verfügbare (Core hat nutzbare Datei). Englisch immer dabei.
+     * Selectable locales for the switcher: enabled (`locale.enabled`) ∩
+     * available (the core has a usable file). English always included.
      *
      * @param list<string> $enabled
      * @return list<string>
@@ -144,7 +145,7 @@ class LocaleResolver
         return array_values(array_unique($sel));
     }
 
-    /** Anzeigename einer Locale (Fallback: der Code selbst). */
+    /** Display name of a locale (fallback: the code itself). */
     public static function displayName(string $locale): string
     {
         return [

@@ -4,161 +4,161 @@ declare(strict_types=1);
 namespace App\Service\Settings;
 
 /**
- * Katalog der bekannten Core-Settings: sichere Vorgabewerte (greifen auch ohne
- * DB-Eintrag, Kap. 27.16.3 / Entscheidung 162), Typ- und Wertebereichs-
- * validierung sowie das Secret-Flag (verschlüsselte Ablage, Entscheidung 159).
+ * Catalog of the known core settings: safe default values (which apply even
+ * without a DB entry, ch. 27.16.3 / Decision 162), type and value-range
+ * validation, and the secret flag (encrypted storage, Decision 159).
  *
- * Definition je Schlüssel: type (int|bool|string|json), default, optional
- * min/max (für int) und secret (bool).
+ * Definition per key: type (int|bool|string|json), default, optionally min/max
+ * (for int) and secret (bool).
  */
 class SettingsCatalog
 {
     /** @var array<string, array<string, array<string, mixed>>> */
     private const DEFINITIONS = [
         'core' => [
-            // Passwort-Policy (in Step 2 als Code-Default, jetzt DB-konfigurierbar).
+            // Password policy (a code default in Step 2, now DB-configurable).
             'password.min_length' => ['type' => 'int', 'default' => 12, 'min' => 6, 'max' => 128],
-            // Anmeldeschutz (Entscheidung 162).
+            // Login protection (Decision 162).
             'login_throttle.max_attempts' => ['type' => 'int', 'default' => 10, 'min' => 1, 'max' => 1000],
             'login_throttle.window_minutes' => ['type' => 'int', 'default' => 15, 'min' => 1, 'max' => 1440],
-            // Per-IP-Obergrenze für Fehlversuche (über alle Benutzernamen) im
-            // selben Fenster — gegen Password-Spraying / Pre-Auth-CPU-Last.
+            // Per-IP cap on failed attempts (across all usernames) within the same
+            // window — defends against password spraying / pre-auth CPU load.
             'login_throttle.ip_max_attempts' => ['type' => 'int', 'default' => 30, 'min' => 1, 'max' => 100000],
-            // Session-Timeout (Wiring an die Session folgt mit der GUI, Step 10).
+            // Session timeout (wiring into the session follows with the GUI, Step 10).
             'session.timeout_minutes' => ['type' => 'int', 'default' => 120, 'min' => 1, 'max' => 43200],
-            // Beispiel für ein verschlüsseltes Geheimnis.
+            // Example of an encrypted secret.
             'smtp.password' => ['type' => 'string', 'default' => null, 'secret' => true],
-            // Mehrsprachigkeit (i18n, E37): Standardsprache + angebotene Sprachen.
+            // Internationalization (i18n, E37): default language + offered languages.
             'locale.default' => ['type' => 'string', 'default' => 'en_US'],
             'locale.enabled' => ['type' => 'json', 'default' => ['en_US', 'de_DE']],
-            // System-/Identitätsmails (Einladung, Passwort-Reset).
+            // System/identity mail (invitation, password reset).
             'mail.enabled' => ['type' => 'bool', 'default' => true],
             'mail.from_address' => ['type' => 'string', 'default' => 'no-reply@fertura.local'],
             'mail.from_name' => ['type' => 'string', 'default' => 'Fertura'],
-            // Marketplace / Signatur / Wartung (Step 8).
+            // Marketplace / signature / maintenance (Step 8).
             'require_module_signature' => ['type' => 'bool', 'default' => true],
             'crl_max_age_days' => ['type' => 'int', 'default' => 7, 'min' => 0, 'max' => 365],
-            // Maximales Alter der Online-Lizenzbestätigung (Kap. 28.7.3.1).
+            // Maximum age of the online license confirmation (ch. 28.7.3.1).
             'license.online_max_age_days' => ['type' => 'int', 'default' => 7, 'min' => 1, 'max' => 365],
             'marketplace.base_url' => ['type' => 'string', 'default' => null],
             'maintenance_mode' => ['type' => 'bool', 'default' => false],
-            // Observability (Step 12, Kap. 20.2).
+            // Observability (Step 12, ch. 20.2).
             'storage.path' => ['type' => 'string', 'default' => null],
-            // Objekt-Storage-Treiber (P03): 'local' (Default) oder 's3'
-            // (S3-Zugangsdaten out-of-band über STORAGE_S3_*-Env).
+            // Object storage driver (P03): 'local' (default) or 's3'
+            // (S3 credentials supplied out-of-band via STORAGE_S3_* env).
             'storage.driver' => ['type' => 'string', 'default' => 'local'],
-            // Off-Site-Backup (P14): Backups zusätzlich ins Objekt-Storage laden.
+            // Off-site backup (P14): additionally upload backups to object storage.
             'backup.offsite.enabled' => ['type' => 'bool', 'default' => false],
             'health.worker_max_age_seconds' => ['type' => 'int', 'default' => 120, 'min' => 10, 'max' => 86400],
             'health_token' => ['type' => 'string', 'default' => null, 'secret' => true],
-            // Observability (#12): Webhook-URL für Health-Alarme (Statuswechsel
-            // up<->degraded/down), signiert per HMAC mit health.alert_secret. Der
-            // OTLP-Metrik-Export läuft separat über OTEL_EXPORTER_OTLP_ENDPOINT (Env).
+            // Observability (#12): webhook URL for health alerts (status changes
+            // up<->degraded/down), signed via HMAC with health.alert_secret. The
+            // OTLP metric export runs separately via OTEL_EXPORTER_OTLP_ENDPOINT (env).
             'health.alert_url' => ['type' => 'string', 'default' => null],
             'health.alert_secret' => ['type' => 'string', 'default' => null, 'secret' => true],
 
-            // Security-Antwort-Header (SecurityHeadersMiddleware): abschaltbar,
-            // falls ein vorgelagerter Proxy sie setzt; CSP ersetzbar (leer =
-            // sichere Default-Policy); HSTS-Dauer (nur über TLS gesendet, 0 = aus).
+            // Security response headers (SecurityHeadersMiddleware): can be turned
+            // off if an upstream proxy sets them; CSP is replaceable (empty =
+            // safe default policy); HSTS duration (only sent over TLS, 0 = off).
             'security.headers.enabled' => ['type' => 'bool', 'default' => true],
             'security.csp' => ['type' => 'string', 'default' => null],
             'security.hsts_max_age' => ['type' => 'int', 'default' => 31536000, 'min' => 0, 'max' => 63072000],
-            // MFA-Pflicht für LOKALE Anmeldungen: Benutzer ohne eingerichtetes
-            // TOTP werden nach dem Login zur Einrichtung gezwungen. SSO-Logins
-            // sind unberührt (MFA-Durchsetzung liegt beim IdP).
+            // MFA requirement for LOCAL logins: users without TOTP set up are forced
+            // to set it up after login. SSO logins are unaffected (MFA enforcement
+            // lies with the IdP).
             'security.mfa.required' => ['type' => 'bool', 'default' => false],
-            // Session-Anomalie-Erkennung (SessionGuardMiddleware): UA-Bindung
-            // (Cookie-Diebstahl in anderem Browser -> Session-Ende), strenger
-            // IP-Wechsel-Modus (Default aus: mobile Netze/NAT wechseln legitim)
-            // und In-App-Hinweis bei Anmeldung von einem neuen Gerät.
+            // Session anomaly detection (SessionGuardMiddleware): UA binding (cookie
+            // theft in a different browser -> session ends), strict IP-change mode
+            // (off by default: mobile networks/NAT change IPs legitimately) and an
+            // in-app notice on login from a new device.
             'security.session.bind_ua' => ['type' => 'bool', 'default' => true],
             'security.session.ip_strict' => ['type' => 'bool', 'default' => false],
             'security.session.notify_new_device' => ['type' => 'bool', 'default' => true],
 
-            // Daten-Backup (Kap. 20.1.2). Pfad als Container-/Linux- bzw.
-            // Windows-Pfad; leer = Standard-Volume. Scheduler läuft im Worker.
+            // Data backup (ch. 20.1.2). Path as a container/Linux or Windows path;
+            // empty = default volume. The scheduler runs in the worker.
             'backup.path' => ['type' => 'string', 'default' => null],
             'backup.schedule.enabled' => ['type' => 'bool', 'default' => false],
             'backup.schedule.interval_hours' => ['type' => 'int', 'default' => 24, 'min' => 1, 'max' => 8760],
             'backup.retention' => ['type' => 'int', 'default' => 14, 'min' => 1, 'max' => 3650],
-            // Passwort verschlüsselt den Archivinhalt (AES-256). Secret: nie im
-            // Klartext angezeigt. Leer = unverschlüsselt (Warnung).
+            // Password that encrypts the archive contents (AES-256). Secret: never
+            // shown in plaintext. Empty = unencrypted (warning).
             'backup.password' => ['type' => 'string', 'default' => null, 'secret' => true],
-            // Vor dem Abschluss zusätzlich Probe-Restore in eine Scratch-DB fahren
-            // (garantiert Wiederherstellbarkeit). Integritätsprüfung läuft immer.
+            // Before finishing, additionally run a trial restore into a scratch DB
+            // (guarantees recoverability). The integrity check always runs.
             'backup.verify_on_create' => ['type' => 'bool', 'default' => true],
-            // Aufbewahrung zusätzlich nach Alter (Tage); 0 = aus.
+            // Additional retention by age (days); 0 = off.
             'backup.retention_days' => ['type' => 'int', 'default' => 0, 'min' => 0, 'max' => 3650],
-            // Mindestens freier Speicher am Zielort vor dem Backup (MB, Pre-Flight).
+            // Minimum free space at the target before the backup (MB, pre-flight).
             'backup.min_free_mb' => ['type' => 'int', 'default' => 500, 'min' => 0, 'max' => 10485760],
-            // Alarm-Empfänger bei fehlgeschlagenem Backup (E-Mail). Leer = aus.
+            // Alert recipient for a failed backup (email). Empty = off.
             'backup.alert_email' => ['type' => 'string', 'default' => null],
-            // Optionales Launcher-Prefix für isolierte Modul-Hosts (Kap. 23.16.2):
-            // Befehl(+Argumente), der VOR `php` gesetzt wird, um den Host-Prozess
-            // zusätzlich vom Betriebssystem zu isolieren — z. B.
-            //   "setpriv --reuid=1001 --regid=1001 --clear-groups --"  (eigener OS-Benutzer),
-            //   "bwrap --unshare-all --ro-bind / / --proc /proc --dev /dev --die-with-parent"  (FS/Kernel-Sandbox),
+            // Optional launcher prefix for isolated module hosts (ch. 23.16.2):
+            // command(+arguments) placed BEFORE `php` to additionally isolate the
+            // host process from the operating system — e.g.
+            //   "setpriv --reuid=1001 --regid=1001 --clear-groups --"  (dedicated OS user),
+            //   "bwrap --unshare-all --ro-bind / / --proc /proc --dev /dev --die-with-parent"  (FS/kernel sandbox),
             //   "firejail --quiet --private".
-            // Wird unverändert (NICHT als ein Argument gequotet) eingesetzt, läuft
-            // also in der bereits bereinigten `env -i`-Umgebung und exec/wrapped `php`.
-            // Leer = kein Prefix (Default, In-Process-UID). Der Befehl muss das Image
-            // bereitstellen und Argumente an `php` durchreichen.
-            // WICHTIG: Der Launcher muss `php` per **exec** ersetzen oder SIGTERM an
-            //   den Host weiterreichen und mit dem Elternprozess sterben (z. B.
-            //   `setpriv … --`, `bwrap … --die-with-parent`). Ein Launcher, der
-            //   abspaltet und sich löst (z. B. `firejail` ohne entsprechende Optionen),
-            //   kann beim Stoppen einen verwaisten Host hinterlassen.
-            // SICHERHEIT: Wer dieses Setting setzen darf, kann beliebigen Code als
-            //   Worker-Benutzer ausführen (Shell-Prefix) — auf dieselbe Vertrauensstufe
-            //   wie Shell-Zugriff beschränken. Siehe MODULE_DEVELOPMENT / 23.16.2.
+            // Used verbatim (NOT quoted as a single argument), so it runs in the
+            // already-sanitized `env -i` environment and exec/wraps `php`.
+            // Empty = no prefix (default, in-process UID). The command must be
+            // provided by the image and pass arguments through to `php`.
+            // IMPORTANT: the launcher must replace `php` via **exec** or forward
+            //   SIGTERM to the host and die with the parent process (e.g.
+            //   `setpriv … --`, `bwrap … --die-with-parent`). A launcher that forks
+            //   and detaches (e.g. `firejail` without the corresponding options) can
+            //   leave an orphaned host behind on stop.
+            // SECURITY: anyone allowed to set this setting can run arbitrary code as
+            //   the worker user (shell prefix) — restrict it to the same trust level
+            //   as shell access. See MODULE_DEVELOPMENT / 23.16.2.
             'module.host.launcher' => ['type' => 'string', 'default' => null],
-            // Gehärtetes Outbound-HTTP (P01): gemeinsamer Egress für Webhooks/OIDC/AI.
+            // Hardened outbound HTTP (P01): shared egress for webhooks/OIDC/AI.
             'http.egress.enabled' => ['type' => 'bool', 'default' => true],
             'http.egress.timeout_seconds' => ['type' => 'int', 'default' => 10, 'min' => 1, 'max' => 120],
-            // Max. Antwortgröße in Bytes (0 = unbegrenzt); Default 5 MiB.
+            // Max response size in bytes (0 = unlimited); default 5 MiB.
             'http.egress.max_response_bytes' => ['type' => 'int', 'default' => 5000000, 'min' => 0, 'max' => 104857600],
-            // SSRF-Schutz aufheben (private/reservierte Ziele erlauben) — nur bewusst setzen.
+            // Disable SSRF protection (allow private/reserved targets) — set only deliberately.
             'http.egress.allow_private' => ['type' => 'bool', 'default' => false],
-            // Hostnamen/IP-Literale, die trotz privater Auflösung erlaubt sind (interne Integrationen).
+            // Hostnames/IP literals allowed despite private resolution (internal integrations).
             'http.egress.allowlist' => ['type' => 'json', 'default' => []],
             'http.egress.user_agent' => ['type' => 'string', 'default' => 'Fertura/1.0 (+egress)'],
-            // API-Rate-Limiting (P07): pro Token (bzw. IP) und Minute.
+            // API rate limiting (P07): per token (or IP) and minute.
             'api.rate_limit.enabled' => ['type' => 'bool', 'default' => true],
             'api.rate_limit.per_minute' => ['type' => 'int', 'default' => 120, 'min' => 1, 'max' => 100000],
-            // Max. gleichzeitige SSE-Streams je Benutzer (P08; gegen FPM-/DB-Erschöpfung).
+            // Max concurrent SSE streams per user (P08; guards against FPM/DB exhaustion).
             'sse.max_streams_per_user' => ['type' => 'int', 'default' => 3, 'min' => 1, 'max' => 100],
-            // Multi-Tenancy: angemeldeten Benutzer auf der Domain eines FREMDEN
-            // Mandanten abweisen (Cross-Tenant-Host-Policy). Single-Org unberührt.
+            // Multi-tenancy: reject a logged-in user on the domain of a FOREIGN
+            // tenant (cross-tenant host policy). Single-org is unaffected.
             'tenancy.enforce_host_match' => ['type' => 'bool', 'default' => true],
-            // Treiber des generischen Job-Queue-Transports (#10): `db` (Default,
-            // Postgres) oder `redis` (Redis Streams; QUEUE_REDIS_URL). Der Event-
-            // Outbox bleibt davon unberührt (immer DB).
+            // Driver of the generic job-queue transport (#10): `db` (default,
+            // Postgres) or `redis` (Redis Streams; QUEUE_REDIS_URL). The event
+            // outbox is unaffected by this (always DB).
             'queue.transport' => ['type' => 'string', 'default' => 'db'],
-            // Pro-Mandant-Obergrenze an Outbox-Events je Worker-Batch (Fairness/Quota
-            // im Multi-Tenant-Pool; Default praktisch unbegrenzt — Fairness kommt schon
-            // aus dem Round-Robin-Claiming). Pro Mandant via Settings-Overlay setzbar.
+            // Per-tenant cap on outbox events per worker batch (fairness/quota in
+            // the multi-tenant pool; default practically unlimited — fairness already
+            // comes from round-robin claiming). Settable per tenant via settings overlay.
             'outbox.max_per_tenant_per_batch' => ['type' => 'int', 'default' => 10000, 'min' => 1, 'max' => 100000],
-            // Volltext-Sprachkonfiguration (Postgres regconfig) für Stemming/Stopwords.
-            // Wird von der Migration aus `SEARCH_TEXT_CONFIG` (Default `german`) gesetzt
-            // und muss zur tsvector-Spalte passen; der Index trägt zusätzlich `simple`
-            // (exakte/sprachunabhängige Treffer). `simple` = kein Stemming.
+            // Full-text language configuration (Postgres regconfig) for stemming/stopwords.
+            // Set by the migration from `SEARCH_TEXT_CONFIG` (default `german`) and
+            // must match the tsvector column; the index additionally carries `simple`
+            // (exact/language-independent matches). `simple` = no stemming.
             'search.text_config' => ['type' => 'string', 'default' => 'simple'],
-            // AI/LLM-Gateway (P11): Provider openai|anthropic|xai|google. Schlüssel
-            // out-of-band über *_API_KEY-Env. Leer = AI deaktiviert.
+            // AI/LLM gateway (P11): provider openai|anthropic|xai|google. Keys supplied
+            // out-of-band via *_API_KEY env. Empty = AI disabled.
             'ai.chat.provider' => ['type' => 'string', 'default' => null],
             'ai.chat.model' => ['type' => 'string', 'default' => null],
             'ai.embed.provider' => ['type' => 'string', 'default' => null],
             'ai.embed.model' => ['type' => 'string', 'default' => null],
-            // Beim Indexieren eines Suchdokuments automatisch auch ein Embedding
-            // erzeugen (für die Hybrid-Suche), sofern ein Embedding-Provider aktiv
-            // ist. Default aus, da je Dokument ein (synchroner) LLM-Aufruf anfällt;
-            // für Massen-Reindex/Hintergrund-Indexierung empfohlen.
+            // When indexing a search document, automatically also create an embedding
+            // (for hybrid search), provided an embedding provider is active. Off by
+            // default, since each document incurs a (synchronous) LLM call;
+            // recommended for bulk reindex / background indexing.
             'ai.embed.auto_index' => ['type' => 'bool', 'default' => false],
-            // Optionaler Endpoint-Override je Provider (z. B. Azure-OpenAI, ein
-            // selbst gehosteter/Proxy-Gateway wie LiteLLM). MUSS https sein, sonst
-            // ginge der API-Schlüssel im Klartext über die Leitung (AiGateway lehnt
-            // http ab). Geht weiter über den gehärteten Egress (SSRF-Schutz). Setzen
-            // darf nur die `core_config`-Rolle; Änderung wird auditiert. Leer = Default.
+            // Optional per-provider endpoint override (e.g. Azure OpenAI, a
+            // self-hosted/proxy gateway like LiteLLM). MUST be https, otherwise the
+            // API key would travel over the wire in plaintext (AiGateway rejects
+            // http). Still goes through the hardened egress (SSRF protection). Only
+            // the `core_config` role may set it; changes are audited. Empty = default.
             'ai.openai.endpoint' => ['type' => 'string', 'default' => null],
             'ai.xai.endpoint' => ['type' => 'string', 'default' => null],
             'ai.anthropic.endpoint' => ['type' => 'string', 'default' => null],
@@ -175,7 +175,7 @@ class SettingsCatalog
     }
 
     /**
-     * Alle bekannten Definitionen (für die Verwaltungs-GUI, Step 10).
+     * All known definitions (for the administration GUI, Step 10).
      *
      * @return array<string, array<string, array<string, mixed>>>
      */
@@ -200,9 +200,9 @@ class SettingsCatalog
     }
 
     /**
-     * Validiert einen Wert gegen die Katalogdefinition.
+     * Validates a value against the catalog definition.
      *
-     * @return list<string> Liste der Fehlermeldungen (leer = gültig).
+     * @return list<string> List of error messages (empty = valid).
      */
     public function validate(string $namespace, string $key, mixed $value): array
     {

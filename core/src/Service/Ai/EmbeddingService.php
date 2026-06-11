@@ -7,10 +7,10 @@ use Cake\Datasource\ConnectionInterface;
 use Cake\Datasource\ConnectionManager;
 
 /**
- * Semantischer Index (Programm Tier-2, P11): bettet Inhalte über das
- * {@see AiGateway} ein und legt sie in `core.embeddings` (pgvector) ab;
- * {@see semantic()} sucht per Cosine-Ähnlichkeit — sichtbarkeits-gefiltert über
- * den Eigentümer (wie die Volltextsuche P10).
+ * Semantic index (program Tier-2, P11): embeds content via the
+ * {@see AiGateway} and stores it in `core.embeddings` (pgvector);
+ * {@see semantic()} searches by cosine similarity — visibility-filtered by
+ * owner (like the full-text search P10).
  */
 class EmbeddingService
 {
@@ -24,7 +24,7 @@ class EmbeddingService
         return ConnectionManager::get('default');
     }
 
-    /** Ist semantische Suche/Indexierung verfügbar (Embedding-Provider konfiguriert)? */
+    /** Is semantic search/indexing available (embedding provider configured)? */
     public function available(): bool
     {
         try {
@@ -62,7 +62,7 @@ class EmbeddingService
         );
     }
 
-    /** Aktueller Mandant aus dem RLS-Kontext (Fallback Default-Mandant). */
+    /** Current tenant from the RLS context (falls back to the default tenant). */
     private function tenantId(): string
     {
         try {
@@ -78,15 +78,15 @@ class EmbeddingService
     }
 
     /**
-     * Semantische Suche. `$userId === null` = System (alles); sonst nur eigene +
-     * öffentliche Dokumente.
+     * Semantic search. `$userId === null` = system (everything); otherwise only
+     * the user's own + public documents.
      *
      * @return list<array{source:string,entity_type:string,entity_id:string,content:string,score:float}>
      */
     public function semantic(string $query, ?string $userId = null, int $limit = 10): array
     {
         $vector = $this->literal($this->ai->embed($query));
-        // Mandantenscharf + Owner-Sichtbarkeit (eigene + öffentliche im Mandanten).
+        // Tenant-scoped + owner visibility (own + public within the tenant).
         $scope = $userId === null ? '' : ' AND (owner_id IS NULL OR owner_id = :uid)';
         $params = ['v' => $vector, 'l' => $limit, 'tid' => $this->tenantId()];
         if ($userId !== null) {
@@ -113,7 +113,7 @@ class EmbeddingService
     /**
      * @param list<float> $floats
      */
-    /** Erwartete Embedding-Dimension (= Spaltentyp `vector(1536)`). */
+    /** Expected embedding dimension (= column type `vector(1536)`). */
     private const DIMENSIONS = 1536;
 
     private function literal(array $floats): string
@@ -133,11 +133,11 @@ class EmbeddingService
                 throw new AiException('Embedding enthält einen nicht-endlichen Wert.');
             }
 
-            // Locale-UNABHÄNGIG formatieren: `number_format` mit explizitem '.'
-            // als Dezimaltrenner (kein `LC_NUMERIC`-Komma, das das `::vector`-
-            // Literal zerstören würde) und Festkomma (kein Exponent). 12 Stellen
-            // erfassen die Float-Genauigkeit ohne Repräsentationsrauschen; Nullen
-            // werden abgeschnitten. Vgl. `sprintf('%f')` wäre `LC_NUMERIC`-anfällig.
+            // Format locale-INDEPENDENTLY: `number_format` with an explicit '.'
+            // as the decimal separator (no `LC_NUMERIC` comma that would break the
+            // `::vector` literal) and fixed-point notation (no exponent). 12 digits
+            // capture the float precision without representation noise; trailing
+            // zeros are trimmed. By contrast, `sprintf('%f')` would be `LC_NUMERIC`-sensitive.
             return rtrim(rtrim(number_format($v, 12, '.', ''), '0'), '.');
         }, $floats)) . ']';
     }

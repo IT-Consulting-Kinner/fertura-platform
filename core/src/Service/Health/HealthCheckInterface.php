@@ -4,17 +4,17 @@ declare(strict_types=1);
 namespace App\Service\Health;
 
 /**
- * Implementierungsvertrag für Modul-Health-Beiträge (Kap. 20.2.2).
+ * Implementation contract for module health contributions (ch. 20.2.2).
  *
- * Module registrieren Implementierungen als Collector-Beiträge am
- * Core-Contract `core.collector.health`. Der Core aggregiert die Beiträge in
- * den Health-Endpoint. Ohne registrierte Beiträge bleibt das Ergebnis leer
- * (Collector-Leerergebnis).
+ * Modules register implementations as collector contributions against the
+ * core contract `core.collector.health`. The core aggregates the contributions
+ * into the health endpoint. With no registered contributions the result stays
+ * empty (empty collector result).
  */
 interface HealthCheckInterface
 {
     /**
-     * Liefert einen Health-Beitrag.
+     * Returns a single health contribution.
      *
      * @return array{component: string, status: string, detail?: mixed}
      *   status ∈ {up, degraded, down}.

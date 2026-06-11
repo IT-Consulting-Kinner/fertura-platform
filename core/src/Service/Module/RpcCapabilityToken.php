@@ -4,46 +4,45 @@ declare(strict_types=1);
 namespace App\Service\Module;
 
 /**
- * Pro-Aufruf-Capability-Token für die Out-of-Process-RPC (Kap. 23.16.2).
+ * Per-call capability token for the out-of-process RPC (ch. 23.16.2).
  *
- * Härtet die zuvor rein kanal-basierte Authentifizierung (ein statisches, bei
- * jedem Aufruf mitgeschicktes Host-Token) zu einer **aufruf-gebundenen**:
+ * Hardens the previously purely channel-based authentication (a static host
+ * token sent on every call) into a **call-bound** one:
  *
- *  - Das gemeinsame Geheimnis (`MODULE_RPC_TOKEN`, 0600-Datei) wird **nur noch
- *    als HMAC-Schlüssel** genutzt und reist **nie** über den Socket. Ein
- *    Mitlauscher am Unix-Socket (gleiche UID, solange keine OS-Isolation) sieht
- *    nur Pro-Aufruf-MACs, nicht das wiederverwendbare Geheimnis.
- *  - Der MAC deckt die **gesamte kanonisierte Anfrage** ab (op/class/method/
- *    args/rls/contract/input) plus Nonce und Ablauf. Ein abgefangener MAC lässt
- *    sich daher **nicht** auf einen anderen Aufruf (andere Methode/Argumente/
- *    RLS-Kontext, z. B. `bypass=true`) ummünzen — Integrität inklusive.
- *  - **Zeitlich begrenzt** (`exp`) und **einmalig** (Nonce; der Host weist
- *    bereits gesehene Nonces ab) -> Replay ist eng beschränkt.
+ *  - The shared secret (`MODULE_RPC_TOKEN`, 0600 file) is **now used only as an
+ *    HMAC key** and **never** travels over the socket. An eavesdropper on the
+ *    Unix socket (same UID, as long as there is no OS isolation) sees only
+ *    per-call MACs, not the reusable secret.
+ *  - The MAC covers the **entire canonicalized request** (op/class/method/
+ *    args/rls/contract/input) plus the nonce and expiry. An intercepted MAC can
+ *    therefore **not** be repurposed for a different call (different method/
+ *    arguments/RLS context, e.g. `bypass=true`) — integrity is included.
+ *  - **Time-limited** (`exp`) and **single-use** (nonce; the host rejects
+ *    already-seen nonces) -> replay is tightly bounded.
  *
- * Symmetrisch: {@see mint()} erzeugt die Auth-Felder (Core-Seite), {@see verify()}
- * prüft sie (Host-Seite). Beide Seiten nutzen dieselbe Kanonisierung.
+ * Symmetric: {@see mint()} produces the auth fields (core side), {@see verify()}
+ * checks them (host side). Both sides use the same canonicalization.
  *
- * **Bedrohungsmodell (ehrlich).** Das Token authentifiziert die **Inter-Prozess-
- * Grenze** (Core ruft den Host) und schützt vor anderen Socket-Clients sowie vor
- * Manipulation/Replay einer abgefangenen Anfrage. Es **beschränkt nicht** den im
- * Host laufenden Modulcode selbst: dieser kennt das Geheimnis (eigene 0600-Datei,
- * gleiche UID) und kann Beiträge in seinem eigenen Namespace ohnehin aufrufen.
- * Die eigentliche Sandbox des Moduls sind die eingeschränkte DB-Rolle, die
- * bereinigte Umgebung und die optionale OS-Isolation (Launcher-Prefix) — nicht
- * dieses Token.
+ * **Threat model (honest).** The token authenticates the **inter-process
+ * boundary** (core calls the host) and protects against other socket clients as
+ * well as tampering/replay of an intercepted request. It does **not** constrain
+ * the module code running inside the host itself: that code knows the secret
+ * (its own 0600 file, same UID) and can call contributions in its own namespace
+ * anyway. The module's actual sandbox is the restricted DB role, the sanitized
+ * environment and the optional OS isolation (launcher prefix) — not this token.
  */
 final class RpcCapabilityToken
 {
-    /** Gültigkeitsfenster eines Aufruf-Tokens (Sekunden). RPC ist lokal/sofort. */
+    /** Validity window of a call token (seconds). RPC is local/instant. */
     public const TTL_SECONDS = 60;
 
-    /** Nicht-signierte Hilfsfelder der Anfrage (aus der Kanonisierung ausgenommen). */
+    /** Unsigned helper fields of the request (excluded from canonicalization). */
     private const AUTH_FIELDS = ['token', 'nonce', 'exp', 'cap'];
 
     /**
-     * Erzeugt die Auth-Felder für eine Anfrage (Core-Seite).
+     * Produces the auth fields for a request (core side).
      *
-     * @param array<string, mixed> $req Die Anfrage OHNE Auth-Felder.
+     * @param array<string, mixed> $req The request WITHOUT auth fields.
      * @return array{nonce:string, exp:int, cap:string}
      */
     public static function mint(string $secret, array $req, ?int $now = null): array
@@ -56,9 +55,9 @@ final class RpcCapabilityToken
     }
 
     /**
-     * Prüft die Auth-Felder einer Anfrage (Host-Seite): MAC korrekt, nicht
-     * abgelaufen, nicht unplausibel weit in der Zukunft. Die **Einmaligkeit**
-     * (Nonce-Replay) prüft der Aufrufer zustandsbehaftet (Host-Schleife).
+     * Checks the auth fields of a request (host side): MAC correct, not expired,
+     * not implausibly far in the future. The **single-use** property (nonce
+     * replay) is checked statefully by the caller (the host loop).
      *
      * @param array<string, mixed> $req
      */
@@ -71,7 +70,7 @@ final class RpcCapabilityToken
         if ($nonce === '' || $cap === '' || $exp <= 0) {
             return false;
         }
-        // Abgelaufen oder unplausibel weit in der Zukunft (gegen Endlos-Tokens).
+        // Expired or implausibly far in the future (guards against endless tokens).
         if ($now > $exp || $exp > $now + self::TTL_SECONDS + 5) {
             return false;
         }
@@ -80,9 +79,9 @@ final class RpcCapabilityToken
     }
 
     /**
-     * Deterministische Kanonisierung der Anfrage ohne Auth-Felder. Ein
-     * JSON-Roundtrip stellt sicher, dass Core (vor dem Senden) und Host (nach
-     * dem Empfangen/Decodieren) **dieselbe** Struktur signieren/prüfen.
+     * Deterministic canonicalization of the request without the auth fields. A
+     * JSON round-trip ensures that the core (before sending) and the host (after
+     * receiving/decoding) sign/check the **same** structure.
      *
      * @param array<string, mixed> $req
      */
@@ -105,7 +104,7 @@ final class RpcCapabilityToken
         return hash_hmac('sha256', self::canonical($req) . '|' . $nonce . '|' . $exp, $secret);
     }
 
-    /** Assoziative Arrays nach Schlüssel sortieren; Listen in Reihenfolge belassen. */
+    /** Sort associative arrays by key; leave lists in order. */
     private static function normalize(mixed $value): mixed
     {
         if (!is_array($value)) {

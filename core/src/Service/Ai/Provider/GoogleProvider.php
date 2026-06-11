@@ -8,8 +8,8 @@ use App\Service\Ai\LlmProviderInterface;
 use App\Service\Http\EgressClient;
 
 /**
- * Google-Gemini-Provider (P11). Rollen werden auf `user`/`model` abgebildet,
- * System-Nachrichten als `systemInstruction`; Schlüssel als Query-Parameter.
+ * Google Gemini provider (P11). Roles are mapped to `user`/`model`, system
+ * messages to `systemInstruction`; the key is passed as a query parameter.
  */
 class GoogleProvider implements LlmProviderInterface
 {

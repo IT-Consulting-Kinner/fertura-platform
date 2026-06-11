@@ -11,12 +11,11 @@ use Cake\I18n\DateTime;
 use Cake\ORM\Locator\LocatorAwareTrait;
 
 /**
- * Einladungs-/Passwort-Setz-Token (Kap. 27.2/27.15).
+ * Invitation/password-set token (ch. 27.2/27.15).
  *
- * Erzeugt einen einmaligen Token (nur als SHA-256-Hash gespeichert), mit dem ein
- * Benutzer sein Passwort setzt und – sofern „invited" – aktiviert wird. Der
- * Versand des Links (E-Mail) ist Modul-Scope; der Core liefert Erzeugung +
- * Einlösung.
+ * Creates a one-time token (stored only as a SHA-256 hash) with which a user
+ * sets their password and – if "invited" – is activated. Sending the link
+ * (email) is module scope; the core provides creation + redemption.
  */
 class PasswordResetService
 {
@@ -36,9 +35,9 @@ class PasswordResetService
     }
 
     /**
-     * Erzeugt einen Token und gibt den Klartext (für den Link) zurück.
+     * Creates a token and returns the plaintext (for the link).
      *
-     * @return string Klartext-Token (nur einmalig verfügbar).
+     * @return string Plaintext token (available only once).
      */
     public function create(string $userId, string $purpose = 'invite', int $ttlHours = 72, ?string $createdBy = null): string
     {
@@ -56,15 +55,15 @@ class PasswordResetService
         return $token;
     }
 
-    /** Mindestlänge aus der Konfiguration (Kap. 27.16.3). */
+    /** Minimum length from the configuration (ch. 27.16.3). */
     public function minPasswordLength(): int
     {
         return (int)$this->settings->get('core', 'password.min_length', 12);
     }
 
     /**
-     * Löst einen Token ein: setzt das Passwort, aktiviert „invited"-Benutzer,
-     * verbraucht den Token. Gibt eine Fehlermeldung oder null (Erfolg) zurück.
+     * Redeems a token: sets the password, activates "invited" users, and
+     * consumes the token. Returns an error message or null (success).
      */
     public function redeem(string $token, string $newPassword): ?string
     {
@@ -106,7 +105,7 @@ class PasswordResetService
                 'UPDATE password_reset_tokens SET used_at = now() WHERE id = :id',
                 ['id' => $row['id']],
             );
-            // Weitere offene Token desselben Benutzers entwerten.
+            // Invalidate any other open tokens of the same user.
             $this->conn()->execute(
                 'UPDATE password_reset_tokens SET used_at = now() WHERE user_id = :u AND used_at IS NULL',
                 ['u' => $row['user_id']],

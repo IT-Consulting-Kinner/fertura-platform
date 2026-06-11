@@ -4,22 +4,22 @@ declare(strict_types=1);
 namespace App\Service\Schedule;
 
 /**
- * Periodische Modul-Aufgabe (Andock-Punkt, Kap. 20.3 / 20.4).
+ * Periodic module task (extension point, ch. 20.3 / 20.4).
  *
- * Module (z. B. Ticketing: `fetch_mails`, `check_escalations`) registrieren
- * Implementierungen über `collectors_registered` für den Collector
- * `core.collector.scheduled` im Manifest. Der Core-Worker tickt sie im
- * konfigurierten Intervall (fehlerisoliert, mit Heartbeat). Die fachliche Logik
- * bleibt im Modul.
+ * Modules (e.g. ticketing: `fetch_mails`, `check_escalations`) register
+ * implementations via `collectors_registered` for the collector
+ * `core.collector.scheduled` in the manifest. The core worker ticks them at the
+ * configured interval (error-isolated, with heartbeat). The business logic stays
+ * in the module.
  */
 interface ScheduledTaskInterface
 {
-    /** Eindeutiger, stabiler Schlüssel (z. B. `ticketing.fetch_mails`). */
+    /** Unique, stable key (e.g. `ticketing.fetch_mails`). */
     public function key(): string;
 
-    /** Mindestabstand zwischen zwei Läufen in Sekunden. */
+    /** Minimum interval between two runs, in seconds. */
     public function intervalSeconds(): int;
 
-    /** Führt die Aufgabe aus. Ausnahmen werden vom Runner isoliert/protokolliert. */
+    /** Runs the task. Exceptions are isolated/logged by the runner. */
     public function run(): void;
 }

@@ -12,14 +12,14 @@ use App\Service\Settings\SettingsManager;
 use Throwable;
 
 /**
- * Provider-agnostisches LLM-Gateway (Programm Tier-2, P11).
+ * Provider-agnostic LLM gateway (program Tier-2, P11).
  *
- * Wählt nach Konfiguration (`core.ai.*`) einen Provider — **OpenAI, Anthropic,
- * xAI/Grok, Google/Gemini** — und ruft ihn über den gehärteten Egress (P01).
- * **API-Schlüssel out-of-band** über Env (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`,
- * `XAI_API_KEY`, `GOOGLE_API_KEY`), nie in der DB. Ohne Provider/Schlüssel →
- * deaktiviert (klare {@see AiException}). Modulen als Capability `core.ai.*`
- * angeboten.
+ * Selects a provider based on configuration (`core.ai.*`) — **OpenAI, Anthropic,
+ * xAI/Grok, Google/Gemini** — and calls it through the hardened egress (P01).
+ * **API keys are kept out-of-band** via env (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`,
+ * `XAI_API_KEY`, `GOOGLE_API_KEY`), never in the DB. Without a provider/key it is
+ * disabled (with a clear {@see AiException}). Exposed to modules as the `core.ai.*`
+ * capability.
  */
 class AiGateway
 {
@@ -38,7 +38,7 @@ class AiGateway
         return $name !== '' && $this->apiKey($name) !== '';
     }
 
-    /** Ist ein Embedding-Provider konfiguriert (für semantische/Hybrid-Suche)? */
+    /** Is an embedding provider configured (for semantic/hybrid search)? */
     public function embedEnabled(): bool
     {
         $name = $this->str('ai.embed.provider');
@@ -92,9 +92,9 @@ class AiGateway
     {
         $custom = $this->str('ai.' . $name . '.endpoint');
         if ($custom !== '') {
-            // Override nur über https zulassen — sonst liefe der Authorization-
-            // Bearer-Schlüssel im Klartext über die Leitung. Der eigentliche
-            // Request läuft ohnehin durch den SSRF-gehärteten Egress.
+            // Only allow the override over https — otherwise the Authorization
+            // bearer key would travel over the wire in plaintext. The actual
+            // request goes through the SSRF-hardened egress in any case.
             if (strtolower((string)parse_url($custom, PHP_URL_SCHEME)) !== 'https') {
                 throw new AiException(
                     "AI-Endpoint-Override für '$name' muss https sein (Schutz des API-Schlüssels): $custom",

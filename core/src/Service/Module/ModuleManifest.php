@@ -9,17 +9,17 @@ use InvalidArgumentException;
 use Throwable;
 
 /**
- * Modul-Manifest (manifest.json), Kap. 24.4–24.7.
+ * Module manifest (manifest.json), ch. 24.4–24.7.
  *
- * Pflichtfelder (Kap. 24.4.1): id, name, version, type, edition, description,
- * core_compatibility, publisher, php_namespace. Extension-Module zusätzlich:
- * extends_main_module, main_module_compatibility. Typregel (24.7.3): Main-Module
- * dürfen kein contracts_used deklarieren.
+ * Required fields (ch. 24.4.1): id, name, version, type, edition, description,
+ * core_compatibility, publisher, php_namespace. Extension modules additionally:
+ * extends_main_module, main_module_compatibility. Type rule (24.7.3): main
+ * modules may not declare contracts_used.
  *
- * Hinweis zum Spec-Feld `entrypoint` (24.4.1, „Einstiegsklasse"): in dieser
- * Implementierung über `php_namespace` realisiert — der Namespace-Wurzelpfad,
- * aus dem der `ModuleAutoloader` den Modulcode lädt (E46). `signature` ist kein
- * Manifestfeld, sondern die separate Paketsignatur (`signature.json`,
+ * Note on the spec field `entrypoint` (24.4.1, "entry class"): in this
+ * implementation it is realized via `php_namespace` — the namespace root path
+ * from which the `ModuleAutoloader` loads the module code (E46). `signature` is
+ * not a manifest field but the separate package signature (`signature.json`,
  * `PackageVerifier`).
  */
 class ModuleManifest
@@ -121,9 +121,9 @@ class ModuleManifest
     }
 
     /**
-     * Vom anbietenden Modul bereitgestellte Service-Implementierungen für eigene
-     * Service-Contracts (öffentliche Modul-Interfaces, Kap. 29). Je Eintrag:
-     * contract, version (Constraint), class (implementiert ServiceInterface).
+     * Service implementations provided by the offering module for its own
+     * service contracts (public module interfaces, ch. 29). Each entry:
+     * contract, version (constraint), class (implements ServiceInterface).
      *
      * @return list<array<string, mixed>>
      */
@@ -132,15 +132,15 @@ class ModuleManifest
         return array_values($this->data['services_registered'] ?? []);
     }
 
-    /** @return list<array<string, mixed>> Deklarierte BREAD-Ressourcen. */
+    /** @return list<array<string, mixed>> Declared BREAD resources. */
     public function permissions(): array
     {
         return array_values($this->data['permissions'] ?? []);
     }
 
     /**
-     * Sprachdateien des Pakets (i18n-4). `domain` = Übersetzungs-Domain (Default
-     * = Modulschlüssel); `supported` = mitgelieferte Locales (mind. en_US).
+     * Language files of the package (i18n-4). `domain` = translation domain
+     * (defaults to the module key); `supported` = bundled locales (at least en_US).
      *
      * @return array{domain: string, supported: list<string>}
      */
@@ -154,20 +154,20 @@ class ModuleManifest
         ];
     }
 
-    /** Sicherheitsupdate-Kennzeichnung (Kap. 28.10): `security: true` im Manifest. */
+    /** Security-update flag (ch. 28.10): `security: true` in the manifest. */
     public function isSecurityUpdate(): bool
     {
         return !empty($this->data['security']);
     }
 
-    /** Dringlichkeit (optional): low|medium|high|critical. */
+    /** Urgency (optional): low|medium|high|critical. */
     public function severity(): ?string
     {
         return isset($this->data['severity']) ? (string)$this->data['severity'] : null;
     }
 
     /**
-     * Validiert das Manifest. Gibt eine Liste der Fehler zurück (leer = gültig).
+     * Validates the manifest. Returns a list of errors (empty = valid).
      *
      * @return list<string>
      */
@@ -205,12 +205,12 @@ class ModuleManifest
             }
         }
 
-        // Typregel 24.7.3: Main-Module dürfen kein contracts_used deklarieren.
+        // Type rule 24.7.3: main modules may not declare contracts_used.
         if ($this->type() === 'main' && $this->contractsUsed() !== []) {
             $errors[] = 'Main-Module dürfen kein contracts_used deklarieren (Kap. 24.7.3).';
         }
 
-        // Extension-Pflichtfelder.
+        // Required fields for extensions.
         if ($this->type() === 'extension') {
             if (empty($this->data['extends_main_module'])) {
                 $errors[] = 'Extension-Modul: extends_main_module fehlt.';

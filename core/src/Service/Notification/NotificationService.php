@@ -14,15 +14,15 @@ use RuntimeException;
 use Throwable;
 
 /**
- * Benachrichtigungs-Framework (Programm Tier-1, P09).
+ * Notification framework (Program Tier-1, P09).
  *
- * Ein Aufruf, mehrere Kanäle: **In-App** (gespeichert + per SSE/P08 live),
- * **E-Mail** (Core-MailService) und **Modul-Kanäle** (Collector-Contract
- * `core.collector.notification_channel`). Kanäle je (Benutzer, Typ) über
- * Präferenzen steuerbar. Zusätzlich wird ein Outbox-Event
- * `core.notification.created` veröffentlicht, sodass Webhook-Abos (P05) externe
- * Empfänger erreichen. Kanal-Fehler sind isoliert (eine fehlgeschlagene E-Mail
- * verliert nicht die In-App-Benachrichtigung).
+ * One call, multiple channels: **in-app** (persisted + delivered live via
+ * SSE/P08), **email** (core MailService) and **module channels** (collector
+ * contract `core.collector.notification_channel`). Channels are controllable
+ * per (user, type) via preferences. Additionally an outbox event
+ * `core.notification.created` is published so that webhook subscriptions (P05)
+ * reach external recipients. Channel failures are isolated (a failed email does
+ * not lose the in-app notification).
  */
 class NotificationService
 {
@@ -41,11 +41,11 @@ class NotificationService
     }
 
     /**
-     * Benachrichtigt einen Benutzer über die (aufgelösten) Kanäle.
+     * Notifies a user over the (resolved) channels.
      *
      * @param array<string,mixed> $data
-     * @param list<string>|null $channels explizite Kanäle (sonst aus Präferenzen)
-     * @return string In-App-ID (leer, wenn in_app nicht aktiv)
+     * @param list<string>|null $channels explicit channels (otherwise from preferences)
+     * @return string in-app ID (empty if in_app is not active)
      */
     public function notify(string $userId, string $type, string $title, string $body = '', array $data = [], ?array $channels = null): string
     {
@@ -60,8 +60,8 @@ class NotificationService
 
         $id = '';
         if (in_array('in_app', $channels, true)) {
-            // Kanal-Fehler isolieren: ein fehlgeschlagenes In-App-Insert darf die
-            // übrigen Kanäle (E-Mail/Modul) + das Outbox-Event nicht abbrechen.
+            // Isolate channel failures: a failed in-app insert must not abort the
+            // remaining channels (email/module) or the outbox event.
             try {
                 $row = $this->conn()->execute(
                     'INSERT INTO notifications (user_id, type, title, body, data) '
@@ -122,8 +122,8 @@ class NotificationService
     }
 
     /**
-     * Standardkanäle: in_app + email, minus per Präferenz deaktivierte, plus
-     * per Präferenz aktivierte (Modul-)Kanäle.
+     * Default channels: in_app + email, minus those disabled by preference, plus
+     * (module) channels enabled by preference.
      *
      * @return list<string>
      */
@@ -183,8 +183,8 @@ class NotificationService
 
     public function markRead(string $userId, string $id): void
     {
-        // UUID-Guard: die ID kommt aus der API-URL; fehlgeformte Werte wie
-        // unbekannte behandeln (no-op) statt 22P02 -> 500 (vgl. \App\Infrastructure\Uuid).
+        // UUID guard: the ID comes from the API URL; treat malformed values like
+        // unknown ones (no-op) instead of 22P02 -> 500 (cf. \App\Infrastructure\Uuid).
         if (!Uuid::isValid($id)) {
             return;
         }

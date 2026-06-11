@@ -7,16 +7,16 @@ use Cake\Datasource\ConnectionManager;
 use Throwable;
 
 /**
- * PSR-4-Autoloader für installierte Module (Step 7, "echtes Laden").
+ * PSR-4 autoloader for installed modules (Step 7, "real loading").
  *
- * Registriert einen eigenen spl_autoload_register-Handler (unabhängig von der
- * Composer-Loader-Instanz), der die Namespaces aktiver Module auf ihre src/-
- * Pfade abbildet. Dadurch werden deklarierte Listener/Resolver/Service-Klassen
- * real geladen.
+ * Registers its own spl_autoload_register handler (independent of the Composer
+ * loader instance) that maps the namespaces of active modules to their src/
+ * paths. This is what actually loads the declared listener/resolver/service
+ * classes.
  */
 class ModuleAutoloader
 {
-    /** @var array<string, string> namespace-prefix => src-Pfad */
+    /** @var array<string, string> namespace prefix => src path */
     private static array $prefixes = [];
 
     private static bool $registered = false;
@@ -49,8 +49,8 @@ class ModuleAutoloader
     }
 
     /**
-     * Registriert die Autoload-Pfade aller AKTIVEN Module. Wird im
-     * Application-Bootstrap und vom Worker aufgerufen (fehlertolerant).
+     * Registers the autoload paths of all ACTIVE modules. Called from the
+     * application bootstrap and by the worker (fault-tolerant).
      */
     public static function registerActiveModules(): void
     {

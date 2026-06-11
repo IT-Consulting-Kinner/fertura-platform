@@ -8,18 +8,18 @@ use Cake\Datasource\ConnectionManager;
 use Generator;
 
 /**
- * Zeitbereichs-/gefilterter Export des Audit-Logs (Punkt 3b: Compliance-/
- * Auditor-Pull). Liefert die Treffer **keyset-paginiert** als Generator, damit
- * auch große Bereiche speicherschonend gestreamt werden (kein OFFSET-Scan, kein
- * Voll-Load). Standard-NDJSON, eine Zeile je Ereignis.
+ * Time-ranged / filtered export of the audit log (point 3b: compliance / auditor
+ * pull). Yields the matches **keyset-paginated** as a generator so that even
+ * large ranges stream with a low memory footprint (no OFFSET scan, no full
+ * load). Output is NDJSON by default, one line per event.
  *
- * Real-time-Strom für SIEM läuft separat über den `audit`-Log-Kanal
- * ({@see \App\Audit\AuditLogger}); dieser Export ist der **gezielte Pull**
- * (Datumsbereich, Entität, Akteur).
+ * The real-time stream for SIEM runs separately over the `audit` log channel
+ * ({@see \App\Audit\AuditLogger}); this export is the **targeted pull**
+ * (date range, entity, actor).
  */
 class AuditExportService
 {
-    /** Sicherheitsnetz gegen unbeabsichtigte Voll-Dumps (Bereich eingrenzen). */
+    /** Safety net against accidental full dumps (caps the range). */
     public const MAX_ROWS = 500000;
     private const BATCH = 2000;
 
@@ -45,7 +45,7 @@ class AuditExportService
 
         [$where, $params] = $this->where($filters);
         $emitted = 0;
-        // Keyset-Cursor über den PK (created_at, id) — stabil + indexgestützt.
+        // Keyset cursor over the PK (created_at, id) — stable and index-backed.
         $cursorTs = null;
         $cursorId = null;
 
@@ -67,7 +67,7 @@ class AuditExportService
             }
             foreach ($rows as $row) {
                 if ($withValues) {
-                    // jsonb kommt als Text — als geparste Struktur ausgeben (NDJSON).
+                    // jsonb arrives as text — emit it as a parsed structure (NDJSON).
                     $row['old_value'] = $row['old_value'] !== null ? json_decode((string)$row['old_value'], true) : null;
                     $row['new_value'] = $row['new_value'] !== null ? json_decode((string)$row['new_value'], true) : null;
                 }
@@ -93,7 +93,7 @@ class AuditExportService
     {
         $where = [];
         $params = [];
-        // Zeitbereich (ISO-8601/strtotime-fähig); ungültige Werte werden ignoriert.
+        // Time range (ISO-8601 / strtotime-parseable); invalid values are ignored.
         foreach (['from' => '>=', 'to' => '<='] as $key => $op) {
             $raw = trim((string)($filters[$key] ?? ''));
             if ($raw !== '' && strtotime($raw) !== false) {

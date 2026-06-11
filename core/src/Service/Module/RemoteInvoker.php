@@ -8,14 +8,14 @@ use RuntimeException;
 use Throwable;
 
 /**
- * Core-seitiger Client für Out-of-Process-Module (Kap. 23.16.2, Phase 3).
+ * Core-side client for out-of-process modules (ch. 23.16.2, phase 3).
  *
- * Ruft einen Erweiterungspunkt eines isolierten Modulprozesses über dessen
- * token-gesicherten Unix-Domain-Socket auf (JSON-Zeilen). Reicht den aktuellen
- * RLS-Zeilenkontext der Anfrage mit, damit die Modul-Beiträge im Host
- * gruppen-/benutzer-scoped arbeiten (Kap. 30.3).
- *   - {@see invoke()} Service-Contract (Alt-Pfad, transparent zu CapabilityHandle)
- *   - {@see call()}   beliebiger Beitrag: $class::$method(...$args)
+ * Invokes an extension point of an isolated module process over its
+ * token-secured Unix domain socket (JSON lines). Passes the request's current
+ * RLS row context along, so the module contributions in the host work
+ * group/user-scoped (ch. 30.3).
+ *   - {@see invoke()} service contract (legacy path, transparent to CapabilityHandle)
+ *   - {@see call()}   arbitrary contribution: $class::$method(...$args)
  */
 class RemoteInvoker
 {
@@ -25,7 +25,7 @@ class RemoteInvoker
     public function __construct(?string $socketDir = null)
     {
         $this->socketDir = rtrim($socketDir ?? (sys_get_temp_dir() . '/fertura-mod'), '/');
-        // Token-Verzeichnis liegt parallel zum Socket-Verzeichnis (s. Supervisor).
+        // The token directory sits alongside the socket directory (see the supervisor).
         $this->tokenDir = dirname($this->socketDir) . '/fertura-mod-tokens';
     }
 
@@ -46,7 +46,7 @@ class RemoteInvoker
     }
 
     /**
-     * Ruft den Service-Contract `$contract` mit `$input` auf (Alt-Pfad).
+     * Invokes the service contract `$contract` with `$input` (legacy path).
      *
      * @param array<string, mixed> $input
      * @return array<string, mixed>
@@ -59,9 +59,9 @@ class RemoteInvoker
     }
 
     /**
-     * Ruft einen beliebigen Beitrag des Moduls auf: `$class::$method(...$args)`,
-     * im aktuellen (oder übergebenen) RLS-Kontext. Rückgabe ist die rohe Ausgabe
-     * der Methode (Array, Skalar oder null bei void).
+     * Invokes an arbitrary contribution of the module: `$class::$method(...$args)`,
+     * in the current (or supplied) RLS context. Returns the method's raw output
+     * (array, scalar, or null for void).
      *
      * @param list<mixed> $args
      * @param array{user_id?:?string,group_ids?:list<string>,bypass?:bool}|null $rls
@@ -79,7 +79,7 @@ class RemoteInvoker
         return $this->send($moduleKey, $req);
     }
 
-    /** Sendet eine Anfrage und liefert die `output`-Nutzlast (wirft bei Fehler). */
+    /** Sends a request and returns the `output` payload (throws on error). */
     private function send(string $moduleKey, array $req): mixed
     {
         $sock = @stream_socket_client('unix://' . $this->socketPath($moduleKey), $errno, $errstr, 5);
@@ -87,9 +87,9 @@ class RemoteInvoker
             throw new RuntimeException("Modul-Host nicht erreichbar ($moduleKey): $errstr");
         }
         stream_set_timeout($sock, 30);
-        // Pro-Aufruf-Capability-Token: das gemeinsame Geheimnis dient nur als
-        // HMAC-Schlüssel und reist NICHT über den Socket; mitgeschickt wird ein
-        // aufruf-gebundener MAC + Nonce + Ablauf (Kap. 23.16.2).
+        // Per-call capability token: the shared secret serves only as an HMAC key
+        // and does NOT travel over the socket; what is sent is a call-bound MAC +
+        // nonce + expiry (ch. 23.16.2).
         $secretFile = $this->tokenDir . '/' . $moduleKey . '.token';
         if (is_file($secretFile)) {
             $secret = trim((string)file_get_contents($secretFile));
@@ -116,9 +116,9 @@ class RemoteInvoker
     }
 
     /**
-     * Liest den aktuell gesetzten RLS-Zeilenkontext der Default-Connection
-     * (von der TransactionRlsMiddleware bzw. dem aufrufenden Code gesetzt), um
-     * ihn an den isolierten Host weiterzureichen.
+     * Reads the currently set RLS row context of the default connection (set by
+     * the TransactionRlsMiddleware or the calling code), in order to pass it on
+     * to the isolated host.
      *
      * @return array{user_id:?string,group_ids:list<string>,bypass:bool,tenant_id:?string}
      */
@@ -140,8 +140,8 @@ class RemoteInvoker
             'user_id' => $row['uid'] !== null && $row['uid'] !== '' ? (string)$row['uid'] : null,
             'group_ids' => $gids === '' ? [] : explode(',', $gids),
             'bypass' => (string)($row['bypass'] ?? 'false') === 'true',
-            // Mandantenkontext mitreichen, damit mandanten-bezogene Daten auch im
-            // isolierten Modul-Host korrekt gescoped sind (sonst fail-closed).
+            // Pass the tenant context along, so tenant-scoped data is also scoped
+            // correctly in the isolated module host (otherwise fail-closed).
             'tenant_id' => $row['tid'] !== null && $row['tid'] !== '' ? (string)$row['tid'] : null,
         ];
     }

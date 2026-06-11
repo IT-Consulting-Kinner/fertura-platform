@@ -10,18 +10,18 @@ use Cake\Log\Log;
 use Throwable;
 
 /**
- * Gehärtetes Outbound-HTTP-Primitiv des Core (Programm Tier-1, P01).
+ * Hardened outbound-HTTP primitive of the core (program tier-1, P01).
  *
- * Gemeinsamer Ausgang für **alle** nach außen gerichteten Aufrufe des Core und
- * der Module (Webhooks, OIDC-Token/JWKS, AI-Gateway, Marketplace …). Schützt
- * insbesondere vor **SSRF**: ohne explizite Erlaubnis werden Ziele in privaten/
- * reservierten Netzen (Loopback, RFC1918, Link-Local inkl. Cloud-Metadaten
- * 169.254.169.254) **blockiert**. Zusätzlich: nur `http`/`https`, Timeout,
- * Antwortgrößen-Limit, fester User-Agent.
+ * Shared egress for **all** outward-facing calls from the core and the modules
+ * (webhooks, OIDC token/JWKS, AI gateway, marketplace …). In particular it
+ * guards against **SSRF**: without explicit permission, targets in private/
+ * reserved networks (loopback, RFC1918, link-local incl. cloud metadata
+ * 169.254.169.254) are **blocked**. Additionally: only `http`/`https`, a
+ * timeout, a response-size limit, and a fixed user agent.
  *
- * Reihenfolge der Konfiguration: explizit übergebenes `$config` > DB-Settings
- * (`core.http.egress.*`) > Code-Defaults. So lässt sich der Client deterministisch
- * (ohne DB) testen und im Betrieb über die Settings steuern.
+ * Configuration precedence: explicitly passed `$config` > DB settings
+ * (`core.http.egress.*`) > code defaults. This lets the client be tested
+ * deterministically (without a DB) and steered via settings in production.
  */
 class EgressClient
 {
@@ -40,7 +40,7 @@ class EgressClient
     }
 
     /**
-     * Führt eine HTTP-Anfrage aus (nach Policy-Prüfung).
+     * Executes an HTTP request (after the policy check).
      *
      * @param array{headers?:array<string,string>, data?:mixed, type?:string} $options
      */
@@ -49,14 +49,15 @@ class EgressClient
         if (empty($this->config['enabled'])) {
             throw new EgressException('HTTP-Egress ist deaktiviert (core.http.egress.enabled).');
         }
-        // Policy-Prüfung + (für Hostnamen) EINMALIGE Auflösung; das Ergebnis wird
-        // direkt zur Pin-Zeile — kein zweites/drittes DNS pro Request.
+        // Policy check + (for hostnames) a SINGLE resolution; the result becomes
+        // the pin line directly — no second/third DNS lookup per request.
         $pin = $this->validatedPinFor($url);
 
-        // Die SSRF-Garantien (IP-Pinning gegen DNS-Rebinding, In-Flight-Größenlimit)
-        // werden über den Curl-Adapter durchgesetzt. Fehlt ext-curl, fiele Cake still
-        // auf den Stream-Adapter zurück, der die `curl`-Optionen ignoriert — der Schutz
-        // wäre wirkungslos. Bei aktivem SSRF-Schutz dann lieber fail-closed.
+        // The SSRF guarantees (IP pinning against DNS rebinding, in-flight size
+        // limit) are enforced via the curl adapter. If ext-curl is missing, Cake
+        // would silently fall back to the stream adapter, which ignores the `curl`
+        // options — the protection would be ineffective. With SSRF protection
+        // active, fail closed instead.
         if (empty($this->config['allow_private']) && !extension_loaded('curl')) {
             throw new EgressException(
                 'Outbound-HTTP erfordert die curl-Erweiterung (SSRF-Pinning/Größenlimit) — nicht verfügbar.',
@@ -67,7 +68,7 @@ class EgressClient
             ['User-Agent' => (string)$this->config['user_agent']],
             (array)($options['headers'] ?? []),
         );
-        // Trace fortführen (P04), falls ein Kontext gesetzt und nicht überschrieben.
+        // Continue the trace (P04) if a context is set and not overridden.
         $traceparent = \App\Log\Trace::traceparent();
         if ($traceparent !== null && !isset($headers['traceparent'])) {
             $headers['traceparent'] = $traceparent;
@@ -75,23 +76,24 @@ class EgressClient
         $opts = [
             'timeout' => (int)$this->config['timeout_seconds'],
             'headers' => $headers,
-            // Keine Redirects folgen: ein validiertes (öffentliches) Ziel könnte
-            // sonst auf ein internes/privates Ziel umleiten und den SSRF-Schutz
-            // umgehen. 3xx wird unverändert zurückgegeben (Aufrufer entscheidet).
+            // Don't follow redirects: a validated (public) target could
+            // otherwise redirect to an internal/private target and bypass the
+            // SSRF protection. 3xx is returned unchanged (the caller decides).
             'redirect' => 0,
         ];
-        // DNS-Rebinding-Schutz: Verbindung auf die oben **validierte** IP pinnen
-        // (CURLOPT_RESOLVE) — curl verbindet nur auf eine der geprüften Adressen
-        // und löst nicht selbst auf (kein Dual-Stack-/Rebinding-Ausweichen).
+        // DNS-rebinding protection: pin the connection to the **validated** IP
+        // from above (CURLOPT_RESOLVE) — curl only connects to one of the
+        // checked addresses and does not resolve itself (no dual-stack/rebinding
+        // escape).
         if ($pin !== null) {
             $opts['curl'][CURLOPT_RESOLVE] = [$pin];
         }
-        // Antwortgrößen-Limit BEREITS WÄHREND des Transfers durchsetzen (statt erst
-        // nach dem vollständigen Puffern): ein bösartiger Server kann `Content-Length`
-        // weglassen und beliebig viel streamen -> Speicher-DoS. Der Curl-Fortschritts-
-        // callback bricht ab, sobald mehr als das Limit geladen wurde (gebundener
-        // Speicher ≈ Limit + ein Puffer-Chunk). Greift mit dem Curl-Adapter; der
-        // Stream-Adapter fällt auf die nachgelagerte Begrenzung unten zurück.
+        // Enforce the response-size limit ALREADY DURING the transfer (instead of
+        // only after fully buffering): a malicious server can omit `Content-Length`
+        // and stream arbitrarily much -> memory DoS. The curl progress callback
+        // aborts as soon as more than the limit has been downloaded (bounded
+        // memory ≈ limit + one buffer chunk). Effective with the curl adapter; the
+        // stream adapter falls back to the downstream cap below.
         $max = (int)$this->config['max_response_bytes'];
         $overLimit = false;
         if ($max > 0) {
@@ -101,7 +103,7 @@ class EgressClient
                     if ($dlNow > $max) {
                         $overLimit = true;
 
-                        return 1; // != 0 -> Transfer abbrechen
+                        return 1; // != 0 -> abort transfer
                     }
 
                     return 0;
@@ -151,7 +153,7 @@ class EgressClient
     }
 
     /**
-     * POST mit JSON-Body (`Content-Type: application/json`).
+     * POST with a JSON body (`Content-Type: application/json`).
      *
      * @param array<string, mixed> $payload
      * @param array{headers?:array<string,string>} $options
@@ -162,7 +164,7 @@ class EgressClient
     }
 
     /**
-     * Prüft, ob ein Ziel nach der Egress-Policy erlaubt ist (ohne zu werfen).
+     * Checks whether a target is allowed by the egress policy (without throwing).
      */
     public function isUrlAllowed(string $url): bool
     {
@@ -176,10 +178,10 @@ class EgressClient
     }
 
     /**
-     * Bestimmt für einen (Hostnamen-)Aufruf die auf die **validierte** IP
-     * gepinnte CURLOPT_RESOLVE-Zeile `host:port:ip`. Gibt null zurück, wenn
-     * Pinning nicht nötig/erwünscht ist (IP-Literal, `allow_private`, Allowlist).
-     * Wirft, wenn der Host (erneut) auf ein privates/reserviertes Ziel auflöst.
+     * For a (hostname) call, determines the CURLOPT_RESOLVE line `host:port:ip`
+     * pinned to the **validated** IP. Returns null when pinning is not
+     * needed/wanted (IP literal, `allow_private`, allowlist). Throws if the host
+     * (re-)resolves to a private/reserved target.
      */
     public function pinTarget(string $url): ?string
     {
@@ -189,10 +191,10 @@ class EgressClient
             return null;
         }
         if (filter_var($host, FILTER_VALIDATE_IP) !== false) {
-            return null; // IP-Literal: kein DNS, kein Rebinding
+            return null; // IP literal: no DNS, no rebinding
         }
         if (in_array(strtolower($host), array_map('strtolower', (array)$this->config['allowlist']), true)) {
-            return null; // Betreiber hat den Host bewusst freigegeben
+            return null; // operator has deliberately allowlisted the host
         }
         $ips = $this->resolveHostIps($host);
         foreach ($ips as $ip) {
@@ -205,11 +207,12 @@ class EgressClient
     }
 
     /**
-     * Kombiniert Policy-Prüfung (Schema/Host/Allowlist/`allow_private`/IP-Literal)
-     * und — für Hostnamen — die **einmalige** Auflösung+Validierung zur Pin-Zeile.
-     * So löst ein Request den Host genau einmal auf (statt in `assertUrlAllowed`
-     * UND `pinTarget` getrennt). Gibt die CURLOPT_RESOLVE-Zeile zurück oder null,
-     * wenn nicht gepinnt wird (IP-Literal/Allowlist/`allow_private`).
+     * Combines the policy check (scheme/host/allowlist/`allow_private`/IP literal)
+     * and — for hostnames — the **single** resolution+validation into the pin
+     * line. This way a request resolves the host exactly once (instead of
+     * separately in `assertUrlAllowed` AND `pinTarget`). Returns the
+     * CURLOPT_RESOLVE line, or null if no pinning is applied
+     * (IP literal/allowlist/`allow_private`).
      */
     private function validatedPinFor(string $url): ?string
     {
@@ -233,7 +236,7 @@ class EgressClient
                 throw new EgressException("Ziel-IP $host ist privat/reserviert — blockiert (SSRF-Schutz).");
             }
 
-            return null; // IP-Literal: validiert, aber kein DNS/Pin
+            return null; // IP literal: validated, but no DNS/pin
         }
         $ips = $this->resolveHostIps($host);
         foreach ($ips as $ip) {
@@ -249,15 +252,15 @@ class EgressClient
     }
 
     /**
-     * Baut die CURLOPT_RESOLVE-Zeile `host:port:ip1,[ipv6],…` aus geprüften IPs.
+     * Builds the CURLOPT_RESOLVE line `host:port:ip1,[ipv6],…` from the checked IPs.
      *
-     * @param array<string,mixed> $parts parse_url-Ergebnis
+     * @param array<string,mixed> $parts parse_url result
      * @param list<string> $ips
      */
     private function pinLine(string $host, array $parts, array $ips): string
     {
         $port = (int)($parts['port'] ?? (strtolower((string)($parts['scheme'] ?? '')) === 'http' ? 80 : 443));
-        // IPv6 in CURLOPT_RESOLVE in eckigen Klammern.
+        // IPv6 in CURLOPT_RESOLVE goes in square brackets.
         $formatted = array_map(
             static fn (string $ip): string => str_contains($ip, ':') ? '[' . $ip . ']' : $ip,
             $ips,
@@ -267,8 +270,8 @@ class EgressClient
     }
 
     /**
-     * Erzwingt die Egress-Policy: nur http/https, kein privates/reserviertes Ziel
-     * (außer per Allowlist/`allow_private` freigegeben).
+     * Enforces the egress policy: only http/https, no private/reserved target
+     * (unless permitted via allowlist/`allow_private`).
      */
     public function assertUrlAllowed(string $url): void
     {
@@ -277,12 +280,12 @@ class EgressClient
         if (!in_array($scheme, ['http', 'https'], true)) {
             throw new EgressException("Nur http/https erlaubt (Schema: '$scheme').");
         }
-        $host = trim((string)($parts['host'] ?? ''), '[]'); // IPv6-Klammern entfernen
+        $host = trim((string)($parts['host'] ?? ''), '[]'); // strip IPv6 brackets
         if ($host === '') {
             throw new EgressException('URL ohne Host.');
         }
         if (!empty($this->config['allow_private'])) {
-            return; // bewusster Betreiber-Override (z. B. interne Integration/Dev)
+            return; // deliberate operator override (e.g. internal integration/dev)
         }
         $allowlist = array_map('strtolower', (array)$this->config['allowlist']);
         if (in_array(strtolower($host), $allowlist, true)) {
@@ -299,8 +302,8 @@ class EgressClient
     }
 
     /**
-     * Sendet die Anfrage über den HTTP-Client. Eigene Methode, damit Tests sie
-     * ohne Netzwerk überschreiben können.
+     * Sends the request via the HTTP client. A dedicated method so tests can
+     * override it without a network.
      *
      * @param array<string, mixed> $opts
      */
@@ -317,8 +320,8 @@ class EgressClient
     }
 
     /**
-     * Löst einen Host in IPv4-Adressen auf (IP-Literale unverändert). Eigene
-     * Methode für Test-Stubs.
+     * Resolves a host into IP addresses (IP literals unchanged). A dedicated
+     * method for test stubs.
      *
      * @return list<string>
      */
@@ -327,9 +330,9 @@ class EgressClient
         if (filter_var($host, FILTER_VALIDATE_IP) !== false) {
             return [$host];
         }
-        // Beide Familien auflösen: IPv4 (A) UND IPv6 (AAAA). Sonst bliebe ein
-        // privater AAAA-Record bei einem Dual-Stack-Host ungeprüft (curl könnte
-        // ihn ansteuern) — die reine IPv4-Auflösung war hier die SSRF-Lücke.
+        // Resolve both families: IPv4 (A) AND IPv6 (AAAA). Otherwise a private
+        // AAAA record on a dual-stack host would go unchecked (curl could target
+        // it) — IPv4-only resolution was the SSRF gap here.
         $ips = [];
         $v4 = @gethostbynamel($host);
         if (is_array($v4)) {
@@ -351,7 +354,7 @@ class EgressClient
         return $ips;
     }
 
-    /** Eine IP ist „öffentlich", wenn sie NICHT in privaten/reservierten Bereichen liegt. */
+    /** An IP is "public" when it is NOT within private/reserved ranges. */
     private function isPublicIp(string $ip): bool
     {
         return filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) !== false;
@@ -385,7 +388,7 @@ class EgressClient
                 'user_agent' => (string)$sm->get('core', 'http.egress.user_agent', 'Fertura/1.0 (+egress)'),
             ];
         } catch (Throwable) {
-            return []; // Settings nicht verfügbar (z. B. Unit-Test) -> Defaults/Override
+            return []; // settings unavailable (e.g. unit test) -> defaults/override
         }
     }
 }

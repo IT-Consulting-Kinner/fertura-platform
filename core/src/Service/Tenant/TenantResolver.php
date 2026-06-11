@@ -8,13 +8,13 @@ use Cake\Datasource\ConnectionManager;
 use Throwable;
 
 /**
- * Bestimmt den Mandanten aus dem Request-**Host** — cookie-/session-unabhängig.
- * Reihenfolge: (1) exakte `tenants.domain`-Übereinstimmung, sonst (2) Konvention
- * Subdomain == Mandanten-Schlüssel (`acme.example.com` → Mandant `acme`). Nur
- * **aktive** Mandanten. Liefert null, wenn nichts passt (Single-Org/Default-Host).
+ * Determines the tenant from the request **host** — cookie/session-independent.
+ * Order: (1) exact `tenants.domain` match, otherwise (2) the convention that the
+ * subdomain == tenant key (`acme.example.com` → tenant `acme`). Only **active**
+ * tenants. Returns null if nothing matches (single-org/default host).
  *
- * Einsatz: Pre-Auth-Mandantenkontext (mandantenspezifische Login-/SSO-Oberfläche)
- * sowie als Fallback im RLS-Kontext, solange kein Benutzer angemeldet ist.
+ * Used for: the pre-auth tenant context (tenant-specific login/SSO surface) as
+ * well as a fallback in the RLS context while no user is logged in.
  */
 class TenantResolver
 {
@@ -32,7 +32,7 @@ class TenantResolver
         if ($host === '') {
             return null;
         }
-        $host = explode(':', $host)[0]; // Port abtrennen
+        $host = explode(':', $host)[0]; // strip the port
         try {
             $row = $this->conn()->execute(
                 'SELECT id FROM tenants WHERE active AND lower(domain) = :h',
@@ -42,7 +42,7 @@ class TenantResolver
                 return (string)$row['id'];
             }
             $label = explode('.', $host)[0];
-            if ($label !== '' && $label !== $host) { // es gibt eine Subdomain
+            if ($label !== '' && $label !== $host) { // there is a subdomain
                 $row = $this->conn()->execute(
                     'SELECT id FROM tenants WHERE active AND key = :k',
                     ['k' => $label],

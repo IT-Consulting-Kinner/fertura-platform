@@ -11,24 +11,24 @@ use Cake\Log\Log;
 use Throwable;
 
 /**
- * Tickt periodische Modul-Aufgaben (Andock-Punkt für Module, Kap. 20.3/20.4).
+ * Ticks periodic module tasks (extension point for modules, ch. 20.3/20.4).
  *
- * Wird vom Core-Worker je Zyklus aufgerufen: sammelt die für den Collector
- * `core.collector.scheduled` registrierten Implementierungen, prüft je Aufgabe
- * anhand des letzten Laufs (Heartbeat `sched:<key>`), ob das Intervall abgelaufen
- * ist, und führt sie fehlerisoliert aus. Die Aufgaben erscheinen dadurch auch in
- * der Worker-Health-Übersicht.
+ * Called by the core worker each cycle: collects the implementations registered
+ * for the collector `core.collector.scheduled`, checks per task — based on the
+ * last run (heartbeat `sched:<key>`) — whether the interval has elapsed, and
+ * runs them error-isolated. Through this, the tasks also appear in the worker
+ * health overview.
  *
- * **Mehrinstanz-sicher:** Jede Aufgabe wird über einen PostgreSQL-Advisory-Lock
- * je Aufgaben-Schlüssel serialisiert — laufen mehrere Worker-Instanzen, führt
- * trotzdem nur **eine** dieselbe Aufgabe gleichzeitig aus (kein Doppellauf, z. B.
- * doppelte geplante Backups). Der Fälligkeits-Check liegt **innerhalb** des Locks.
+ * **Multi-instance safe:** each task is serialized via a PostgreSQL advisory lock
+ * keyed by the task key — if multiple worker instances run, still only **one**
+ * executes the same task at a time (no double run, e.g. duplicate scheduled
+ * backups). The due check sits **inside** the lock.
  */
 class ScheduledTaskRunner
 {
     public const COLLECTOR = 'core.collector.scheduled';
 
-    /** @var list<class-string> Vom Core mitgelieferte periodische Aufgaben. */
+    /** @var list<class-string> Periodic tasks shipped with the core. */
     private const CORE_TASKS = [
         \App\Service\Backup\BackupScheduledTask::class,
     ];
@@ -39,29 +39,29 @@ class ScheduledTaskRunner
     }
 
     /**
-     * Tickt alle registrierten Aufgaben. Gibt die Schlüssel der gelaufenen zurück.
+     * Ticks all registered tasks. Returns the keys of those that ran.
      *
      * @return list<string>
      */
     public function tick(): array
     {
-        // Core-eigene Aufgaben (in-process) immer mitführen.
+        // Always include the core's own tasks (in-process).
         $tasks = array_map(
             static fn ($c) => ['class' => $c, 'module_key' => 'core', 'isolation' => 'in_process'],
             self::CORE_TASKS,
         );
-        // Modul-Aufgaben MIT Isolationsmodus (out_of_process -> über RPC im Host).
+        // Module tasks WITH isolation mode (out_of_process -> via RPC in the host).
         try {
             $tasks = array_merge($tasks, (new ContributionRuntime($this->registry))->collectors(self::COLLECTOR));
         } catch (Throwable) {
-            // keine Modul-Aufgaben
+            // no module tasks
         }
 
         return $this->tickContributions($tasks);
     }
 
     /**
-     * Alt-Pfad: tickt nackte Klassennamen (in-process). Für Tests/Kompatibilität.
+     * Legacy path: ticks bare class names (in-process). For tests/compatibility.
      *
      * @param list<string> $classes
      * @return list<string>
@@ -83,21 +83,21 @@ class ScheduledTaskRunner
         $runtime = new ContributionRuntime($this->registry);
         $ran = [];
         foreach ($tasks as $task) {
-            // Metadaten (Schlüssel/Intervall) — in-process lokal, out_of_process
-            // über RPC im Host (wie run() selbst).
+            // Metadata (key/interval) — local for in-process, via RPC in the host
+            // for out_of_process (like run() itself).
             try {
                 $key = (string)$runtime->call($task, 'key', []);
                 $interval = (int)$runtime->call($task, 'intervalSeconds', []);
             } catch (Throwable) {
-                continue; // ungültige/nicht ladbare Aufgabe
+                continue; // invalid/unloadable task
             }
             if ($key === '') {
                 continue;
             }
             $hbKey = 'sched:' . $key;
 
-            // Mehrinstanz-Sicherheit: nur ein Worker bearbeitet eine Aufgabe
-            // gleichzeitig. Fälligkeits-Check liegt im Lock (kein Race).
+            // Multi-instance safety: only one worker processes a task at a time.
+            // The due check sits inside the lock (no race).
             $lockKey = $this->lockKey($hbKey);
             if (!$this->tryLock($lockKey)) {
                 continue;
@@ -105,10 +105,10 @@ class ScheduledTaskRunner
             try {
                 $age = $this->ageSeconds($hbKey);
                 if ($age !== null && $age < $interval) {
-                    continue; // noch nicht fällig
+                    continue; // not yet due
                 }
                 try {
-                    // Systemkontext (kein laufender Benutzer) -> Bypass.
+                    // System context (no active user) -> bypass.
                     $runtime->call($task, 'run', [], ['bypass' => true]);
                     WorkerHeartbeat::beat($hbKey, 'ok', ['interval_seconds' => $interval]);
                     $ran[] = $key;

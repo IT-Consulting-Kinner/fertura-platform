@@ -6,14 +6,14 @@ namespace App\Service\Registry;
 use RuntimeException;
 
 /**
- * Technische Abweisung eines Interface-Aufrufs (Kap. 29.8.4).
+ * Technical rejection of an interface call (ch. 29.8.4).
  *
- * Wird geworfen, wenn ein Modul ein öffentliches Modul-Interface ohne gültiges
- * Capability-Handle aufruft (kein Handle, Bindung widerrufen, anbietendes Modul
- * deaktiviert/inkompatibel, kein aktiver Provider). Die Plattform lehnt den
- * nicht registrierten Aufruf damit *technisch* ab; wie das *fachlich* verarbeitet
- * wird (Default, leeres Ergebnis, Ausblenden, Fehler, Abbruch), entscheidet das
- * aufrufende Modul.
+ * Thrown when a module invokes a public module interface without a valid
+ * capability handle (no handle, binding revoked, providing module
+ * deactivated/incompatible, no active provider). The platform thereby
+ * *technically* rejects the unregistered call; how this is handled at the
+ * *business* level (default, empty result, hiding, error, abort) is decided by
+ * the calling module.
  */
 class CapabilityRejectedException extends RuntimeException
 {

@@ -11,15 +11,15 @@ use Cake\I18n\DateTime;
 use Cake\ORM\Locator\LocatorAwareTrait;
 
 /**
- * Zentrale Contract-/Capability-Registry (Step 5, Kap. 26).
+ * Central contract/capability registry (Step 5, ch. 26).
  *
- * Verantwortlich für: Registrierung von Contracts und von Provider/Collector-
- * Beiträgen/Listenern/Service-Nutzern, Validierung (Existenz, Versions-
- * Kompatibilität nach 26.6.4, Slot-Exklusivität), persistierte Capability-
- * Bindings + Laufzeit-Handles (Entscheidung 151) sowie Auflösung (aktiver
- * Provider / Beiträge / Listener). Jeder Vorgang wird auditiert (Kap. 26.17).
+ * Responsible for: registering contracts as well as provider/collector
+ * contributions, listeners and service consumers; validation (existence, version
+ * compatibility per 26.6.4, slot exclusivity); persisted capability bindings plus
+ * runtime handles (Decision 151); and resolution (active provider / contributions
+ * / listeners). Every operation is audited (ch. 26.17).
  *
- * Lizenz-/Signaturprüfung ist Step 8; Module werden per module_key referenziert.
+ * License/signature checking is Step 8; modules are referenced by module_key.
  */
 class ContractRegistry
 {
@@ -52,7 +52,7 @@ class ContractRegistry
         return $this->contracts()->find()->where(['name' => $name])->first();
     }
 
-    // ---- Contract-Definition -------------------------------------------------
+    // ---- Contract definition -------------------------------------------------
 
     public function registerContract(
         string $ownerModuleKey,
@@ -96,7 +96,7 @@ class ContractRegistry
         });
     }
 
-    // ---- Registrierung an einem Contract ------------------------------------
+    // ---- Registration against a contract ------------------------------------
 
     public function register(
         string $moduleKey,
@@ -139,8 +139,8 @@ class ContractRegistry
             }
         }
 
-        // Slot-Exklusivität für Provider (sauberer Fehler + Audit; der partielle
-        // Unique-Index ist das DB-seitige Sicherheitsnetz).
+        // Slot exclusivity for providers (clean error + audit; the partial
+        // unique index is the DB-side safety net).
         if ($registrationType === ContractRegistration::TYPE_PROVIDER) {
             $existing = $this->registrations()->find()
                 ->where([
@@ -160,8 +160,8 @@ class ContractRegistry
             }
         }
 
-        // Mehrfachnutzungs-Regel für öffentliche Modul-Interfaces (Kap. 29.8.1):
-        // Bei multi_use=false darf nur ein nutzendes Modul gleichzeitig aktiv sein.
+        // Multi-use rule for public module interfaces (ch. 29.8.1):
+        // with multi_use=false only one consuming module may be active at a time.
         if ($registrationType === ContractRegistration::TYPE_CONSUMER && !$contract->multi_use) {
             $existing = $this->registrations()->find()
                 ->where([
@@ -258,7 +258,7 @@ class ContractRegistry
         });
     }
 
-    // ---- Auflösung -----------------------------------------------------------
+    // ---- Resolution ----------------------------------------------------------
 
     public function resolveProviderClass(string $contractName): ?string
     {
@@ -266,9 +266,10 @@ class ContractRegistry
     }
 
     /**
-     * Aktiver Provider (Klasse **und** beitragendes Modul) eines Contracts.
-     * Für die Out-of-Process-Weiche zählt das **Anbieter**-Modul (nicht der
-     * Contract-Owner — bei Resolver/Service kann es ein anderes Modul sein).
+     * Active provider (class **and** contributing module) of a contract.
+     * For the out-of-process routing the **providing** module is what counts
+     * (not the contract owner — for resolver/service contracts it may be a
+     * different module).
      *
      * @return array{class:string, module_key:string}|null
      */
@@ -305,8 +306,8 @@ class ContractRegistry
     }
 
     /**
-     * Wie {@see collectContributionClasses()}, aber mit dem beitragenden Modul
-     * je Klasse (für die Out-of-Process-Weiche, Kap. 23.16.2).
+     * Like {@see collectContributionClasses()}, but with the contributing module
+     * per class (for the out-of-process routing, ch. 23.16.2).
      *
      * @return list<array{class: string, module_key: string}>
      */
@@ -412,8 +413,8 @@ class ContractRegistry
     }
 
     /**
-     * Gibt ein Handle nur aus, wenn eine aktive Bindung besteht (Guard,
-     * Entscheidung 151). Optional erneute Versionsprüfung.
+     * Issues a handle only if an active binding exists (guard, Decision 151).
+     * Optionally re-checks the version.
      */
     public function handleFor(string $moduleKey, string $contractName, ?string $requiredVersion = null): ?CapabilityHandle
     {

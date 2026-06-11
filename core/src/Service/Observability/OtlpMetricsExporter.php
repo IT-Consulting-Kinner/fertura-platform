@@ -10,13 +10,13 @@ use Throwable;
 use function Cake\Core\env;
 
 /**
- * Schlanker **OTLP/HTTP-Metrik-Exporter** (#12): exportiert die vorhandenen
- * Gauges aus {@see MetricsService} im OpenTelemetry-Format an einen beliebigen
- * OTLP-Collector (`OTEL_EXPORTER_OTLP_ENDPOINT`), ohne schweres SDK. Backend-/
- * Lock-in-frei — jeder OTel-fähige Stack (Collector, Grafana, Datadog …) ingestiert.
+ * Lightweight **OTLP/HTTP metrics exporter** (#12): exports the existing gauges
+ * from {@see MetricsService} in OpenTelemetry format to any OTLP collector
+ * (`OTEL_EXPORTER_OTLP_ENDPOINT`), without a heavy SDK. Backend-/lock-in-free —
+ * any OTel-capable stack (Collector, Grafana, Datadog …) can ingest it.
  *
- * Push über den gehärteten {@see EgressClient}; nur aktiv, wenn ein Endpoint gesetzt
- * ist. Traces bleiben über `traceparent`/Logs korrelierbar (kein Span-Modell hier).
+ * Pushed via the hardened {@see EgressClient}; only active when an endpoint is
+ * set. Traces stay correlatable via `traceparent`/logs (no span model here).
  */
 class OtlpMetricsExporter
 {
@@ -43,7 +43,7 @@ class OtlpMetricsExporter
         return $this->endpoint() !== null;
     }
 
-    /** Exportiert einen Snapshot; gibt true zurück, wenn gesendet (2xx). */
+    /** Exports a snapshot; returns true if sent (2xx). */
     public function export(): bool
     {
         $endpoint = $this->endpoint();
@@ -55,9 +55,9 @@ class OtlpMetricsExporter
 
             return $resp->isSuccess();
         } catch (Throwable $e) {
-            // Sichtbar machen statt still schlucken: ein interner Collector liegt
-            // typischerweise auf einer privaten IP und wird vom Egress-SSRF-Schutz
-            // blockiert, bis er in core.http.egress.allowlist steht (siehe SCALING.md).
+            // Make it visible instead of silently swallowing: an internal collector
+            // typically sits on a private IP and is blocked by the egress SSRF
+            // protection until it is in core.http.egress.allowlist (see SCALING.md).
             Log::warning('[otlp-export] Export fehlgeschlagen (' . $endpoint . '): ' . $e->getMessage());
 
             return false;
@@ -65,7 +65,7 @@ class OtlpMetricsExporter
     }
 
     /**
-     * Baut den OTLP/HTTP-JSON-Body (resourceMetrics → scopeMetrics → metrics).
+     * Builds the OTLP/HTTP JSON body (resourceMetrics → scopeMetrics → metrics).
      *
      * @param list<array<string,mixed>> $samples
      * @return array<string,mixed>

@@ -19,12 +19,12 @@ use Cake\Datasource\ConnectionManager;
 use Throwable;
 
 /**
- * Modul-Lifecycle (Step 7, Kap. 24): install / activate / deactivate / delete.
+ * Module lifecycle (Step 7, ch. 24): install / activate / deactivate / delete.
  *
- * Jede Operation läuft unter einem PostgreSQL-Advisory-Lock (Kap. 24.18/30.7),
- * sodass lifecycle-verändernde Vorgänge knotenübergreifend serialisiert sind.
- * Der Lifecycle treibt die Contract-Registry aus Step 5 an und auditiert
- * referenzrobust (Step 3). Update = Step 8.
+ * Every operation runs under a PostgreSQL advisory lock (ch. 24.18/30.7), so
+ * lifecycle-changing operations are serialized across nodes. The lifecycle
+ * drives the contract registry from Step 5 and audits reference-robustly
+ * (Step 3). Update = Step 8.
  */
 class ModuleLifecycle
 {
@@ -63,22 +63,22 @@ class ModuleLifecycle
 
     private function conn()
     {
-        // Modul-Lifecycle macht DDL (CREATE/DROP SCHEMA) -> privilegierte
-        // (Superuser-)Connection, die RLS umgeht (E26).
+        // The module lifecycle performs DDL (CREATE/DROP SCHEMA) -> privileged
+        // (superuser) connection that bypasses RLS (E26).
         return \App\Infrastructure\Db::privileged();
     }
 
     /**
-     * Erteilt der NOBYPASSRLS-App-Rolle Rechte auf ein frisch erzeugtes
-     * Modul-Schema, damit der Request-Pfad (App-Rolle) darauf zugreifen kann.
-     * No-op, wenn keine getrennte App-Rolle konfiguriert ist.
+     * Grants the NOBYPASSRLS app role privileges on a freshly created module
+     * schema, so the request path (app role) can access it. No-op if no separate
+     * app role is configured.
      */
     /**
-     * Durchsetzung der RLS-Pflicht für is_scoped-Ressourcen (Kap. 30.3, E47).
-     * Deklariert das Modul mindestens eine scoped Ressource, muss sein Schema
-     * mindestens eine RLS-aktivierte Tabelle UND mindestens eine Policy
-     * enthalten. Andernfalls LifecycleException — der manuelle Rückbau läuft
-     * zentral über den try/catch in {@see install()} (E69).
+     * Enforces the RLS requirement for is_scoped resources (ch. 30.3, E47). If
+     * the module declares at least one scoped resource, its schema must contain
+     * at least one RLS-enabled table AND at least one policy. Otherwise it throws
+     * a LifecycleException — the manual rollback is handled centrally by the
+     * try/catch in {@see install()} (E69).
      */
     private function assertScopedRls(string $schema, ModuleManifest $manifest): void
     {
@@ -104,22 +104,22 @@ class ModuleLifecycle
     }
 
     /**
-     * Manueller Rückbau aller bis zu einem Fehlschlag angelegten Install-
-     * Artefakte (Kap. 24, E69). Der Install ist NICHT in eine DB-Transaktion
-     * gekapselt — CREATE ROLE/Schema und das Kopieren des Pakets sind teils
-     * nicht-transaktional —, daher räumt {@see install()} bei jedem Throw nach
-     * Beginn der Seiteneffekte hier explizit auf: isolierten Host stoppen,
-     * provisionierte DB-Rolle entfernen, Schema droppen, Modulzeile samt
-     * Registrierungen/Contracts/Ressourcen/Sprachpaketen löschen und das
-     * kopierte Verzeichnis (+ Sprachpaket-Dateien) entfernen. So bleibt kein
-     * Rest zurück, an dem ein erneuter Install („bereits installiert") scheitert.
-     * Jeder Schritt ist best effort und für sich gekapselt.
+     * Manual rollback of all install artifacts created up to a failure (ch. 24,
+     * E69). The install is NOT wrapped in a DB transaction — CREATE ROLE/schema
+     * and copying the package are partly non-transactional — so on any throw
+     * after side effects have begun, {@see install()} explicitly cleans up here:
+     * stop the isolated host, remove the provisioned DB role, drop the schema,
+     * delete the module row together with its
+     * registrations/contracts/resources/language packs, and remove the copied
+     * directory (+ language pack files). This leaves no remnant that would make a
+     * subsequent install fail with "already installed". Each step is best effort
+     * and self-contained.
      */
     private function rollbackInstall(string $key, string $schema, string $targetPath, bool $outOfProcess): void
     {
-        // Out-of-Process: etwaigen bereits gestarteten Host stoppen und die
-        // eigene DB-Rolle entfernen (DROP OWNED + DROP ROLE), BEVOR das Schema
-        // fällt — die Rolle kann Tabellen im Schema besitzen.
+        // Out-of-process: stop any host that may already have been started and
+        // remove the module's own DB role (DROP OWNED + DROP ROLE) BEFORE the
+        // schema is dropped — the role may own tables in the schema.
         if ($outOfProcess) {
             try {
                 (new ModuleHostSupervisor())->stop($key);
@@ -140,7 +140,7 @@ class ModuleLifecycle
             'DELETE FROM contracts WHERE owner_module_key = :k',
             'DELETE FROM resources WHERE module_key = :k',
             'DELETE FROM language_packs WHERE component_key = :k',
-            // Modul-Stammdaten zuletzt (CASCADE -> dependencies, migrations_log).
+            // Module master record last (CASCADE -> dependencies, migrations_log).
             'DELETE FROM modules WHERE module_key = :k',
         ];
         foreach ($cleanup as $sql) {
@@ -151,7 +151,7 @@ class ModuleLifecycle
             }
         }
 
-        // Kopiertes Paketverzeichnis + Sprachpaket-Dateien im Locale Store.
+        // Copied package directory + language pack files in the locale store.
         $this->removeDir($targetPath);
         $this->removeDir((new LanguagePackStore())->base() . '/' . $key);
     }
@@ -162,7 +162,7 @@ class ModuleLifecycle
         if ($role === '' || !preg_match('/^[a-z_][a-z0-9_]{0,62}$/', $schema) || !preg_match('/^[a-z_][a-z0-9_]{0,62}$/', $role)) {
             return;
         }
-        // Nur wenn die Rolle existiert (getrennter Rollenbetrieb aktiv).
+        // Only if the role exists (separate-role operation is active).
         $exists = $this->conn()->execute('SELECT 1 FROM pg_roles WHERE rolname = :r', ['r' => $role])->fetch();
         if ($exists === false) {
             return;
@@ -176,10 +176,10 @@ class ModuleLifecycle
     }
 
     /**
-     * Übernimmt die Paket-Sprachdateien (`<paket>/locales/<locale>/<domain>.po`)
-     * in den Managed Locale Store (i18n-4). Domain = Manifest-`locales.domain`
-     * (Default Modulschlüssel); signiert -> reviewed (E38). Bei Deinstallation
-     * bleiben die Dateien erhalten (kein Gegenstück hier).
+     * Imports the package language files (`<package>/locales/<locale>/<domain>.po`)
+     * into the managed locale store (i18n-4). Domain = manifest `locales.domain`
+     * (defaults to the module key); signed -> reviewed (E38). On uninstall the
+     * files are kept (there is no counterpart here).
      */
     private function importPackageLocales(string $sourcePath, ModuleManifest $manifest, bool $signed): void
     {
@@ -211,12 +211,12 @@ class ModuleLifecycle
         return ROOT . DIRECTORY_SEPARATOR . 'modules';
     }
 
-    // ---- öffentliche Operationen --------------------------------------------
+    // ---- public operations --------------------------------------------------
 
     /**
-     * @param string $isolation 'in_process' (Standard) oder 'out_of_process'
-     *   (Kap. 23.16.2): eigene DB-Rolle, Migrationen unter dieser Rolle, RLS
-     *   erzwungen, Aufruf über RPC.
+     * @param string $isolation 'in_process' (default) or 'out_of_process'
+     *   (ch. 23.16.2): own DB role, migrations under that role, RLS forced,
+     *   invocation via RPC.
      * @return array<string, mixed>
      */
     public function install(string $sourcePath, string $isolation = 'in_process'): array
@@ -231,8 +231,8 @@ class ModuleLifecycle
             $key = $manifest->key();
             $this->assertKeySafe($key);
 
-            // Signaturprüfung (Step 8): liefert die signierende Schlüssel-ID,
-            // damit nachträgliche Widerrufe dem Modul zugeordnet werden können.
+            // Signature check (Step 8): returns the signing key ID, so later
+            // revocations can be attributed to the module.
             $signatureKeyId = $this->verifySignature($sourcePath, $manifest);
 
             $errors = $manifest->validate($this->coreVersion);
@@ -249,13 +249,13 @@ class ModuleLifecycle
                 throw new LifecycleException("Modul bereits installiert: $key");
             }
 
-            // Out-of-Process früh ablehnen (vor jedem Seiteneffekt), wenn das
-            // Modul nicht ausschließlich Service-Contracts anbietet (Kap. 23.16.2).
+            // Reject out-of-process early (before any side effect) if the module
+            // does not offer service contracts exclusively (ch. 23.16.2).
             if ($isolation === 'out_of_process') {
                 $this->assertIsolatable($manifest);
             }
 
-            // Abhängigkeitsprüfung.
+            // Dependency check.
             foreach ($manifest->dependencies() as $dep) {
                 $depKey = (string)($dep['module'] ?? $dep['id'] ?? '');
                 $depVer = $dep['version'] ?? null;
@@ -275,14 +275,14 @@ class ModuleLifecycle
             $targetPath = $this->modulesBaseDir() . '/' . $key;
             $schema = 'mod_' . $key;
 
-            // Ab hier entstehen Seiteneffekte (Verzeichnis, Schema, Modulzeile,
-            // ggf. DB-Rolle/Host). Der Install ist NICHT in eine DB-Transaktion
-            // gekapselt — CREATE ROLE/SCHEMA und das Kopieren des Pakets sind
-            // teils nicht-transaktional. Wirft irgendein nachfolgender Schritt
+            // From here on side effects are produced (directory, schema, module
+            // row, possibly DB role/host). The install is NOT wrapped in a DB
+            // transaction — CREATE ROLE/SCHEMA and copying the package are partly
+            // non-transactional. If any subsequent step throws
             // (grantSchemaToAppRole, importPackageLocales, registerContract …),
-            // wird alles bis hierher Angelegte manuell wieder abgeräumt (E69),
-            // damit kein Rest zurückbleibt und ein erneuter Install nicht an
-            // „bereits installiert" scheitert.
+            // everything created up to that point is manually cleaned up (E69),
+            // so no remnant remains and a subsequent install does not fail with
+            // "already installed".
             try {
                 $this->copyDir($sourcePath, $targetPath);
                 $conn->execute("CREATE SCHEMA IF NOT EXISTS $schema");
@@ -304,10 +304,10 @@ class ModuleLifecycle
     }
 
     /**
-     * Legt die eigentlichen Install-Artefakte an (Modulzeile, Abhängigkeiten,
-     * Migrationen, RLS-Pflicht, Rechte, Sprachpakete, Contracts, Ressourcen).
-     * Ausgelagert aus {@see install()}, damit der dortige try/catch den
-     * manuellen Rückbau ({@see rollbackInstall()}) sauber umschließt.
+     * Creates the actual install artifacts (module row, dependencies, migrations,
+     * RLS requirement, privileges, language packs, contracts, resources).
+     * Extracted from {@see install()} so that its try/catch cleanly wraps the
+     * manual rollback ({@see rollbackInstall()}).
      *
      * @return array<string, mixed>
      */
@@ -357,42 +357,42 @@ class ModuleLifecycle
             ModuleAutoloader::register($manifest->phpNamespace(), $targetPath . '/src');
         }
 
-        // Out-of-Process-Isolation (Kap. 23.16.2): eigene DB-Rolle anlegen und
-        // die Migrationen UNTER dieser Rolle ausführen (kein Modulcode mit
-        // Superuser-Rechten). Nur Service-Contracts sind erlaubt.
+        // Out-of-process isolation (ch. 23.16.2): create the module's own DB role
+        // and run the migrations UNDER that role (no module code with superuser
+        // privileges). Only service contracts are permitted.
         $roleDsn = null;
         if ($isolation === 'out_of_process') {
             $conn->execute("UPDATE modules SET isolation = 'out_of_process' WHERE module_key = :k", ['k' => $key]);
             $role = new ModuleDbRole();
             $role->provision($key);
             $role->grantSchemaCreate($key);
-            // Migrationen über die Login-Rolle ausführen (kein Superuser-Code).
+            // Run the migrations via the login role (no superuser code).
             $roleDsn = $role->dsn($key);
         }
 
         $this->migrations->runUp($moduleId, $schema, $targetPath . '/migrations', $roleDsn);
 
-        // RLS-Pflicht (Kap. 30.3, E47): direkt nach den Migrationen — wer
-        // is_scoped-Ressourcen deklariert, muss im Modul-Schema mind. eine
-        // RLS-geschützte Tabelle mit Policy mitbringen. Schlägt fehl → wirft;
-        // der Rückbau läuft zentral über den try/catch in install() (E69).
+        // RLS requirement (ch. 30.3, E47): right after the migrations — anyone
+        // declaring is_scoped resources must provide at least one RLS-protected
+        // table with a policy in the module schema. On failure it throws; the
+        // rollback is handled centrally by the try/catch in install() (E69).
         $this->assertScopedRls($schema, $manifest);
 
-        // Isolierte Module: RLS auch für den Tabelleneigentümer (die Modul-
-        // Rolle) erzwingen, sonst umginge sie ihre eigene Policy.
+        // Isolated modules: force RLS for the table owner (the module role) too,
+        // otherwise it would bypass its own policy.
         if ($roleDsn !== null) {
             (new ModuleDbRole())->forceRls($key);
         }
 
-        // App-Rolle (NOBYPASSRLS) auf das neue Modul-Schema berechtigen,
-        // damit der Request-Pfad nach dem Install darauf zugreifen kann (E26).
+        // Authorize the app role (NOBYPASSRLS) on the new module schema, so the
+        // request path can access it after the install (E26).
         $this->grantSchemaToAppRole($schema);
 
-        // Sprachdateien des Pakets in den Managed Locale Store übernehmen
-        // (i18n-4); signiert -> reviewed (E38).
+        // Import the package's language files into the managed locale store
+        // (i18n-4); signed -> reviewed (E38).
         $this->importPackageLocales($sourcePath, $manifest, $signatureKeyId !== null);
 
-        // contracts_provided als Contract-Definitionen registrieren.
+        // Register contracts_provided as contract definitions.
         foreach ($manifest->contractsProvided() as $c) {
             $this->registry->registerContract(
                 $key,
@@ -401,8 +401,8 @@ class ModuleLifecycle
                 (string)$c['version'],
                 [
                     'description' => $c['description'] ?? null,
-                    // Service-Interface-Felder (Kap. 29.5): Mehrfachnutzung +
-                    // maschinenlesbare Input-/Output-/Fehler-Spezifikation.
+                    // Service interface fields (ch. 29.5): multi-use + machine-
+                    // readable input/output/error specification.
                     'multiUse' => $c['multi_use'] ?? true,
                     'inputSpec' => $c['input_spec'] ?? null,
                     'outputSpec' => $c['output_spec'] ?? null,
@@ -411,7 +411,7 @@ class ModuleLifecycle
             );
         }
 
-        // Deklarierte BREAD-Ressourcen registrieren (Step 9, Kap. 25.11).
+        // Register the declared BREAD resources (Step 9, ch. 25.11).
         foreach ($manifest->permissions() as $p) {
             $conn->execute(
                 'INSERT INTO resources (module_key, resource_type, resource_name, description, is_scoped, group_capable, extra_actions) '
@@ -423,7 +423,7 @@ class ModuleLifecycle
                     'n' => (string)($p['name'] ?? ''),
                     'd' => $p['description'] ?? null,
                     's' => !empty($p['is_scoped']) ? 'true' : 'false',
-                    // Gruppenfähig per Default; Modul kann es per Manifest abschalten (Kap. 25.11).
+                    // Group-capable by default; a module can disable it via the manifest (ch. 25.11).
                     'gc' => (!array_key_exists('group_capable', $p) || !empty($p['group_capable'])) ? 'true' : 'false',
                     'e' => isset($p['extra_actions']) ? json_encode($p['extra_actions']) : null,
                 ],
@@ -454,8 +454,8 @@ class ModuleLifecycle
             if ($errors !== []) {
                 throw new LifecycleException('Aktivierung blockiert: ' . implode(' ', $errors));
             }
-            // Isolierte Module dürfen nur Service-Contracts anbieten (Kap. 23.16.2),
-            // sonst würden Erweiterungspunkte still in-process ausgeführt.
+            // Isolated modules may only offer service contracts (ch. 23.16.2),
+            // otherwise extension points would silently run in-process.
             if (($mod['isolation'] ?? 'in_process') === 'out_of_process') {
                 $this->assertIsolatable($manifest);
             }
@@ -467,8 +467,8 @@ class ModuleLifecycle
                 }
             }
 
-            // Lizenz-Gate (Kap. 28.7.2): kostenpflichtige Module ohne gültige
-            // Lizenz dürfen nicht aktiviert werden.
+            // License gate (ch. 28.7.2): paid modules without a valid license must
+            // not be activated.
             if ($manifest->requiresLicense() && !$this->license->isValid($key)) {
                 $ev = $this->license->evaluate($key);
                 $this->audit->log('module.license_error', 'module', $key, [
@@ -507,8 +507,8 @@ class ModuleLifecycle
                         'moduleVersion' => $mod['version'],
                     ]);
                 }
-                // Service-Anbieter: das anbietende Modul stellt die Implementierung
-                // seines öffentlichen Interfaces als PROVIDER bereit (Kap. 29.3.1/29.8).
+                // Service provider: the providing module exposes the implementation
+                // of its public interface as a PROVIDER (ch. 29.3.1/29.8).
                 foreach ($manifest->servicesRegistered() as $s) {
                     $this->registry->register($key, (string)$s['contract'], ContractRegistration::TYPE_PROVIDER, [
                         'implementationClass' => $s['class'] ?? null,
@@ -544,7 +544,7 @@ class ModuleLifecycle
                 'moduleVersion' => (string)$mod['version'],
             ]);
 
-            // Out-of-Process: isolierten Host starten (Worker heilt bei Bedarf nach).
+            // Out-of-process: start the isolated host (the worker heals it later if needed).
             if (($mod['isolation'] ?? 'in_process') === 'out_of_process') {
                 try {
                     (new ModuleHostSupervisor())->ensureRunning($key);
@@ -572,7 +572,7 @@ class ModuleLifecycle
                 "UPDATE modules SET status = 'inactive', deactivated_at = now() WHERE module_key = :k",
                 ['k' => $key],
             );
-            // Out-of-Process: isolierten Host stoppen.
+            // Out-of-process: stop the isolated host.
             if (($mod['isolation'] ?? 'in_process') === 'out_of_process') {
                 try {
                     (new ModuleHostSupervisor())->stop($key);
@@ -596,7 +596,7 @@ class ModuleLifecycle
         $this->withLock(function () use ($key): void {
             $mod = $this->findModuleOrFail($key);
 
-            // Blockierende Abhängigkeiten: hängt ein anderes Modul von diesem ab?
+            // Blocking dependencies: does another module depend on this one?
             $dependents = $this->conn()->execute(
                 'SELECT count(*) AS c FROM module_dependencies WHERE required_module_key = :k',
                 ['k' => $key],
@@ -605,8 +605,8 @@ class ModuleLifecycle
                 throw new LifecycleException("Löschen blockiert: andere Module hängen von $key ab.");
             }
 
-            // Out-of-Process: Host stoppen + eigene DB-Rolle entfernen
-            // (DROP OWNED löst die Rollen-Objekte/-Rechte, bevor das Schema fällt).
+            // Out-of-process: stop the host + remove the module's own DB role
+            // (DROP OWNED detaches the role's objects/privileges before the schema is dropped).
             if (($mod['isolation'] ?? 'in_process') === 'out_of_process') {
                 try {
                     (new ModuleHostSupervisor())->stop($key);
@@ -621,19 +621,19 @@ class ModuleLifecycle
             }
 
             $conn = $this->conn();
-            // Von diesem Modul vorgenommene Registrierungen entfernen.
+            // Remove the registrations made by this module.
             $conn->execute('DELETE FROM contract_registrations WHERE module_key = :k', ['k' => $key]);
-            // Von diesem Modul definierte Contracts entfernen (CASCADE -> Reg./Bindings).
+            // Remove the contracts defined by this module (CASCADE -> registrations/bindings).
             $conn->execute('DELETE FROM contracts WHERE owner_module_key = :k', ['k' => $key]);
-            // Capability-Bindings dieses Moduls.
+            // This module's capability bindings.
             $conn->execute('DELETE FROM capability_bindings WHERE module_key = :k', ['k' => $key]);
-            // BREAD-Ressourcen + Rechtezuordnungen dieses Moduls.
+            // This module's BREAD resources + permission assignments.
             $conn->execute('DELETE FROM group_resource_permissions WHERE module_key = :k', ['k' => $key]);
             $conn->execute('DELETE FROM resources WHERE module_key = :k', ['k' => $key]);
-            // Modul-Schema mit allen Modultabellen.
+            // Module schema with all module tables.
             $schema = 'mod_' . $key;
             $conn->execute("DROP SCHEMA IF EXISTS $schema CASCADE");
-            // Modul-Stammdaten (CASCADE -> dependencies, migrations_log).
+            // Module master record (CASCADE -> dependencies, migrations_log).
             $conn->execute('DELETE FROM modules WHERE module_key = :k', ['k' => $key]);
 
             if ($mod['source_path'] !== null) {
@@ -658,10 +658,10 @@ class ModuleLifecycle
     }
 
     /**
-     * Schaltet den Isolationsmodus eines bereits installierten Moduls um
-     * (Kap. 23.16.2). out_of_process: eigene DB-Rolle provisionieren + Laufzeit-
-     * Rechte auf das (bestehende) Schema erteilen; bei aktivem Modul Host starten.
-     * in_process: Host stoppen + Rolle entfernen.
+     * Switches the isolation mode of an already installed module (ch. 23.16.2).
+     * out_of_process: provision the module's own DB role + grant runtime
+     * privileges on the (existing) schema; start the host if the module is
+     * active. in_process: stop the host + remove the role.
      *
      * @return array<string, mixed>
      */
@@ -682,15 +682,15 @@ class ModuleLifecycle
                 $this->assertIsolatable($manifest);
                 $role = new ModuleDbRole();
                 $role->provision($key);
-                // Bestehende Tabellen bleiben Superuser-Eigentum -> Laufzeit-CRUD
-                // an die Rolle, RLS greift natürlich (Rolle = NOBYPASSRLS, nicht Eigentümer).
+                // Existing tables stay superuser-owned -> grant runtime CRUD to the
+                // role; RLS applies as usual (role = NOBYPASSRLS, not the owner).
                 $role->grantSchemaCrud($key);
                 $this->conn()->execute("UPDATE modules SET isolation = 'out_of_process' WHERE module_key = :k", ['k' => $key]);
                 if ($mod['status'] === 'active') {
                     try {
                         (new ModuleHostSupervisor())->ensureRunning($key);
                     } catch (\Throwable) {
-                        // Worker heilt nach
+                        // the worker heals it later
                     }
                 }
             } else {
@@ -716,23 +716,23 @@ class ModuleLifecycle
         });
     }
 
-    // ---- intern --------------------------------------------------------------
+    // ---- internal ------------------------------------------------------------
 
     /**
-     * Stellt sicher, dass ein Modul out_of_process betrieben werden darf
-     * (Kap. 23.16.2, Phase 3). Service-Contracts, (Daten-)Resolver, Collector
-     * (Health/Anonymize/Scheduled) und Event-Listener laufen über RPC; einzig
-     * der **Auth-Provider-Slot** (`core.auth.provider`) wird abgelehnt, weil er
-     * In-Process-Authenticator-Objekte konfiguriert (nicht über RPC reichbar).
+     * Ensures a module is allowed to run out_of_process (ch. 23.16.2, phase 3).
+     * Service contracts, (data) resolvers, collectors (Health/Anonymize/
+     * Scheduled) and event listeners run over RPC; only the **auth provider slot**
+     * (`core.auth.provider`) is rejected, because it configures in-process
+     * authenticator objects (not reachable over RPC).
      */
     private function assertIsolatable(ModuleManifest $manifest): void
     {
-        // Phase 3 (Kap. 23.16.2): Service-Contracts, (Daten-)Resolver, Collector
-        // (Health/Anonymize/Scheduled) und Event-Listener laufen über RPC.
-        // Einzige Ausnahme: der **Auth-Provider-Slot** (`core.auth.provider`)
-        // konfiguriert In-Process-Authenticator-Objekte (configure-style) und
-        // lässt sich nicht über RPC reichen — wird daher bei Isolation abgelehnt
-        // (statt still in-process ausgeführt zu werden).
+        // Phase 3 (ch. 23.16.2): service contracts, (data) resolvers, collectors
+        // (Health/Anonymize/Scheduled) and event listeners run over RPC. The only
+        // exception: the **auth provider slot** (`core.auth.provider`) configures
+        // in-process authenticator objects (configure-style) and cannot be passed
+        // over RPC — so it is rejected under isolation (rather than being silently
+        // run in-process).
         foreach ($manifest->resolversRegistered() as $r) {
             if ((string)($r['contract'] ?? '') === 'core.auth.provider') {
                 throw new LifecycleException(
@@ -791,7 +791,7 @@ class ModuleLifecycle
     private function verifySignature(string $sourcePath, ModuleManifest $manifest): ?string
     {
         if (!(bool)$this->settings->get('core', 'require_module_signature', true)) {
-            return null; // Dev-Bypass (Setting)
+            return null; // dev bypass (setting)
         }
         try {
             $result = $this->verifier->verify($sourcePath, $manifest->publisher());

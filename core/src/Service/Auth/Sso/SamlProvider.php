@@ -7,11 +7,11 @@ use OneLogin\Saml2\Auth as SamlAuth;
 use Throwable;
 
 /**
- * SAML-2.0-Provider (Programm Tier-1, P06) auf Basis von onelogin/php-saml.
+ * SAML 2.0 provider (program tier-1, P06) based on onelogin/php-saml.
  *
- * SP-initiierter Redirect-Login + Assertion-Consumer-Service (ACS): die
- * Echtheit der Antwort garantiert die **signierte SAML-Assertion** (Prüfung
- * gegen das IdP-Zertifikat). Identitäten/Autorisierung bleiben Core-verwaltet.
+ * SP-initiated redirect login + assertion consumer service (ACS): the response's
+ * authenticity is guaranteed by the **signed SAML assertion** (verified against
+ * the IdP certificate). Identities/authorization stay core-managed.
  */
 class SamlProvider
 {
@@ -22,9 +22,9 @@ class SamlProvider
     public function settings(array $provider, string $acsUrl, string $spEntityId): array
     {
         $c = (array)($provider['config'] ?? []);
-        // SP-Zertifikat (öffentlich, in der Konfig) + SP-Privatschlüssel
-        // (geheim -> provider['secret'], AES-verschlüsselt gespeichert). Sind
-        // beide vorhanden, werden AuthnRequests **signiert** (Härtung).
+        // SP certificate (public, in the config) + SP private key (secret ->
+        // provider['secret'], stored AES-encrypted). If both are present,
+        // AuthnRequests are **signed** (hardening).
         $spCert = (string)($c['sp_cert'] ?? '');
         $spKey = (string)($provider['secret'] ?? '');
         $signed = $spCert !== '' && $spKey !== '';
@@ -55,20 +55,20 @@ class SamlProvider
                 'logoutRequestSigned' => $signed,
                 'signatureAlgorithm' => 'http://www.w3.org/2001/04/xmldsig-more#rsa-sha256',
                 'wantAssertionsSigned' => true,
-                // Replay-/Härtung: unaufgeforderte (IdP-initiierte) Antworten, die
-                // ein `InResponseTo` tragen, ablehnen — und nur SP-initiierte
-                // Antworten akzeptieren, deren `InResponseTo` zu unserer in der
-                // Session gemerkten AuthnRequest-ID passt (siehe processAcs()).
+                // Replay/hardening: reject unsolicited (IdP-initiated) responses
+                // that carry an `InResponseTo` — and accept only SP-initiated
+                // responses whose `InResponseTo` matches the AuthnRequest ID we
+                // remembered in the session (see processAcs()).
                 'rejectUnsolicitedResponsesWithInResponseTo' => true,
             ],
         ];
     }
 
     /**
-     * Baut die Redirect-URL zum IdP (SP-initiierter Login). RelayState trägt die
-     * Provider-ID zurück zum ACS. Liefert zusätzlich die **AuthnRequest-ID**, die
-     * der Aufrufer in der Session merkt und beim ACS wieder mitgibt — so wird die
-     * IdP-Antwort an genau diese Anfrage gebunden (Replay-Schutz, einmalig).
+     * Builds the redirect URL to the IdP (SP-initiated login). RelayState carries
+     * the provider ID back to the ACS. Also returns the **AuthnRequest ID**, which
+     * the caller remembers in the session and passes back at the ACS — binding the
+     * IdP response to exactly this request (replay protection, single-use).
      *
      * @param array<string,mixed> $provider
      * @return array{url:string, id:?string}
@@ -77,14 +77,14 @@ class SamlProvider
     {
         $auth = new SamlAuth($this->settings($provider, $acsUrl, $spEntityId));
 
-        // stay=true -> URL zurückgeben statt direkt zu redirecten.
+        // stay=true -> return the URL instead of redirecting directly.
         $url = $auth->login($relayState, [], false, false, true);
 
         return ['url' => $url, 'id' => $auth->getLastRequestID()];
     }
 
     /**
-     * Rückwärtskompatibler Helfer: nur die Redirect-URL (ohne Request-ID-Bindung).
+     * Backward-compatible helper: just the redirect URL (without request-ID binding).
      *
      * @param array<string,mixed> $provider
      */
@@ -94,13 +94,13 @@ class SamlProvider
     }
 
     /**
-     * Verarbeitet die ACS-Antwort (liest `SAMLResponse` aus den POST-Daten) und
-     * liefert die Identitätsdaten.
+     * Processes the ACS response (reads `SAMLResponse` from the POST data) and
+     * returns the identity data.
      *
-     * Der `$expectedRequestId` (zuvor in der Session gemerkte AuthnRequest-ID)
-     * bindet die Antwort an unsere Anfrage: onelogin prüft `InResponseTo` dagegen
-     * und lehnt fremde/wiederholte Antworten ab. Der Aufrufer löscht die ID nach
-     * dem ACS aus der Session, sodass eine Antwort nur **einmal** gültig ist.
+     * `$expectedRequestId` (the AuthnRequest ID previously remembered in the
+     * session) binds the response to our request: onelogin checks `InResponseTo`
+     * against it and rejects foreign/replayed responses. The caller removes the
+     * ID from the session after the ACS, so a response is valid only **once**.
      *
      * @param array<string,mixed> $provider
      * @return array{sub:string,email:string,first:?string,last:?string}
@@ -131,8 +131,8 @@ class SamlProvider
         return [
             'sub' => $nameId,
             'email' => (string)$email,
-            // SAML-Attribute sind nicht als „verifiziert" markiert -> unbekannt
-            // (null); die Zuordnung lehnt lokale Passwortkonten ohnehin ab.
+            // SAML attributes are not marked as "verified" -> unknown (null);
+            // the linking logic rejects local password accounts anyway.
             'email_verified' => null,
             'first' => $this->firstAttr($attrs, [
                 'givenName', 'first_name',

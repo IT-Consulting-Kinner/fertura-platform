@@ -8,12 +8,11 @@ use Cake\Datasource\ConnectionManager;
 use Cake\Log\Log;
 
 /**
- * Sammelt die von **aktiven Modulen** deklarierten API-Endpunkte (P07).
+ * Collects the API endpoints declared by **active modules** (P07).
  *
- * Quelle ist die Manifest-Sektion `api_routes` der aktiven Module (gleiche
- * Manifest-getriebene Strömung wie Autoloader/Locales). Liefert die Routenliste
- * (für OpenAPI/Dispatch) und ein Matching method+path → Route inkl. Pfad-
- * Parametern.
+ * The source is the `api_routes` manifest section of the active modules (the same
+ * manifest-driven flow as autoloader/locales). Provides the route list (for
+ * OpenAPI/dispatch) and a method+path → route matcher including path parameters.
  */
 class ApiRouteRegistry
 {
@@ -23,7 +22,7 @@ class ApiRouteRegistry
     }
 
     /**
-     * Alle von aktiven Modulen deklarierten Endpunkte.
+     * All endpoints declared by active modules.
      *
      * @return list<array{module_key:string,isolation:string,method:string,path:string,class:string,summary:string,scope:?string}>
      */
@@ -60,8 +59,8 @@ class ApiRouteRegistry
     }
 
     /**
-     * Findet die passende Route für ein Modul + Methode + Pfad inkl. extrahierter
-     * Pfad-Parameter.
+     * Finds the matching route for a module + method + path, including extracted
+     * path parameters.
      *
      * @return array<string,mixed>|null
      */
@@ -83,20 +82,20 @@ class ApiRouteRegistry
     }
 
     /**
-     * Matcht ein Pfad-Template (`/things/{id}`) gegen einen konkreten Pfad und
-     * gibt die benannten Parameter zurück (oder null bei Nichttreffer).
+     * Matches a path template (`/things/{id}`) against a concrete path and
+     * returns the named parameters (or null if it does not match).
      *
      * @return array<string,string>|null
      */
-    /** @var array<string,bool> Bereits gemeldete fehlerhafte Templates (Log-Entprellung). */
+    /** @var array<string,bool> Malformed templates already reported (log debouncing). */
     private static array $warnedTemplates = [];
 
     public static function matchPath(string $template, string $path): ?array
     {
-        // Doppelte Platzhalternamen (z. B. `/a/{id}/b/{id}`) ergäben ein ungültiges
-        // PCRE (duplicate subpattern name) -> Compile-Fehler + Warnung pro Request.
-        // Das ist ein Manifest-Fehler des Moduls: sauber als Nichttreffer behandeln
-        // (kein Fatal/keine Warnung) und einmalig protokollieren.
+        // Duplicate placeholder names (e.g. `/a/{id}/b/{id}`) would yield an invalid
+        // PCRE (duplicate subpattern name) -> compile error + warning per request.
+        // This is a manifest error in the module: treat it cleanly as a non-match
+        // (no fatal/no warning) and log it once.
         if (preg_match_all('/\{([a-zA-Z_][a-zA-Z0-9_]*)\}/', $template, $names) && $names[1] !== []) {
             if (count($names[1]) !== count(array_unique($names[1]))) {
                 if (!isset(self::$warnedTemplates[$template])) {
@@ -108,9 +107,9 @@ class ApiRouteRegistry
             }
         }
 
-        // Sicherheit: erst das gesamte Template quoten (keine Regex-Metazeichen
-        // aus dem Manifest -> kein ReDoS/Regex-Injection), DANN die nun escapten
-        // Platzhalter `\{name\}` durch benannte Gruppen ersetzen.
+        // Security: first quote the entire template (no regex metacharacters from
+        // the manifest -> no ReDoS/regex injection), THEN replace the now-escaped
+        // placeholders `\{name\}` with named groups.
         $regex = (string)preg_replace(
             '/\\\\\{([a-zA-Z_][a-zA-Z0-9_]*)\\\\\}/',
             '(?<$1>[^/]+)',

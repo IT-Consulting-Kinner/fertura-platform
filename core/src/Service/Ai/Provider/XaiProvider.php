@@ -4,8 +4,8 @@ declare(strict_types=1);
 namespace App\Service\Ai\Provider;
 
 /**
- * xAI/Grok-Provider (P11): OpenAI-kompatibles API, daher nur abweichende
- * Defaults (Endpoint/Modell werden vom Gateway gesetzt).
+ * xAI/Grok provider (P11): OpenAI-compatible API, hence only the differing
+ * defaults (endpoint/model are set by the gateway).
  */
 class XaiProvider extends OpenAiProvider
 {

@@ -7,13 +7,13 @@ use App\Infrastructure\Db;
 use Throwable;
 
 /**
- * Sammelt Plattform-Metriken (Programm Tier-3, P04) aus **gemeinsam geteiltem
- * DB-Zustand** und exportiert sie als Prometheus-Gauges.
+ * Collects platform metrics (program Tier-3, P04) from **shared DB state** and
+ * exports them as Prometheus gauges.
  *
- * Bewusst zustandsbasiert (statt prozesslokaler Request-Zähler): Die Quelle ist
- * die DB (Worker-Heartbeats, Outbox, Module), die alle Instanzen teilen — damit
- * entfällt das prozessübergreifende Aggregationsproblem von PHP-FPM. Jede
- * Teil-Abfrage ist fehlerisoliert; ein Fehler entfernt nur ihre Metriken.
+ * Deliberately state-based (rather than process-local request counters): the
+ * source is the DB (worker heartbeats, outbox, modules), which all instances
+ * share — this sidesteps the cross-process aggregation problem of PHP-FPM. Each
+ * sub-query is error-isolated; a failure only drops its own metrics.
  *
  * @return list<array<string,mixed>>
  */
@@ -32,10 +32,10 @@ class MetricsService
             'value' => 1,
         ]];
 
-        // Privilegierte Verbindung: der /metrics-Endpoint läuft im Request-Pfad
-        // als NOBYPASSRLS-App-Rolle, die System-/Betriebstabellen
-        // (worker_heartbeats/event_outbox/modules) nicht lesen darf. Wie
-        // HealthService lesen wir den Betriebszustand privilegiert.
+        // Privileged connection: the /metrics endpoint runs in the request path
+        // as the NOBYPASSRLS app role, which is not allowed to read system/
+        // operational tables (worker_heartbeats/event_outbox/modules). As in
+        // HealthService, we read the operational state with privilege.
         $conn = Db::privileged();
 
         $this->safe($samples, function () use ($conn): array {
@@ -78,7 +78,7 @@ class MetricsService
      */
     private function grouped(object $conn, string $table, string $metric, string $help): array
     {
-        // $table/$metric sind feste Literale (keine Nutzereingabe) -> keine Injection.
+        // $table/$metric are fixed literals (no user input) -> no injection risk.
         $rows = $conn->execute("SELECT status, count(*) AS c FROM $table GROUP BY status")->fetchAll('assoc');
         $out = [];
         foreach ($rows as $r) {
@@ -105,7 +105,7 @@ class MetricsService
                 $samples[] = $sample;
             }
         } catch (Throwable) {
-            // Teil-Metrik nicht verfügbar -> auslassen, Endpoint bleibt nutzbar.
+            // Sub-metric unavailable -> skip it, the endpoint stays usable.
         }
     }
 }

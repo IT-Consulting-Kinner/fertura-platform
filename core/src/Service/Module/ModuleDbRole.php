@@ -9,22 +9,22 @@ use Cake\Datasource\ConnectionManager;
 use RuntimeException;
 
 /**
- * Eingeschränkte DB-Rolle je Out-of-Process-Modul (Kap. 23.16.2, Phase 2).
+ * Restricted DB role per out-of-process module (ch. 23.16.2, phase 2).
  *
- * Ein isoliertes Modul verbindet sich ausschließlich über eine **eigene Rolle**
- * `mod_<key>` (LOGIN, NOBYPASSRLS) mit Rechten **nur auf das eigene Schema** und
- * EXECUTE auf wenige Core-Hilfsfunktionen (UUID/Timestamp/RLS-Kontext) — **kein**
- * Zugriff auf Core-Tabellen. Das Rollenpasswort wird zufällig erzeugt und
- * **AES-256-GCM-verschlüsselt** in `core.modules.db_role_secret` abgelegt; die
- * isolierte Rolle kann es nicht lesen (kein Core-Tabellenzugriff).
+ * An isolated module connects exclusively through its **own role** `mod_<key>`
+ * (LOGIN, NOBYPASSRLS) with privileges **only on its own schema** plus EXECUTE
+ * on a handful of core helper functions (UUID/timestamp/RLS context) — and **no**
+ * access to core tables. The role password is generated randomly and stored
+ * **AES-256-GCM-encrypted** in `core.modules.db_role_secret`; the isolated role
+ * cannot read it (no access to core tables).
  *
- * RLS-Garantie auch bei modul-eigenen (rollen-besessenen) Tabellen: Der Core
- * setzt nach den Migrationen `FORCE ROW LEVEL SECURITY` (sonst umginge der
- * Tabelleneigentümer die Policy).
+ * RLS guarantee even for module-owned (role-owned) tables: after the migrations
+ * the core sets `FORCE ROW LEVEL SECURITY` (otherwise the table owner would
+ * bypass the policy).
  */
 class ModuleDbRole
 {
-    /** Core-Hilfsfunktionen, die Modulschemata in DEFAULTs/Triggern/Policies brauchen. */
+    /** Core helper functions that module schemas need in DEFAULTs/triggers/policies. */
     private const CORE_FUNCTIONS = [
         'core.uuid_generate_v7()',
         'core.set_updated_at()',
@@ -53,14 +53,14 @@ class ModuleDbRole
     }
 
     /**
-     * Legt die Rolle an (oder setzt das Passwort neu), erteilt die Core-
-     * Funktionsrechte und speichert das verschlüsselte Passwort am Modul.
-     * Idempotent. Gibt das Klartext-Passwort zurück (nur für den Aufrufer).
+     * Creates the role (or resets its password), grants the core function
+     * privileges and stores the encrypted password on the module. Idempotent.
+     * Returns the plaintext password (for the caller only).
      */
     public function provision(string $key): string
     {
         $role = $this->roleName($key);
-        $password = bin2hex(random_bytes(24)); // nur [0-9a-f] -> SQL-literal-sicher
+        $password = bin2hex(random_bytes(24)); // only [0-9a-f] -> safe as an SQL literal
         $conn = $this->conn();
 
         $exists = $conn->execute('SELECT 1 FROM pg_roles WHERE rolname = :r', ['r' => $role])->fetch() !== false;
@@ -71,8 +71,8 @@ class ModuleDbRole
             $conn->execute("CREATE ROLE $role WITH $opts");
         }
 
-        // Minimaler Core-Zugriff: Schema-USAGE (erlaubt KEIN Tabellen-SELECT) +
-        // EXECUTE auf die wenigen Hilfsfunktionen.
+        // Minimal core access: schema USAGE (does NOT permit table SELECT) +
+        // EXECUTE on the few helper functions.
         $conn->execute("GRANT USAGE ON SCHEMA core TO $role");
         foreach (self::CORE_FUNCTIONS as $fn) {
             $conn->execute("GRANT EXECUTE ON FUNCTION $fn TO $role");
@@ -87,28 +87,28 @@ class ModuleDbRole
         return $password;
     }
 
-    /** Quotet einen SQL-Bezeichner sicher (verdoppelt eingebettete Anführungszeichen). */
+    /** Safely quotes an SQL identifier (doubles any embedded quotes). */
     private function q(string $ident): string
     {
         return '"' . str_replace('"', '""', $ident) . '"';
     }
 
-    /** Erteilt der Rolle das Recht, im eigenen Schema Objekte anzulegen (Migrationen-als-Rolle). */
+    /** Grants the role the right to create objects in its own schema (migrations-as-role). */
     public function grantSchemaCreate(string $key): void
     {
-        $role = $this->roleName($key); // validiert $key
+        $role = $this->roleName($key); // validates $key
         $schema = 'mod_' . $key;
         $this->conn()->execute("GRANT CREATE, USAGE ON SCHEMA $schema TO $role");
     }
 
     /**
-     * Erteilt der Rolle Laufzeit-CRUD auf ein bestehendes (Superuser-besessenes)
-     * Schema — für den Wechsel eines bereits installierten Moduls auf
-     * out_of_process (Tabellen bleiben Superuser-Eigentum, RLS greift natürlich).
+     * Grants the role runtime CRUD on an existing (superuser-owned) schema — for
+     * switching an already installed module to out_of_process (the tables stay
+     * superuser-owned, RLS applies as usual).
      */
     public function grantSchemaCrud(string $key): void
     {
-        $role = $this->roleName($key); // validiert $key
+        $role = $this->roleName($key); // validates $key
         $schema = 'mod_' . $key;
         $c = $this->conn();
         $c->execute("GRANT USAGE ON SCHEMA $schema TO $role");
@@ -119,8 +119,8 @@ class ModuleDbRole
     }
 
     /**
-     * Erzwingt RLS auf allen RLS-aktivierten Tabellen des Modulschemas, damit die
-     * Policy auch für den Tabelleneigentümer (die Modul-Rolle) greift.
+     * Forces RLS on all RLS-enabled tables of the module schema, so the policy
+     * also applies to the table owner (the module role).
      */
     public function forceRls(string $key): void
     {
@@ -132,15 +132,15 @@ class ModuleDbRole
             ['s' => $schema],
         )->fetchAll('assoc');
         foreach ($rows as $r) {
-            // Tabellenname stammt aus dem Katalog -> sicher quoten (kann von der
-            // Modul-Migration beliebig benannt worden sein).
+            // The table name comes from the catalog -> quote it safely (the
+            // module migration may have named it arbitrarily).
             $this->conn()->execute(
                 'ALTER TABLE ' . $this->q($schema) . '.' . $this->q((string)$r['relname']) . ' FORCE ROW LEVEL SECURITY',
             );
         }
     }
 
-    /** Baut den PDO-DSN der Modul-Rolle (für den Host-Prozess). Null, wenn nicht provisioniert. */
+    /** Builds the module role's PDO DSN (for the host process). Null if not provisioned. */
     public function dsn(string $key): ?string
     {
         $row = $this->conn()->execute(
@@ -167,8 +167,9 @@ class ModuleDbRole
     }
 
     /**
-     * Baut die CakePHP-Connection-URL der Modul-Rolle (für die ConnectionManager-
-     * Konfiguration im isolierten Host, Phase 3). Null, wenn nicht provisioniert.
+     * Builds the CakePHP connection URL of the module role (for the
+     * ConnectionManager configuration in the isolated host, phase 3). Null if
+     * not provisioned.
      */
     public function cakeUrl(string $key): ?string
     {
@@ -192,7 +193,7 @@ class ModuleDbRole
         );
     }
 
-    /** Entfernt die Rolle samt ihrer Rechte (bei Deinstallation). */
+    /** Removes the role together with its privileges (on uninstall). */
     public function drop(string $key): void
     {
         $role = $this->roleName($key);
@@ -200,7 +201,7 @@ class ModuleDbRole
         if ($conn->execute('SELECT 1 FROM pg_roles WHERE rolname = :r', ['r' => $role])->fetch() === false) {
             return;
         }
-        // Rechte/Eigentum lösen, dann Rolle entfernen.
+        // Detach privileges/ownership, then drop the role.
         $conn->execute("DROP OWNED BY $role CASCADE");
         $conn->execute("DROP ROLE IF EXISTS $role");
     }

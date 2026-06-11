@@ -7,21 +7,21 @@ use RuntimeException;
 use function Cake\Core\env;
 
 /**
- * Wiederherstellungspunkt via pg_dump (Kap. 28.14.2, Entscheidung 155).
+ * Recovery point via pg_dump (ch. 28.14.2, Decision 155).
  *
- * Vor jedem migrationsbehafteten Update verpflichtend; gelingt der Dump nicht,
- * wird das Update abgebrochen. Einheitlich für Core- und Modul-Updates.
+ * Mandatory before every migration-bearing update; if the dump fails, the update
+ * is aborted. Uniform for core and module updates.
  */
 class RecoveryPoint
 {
-    /** Wie viele Wiederherstellungspunkte aufbewahrt werden (ältere werden gekappt). */
+    /** How many recovery points are retained (older ones are pruned). */
     private const DEFAULT_KEEP = 10;
 
     public function dir(): string
     {
-        // Auf dem **persistenten** Backup-Volume (nicht im flüchtigen tmp/), damit
-        // Wiederherstellungspunkte einen Container-Recreate überleben und neben
-        // den Daten-Backups liegen (Kap. 28.14.2 / 20.1.2).
+        // On the **persistent** backup volume (not in the ephemeral tmp/), so that
+        // recovery points survive a container recreate and sit alongside the data
+        // backups (ch. 28.14.2 / 20.1.2).
         $dir = ROOT . DIRECTORY_SEPARATOR . 'backups' . DIRECTORY_SEPARATOR . 'recovery';
         if (!is_dir($dir)) {
             mkdir($dir, 0o775, true);
@@ -37,14 +37,14 @@ class RecoveryPoint
         return $k > 0 ? $k : self::DEFAULT_KEEP;
     }
 
-    /** Behält die jüngsten N `.sql`-Wiederherstellungspunkte, löscht ältere. */
+    /** Keeps the most recent N `.sql` recovery points, deletes older ones. */
     public function prune(): int
     {
         $files = glob($this->dir() . '/*.sql') ?: [];
         if (count($files) <= $this->keep()) {
             return 0;
         }
-        // Nach Änderungszeit absteigend (neueste zuerst).
+        // By modification time, descending (newest first).
         usort($files, static fn ($a, $b) => filemtime($b) <=> filemtime($a));
         $stale = array_slice($files, $this->keep());
         foreach ($stale as $f) {
@@ -72,7 +72,7 @@ class RecoveryPoint
     }
 
     /**
-     * Erstellt einen vollständigen Dump. Wirft bei Fehlschlag (Abbruch-Bedingung).
+     * Creates a full dump. Throws on failure (abort condition).
      */
     public function create(string $label): string
     {
@@ -99,14 +99,14 @@ class RecoveryPoint
             );
         }
 
-        // Aufbewahrung: alte Wiederherstellungspunkte kappen (Volume nicht volllaufen lassen).
+        // Retention: prune old recovery points (don't let the volume fill up).
         $this->prune();
 
         return $file;
     }
 
     /**
-     * Spielt einen Wiederherstellungspunkt zurück (letzte Zuflucht).
+     * Restores a recovery point (last resort).
      */
     public function restore(string $file): void
     {

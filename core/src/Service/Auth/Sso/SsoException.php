@@ -6,7 +6,7 @@ namespace App\Service\Auth\Sso;
 use RuntimeException;
 
 /**
- * Fehler im SSO-Flow (P06): Discovery/Token-Austausch/Signatur-/Claim-Prüfung.
+ * Error in the SSO flow (P06): discovery/token exchange/signature/claim checks.
  */
 class SsoException extends RuntimeException
 {

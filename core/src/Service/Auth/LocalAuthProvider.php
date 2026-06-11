@@ -6,13 +6,14 @@ namespace App\Service\Auth;
 use Authentication\AuthenticationService;
 
 /**
- * Lokaler Default-Provider (Benutzer + Passwort, Kap. 27.2.2). Greift, wenn kein
- * alternativer Provider (SSO/AD) für `core.auth.provider` aktiv ist — damit ist
- * der Core ohne weiteres Modul voll authentifizierungsfähig. Dient bei aktivem
- * SSO als Break-Glass-Pfad (durch Deaktivieren des SSO-Moduls erreichbar).
+ * Local default provider (username + password, ch. 27.2.2). Applies when no
+ * alternative provider (SSO/AD) is active for `core.auth.provider` — making the
+ * core fully capable of authentication without any additional module. With SSO
+ * active it serves as the break-glass path (reachable by disabling the SSO
+ * module).
  *
- * Hashing: Argon2id (E13) mit bcrypt-Fallback (Verifikation alter Hashes).
- * Login-Finder `active` sperrt nicht-aktive Benutzer aus.
+ * Hashing: Argon2id (E13) with a bcrypt fallback (verification of old hashes).
+ * The `active` login finder locks out non-active users.
  */
 class LocalAuthProvider implements AuthProviderInterface
 {
@@ -23,10 +24,10 @@ class LocalAuthProvider implements AuthProviderInterface
 
     public function configure(AuthenticationService $service): void
     {
-        // Identifier-Konfiguration direkt am Authenticator (statt des seit
-        // authentication 3.3.0 veralteten AuthenticationService::loadIdentifier()).
-        // Nur der Form-Authenticator verifiziert Benutzer/Passwort; die Session
-        // stellt die Identität ohne erneute DB-Prüfung wieder her.
+        // Identifier configured directly on the authenticator (instead of
+        // AuthenticationService::loadIdentifier(), deprecated since authentication 3.3.0).
+        // Only the form authenticator verifies username/password; the session
+        // restores the identity without another DB lookup.
         $identifier = [
             'Authentication.Password' => [
                 'fields' => [

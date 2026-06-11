@@ -4,10 +4,10 @@ declare(strict_types=1);
 namespace App\Service\Api;
 
 /**
- * Erzeugt die OpenAPI-3.1-Spezifikation der externen API (P07) aus dem
- * **tatsächlichen** API-Bestand: feste Core-Endpunkte + die von aktiven Modulen
- * registrierten Routen ({@see ApiRouteRegistry}). Single Source of Truth statt
- * handgepflegter Spezifikation (Architekturhabitus).
+ * Generates the OpenAPI 3.1 specification of the external API (P07) from the
+ * **actual** set of APIs: fixed core endpoints + the routes registered by active
+ * modules ({@see ApiRouteRegistry}). A single source of truth instead of a
+ * hand-maintained specification (architectural convention).
  */
 class OpenApiGenerator
 {
@@ -23,7 +23,7 @@ class OpenApiGenerator
     {
         $paths = [];
 
-        // Feste Core-Endpunkte: [Methode, Pfad, Scope|null, Beschreibung].
+        // Fixed core endpoints: [method, path, scope|null, description].
         $core = [
             ['GET', '/api/v1/health', null, 'Liveness/Health der Plattform'],
             ['GET', '/api/v1/me', 'me:read', 'Aktueller Benutzer (Token-Inhaber)'],
@@ -39,7 +39,7 @@ class OpenApiGenerator
             $this->addPath($paths, $method, $path, $summary, $scope, 'core');
         }
 
-        // Von Modulen registrierte Endpunkte.
+        // Endpoints registered by modules.
         foreach ($this->routes->all() as $r) {
             $this->addPath(
                 $paths,

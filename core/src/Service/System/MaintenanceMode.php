@@ -4,14 +4,13 @@ declare(strict_types=1);
 namespace App\Service\System;
 
 /**
- * Datei-basierter Wartungsmodus-Schalter (Kap. 28.11).
+ * File-based maintenance-mode switch (ch. 28.11).
  *
- * Ergänzt das DB-Setting `core.maintenance_mode`: Für den **Restore-Cutover**
- * (Kap. 20.1.2) muss der 503-Schalter **außerhalb der Datenbank** liegen, weil
- * der destruktive Restore die DB (inkl. Settings) ersetzt — ein DB-Flag würde
- * mitten im Vorgang überschrieben. Die Flag-Datei liegt unter `tmp/` und wird
- * vom PHP-Prozess (Core) gelesen, der die {@see \App\Middleware\MaintenanceMiddleware}
- * ausführt.
+ * Complements the DB setting `core.maintenance_mode`: for the **restore cutover**
+ * (ch. 20.1.2) the 503 switch must live **outside the database**, because the
+ * destructive restore replaces the DB (including settings) — a DB flag would be
+ * overwritten mid-operation. The flag file lives under `tmp/` and is read by the
+ * PHP process (core) that runs the {@see \App\Middleware\MaintenanceMiddleware}.
  */
 final class MaintenanceMode
 {
@@ -25,7 +24,7 @@ final class MaintenanceMode
         return is_file(self::flagPath());
     }
 
-    /** Aktiviert den Wartungsmodus (idempotent). Gibt zurück, ob er neu gesetzt wurde. */
+    /** Engages maintenance mode (idempotent). Returns whether it was newly set. */
     public static function engage(string $reason = 'maintenance'): bool
     {
         if (self::isFileActive()) {

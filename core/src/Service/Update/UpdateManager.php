@@ -21,11 +21,11 @@ use Migrations\Migrations;
 use Throwable;
 
 /**
- * Update-Manager (Step 8, Kap. 28.8/28.9/28.14).
+ * Update manager (Step 8, ch. 28.8/28.9/28.14).
  *
- * Modul- und Core-Updates mit Signaturprüfung, Kompatibilitätsprüfung,
- * verpflichtendem Wiederherstellungspunkt bei Migrationen, Migration,
- * Registry-Revalidierung, Audit/Historie und Rollback-Kaskade.
+ * Module and core updates with signature verification, compatibility checking, a
+ * mandatory recovery point when migrations are present, migration, registry
+ * revalidation, audit/history and a rollback cascade.
  */
 class UpdateManager
 {
@@ -62,13 +62,13 @@ class UpdateManager
         return \App\Infrastructure\Db::privileged();
     }
 
-    // ---- Modul-Update --------------------------------------------------------
+    // ---- Module update -------------------------------------------------------
 
     /** @return array<string, mixed> */
     /**
-     * Migrations-/Kompatibilitätsvorschau für ein Modul-Update OHNE Ausführung
-     * (Kap. 24.13 Schritt 8). Liefert Versionsdelta, ausstehende Migrationen und
-     * blockierende Fehler (Signatur/Manifest/Downgrade).
+     * Migration/compatibility preview for a module update WITHOUT executing it
+     * (ch. 24.13 step 8). Returns the version delta, pending migrations and
+     * blocking errors (signature/manifest/downgrade).
      *
      * @return array<string, mixed>
      */
@@ -120,8 +120,8 @@ class UpdateManager
     }
 
     /**
-     * Vorschau für ein Core-Update: ausstehende Core-Migrationen + inkompatible
-     * Module (ohne Ausführung).
+     * Preview for a core update: pending core migrations + incompatible modules
+     * (without executing).
      *
      * @return array<string, mixed>
      */
@@ -197,8 +197,8 @@ class UpdateManager
             $schema = 'mod_' . $key;
             $targetPath = (string)$mod['source_path'];
             $wasActive = $mod['status'] === 'active';
-            // Isolierte Module: Migrationen über die Login-Rolle ausführen (kein
-            // Superuser-Code, Kap. 23.16.2) — sonst liefe ein Update privilegiert.
+            // Isolated modules: run migrations via the login role (no superuser
+            // code, ch. 23.16.2) — otherwise an update would run privileged.
             $roleDsn = ((string)($mod['isolation'] ?? 'in_process')) === 'out_of_process'
                 ? (new ModuleDbRole())->dsn($key)
                 : null;
@@ -208,9 +208,9 @@ class UpdateManager
             if ($hasMigrations) {
                 $recoveryPath = $this->recovery->create("update_module_$key");
             }
-            // Bereits angewendete Migrationen merken: bei einem Fehlschlag dürfen
-            // NUR die in DIESEM Update neu angewendeten zurückgerollt werden — die
-            // bereits beim Install angewendeten bleiben (sonst Datenverlust).
+            // Remember already-applied migrations: on failure, ONLY the ones newly
+            // applied in THIS update may be rolled back — those already applied at
+            // install time stay (otherwise data loss).
             $preApplied = $this->appliedMigrations($moduleId, $newSourcePath . '/migrations');
 
             $backupPath = $targetPath . '.bak';
@@ -220,7 +220,7 @@ class UpdateManager
                 if ($wasActive) {
                     $this->deactivateRegistrations($key);
                 }
-                // Code austauschen (alten Stand sichern für Rollback).
+                // Swap the code (back up the old state for rollback).
                 if (is_dir($targetPath)) {
                     rename($targetPath, $backupPath);
                 }
@@ -232,12 +232,12 @@ class UpdateManager
                 );
 
                 $this->migrations->runUp($moduleId, $schema, $targetPath . '/migrations', $roleDsn);
-                // Isolierte Module: RLS auf neuen Tabellen erzwingen.
+                // Isolated modules: force RLS on new tables.
                 if ($roleDsn !== null) {
                     (new ModuleDbRole())->forceRls($key);
                 }
 
-                // Contracts neu aufbauen (vom Modul definierte).
+                // Rebuild contracts (those defined by the module).
                 $this->conn()->execute('DELETE FROM contracts WHERE owner_module_key = :k', ['k' => $key]);
                 foreach ($manifest->contractsProvided() as $c) {
                     $this->registry->registerContract($key, (string)$c['name'], (string)$c['type'], (string)$c['version']);
@@ -259,16 +259,16 @@ class UpdateManager
 
                 return $this->findModuleOrFail($key);
             } catch (Throwable $e) {
-                // Rollback-Kaskade (Kap. 28.14.2): down-Migrationen -> Dateien ->
-                // Stammdaten/Registry. Der pg_dump-Recovery-Point bleibt als
-                // manuelle letzte Zuflucht erhalten (kein gefährlicher Auto-Restore).
+                // Rollback cascade (ch. 28.14.2): down migrations -> files ->
+                // master data/registry. The pg_dump recovery point is preserved as
+                // a manual last resort (no dangerous auto-restore).
                 $result = 'failed';
                 try {
                     $files = glob($newSourcePath . '/migrations/*.sql') ?: [];
                     rsort($files);
                     foreach ($files as $f) {
                         $name = basename($f);
-                        // Nur in diesem Update neu angewendete Migrationen zurückrollen.
+                        // Only roll back migrations newly applied in this update.
                         if ($this->migrations->isApplied($moduleId, $name) && !in_array($name, $preApplied, true)) {
                             $this->migrations->runDown($moduleId, $schema, $newSourcePath . '/migrations', $name, $roleDsn);
                         }
@@ -307,14 +307,14 @@ class UpdateManager
         });
     }
 
-    // ---- Core-Update ---------------------------------------------------------
+    // ---- Core update ---------------------------------------------------------
 
     /**
-     * Orchestriert ein Core-Update: Kompatibilitätsprüfung gegen installierte
-     * Module, Wiederherstellungspunkt, Core-Migrationen, Historie/Audit.
+     * Orchestrates a core update: compatibility check against installed modules,
+     * recovery point, core migrations, history/audit.
      *
-     * (Der Austausch des Core-Codes selbst wird umgebungsseitig durchgeführt;
-     * diese Methode führt die migrations-/sicherheitsrelevante Orchestrierung aus.)
+     * (Swapping the core code itself is done on the environment side; this method
+     * performs the migration-/security-relevant orchestration.)
      *
      * @return array<string, mixed>
      */
@@ -324,7 +324,7 @@ class UpdateManager
             SemVer::parse($targetVersion);
             $oldVersion = $this->coreVersion;
 
-            // Kompatibilität: jedes installierte Modul muss targetVersion zulassen.
+            // Compatibility: every installed module must allow targetVersion.
             $incompatible = [];
             $modules = $this->conn()->execute(
                 'SELECT module_key, core_compatibility FROM modules',
@@ -348,12 +348,12 @@ class UpdateManager
                 );
             }
 
-            // Wiederherstellungspunkt (Core-Update kann Migrationen enthalten).
+            // Recovery point (a core update may contain migrations).
             $recoveryPath = $this->recovery->create('update_core');
 
             try {
-                // Ausstehende Core-Migrationen ausführen (privilegierte Connection
-                // wegen DDL; Default läuft als NOBYPASSRLS-Rolle, E26).
+                // Run pending core migrations (privileged connection because of
+                // DDL; the default runs as a NOBYPASSRLS role, E26).
                 $migrations = new Migrations(['connection' => \App\Infrastructure\Db::privilegedName()]);
                 $migrations->migrate();
 
@@ -365,9 +365,9 @@ class UpdateManager
 
                 return ['old_version' => $oldVersion, 'new_version' => $targetVersion, 'recovery_point' => $recoveryPath];
             } catch (Throwable $e) {
-                // Core-Migrationen sind transaktional (cakephp/migrations rollt die
-                // fehlgeschlagene Migration atomar zurück). Kein gefährlicher
-                // Auto-Restore; der Recovery-Point bleibt für den manuellen Notfall.
+                // Core migrations are transactional (cakephp/migrations rolls the
+                // failed migration back atomically). No dangerous auto-restore; the
+                // recovery point remains for the manual emergency.
                 $this->recordHistory('core', 'core', $oldVersion, $targetVersion, 'failed', $e->getMessage(), $recoveryPath);
                 $this->audit->log('core.update_failed', 'core', 'core', [
                     'newValue' => ['error' => $e->getMessage(), 'result' => 'failed'],
@@ -386,7 +386,7 @@ class UpdateManager
         )->fetchAll('assoc');
     }
 
-    // ---- intern --------------------------------------------------------------
+    // ---- internal ------------------------------------------------------------
 
     private function recordHistory(
         string $type,
@@ -420,8 +420,8 @@ class UpdateManager
     }
 
     /**
-     * Basenamen der im Verzeichnis enthaltenen, **bereits angewendeten**
-     * Migrationen (für die korrekte Eingrenzung des Update-Rückbaus).
+     * Base names of the **already-applied** migrations contained in the directory
+     * (for correctly scoping the update rollback).
      *
      * @return list<string>
      */

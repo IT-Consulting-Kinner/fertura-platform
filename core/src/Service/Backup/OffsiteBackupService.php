@@ -8,14 +8,14 @@ use App\Service\Storage\StorageManager;
 use RuntimeException;
 
 /**
- * Off-Site-Ablage der Backups (Programm Tier-2, P14): lädt die lokal erzeugten
- * Backup-Archive über den Objekt-Storage (P03) an ein **externes Ziel** (S3-
- * kompatibel) und holt sie für ein Disaster-Recovery zurück.
+ * Off-site storage of backups (program tier-2, P14): uploads the locally created
+ * backup archives via object storage (P03) to an **external target** (S3-
+ * compatible) and pulls them back for disaster recovery.
  *
- * Ergänzt das Core-Backup (Kap. 20.1.2) um Geo-Redundanz, ohne dessen
- * Konsistenz-/Verschlüsselungs-Garantien zu berühren (die Archive sind bereits
- * AES-verschlüsselt). Point-in-Time-Recovery (WAL-Archivierung) ist als
- * Betreiber-Runbook beschrieben (RUNBOOK).
+ * Adds geo-redundancy to the core backup (ch. 20.1.2) without touching its
+ * consistency/encryption guarantees (the archives are already AES-encrypted).
+ * Point-in-time recovery (WAL archiving) is documented as an operator runbook
+ * (RUNBOOK).
  */
 class OffsiteBackupService
 {
@@ -28,7 +28,7 @@ class OffsiteBackupService
         $this->storage ??= new StorageManager();
     }
 
-    /** Lädt eine lokale Backup-Datei ins Off-Site-Ziel. Gibt den Zielpfad zurück. */
+    /** Uploads a local backup file to the off-site target. Returns the target path. */
     public function upload(string $localPath): string
     {
         if (!is_file($localPath)) {
@@ -52,14 +52,14 @@ class OffsiteBackupService
     }
 
     /**
-     * @return list<string> Off-Site abgelegte Backup-Pfade
+     * @return list<string> Backup paths stored off-site
      */
     public function list(): array
     {
         return $this->storage->list(rtrim(self::PREFIX, '/'));
     }
 
-    /** Holt ein Off-Site-Backup in eine lokale Datei (Disaster-Recovery). */
+    /** Fetches an off-site backup into a local file (disaster recovery). */
     public function download(string $name, string $localPath): void
     {
         $source = str_starts_with($name, self::PREFIX) ? $name : self::PREFIX . $name;
@@ -72,7 +72,7 @@ class OffsiteBackupService
             stream_copy_to_stream($in, $out);
         } catch (\Throwable $e) {
             fclose($out);
-            @unlink($localPath); // keine halb-geschriebene Restore-Datei zurücklassen
+            @unlink($localPath); // do not leave a half-written restore file behind
             if (is_resource($in)) {
                 fclose($in);
             }

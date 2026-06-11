@@ -14,16 +14,16 @@ use Throwable;
 use function Cake\Core\env;
 
 /**
- * Verarbeitet den Event-Outbox (Step 6).
+ * Processes the event outbox (step 6).
  *
- * - claim: holt fällige `pending`-Events sicher mit FOR UPDATE SKIP LOCKED
- *   (mehrere Worker parallel möglich) und setzt sie auf `processing`.
- * - dispatch: ruft die in der Registry aktiven Listener isoliert auf
- *   (Fehler eines Listeners blockiert die anderen nicht, Kap. 26.16.3).
- * - Erfolg -> done; Fehler -> Retry mit exponentiellem Backoff; nach
- *   Ausschöpfung der Versuche -> dead_letter (sichtbar, nie auto-gelöscht).
- * - reclaim: hängende `processing`-Events (Worker-Absturz) zurück auf pending.
- * - run(): LISTEN/NOTIFY-Schleife mit periodischem Poll-Fallback.
+ * - claim: safely fetches due `pending` events with FOR UPDATE SKIP LOCKED
+ *   (multiple workers may run in parallel) and sets them to `processing`.
+ * - dispatch: invokes the listeners active in the registry in isolation
+ *   (a failure in one listener does not block the others, ch. 26.16.3).
+ * - success -> done; failure -> retry with exponential backoff; once attempts
+ *   are exhausted -> dead_letter (visible, never auto-deleted).
+ * - reclaim: returns stuck `processing` events (worker crash) back to pending.
+ * - run(): LISTEN/NOTIFY loop with a periodic poll fallback.
  */
 class OutboxWorker
 {
@@ -68,24 +68,25 @@ class OutboxWorker
     }
 
     /**
-     * Holt einen Batch fälliger Events und verarbeitet sie. Gibt die Anzahl
-     * verarbeiteter Events zurück.
+     * Fetches a batch of due events and processes them. Returns the number of
+     * processed events.
      */
     public function processBatch(?int $limit = null): int
     {
         $limit ??= $this->batchLimit;
-        // Mandanten-Fairness (Pool-Modell, gegen Noisy-Neighbor): Events werden je
-        // Mandant nach Fälligkeit gerankt und **round-robin** ausgewählt (alle rn=1
-        // zuerst, dann rn=2 …), sodass kein einzelner Mandant den Worker monopolisiert.
-        // `perTenant` begrenzt zusätzlich, wie viele Events EIN Mandant pro Batch
-        // beisteuern darf. FOR UPDATE SKIP LOCKED bleibt erhalten (Multi-Worker), indem
-        // die gerankten Kandidaten-IDs anschließend an der Basistabelle gesperrt werden.
+        // Tenant fairness (pool model, against noisy neighbors): events are ranked
+        // per tenant by due time and selected **round-robin** (all rn=1 first, then
+        // rn=2 …), so no single tenant monopolizes the worker. `perTenant`
+        // additionally caps how many events ONE tenant may contribute per batch.
+        // FOR UPDATE SKIP LOCKED is preserved (multi-worker) by subsequently
+        // locking the ranked candidate IDs on the base table.
         //
-        // Wichtig (Multi-Worker-Durchsatz): die finale `LIMIT :limit` greift ERST NACH
-        // dem SKIP LOCKED. `picked` über-selektiert deshalb fair gerankte Kandidaten
-        // (`:overfetch`), und `due` sperrt daraus die ersten `:limit` NICHT gesperrten.
-        // Andernfalls (LIMIT vor dem Lock) griffen alle Worker auf dieselben Top-N
-        // Kandidaten zu, fänden sie gegenseitig gesperrt und holten fast leere Batches.
+        // Important (multi-worker throughput): the final `LIMIT :limit` takes effect
+        // ONLY AFTER the SKIP LOCKED. `picked` therefore over-selects fairly ranked
+        // candidates (`:overfetch`), and `due` locks the first `:limit` of them that
+        // are NOT already locked. Otherwise (LIMIT before the lock) all workers would
+        // contend for the same top-N candidates, find them mutually locked, and
+        // fetch almost empty batches.
         $perTenant = $this->maxPerTenantPerBatch();
         $overfetch = $limit * 10;
         $rows = $this->connection()->execute(
@@ -129,7 +130,7 @@ class OutboxWorker
         return count($rows);
     }
 
-    /** Pro-Mandant-Obergrenze an Events je Batch (Fairness/Quota). */
+    /** Per-tenant upper bound on events per batch (fairness/quota). */
     private function maxPerTenantPerBatch(): int
     {
         try {
@@ -145,10 +146,10 @@ class OutboxWorker
      */
     private function dispatch(array $event): void
     {
-        // Mandantenkontext des Events setzen, damit abgeleitete Aktionen und
-        // Listener im richtigen Mandanten arbeiten (z. B. korrekter Such-/Embedding-
-        // Index). Session-weit, da Verarbeitung sequenziell ist; im finally wieder
-        // geleert, damit kein Mandant ins nächste Event leckt.
+        // Set the event's tenant context so derived actions and listeners operate
+        // in the correct tenant (e.g. the right search/embedding index).
+        // Session-wide, since processing is sequential; cleared again in the
+        // finally so no tenant leaks into the next event.
         $tenantId = $event['tenant_id'] !== null ? (string)$event['tenant_id'] : '';
         $this->connection()->execute(
             "SELECT set_config('app.current_tenant_id', :t, false)",
@@ -175,22 +176,21 @@ class OutboxWorker
         ];
 
         $errors = [];
-        // Outbound-Webhooks (P05): passende Subscriptions idempotent einreihen
-        // (UNIQUE(subscription_id,event_id)); ein Fehler hier lässt das Event
-        // erneut versuchen (at-least-once, Einreihen ist idempotent).
+        // Outbound webhooks (P05): idempotently enqueue matching subscriptions
+        // (UNIQUE(subscription_id,event_id)); a failure here lets the event be
+        // retried (at-least-once, enqueuing is idempotent).
         try {
             (new \App\Service\Webhook\WebhookService())
                 ->enqueueForEvent((string)$event['contract_name'], $payload, (string)$event['id']);
         } catch (Throwable $e) {
             $errors[] = 'webhook-enqueue: ' . $e->getMessage();
         }
-        // Automations-/Workflow-Regeln genau einmal auswerten, gesteuert über das
-        // persistierte `derived_done`-Flag. Aktionen UND das Setzen des Flags
-        // laufen in **einer** Transaktion: ein Absturz dazwischen rollt beides
-        // zurück, sodass der Reclaim sie genau einmal ausführt (keine doppelte
-        // Benachrichtigung / kein doppeltes Folge-Event). Behandelte Engine-Fehler
-        // bleiben isoliert (das Flag committet trotzdem); ein normaler Listener-
-        // Retry löst die Aktionen nicht erneut aus.
+        // Evaluate automation/workflow rules exactly once, gated by the persisted
+        // `derived_done` flag. The actions AND setting the flag run in **one**
+        // transaction: a crash in between rolls back both, so the reclaim runs them
+        // exactly once (no duplicate notification / no duplicate follow-up event).
+        // Handled engine errors stay isolated (the flag commits regardless); a
+        // normal listener retry does not re-trigger the actions.
         if (!(bool)$event['derived_done']) {
             $this->connection()->transactional(function () use ($event, $payload): void {
                 try {
@@ -214,11 +214,11 @@ class OutboxWorker
         $runtime = new \App\Service\Module\ContributionRuntime($this->registry);
         foreach ($runtime->listeners((string)$event['contract_name']) as $listener) {
             try {
-                // In-Process lokal, out_of_process über den isolierten Host (RPC).
-                // Worker-Kontext ohne laufenden Benutzer -> Bypass für den Listener.
+                // In-process locally, out_of_process via the isolated host (RPC).
+                // Worker context has no active user -> bypass for the listener.
                 $runtime->call($listener, 'handle', [$payload, $context], ['bypass' => true]);
             } catch (Throwable $e) {
-                // Isolation: Fehler eines Listeners stoppt die anderen nicht.
+                // Isolation: a failure in one listener does not stop the others.
                 $errors[] = $listener['class'] . ': ' . $e->getMessage();
             }
         }
@@ -254,7 +254,7 @@ class OutboxWorker
         );
     }
 
-    /** Setzt hängende 'processing'-Events (z. B. nach Worker-Absturz) zurück. */
+    /** Resets stuck 'processing' events (e.g. after a worker crash). */
     public function reclaimStuck(): int
     {
         $statement = $this->connection()->execute(
@@ -272,8 +272,8 @@ class OutboxWorker
     }
 
     /**
-     * Dauerschleife: verarbeitet vorhandene Events, wartet dann per LISTEN/NOTIFY
-     * (latenzarm) bzw. per Poll-Timeout (Fallback) auf neue.
+     * Continuous loop: processes existing events, then waits for new ones via
+     * LISTEN/NOTIFY (low latency) or a poll timeout (fallback).
      */
     public function run(): void
     {
@@ -288,25 +288,25 @@ class OutboxWorker
 
         \App\Log\LogContext::put('component', 'worker');
 
-        // Modulhost-Supervision nicht in jedem Poll-Zyklus, sondern gedrosselt
-        // (DB-Query + Socket-Checks je isoliertem Modul sind sonst teuer).
+        // Module-host supervision not on every poll cycle but throttled
+        // (DB query + socket checks per isolated module are otherwise expensive).
         $lastSupervision = 0.0;
         $supervisionEverySec = 30.0;
 
         while ($this->running) {
             try {
-                // Heartbeat (Kap. 20.3): jeder Zyklus protokolliert seinen Lauf
-                // inkl. Lauf-Dauer und erwartetem Intervall (für die >2×-Intervall-
-                // Überfälligkeitswarnung im Health/Dashboard, Kap. 20.3).
+                // Heartbeat (ch. 20.3): every cycle logs its run including run
+                // duration and expected interval (for the >2× interval overdue
+                // warning in the health/dashboard, ch. 20.3).
                 $cycleStart = microtime(true);
-                // Neu aktivierte Modul-Listener nachladbar machen (Step 7).
+                // Make newly activated module listeners loadable (step 7).
                 ModuleAutoloader::registerActiveModules();
                 $reclaimed = $this->reclaimStuck();
                 if ($reclaimed > 0) {
                     $this->log("$reclaimed haengende Events zurueckgesetzt.");
                 }
-                // Periodische Modul-Aufgaben (Andock-Punkt, Kap. 20.4) ticken –
-                // fehlerisoliert, damit ein Modul-Job den Worker nicht stoppt.
+                // Tick periodic module tasks (extension point, ch. 20.4) –
+                // error-isolated, so a module job does not stop the worker.
                 try {
                     $ran = (new \App\Service\Schedule\ScheduledTaskRunner())->tick();
                     if ($ran !== []) {
@@ -315,8 +315,8 @@ class OutboxWorker
                 } catch (Throwable $e) {
                     $this->log('Scheduler-Fehler: ' . $e->getMessage());
                 }
-                // Out-of-Process-Modulhosts überwachen (Selbstheilung, Kap. 23.16.2):
-                // abgestürzte Hosts neu starten, verwaiste stoppen — gedrosselt.
+                // Supervise out-of-process module hosts (self-healing, ch. 23.16.2):
+                // restart crashed hosts, stop orphaned ones — throttled.
                 if ($cycleStart - $lastSupervision >= $supervisionEverySec) {
                     $lastSupervision = $cycleStart;
                     try {
@@ -329,9 +329,9 @@ class OutboxWorker
                     } catch (Throwable $e) {
                         $this->log('Modulhost-Supervision-Fehler: ' . $e->getMessage());
                     }
-                    // Observability (#12), gedrosselt: OTLP-Metrik-Push (falls
-                    // OTEL_EXPORTER_OTLP_ENDPOINT gesetzt) + Health-Alert bei
-                    // Statuswechsel. Fehlerisoliert.
+                    // Observability (#12), throttled: OTLP metric push (if
+                    // OTEL_EXPORTER_OTLP_ENDPOINT is set) + health alert on a
+                    // status change. Error-isolated.
                     try {
                         $otlp = new \App\Service\Observability\OtlpMetricsExporter();
                         if ($otlp->available()) {
@@ -344,13 +344,13 @@ class OutboxWorker
                         $this->log('Observability-Fehler: ' . $e->getMessage());
                     }
                 }
-                // Vorhandene Events vollständig abarbeiten.
+                // Fully drain the existing events.
                 $processed = 0;
                 while ($this->running && ($n = $this->processBatch()) > 0) {
                     $processed += $n;
                 }
-                // Fällige Webhook-Zustellungen (P05) zustellen — pro Zyklus
-                // begrenzt (externe HTTP-Aufrufe), der Rest folgt im nächsten Zyklus.
+                // Deliver due webhook deliveries (P05) — capped per cycle
+                // (external HTTP calls), the rest follows in the next cycle.
                 $deliveredWebhooks = 0;
                 try {
                     $deliveredWebhooks = (new \App\Service\Webhook\WebhookService())->deliverPending(25);
@@ -363,7 +363,7 @@ class OutboxWorker
                     'processed' => $processed,
                     'webhooks_delivered' => $deliveredWebhooks,
                 ]);
-                // Auf NOTIFY oder Timeout warten.
+                // Wait for NOTIFY or timeout.
                 if ($listenPdo !== null) {
                     $listenPdo->pgsqlGetNotify(PDO::FETCH_ASSOC, $this->pollMs);
                 } else {

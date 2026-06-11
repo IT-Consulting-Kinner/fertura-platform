@@ -8,18 +8,18 @@ use App\Infrastructure\Uuid;
 use Cake\Datasource\ConnectionManager;
 
 /**
- * Verwaltung der API-Tokens für die externe API (Kap. 29 / Entscheidung 162).
+ * Management of API tokens for the external API (ch. 29 / Decision 162).
  *
- * Ein Token bindet an einen Benutzer; autorisiert wird über dessen Rechte. Die
- * `scopes` schränken zusätzlich ein, welche API-Fähigkeiten das Token nutzen
- * darf (`*` = alle). Der Klartext wird **nur bei der Erzeugung** zurückgegeben;
- * gespeichert wird ausschließlich der SHA-256-Hash.
+ * A token is bound to a user; authorization is derived from that user's
+ * permissions. The `scopes` additionally restrict which API capabilities the
+ * token may use (`*` = all). The plaintext is returned **only on creation**;
+ * only the SHA-256 hash is stored.
  */
 class TokenService
 {
     public const PREFIX = 'ftra_';
 
-    /** Bekannte Scopes (für die GUI; die Prüfung erlaubt auch `*`). */
+    /** Known scopes (for the GUI; the check also accepts `*`). */
     public const KNOWN_SCOPES = ['me:read', 'health:read', 'modules:read'];
 
     public function __construct(private ?AuditLogger $audit = null)
@@ -38,7 +38,7 @@ class TokenService
     }
 
     /**
-     * Erzeugt ein Token. Gibt den **Klartext** (einmalig) + die Zeilen-ID zurück.
+     * Creates a token. Returns the **plaintext** (once) + the row ID.
      *
      * @param list<string> $scopes
      * @return array{id: string, token: string}
@@ -64,9 +64,8 @@ class TokenService
     }
 
     /**
-     * Authentifiziert einen Klartext-Token. Gibt die Token-/Benutzerdaten zurück
-     * oder null (unbekannt/abgelaufen/widerrufen/Benutzer inaktiv). Aktualisiert
-     * `last_used_at` bei Erfolg.
+     * Authenticates a plaintext token. Returns the token/user data, or null
+     * (unknown/expired/revoked/user inactive). Updates `last_used_at` on success.
      *
      * @return array{token_id:string, user_id:string, username:string, email:?string, locale:?string, scopes:list<string>}|null
      */
@@ -107,7 +106,7 @@ class TokenService
     }
 
     /**
-     * Tokens eines Benutzers (ohne Hash/Klartext).
+     * A user's tokens (without hash/plaintext).
      *
      * @return list<array<string,mixed>>
      */
@@ -125,11 +124,11 @@ class TokenService
         return $rows;
     }
 
-    /** Widerruft ein Token des Benutzers (idempotent). */
+    /** Revokes one of the user's tokens (idempotent). */
     public function revoke(string $tokenId, string $userId): bool
     {
-        // UUID-Guard: die Token-ID kommt aus der URL; fehlgeformte Werte wie
-        // unbekannte behandeln statt 22P02 -> 500 (vgl. \App\Infrastructure\Uuid).
+        // UUID guard: the token ID comes from the URL; treat malformed values like
+        // unknown ones instead of letting 22P02 -> 500 (cf. \App\Infrastructure\Uuid).
         if (!Uuid::isValid($tokenId)) {
             return false;
         }
@@ -144,7 +143,7 @@ class TokenService
         return $n > 0;
     }
 
-    /** Prüft, ob die Scope-Liste den geforderten Scope abdeckt (`*` = alle). */
+    /** Checks whether the scope list covers the required scope (`*` = all). */
     public static function hasScope(array $scopes, string $required): bool
     {
         return in_array('*', $scopes, true) || in_array($required, $scopes, true);

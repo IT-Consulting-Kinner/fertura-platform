@@ -13,11 +13,11 @@ use RuntimeException;
 use Throwable;
 
 /**
- * Marketplace-Kommunikation (Kap. 28.4–28.6): Abruf von Metadaten, Sperrliste
- * (CRL) und aktualisierten Vertrauensankern über einen signierten Kanal.
+ * Marketplace communication (ch. 28.4–28.6): fetches metadata, the revocation
+ * list (CRL) and updated trust anchors over a signed channel.
  *
- * Reiner Metadatenabruf hat keine Systemwirkung; nur die signiert verifizierten
- * CRL/Anker werden angewendet (Entscheidung 139).
+ * A plain metadata fetch has no effect on the system; only the signature-
+ * verified CRL/anchors are actually applied (Decision 139).
  */
 class MarketplaceClient
 {
@@ -72,10 +72,10 @@ class MarketplaceClient
     }
 
     /**
-     * Verifiziert ein signiertes Dokument {payload, key_id, signature} gegen
-     * einen aktiven, nicht-widerrufenen Vertrauensanker.
+     * Verifies a signed document {payload, key_id, signature} against an active,
+     * non-revoked trust anchor.
      *
-     * @return array<string, mixed>|null Payload bei Erfolg, sonst null.
+     * @return array<string, mixed>|null The payload on success, null otherwise.
      */
     private function verifySigned(?array $doc): ?array
     {
@@ -90,9 +90,9 @@ class MarketplaceClient
         if ($anchor === null) {
             return null;
         }
-        // Gültigkeitsfenster des Ankers durchsetzen (wie an den übrigen Verifikations-
-        // pfaden, Kap. 24.9.2): ein abgelaufener/noch-nicht-gültiger Anker darf auch
-        // CRL/Anchor-Dokumente nicht mehr signieren.
+        // Enforce the anchor's validity window (as on the other verification
+        // paths, ch. 24.9.2): an expired/not-yet-valid anchor must no longer be
+        // able to sign CRL/anchor documents either.
         if (!\App\Service\Security\TrustStore::validity($anchor)['ok']) {
             return null;
         }
@@ -104,7 +104,7 @@ class MarketplaceClient
     }
 
     /**
-     * Holt CRL + Vertrauensanker und wendet sie an.
+     * Fetches the CRL + trust anchors and applies them.
      *
      * @return array{revoked: int, anchors: int}
      */
@@ -119,7 +119,7 @@ class MarketplaceClient
                 $this->trust->revokeKey((string)$entry['key_id'], $entry['reason'] ?? null, 'crl');
                 $revoked++;
             }
-            // Erfolgreichen CRL-Abruf datieren (Cache-Alter/Stale-Warnung, Kap. 24.9.2).
+            // Timestamp the successful CRL fetch (cache age / stale warning, ch. 24.9.2).
             $this->setMeta('last_crl_fetch_at', date('c'));
         }
 
@@ -128,9 +128,9 @@ class MarketplaceClient
             $chain = new \App\Service\Security\TrustChain($this->signer, $this->trust);
             foreach ($anchorDoc['anchors'] ?? [] as $a) {
                 $type = (string)($a['type'] ?? 'publisher');
-                // Publisher-Anker nur mit gültiger Root-Signatur übernehmen
-                // (Kette Root -> Publisher, Kap. 24.9.2) – Defense-in-Depth über
-                // die Dokument-Signatur hinaus.
+                // Only accept publisher anchors with a valid root signature
+                // (chain Root -> Publisher, ch. 24.9.2) – defense-in-depth
+                // beyond the document signature.
                 if ($type === 'publisher') {
                     $check = $chain->verifyPublisherCert($a);
                     if (!$check['ok']) {
@@ -159,7 +159,7 @@ class MarketplaceClient
         return ['revoked' => $revoked, 'anchors' => $anchors];
     }
 
-    /** @return array<string, mixed>|null Verifizierte Metadaten. */
+    /** @return array<string, mixed>|null Verified metadata. */
     public function metadata(): ?array
     {
         return $this->verifySigned($this->fetch('metadata.json'));
@@ -175,8 +175,8 @@ class MarketplaceClient
     }
 
     /**
-     * Zustand der Sperrliste (CRL): Zeitpunkt des letzten erfolgreichen Abrufs,
-     * Alter in Tagen, Schwellwert und Stale-Flag (Kap. 24.9.2).
+     * State of the revocation list (CRL): timestamp of the last successful fetch,
+     * age in days, the threshold and the stale flag (ch. 24.9.2).
      *
      * @return array{last_fetch_at: ?string, age_days: ?int, max_age_days: int, stale: bool}
      */

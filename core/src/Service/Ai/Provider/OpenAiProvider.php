@@ -9,7 +9,7 @@ use App\Service\Http\EgressClient;
 use App\Service\Http\EgressResponse;
 
 /**
- * OpenAI-Provider (P11), zugleich Basis für OpenAI-kompatible APIs (z. B. xAI).
+ * OpenAI provider (P11), and also the base for OpenAI-compatible APIs (e.g. xAI).
  */
 class OpenAiProvider implements LlmProviderInterface
 {

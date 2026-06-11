@@ -6,18 +6,18 @@ namespace App\Service\Registry;
 use Cake\Datasource\ConnectionManager;
 
 /**
- * Laufzeit-Handle für eine gebundene Capability (Entscheidung 151).
+ * Runtime handle for a bound capability (Decision 151).
  *
- * Ein Modul interagiert mit einem Contract ausschließlich über sein Handle.
- * Das Handle wird vom ContractRegistry nur ausgegeben, wenn für (Modul, Contract)
- * eine aktive Bindung besteht. `isValid()` prüft den Live-Status erneut, sodass
- * Deaktivierung/Widerruf sofort wirken.
+ * A module interacts with a contract exclusively through its handle. The handle
+ * is only issued by the ContractRegistry when an active binding exists for the
+ * (module, contract) pair. `isValid()` re-checks the live status, so a
+ * deactivation/revocation takes effect immediately.
  *
- * Für Service-Contracts (öffentliche Modul-Interfaces, Kap. 29) ruft das
- * nutzende Modul die Implementierung des Anbieters ausschließlich über
- * {@see self::invoke()} auf. Die Zugriffskontrolle wirkt durch Konstruktion:
- * Nur ein gültiges Handle ist nutzbar (Kap. 29.8.3); andernfalls greift das
- * Abweisungsverhalten (Kap. 29.8.4) via {@see CapabilityRejectedException}.
+ * For service contracts (public module interfaces, ch. 29), the consuming module
+ * invokes the provider's implementation exclusively through {@see self::invoke()}.
+ * Access control holds by construction: only a valid handle is usable
+ * (ch. 29.8.3); otherwise the rejection behavior (ch. 29.8.4) takes effect via
+ * {@see CapabilityRejectedException}.
  */
 final class CapabilityHandle
 {
@@ -34,11 +34,11 @@ final class CapabilityHandle
     }
 
     /**
-     * Ruft das öffentliche Modul-Interface (Service-Contract) auf (Kap. 29.8).
+     * Invokes the public module interface (service contract) (ch. 29.8).
      *
-     * Wirkt als Guard: Ohne gültige Bindung bzw. ohne aktiven Anbieter wird der
-     * Aufruf *technisch* abgewiesen (Kap. 29.8.4). Die Anbieterklasse muss
-     * {@see ServiceInterface} implementieren.
+     * Acts as a guard: without a valid binding or an active provider, the call is
+     * *technically* rejected (ch. 29.8.4). The provider class must implement
+     * {@see ServiceInterface}.
      *
      * @param array<string, mixed> $input
      * @return array<string, mixed>
@@ -54,8 +54,8 @@ final class CapabilityHandle
         }
 
         $contract = $this->registry->findContract($this->contractName);
-        // Aufrufbar sind Service- und (Daten-)Resolver-Contracts: beide werden
-        // über die Anbieter-Methode handle(input):array genutzt (Kap. 26/29).
+        // Service and (data) resolver contracts are callable: both are consumed
+        // through the provider method handle(input):array (ch. 26/29).
         if ($contract === null || !in_array($contract->contract_type, ['service', 'resolver'], true)) {
             throw new CapabilityRejectedException(
                 "Kein aufrufbares Interface (Service/Resolver): '{$this->contractName}'."
@@ -64,21 +64,21 @@ final class CapabilityHandle
 
         $provider = $this->registry->resolveProvider($this->contractName);
         if ($provider === null) {
-            // Anbieter deaktiviert/entfernt -> Interface nicht verfügbar (Kap. 29.14).
+            // Provider deactivated/removed -> interface unavailable (ch. 29.14).
             throw new CapabilityRejectedException(
                 "Interface-Aufruf abgewiesen: kein aktiver Anbieter für '{$this->contractName}'."
             );
         }
 
-        // Out-of-Process-Anbieter (Kap. 23.16.2): transparent über RPC an den
-        // isolierten Modulprozess; sonst in-process. Maßgeblich ist das
-        // **Anbieter**-Modul (nicht der Contract-Owner).
+        // Out-of-process provider (ch. 23.16.2): routed transparently via RPC to
+        // the isolated module process; otherwise in-process. The decisive factor
+        // is the **provider** module (not the contract owner).
         $contrib = $provider + ['isolation' => $this->providerIsolation($provider['module_key'])];
 
         return (array)(new \App\Service\Module\ContributionRuntime($this->registry))->call($contrib, 'handle', [$input]);
     }
 
-    /** Isolationsmodus des Anbieter-Moduls (core/unbekannt -> in_process). */
+    /** Isolation mode of the provider module (core/unknown -> in_process). */
     private function providerIsolation(string $moduleKey): string
     {
         if ($moduleKey === '' || $moduleKey === 'core') {
@@ -92,19 +92,19 @@ final class CapabilityHandle
         return $row === false ? 'in_process' : (string)$row['isolation'];
     }
 
-    /** Aktiver Provider (Resolver/Service) oder null (-> Default greift). */
+    /** Active provider (resolver/service) or null (-> default applies). */
     public function resolveProviderClass(): ?string
     {
         return $this->registry->resolveProviderClass($this->contractName);
     }
 
-    /** @return list<string> Beiträge (Collector), nach Priorität. */
+    /** @return list<string> Contributions (collector), by priority. */
     public function contributionClasses(): array
     {
         return $this->registry->collectContributionClasses($this->contractName);
     }
 
-    /** @return list<string> Listener (Event). */
+    /** @return list<string> Listeners (event). */
     public function listenerClasses(): array
     {
         return $this->registry->listenerClasses($this->contractName);

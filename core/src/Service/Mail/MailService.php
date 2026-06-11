@@ -9,13 +9,13 @@ use Cake\Mailer\Mailer;
 use Throwable;
 
 /**
- * Schlanker Core-Mailversand für System-/Identitätsmails (Einladung, Passwort-
- * Reset). Nutzt den konfigurierten Transport (EmailTransport.default, per
- * EMAIL_TRANSPORT_DEFAULT_URL). Fachliche Benachrichtigungen bleiben Modul-Sache.
+ * Lightweight core mail sending for system/identity mails (invitation, password
+ * reset). Uses the configured transport (EmailTransport.default, via
+ * EMAIL_TRANSPORT_DEFAULT_URL). Domain-specific notifications remain the
+ * responsibility of modules.
  *
- * Fehlertolerant: Schlägt der Versand fehl (Transport nicht erreichbar), wird
- * `false` zurückgegeben — der aufrufende Flow (z. B. Einladung) zeigt dann den
- * Link als Fallback an.
+ * Fault-tolerant: if sending fails (transport unreachable), `false` is returned
+ * — the calling flow (e.g. an invitation) then shows the link as a fallback.
  */
 class MailService
 {
@@ -47,7 +47,7 @@ class MailService
         );
     }
 
-    /** Generische System-Benachrichtigung (z. B. Backup-Alarm). */
+    /** Generic system notification (e.g. a backup alert). */
     public function notify(string $to, string $subject, string $body): bool
     {
         return $this->send($to, $subject, $body);
