@@ -152,6 +152,9 @@ class SsoController extends AppController
         // erneuern (der Pre-Auth-Flow lief in derselben Session).
         $this->request->getSession()->renew();
         $this->Authentication->setIdentity($user);
+        // SSO-Anmeldung markieren: die MFA-Pflicht (security.mfa.required) gilt
+        // nur für LOKALE Logins — bei Föderation setzt der IdP die MFA-Policy durch.
+        $this->request->getSession()->write('Auth.via_sso', true);
         $this->Flash->success(__('flash.auth.loggedin'));
 
         return $this->redirect('/admin');

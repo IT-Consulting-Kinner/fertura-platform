@@ -55,6 +55,10 @@ return function (RouteBuilder $routes): void {
         // Authentifizierung (Step 10).
         $builder->connect('/login', ['controller' => 'Auth', 'action' => 'login']);
         $builder->connect('/logout', ['controller' => 'Auth', 'action' => 'logout']);
+        // MFA: zweiter Faktor nach Passwort (Challenge) + Self-Service-Verwaltung.
+        $builder->connect('/login/mfa', ['controller' => 'Auth', 'action' => 'mfa']);
+        $builder->connect('/mfa', ['controller' => 'Mfa', 'action' => 'index']);
+        $builder->connect('/mfa/{action}', ['controller' => 'Mfa']);
         // Passwort vergessen + setzen per Einladungs-/Reset-Token (Kap. 27.2/27.15).
         $builder->connect('/forgot-password', ['controller' => 'Auth', 'action' => 'forgotPassword']);
         $builder->connect('/set-password', ['controller' => 'Auth', 'action' => 'setPassword']);

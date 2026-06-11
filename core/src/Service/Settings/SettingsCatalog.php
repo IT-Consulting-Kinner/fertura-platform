@@ -57,6 +57,17 @@ class SettingsCatalog
             'health.alert_url' => ['type' => 'string', 'default' => null],
             'health.alert_secret' => ['type' => 'string', 'default' => null, 'secret' => true],
 
+            // Security-Antwort-Header (SecurityHeadersMiddleware): abschaltbar,
+            // falls ein vorgelagerter Proxy sie setzt; CSP ersetzbar (leer =
+            // sichere Default-Policy); HSTS-Dauer (nur über TLS gesendet, 0 = aus).
+            'security.headers.enabled' => ['type' => 'bool', 'default' => true],
+            'security.csp' => ['type' => 'string', 'default' => null],
+            'security.hsts_max_age' => ['type' => 'int', 'default' => 31536000, 'min' => 0, 'max' => 63072000],
+            // MFA-Pflicht für LOKALE Anmeldungen: Benutzer ohne eingerichtetes
+            // TOTP werden nach dem Login zur Einrichtung gezwungen. SSO-Logins
+            // sind unberührt (MFA-Durchsetzung liegt beim IdP).
+            'security.mfa.required' => ['type' => 'bool', 'default' => false],
+
             // Daten-Backup (Kap. 20.1.2). Pfad als Container-/Linux- bzw.
             // Windows-Pfad; leer = Standard-Volume. Scheduler läuft im Worker.
             'backup.path' => ['type' => 'string', 'default' => null],

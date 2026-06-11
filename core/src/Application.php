@@ -108,6 +108,12 @@ class Application extends BaseApplication implements AuthenticationServiceProvid
             // jede Logzeile. Outermost, damit auch ErrorHandler-Logs ihn tragen.
             ->add(new \App\Middleware\LogContextMiddleware())
 
+            // Security-Header (CSP/nosniff/Frame/Referrer/HSTS) auf JEDER
+            // Antwort — ÜBER dem ErrorHandler: eine Exception fliegt durch diese
+            // Middleware nach oben, erst der zurückkommende (Fehler-)Response
+            // bekommt die Header. Läge sie darunter, blieben Fehlerseiten nackt.
+            ->add(new \App\Middleware\SecurityHeadersMiddleware())
+
             // Catch any exceptions in the lower layers,
             // and make an error page/response
             ->add(new ErrorHandlerMiddleware(Configure::read('Error'), $this))

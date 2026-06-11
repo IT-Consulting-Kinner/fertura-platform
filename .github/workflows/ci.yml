@@ -92,6 +92,12 @@ jobs:
         # grandfathered, NEUE Fehler lassen die CI rot werden.
         run: php -d memory_limit=1G vendor/bin/phpstan analyse --no-progress --error-format=github
 
+      - name: Dependency-Advisories (composer audit, blockierend)
+        working-directory: core
+        # SCA: bekannte Sicherheitslücken in Produktiv-Abhängigkeiten brechen
+        # die CI (Dev-Pakete laufen nicht in Produktion -> nur Hinweis).
+        run: composer audit --no-dev --locked
+
       - name: Coding-Standard (PHPCS, informativ)
         working-directory: core
         # Nicht blockierend (Altbestand fehlender Docblocks); macht Verstöße

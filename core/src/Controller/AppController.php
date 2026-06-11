@@ -17,6 +17,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use Cake\Controller\Controller;
+use Cake\Event\EventInterface;
 
 /**
  * Application Controller
@@ -43,6 +44,39 @@ class AppController extends Controller
 
         $this->loadComponent('Flash');
         $this->loadComponent('Authentication.Authentication');
+    }
+
+    /** @return \Cake\Http\Response|null|void */
+    public function beforeFilter(EventInterface $event)
+    {
+        parent::beforeFilter($event);
+
+        // MFA-Pflicht (security.mfa.required): angemeldete Benutzer ohne
+        // eingerichtetes TOTP werden auf die Einrichtung gelenkt — überall
+        // außer auf den Auth-/MFA-Seiten selbst (sonst Redirect-Schleife).
+        $identity = $this->identity();
+        if ($identity === null || in_array($this->request->getParam('controller'), ['Auth', 'Mfa', 'Sso'], true)) {
+            return;
+        }
+        // SSO-Sitzungen sind ausgenommen (MFA-Policy liegt beim IdP).
+        if ($this->request->getSession()->read('Auth.via_sso') === true) {
+            return;
+        }
+        $identifier = $identity->getIdentifier();
+        if (!is_string($identifier)) {
+            return;
+        }
+        try {
+            $mfa = new \App\Service\Security\MfaService();
+            if ($mfa->required() && !$mfa->enabled($identifier)) {
+                $this->Flash->error(__('flash.mfa.setup_required'));
+                $event->setResult($this->redirect('/mfa'));
+            }
+        } catch (\Throwable) {
+            // Fail-open hier bewusst NICHT für die Anmeldung selbst (die ist
+            // bereits passiert), sondern nur für die Setup-Umleitung: ein
+            // Settings-/DB-Problem darf die ganze Oberfläche nicht sperren.
+        }
     }
 
     /**

@@ -193,18 +193,6 @@ parameters:
 			path: src/Controller/Admin/AdminController.php
 
 		-
-			message: '#^Method App\\Controller\\Admin\\AdminController\:\:beforeFilter\(\) with return type void returns Cake\\Http\\Response\|null but should not return anything\.$#'
-			identifier: return.void
-			count: 1
-			path: src/Controller/Admin/AdminController.php
-
-		-
-			message: '#^Method App\\Controller\\Admin\\AdminController\:\:beforeFilter\(\) with return type void returns null but should not return anything\.$#'
-			identifier: return.void
-			count: 1
-			path: src/Controller/Admin/AdminController.php
-
-		-
 			message: '#^Method App\\Controller\\Admin\\AdminController\:\:loadUserAreas\(\) should return list\<string\> but returns array\<string\>\.$#'
 			identifier: return.type
 			count: 1
@@ -677,12 +665,6 @@ parameters:
 			identifier: missingType.return
 			count: 1
 			path: src/Controller/Api/V1/ModulesController.php
-
-		-
-			message: '#^Access to an undefined property App\\Controller\\AuthController\:\:\$Authentication\.$#'
-			identifier: property.notFound
-			count: 4
-			path: src/Controller/AuthController.php
 
 		-
 			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'

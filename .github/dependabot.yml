@@ -1,0 +1,17 @@
+# Dependency-Scanning (SCA): wöchentliche Update-PRs für Composer-Pakete und
+# GitHub-Actions. Blockierende Advisory-Prüfung läuft zusätzlich in der CI
+# (composer audit).
+version: 2
+updates:
+  - package-ecosystem: composer
+    directory: /core
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      composer-minor-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

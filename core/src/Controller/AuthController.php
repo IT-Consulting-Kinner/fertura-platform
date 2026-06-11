@@ -11,14 +11,16 @@ use Cake\Event\EventInterface;
 
 /**
  * Anmeldung/Abmeldung (Step 10). Verdrahtet die lokale Authentifizierung
- * (Step 2) mit Anmeldeschutz (Step 2/4).
+ * (Step 2) mit Anmeldeschutz (Step 2/4) und dem zweiten Faktor (TOTP).
+ *
+ * @property \Authentication\Controller\Component\AuthenticationComponent $Authentication
  */
 class AuthController extends AppController
 {
     public function initialize(): void
     {
         parent::initialize();
-        $this->Authentication->allowUnauthenticated(['login', 'setPassword', 'forgotPassword']);
+        $this->Authentication->allowUnauthenticated(['login', 'mfa', 'setPassword', 'forgotPassword']);
     }
 
     public function beforeFilter(EventInterface $event): void
@@ -59,6 +61,26 @@ class AuthController extends AppController
         }
 
         if ($result !== null && $result->isValid()) {
+            // MFA-Gate (zweiter Faktor): Das Passwort allein schließt die
+            // Anmeldung NICHT ab, wenn TOTP aktiv ist — die von der Middleware
+            // persistierte Identity wird wieder entfernt und erst nach gültigem
+            // Code (mfa()) neu gesetzt. SSO-Logins laufen separat (IdP-MFA).
+            $identity = $result->getData();
+            $userId = (string)($identity['id'] ?? '');
+            $mfa = new \App\Service\Security\MfaService();
+            if ($userId !== '' && $mfa->enabled($userId)) {
+                $target = $this->Authentication->getLoginRedirect() ?? '/admin';
+                $this->Authentication->logout();
+                $this->request->getSession()->write('Mfa.pending', [
+                    'id' => $userId,
+                    'username' => (string)($identity['username'] ?? $username),
+                    'target' => $target,
+                    'expires' => time() + 300, // 5-Minuten-Fenster für den 2. Faktor
+                ]);
+
+                return $this->redirect('/login/mfa');
+            }
+
             if ($username !== '') {
                 $throttle->clear($username);
             }
@@ -67,17 +89,80 @@ class AuthController extends AppController
             $this->request->getSession()->renew();
             $target = $this->Authentication->getLoginRedirect() ?? '/admin';
 
+            // MFA-Pflicht (Betreiber-Setting): ohne eingerichtetes TOTP direkt
+            // in die Einrichtung leiten (AppController erzwingt das zusätzlich).
+            if ($mfa->required()) {
+                $this->Flash->error(__('flash.mfa.setup_required'));
+
+                return $this->redirect('/mfa');
+            }
+
             return $this->redirect($target);
         }
 
         if ($this->request->is('post')) {
             if ($username !== '') {
-                $throttle->recordFailure($username, $this->request->clientIp());
+                $throttle->recordFailure($username, $this->request->clientIp() ?: null);
             }
             $this->Flash->error(__('flash.auth.invalid'));
         }
 
         return null;
+    }
+
+    /**
+     * Zweiter Faktor nach gültigem Passwort: GET zeigt das Code-Formular,
+     * POST prüft TOTP- oder Recovery-Code. Die Anmeldung wird erst hier
+     * abgeschlossen (Identity gesetzt + Session erneuert). Fehlversuche
+     * laufen über dieselbe Drosselung wie der Passwort-Login.
+     *
+     * @return \Cake\Http\Response|null
+     */
+    public function mfa()
+    {
+        $session = $this->request->getSession();
+        /** @var array{id:string,username:string,target:string,expires:int}|null $pending */
+        $pending = $session->read('Mfa.pending');
+        if (!is_array($pending) || (int)($pending['expires'] ?? 0) < time()) {
+            $session->delete('Mfa.pending');
+            $this->Flash->error(__('flash.mfa.expired'));
+
+            return $this->redirect('/login');
+        }
+
+        if (!$this->request->is('post')) {
+            return null;
+        }
+
+        $username = (string)$pending['username'];
+        $throttle = new LoginThrottle();
+        if ($throttle->isBlocked($username)) {
+            $this->Flash->error(__('flash.auth.throttled'));
+
+            return null;
+        }
+
+        $code = (string)$this->request->getData('code');
+        if (!(new \App\Service\Security\MfaService())->verify((string)$pending['id'], $code)) {
+            $throttle->recordFailure($username, $this->request->clientIp() ?: null);
+            $this->Flash->error(__('flash.mfa.invalid'));
+
+            return null;
+        }
+
+        // Faktor 2 ok -> Anmeldung abschließen (wie der SSO-Pfad: ORM-Entity).
+        $session->delete('Mfa.pending');
+        $throttle->clear($username);
+        $user = $this->fetchTable('Users')->find()
+            ->where(['id' => (string)$pending['id'], 'status' => 'active'])
+            ->first();
+        if ($user === null) {
+            return $this->redirect('/login');
+        }
+        $session->renew();
+        $this->Authentication->setIdentity($user);
+
+        return $this->redirect((string)$pending['target'] ?: '/admin');
     }
 
     public function logout()
