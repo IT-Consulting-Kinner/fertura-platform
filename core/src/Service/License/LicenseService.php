@@ -92,7 +92,9 @@ class LicenseService
         if (!$result['ok']) {
             throw new RuntimeException($result['reason'] ?? 'Lizenz ungültig.');
         }
-        $p = $result['payload'];
+        // A valid result always carries a payload; guard explicitly so the
+        // array-shape access is provably safe (and fails loud if it ever isn't).
+        $p = $result['payload'] ?? throw new RuntimeException('Lizenz ohne Payload.');
         $moduleKey = (string)($p['module_ref'] ?? '');
         if ($moduleKey === '') {
             throw new RuntimeException('Lizenz ohne module_ref.');

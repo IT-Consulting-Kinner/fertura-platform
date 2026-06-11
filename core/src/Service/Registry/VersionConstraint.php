@@ -72,6 +72,9 @@ final class VersionConstraint
                 '<=' => $cmp <= 0,
                 '<' => $cmp < 0,
                 '=' => $cmp === 0,
+                // Operators are parsed from a fixed regex set; a value outside it
+                // is a programming error, not a recoverable input.
+                default => throw new \LogicException('Unknown version operator: ' . $clause['op']),
             };
             if (!$ok) {
                 return false;

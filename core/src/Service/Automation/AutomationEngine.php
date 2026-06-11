@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace App\Service\Automation;
 
-use App\Audit\AuditLogger;
 use App\Service\Event\OutboxPublisher;
 use App\Service\Notification\NotificationService;
 use Cake\Datasource\ConnectionInterface;
@@ -26,7 +25,6 @@ class AutomationEngine
         private ?ConditionEvaluator $evaluator = null,
         private ?NotificationService $notifications = null,
         private ?OutboxPublisher $outbox = null,
-        private ?AuditLogger $audit = null,
     ) {
         $this->evaluator ??= new ConditionEvaluator();
     }

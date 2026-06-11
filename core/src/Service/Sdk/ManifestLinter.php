@@ -86,7 +86,8 @@ class ManifestLinter
             }
         }
 
-        return ['errors' => array_values($errors), 'warnings' => array_values($warnings)];
+        // $errors/$warnings are append-only lists already — no array_values needed.
+        return ['errors' => $errors, 'warnings' => $warnings];
     }
 
     /**

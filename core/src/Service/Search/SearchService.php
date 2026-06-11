@@ -257,7 +257,8 @@ class SearchService
                         'entity_type' => (string)$r['entity_type'],
                         'entity_id' => (string)$r['entity_id'],
                         'title' => (string)($r['title'] ?? mb_substr((string)($r['content'] ?? ''), 0, 120)),
-                        'url' => isset($r['url']) && $r['url'] !== null ? (string)$r['url'] : null,
+                        // isset() already excludes null — no extra !== null check needed.
+                        'url' => isset($r['url']) ? (string)$r['url'] : null,
                     ];
                 }
             }
