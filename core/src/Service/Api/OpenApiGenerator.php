@@ -32,6 +32,7 @@ class OpenApiGenerator
             ['GET', '/api/v1/notifications', 'me:read', 'Ungelesene Benachrichtigungen'],
             ['POST', '/api/v1/notifications/{id}/read', 'me:read', 'Benachrichtigung als gelesen markieren'],
             ['POST', '/api/v1/notifications/read-all', 'me:read', 'Alle als gelesen markieren'],
+            ['GET', '/api/v1/audit', 'audit:read', 'Audit-Log-Export als NDJSON-Strom (Filter: from/to/action/entity_type/entity_id/module_key/actor_user_id; with_values=1 für Wert-Snapshots)'],
             ['GET', '/api/v1/openapi.json', null, 'Diese OpenAPI-Spezifikation'],
         ];
         foreach ($core as [$method, $path, $scope, $summary]) {

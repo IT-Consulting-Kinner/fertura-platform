@@ -22,6 +22,11 @@
     <div class="col-auto">
         <?= $this->Form->button(__('admin.audit.btn_filter'), ['class' => 'btn btn-primary btn-sm']) ?>
         <?= $this->Html->link(__('admin.audit.btn_reset'), ['action' => 'index'], ['class' => 'btn btn-outline-secondary btn-sm']) ?>
+        <?= $this->Html->link(
+            __('admin.audit.btn_export'),
+            ['action' => 'export', '?' => ['action' => $action, 'entity_type' => $entityType, 'module_key' => $moduleKey]],
+            ['class' => 'btn btn-outline-secondary btn-sm'],
+        ) ?>
     </div>
 <?= $this->Form->end() ?>
 

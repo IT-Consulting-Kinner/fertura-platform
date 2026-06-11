@@ -1353,3 +1353,6 @@ msgstr "Passkey hinzufügen"
 
 msgid "security.new_device_notice"
 msgstr "Neue Anmeldung von einem unbekannten Gerät/Browser. Falls Sie das nicht waren, ändern Sie umgehend Ihr Passwort."
+
+msgid "admin.audit.btn_export"
+msgstr "Exportieren (NDJSON)"

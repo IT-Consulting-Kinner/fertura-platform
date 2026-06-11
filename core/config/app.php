@@ -459,6 +459,19 @@ return [
             'url' => env('LOG_QUERIES_URL', null),
             'scopes' => ['cake.database.queries'],
         ],
+        // Dedizierter Audit-Strom (Punkt 3a): eine JSON-Zeile je Audit-Ereignis,
+        // vom Betreiber per Log-Shipper (Fluentbit/Vector) an ein beliebiges SIEM
+        // ausleitbar — getrennte Datei `audit.log`, damit die Ausleitung gezielt
+        // bleibt. PII-arm (Werte-Snapshots bleiben in der DB / im Export).
+        'audit' => [
+            'className' => FileLog::class,
+            'path' => LOGS,
+            'file' => 'audit',
+            'url' => env('LOG_AUDIT_URL', null),
+            'scopes' => ['audit'],
+            'levels' => ['info'],
+            'formatter' => ['className' => \App\Log\ContextJsonFormatter::class],
+        ],
     ],
 
     /*

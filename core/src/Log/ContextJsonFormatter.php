@@ -34,6 +34,11 @@ class ContextJsonFormatter extends JsonFormatter
                 $log[$f] = $merged[$f];
             }
         }
+        // Audit-Ereignis (Punkt 3a): strukturiertes Feld für SIEM-Parsing
+        // durchreichen, statt es im freien Text zu verstecken.
+        if (isset($merged['audit']) && is_array($merged['audit'])) {
+            $log['audit'] = $merged['audit'];
+        }
 
         $json = json_encode($log, JSON_THROW_ON_ERROR | $this->_config['flags']);
 

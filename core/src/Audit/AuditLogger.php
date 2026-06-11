@@ -5,6 +5,7 @@ namespace App\Audit;
 
 use App\Model\ActorContext;
 use Cake\Datasource\ConnectionManager;
+use Cake\Log\Log;
 use Symfony\Component\Uid\Uuid;
 
 /**
@@ -63,5 +64,44 @@ class AuditLogger
                 'new' => $newValue,
             ],
         );
+
+        $this->stream($action, $entityType, $entityId, $correlationId, $actor, $options);
+    }
+
+    /**
+     * Spiegelt das Ereignis (Punkt 3a) auf den dedizierten `audit`-Log-Kanal —
+     * den der Betreiber per Log-Shipper an ein beliebiges SIEM ausleitet (kein
+     * vendorspezifischer Konnektor im Core). **PII-arm** (E16): Akteur/Entität
+     * per UUID/Bezeichner, **keine** old/new-Wert-Snapshots im Strom — die
+     * bleiben in der DB und sind nur über den autorisierten Export abrufbar.
+     * Fehlerisoliert: ein Log-Problem darf die fachliche Aktion nie scheitern lassen.
+     *
+     * @param array<string,mixed> $options
+     */
+    private function stream(
+        string $action,
+        string $entityType,
+        ?string $entityId,
+        string $correlationId,
+        ?string $actor,
+        array $options,
+    ): void {
+        try {
+            Log::write('info', 'audit.' . $action, [
+                'scope' => ['audit'],
+                'component' => (string)($options['component'] ?? 'core'),
+                'correlation_id' => $correlationId,
+                'audit' => [
+                    'action' => $action,
+                    'entity_type' => $entityType,
+                    'entity_id' => $entityId,
+                    'entity_label' => $options['entityLabel'] ?? null,
+                    'module_key' => $options['moduleKey'] ?? null,
+                    'actor_user_id' => $actor,
+                ],
+            ]);
+        } catch (\Throwable) {
+            // Strom ist Spiegel zur Detektion; die DB bleibt die Quelle der Wahrheit.
+        }
     }
 }

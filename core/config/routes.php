@@ -96,6 +96,9 @@ return function (RouteBuilder $routes): void {
                 $api->prefix('V1', function (RouteBuilder $v1): void {
                     $v1->connect('/health', ['controller' => 'Health', 'action' => 'index']);
                     $v1->connect('/me', ['controller' => 'Me', 'action' => 'index']);
+                    // Audit-Log-Export (NDJSON, Scope audit:read) für SIEM-Pulls.
+                    $v1->connect('/audit', ['controller' => 'Audit', 'action' => 'index'])
+                        ->setMethods(['GET']);
                     $v1->connect('/modules', ['controller' => 'Modules', 'action' => 'index']);
                     // OpenAPI-Spezifikation (P07).
                     $v1->connect('/openapi.json', ['controller' => 'OpenApi', 'action' => 'index']);
