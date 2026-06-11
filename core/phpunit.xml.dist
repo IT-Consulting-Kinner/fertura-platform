@@ -5,6 +5,7 @@
          stopOnFailure="false"
          bootstrap="tests/bootstrap.php"
          cacheDirectory=".phpunit.cache"
+         defaultTestSuite="app"
          xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/10.1/phpunit.xsd">
     <php>
         <ini name="memory_limit" value="-1"/>
@@ -14,6 +15,17 @@
     <testsuites>
         <testsuite name="app">
             <directory>tests/TestCase/</directory>
+        </testsuite>
+        <!-- Fokus-Suite für Mutation-Testing (Infection): genau die Tests, die
+             die sicherheitskritischen Namespaces abdecken. Schließt langsame/
+             streaming-/Daemon-Tests aus -> stabil + schnell unter Zufallsreihenfolge. -->
+        <testsuite name="security">
+            <directory>tests/TestCase/Service/Security/</directory>
+            <directory>tests/TestCase/Service/License/</directory>
+            <directory>tests/TestCase/Service/Permission/</directory>
+            <directory>tests/TestCase/Service/Auth/</directory>
+            <file>tests/TestCase/Controller/AuthMfaFlowTest.php</file>
+            <file>tests/TestCase/Controller/MfaControllerTest.php</file>
         </testsuite>
         <!-- Add plugin test suites here. -->
     </testsuites>

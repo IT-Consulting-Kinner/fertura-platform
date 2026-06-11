@@ -1,0 +1,25 @@
+{
+    // Mutation-Testing (Test-QUALITÄT) — bewusst ENG auf die sicherheits-
+    // kritischen Namespaces begrenzt: Krypto/Signaturkette, Lizenz-Statusmaschine,
+    // Authentifizierung/SSO, BREAD-Autorisierung. Zeilen-Coverage sagt „Code lief",
+    // Mutation-Testing sagt „die Tests fangen eine Regression". Nicht im
+    // blockierenden CI-Gate (langsam); manueller/optionaler Qualitäts-Lauf.
+    "$schema": "vendor/infection/infection/resources/schema.json",
+    "source": {
+        "directories": [
+            "src/Service/Security",
+            "src/Service/License",
+            "src/Service/Permission",
+            "src/Service/Auth"
+        ]
+    },
+    "mutators": {
+        "@default": true
+    },
+    "logs": {
+        "text": "infection.log",
+        "html": "infection.html"
+    },
+    "testFramework": "phpunit",
+    "tmpDir": "tmp/infection"
+}

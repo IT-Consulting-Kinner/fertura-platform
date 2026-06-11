@@ -54,3 +54,8 @@ nbproject/*
 # yarn
 yarn-debug.log
 yarn-error.log
+
+# Infection (Mutation-Testing) Artefakte
+infection.log
+infection.html
+.infection-cache/

@@ -67,8 +67,10 @@ class WebAuthnServiceTest extends TestCase
                 1 => 2, // kty EC2
                 3 => -7, // alg ES256
                 -1 => 1, // crv P-256
-                -2 => $details['ec']['x'],
-                -3 => $details['ec']['y'],
+                // EC-Rohkoordinaten links auf 32 Byte padden (openssl lässt eine
+                // führende Null ~1/256 weg → COSE-Key wäre 31 Byte und ungültig).
+                -2 => str_pad((string)$details['ec']['x'], 32, "\x00", STR_PAD_LEFT),
+                -3 => str_pad((string)$details['ec']['y'], 32, "\x00", STR_PAD_LEFT),
             ]);
             $out .= str_repeat("\x00", 16) // aaguid
                 . pack('n', strlen($this->credentialId)) . $this->credentialId

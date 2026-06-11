@@ -157,7 +157,9 @@ class AuthMfaFlowTest extends TestCase
         $rpId = 'localhost'; // Host der Test-Requests
         $details = openssl_pkey_get_details($key);
         $coseKey = \App\Service\Security\Cbor::encode([
-            1 => 2, 3 => -7, -1 => 1, -2 => $details['ec']['x'], -3 => $details['ec']['y'],
+            1 => 2, 3 => -7, -1 => 1,
+            -2 => str_pad((string)$details['ec']['x'], 32, "\x00", STR_PAD_LEFT),
+            -3 => str_pad((string)$details['ec']['y'], 32, "\x00", STR_PAD_LEFT),
         ]);
         $regChallenge = \App\Service\Security\WebAuthnService::challenge();
         $authData = hash('sha256', $rpId, true) . chr(0x41) . pack('N', 0)
