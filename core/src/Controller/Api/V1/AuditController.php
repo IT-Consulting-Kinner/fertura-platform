@@ -8,12 +8,12 @@ use Cake\Http\CallbackStream;
 use Cake\Http\Response;
 
 /**
- * GET /api/v1/audit — Zeitbereichs-Export des Audit-Logs als **NDJSON-Strom**
- * (Punkt 3b) für externe Compliance-/SIEM-Pulls. Scope `audit:read`.
+ * GET /api/v1/audit — time-range export of the audit log as an **NDJSON stream**
+ * (item 3b) for external compliance/SIEM pulls. Scope `audit:read`.
  *
- * Bewusst PII-arm wie der DB-Bestand (Akteur per UUID, E16); die Wert-Snapshots
- * (`old_value`/`new_value`) sind über `with_values=1` zuschaltbar (Standard aus
- * — der Strom ist primär für Detektion/Korrelation, nicht für Daten-Exfiltration).
+ * Deliberately low-PII, like the stored data (actor by UUID, E16); the value
+ * snapshots (`old_value`/`new_value`) can be enabled via `with_values=1` (off by
+ * default — the stream is primarily for detection/correlation, not data exfiltration).
  */
 class AuditController extends ApiController
 {

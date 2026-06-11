@@ -8,10 +8,10 @@ use Cake\Controller\Controller;
 use Cake\Http\Response;
 
 /**
- * Basis für die externe API v1 (Kap. 29). Reine JSON-Controller ohne Session/
- * Flash/Authentication-Component — die Identität + Scopes stammen aus der
- * `ApiAuthMiddleware` (Bearer-Token). Autorisierung: Token-Scope + (über RLS/
- * Permissions) die Rechte des gebundenen Benutzers.
+ * Base for the external API v1 (ch. 29). Pure JSON controllers with no session/
+ * flash/Authentication component — identity and scopes come from the
+ * `ApiAuthMiddleware` (Bearer token). Authorization: token scope plus (via RLS/
+ * permissions) the rights of the bound user.
  */
 class ApiController extends Controller
 {
@@ -28,7 +28,7 @@ class ApiController extends Controller
         return $identity !== null ? (string)$identity->getIdentifier() : '';
     }
 
-    /** Liefert eine 403-Antwort, wenn der geforderte Scope fehlt, sonst null. */
+    /** Returns a 403 response if the required scope is missing, otherwise null. */
     protected function requireScope(string $scope): ?Response
     {
         if (!TokenService::hasScope($this->scopes(), $scope)) {

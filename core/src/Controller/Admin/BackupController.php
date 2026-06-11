@@ -8,10 +8,10 @@ use App\Service\Backup\OffsiteBackupService;
 use App\Service\Settings\SettingsManager;
 
 /**
- * Core-Backup-Verwaltung (Kap. 20.1.2 / E53/E55/E56) im Bereich
- * Core-Konfiguration. Erstellen (verifiziert, ggf. verschlüsselt), prüfen,
- * Probe-Restore, Löschen + Operationsprotokoll. Die **destruktive** Produktions-
- * Wiederherstellung bleibt bewusst CLI-only (`bin/cake backup restore … --yes`).
+ * Core backup management (ch. 20.1.2 / E53/E55/E56) within the
+ * core configuration area. Create (verified, optionally encrypted), verify,
+ * test-restore, delete + operations log. The **destructive** production
+ * restore deliberately stays CLI-only (`bin/cake backup restore … --yes`).
  */
 class BackupController extends AdminController
 {
@@ -37,7 +37,7 @@ class BackupController extends AdminController
         $this->set('retentionDays', (int)$settings->get('core', 'backup.retention_days', 0));
         $this->set('encryptionOn', $svc->encryptionEnabled());
 
-        // Off-Site (P14): nur anzeigen, wenn aktiviert; Storage-Fehler tolerieren.
+        // Off-site (P14): only show when enabled; tolerate storage errors.
         $offsiteEnabled = (bool)$settings->get('core', 'backup.offsite.enabled', false);
         $offsiteBackups = [];
         if ($offsiteEnabled) {
@@ -91,7 +91,7 @@ class BackupController extends AdminController
         return $this->redirect(['action' => 'index']);
     }
 
-    /** Lädt das Archiv herunter (Datenexport) und protokolliert ihn. */
+    /** Downloads the archive (data export) and logs the download. */
     public function download(string $id)
     {
         $row = (new BackupService())->get($id);
@@ -108,7 +108,7 @@ class BackupController extends AdminController
         ]);
     }
 
-    /** Lädt ein lokales Backup ins Off-Site-Objekt-Storage (P14). */
+    /** Uploads a local backup to the off-site object storage (P14). */
     public function offsiteUpload(string $id): ?\Cake\Http\Response
     {
         $this->request->allowMethod('post');
@@ -133,7 +133,7 @@ class BackupController extends AdminController
         return $this->redirect(['action' => 'index']);
     }
 
-    /** Löscht ein Off-Site-Backup (Name = Dateiname, kein Pfad-Traversal). */
+    /** Deletes an off-site backup (name = file name, no path traversal). */
     public function offsiteDelete(string $name): ?\Cake\Http\Response
     {
         $this->request->allowMethod('post');

@@ -9,14 +9,14 @@ use Cake\Console\ConsoleIo;
 use Cake\Datasource\ConnectionManager;
 
 /**
- * Listet die Core-Erweiterungspunkte (Contracts) + das jeweils erwartete
- * Interface auf (Programm Tier-3, P16) — der „SDK-Katalog" für Modulentwickler.
+ * Lists the core extension points (contracts) plus the interface expected for
+ * each (Programme Tier-3, P16) — the "SDK catalogue" for module developers.
  *
  *   bin/cake module_contracts
  */
 class ModuleContractsCommand extends Command
 {
-    /** Bekannte Core-Contracts → zu implementierendes Interface. */
+    /** Known core contracts → the interface to implement. */
     private const INTERFACES = [
         'core.collector.health' => 'App\\Service\\Health\\HealthCheckInterface',
         'core.collector.scheduled' => 'App\\Service\\Schedule\\ScheduledTaskInterface',

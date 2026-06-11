@@ -8,13 +8,12 @@ use App\Service\Security\Totp;
 use App\Service\Security\WebAuthnService;
 
 /**
- * Self-Service-MFA-Verwaltung (TOTP) für den ANGEMELDETEN Benutzer:
- * Status, zweistufige Einrichtung (Secret anzeigen → Code bestätigen →
- * Recovery-Codes einmalig zeigen) und Deaktivierung (re-authentifiziert
- * per gültigem Code).
+ * Self-service MFA management (TOTP) for the AUTHENTICATED user:
+ * status, two-step setup (show secret → confirm code → show recovery
+ * codes once) and deactivation (re-authenticated via a valid code).
  *
- * Das Pending-Secret lebt bis zur Bestätigung NUR in der Session (nie
- * unbestätigt in der DB); persistiert wird verschlüsselt im MfaService.
+ * The pending secret lives ONLY in the session until confirmation (never
+ * unconfirmed in the DB); it is persisted encrypted in the MfaService.
  */
 class MfaController extends AppController
 {
@@ -29,10 +28,10 @@ class MfaController extends AppController
     }
 
     /**
-     * JSON-Optionen für `navigator.credentials.create()` (Passkey-Registrierung).
-     * Voraussetzung: TOTP ist eingerichtet (Recovery-Codes existieren) — der
-     * Passkey ist die bequemere Alternative, nicht der einzige zweite Faktor
-     * (keine Aussperrung bei Geräteverlust).
+     * JSON options for `navigator.credentials.create()` (passkey registration).
+     * Precondition: TOTP is set up (recovery codes exist) — the passkey is the
+     * more convenient alternative, not the only second factor (no lockout if the
+     * device is lost).
      */
     public function passkeyOptions(): \Cake\Http\Response
     {
@@ -48,7 +47,7 @@ class MfaController extends AppController
         return $this->response->withType('application/json')->withStringBody((string)json_encode($options));
     }
 
-    /** Schließt die Passkey-Registrierung ab (Formular-POST mit JS-befüllten Feldern). */
+    /** Completes the passkey registration (form POST with JS-populated fields). */
     public function passkeyRegister(): ?\Cake\Http\Response
     {
         $this->request->allowMethod('post');
@@ -89,13 +88,13 @@ class MfaController extends AppController
         return $this->redirect(['action' => 'index']);
     }
 
-    /** Relying-Party-ID = Request-Host ohne Port (WebAuthn-Origin-Bindung). */
+    /** Relying party ID = request host without port (WebAuthn origin binding). */
     private function rpId(): string
     {
         return (string)$this->request->getUri()->getHost();
     }
 
-    /** Typ-sichere Benutzer-ID der angemeldeten Identität. */
+    /** Type-safe user ID of the authenticated identity. */
     private function userId(): string
     {
         $identifier = $this->identity()?->getIdentifier();
@@ -103,7 +102,7 @@ class MfaController extends AppController
         return is_string($identifier) ? $identifier : '';
     }
 
-    /** Schritt 1: Secret erzeugen und zur Bestätigung anzeigen (otpauth + manuell). */
+    /** Step 1: generate the secret and display it for confirmation (otpauth + manual). */
     public function setup(): \Cake\Http\Response
     {
         $this->request->allowMethod('post');
@@ -116,7 +115,7 @@ class MfaController extends AppController
         return $this->render('setup');
     }
 
-    /** Schritt 2: Code gegen das Pending-Secret bestätigen -> aktivieren. */
+    /** Step 2: confirm the code against the pending secret -> activate. */
     public function confirm(): ?\Cake\Http\Response
     {
         $this->request->allowMethod('post');
@@ -132,7 +131,7 @@ class MfaController extends AppController
         $codes = (new MfaService())->confirmEnrollment($userId, $secret, (string)$this->request->getData('code'));
         if ($codes === null) {
             $this->Flash->error(__('flash.mfa.invalid'));
-            // Gleiches Secret erneut anzeigen (App ist ggf. schon eingerichtet).
+            // Show the same secret again (the app may already be set up).
             $this->set('secret', $secret);
             $this->set('otpauthUri', Totp::provisioningUri($secret, $this->accountLabel(), MfaService::ISSUER));
 
@@ -140,12 +139,12 @@ class MfaController extends AppController
         }
 
         $session->delete('Mfa.setup_secret');
-        $this->set('recoveryCodes', $codes); // einmalige Anzeige
+        $this->set('recoveryCodes', $codes); // one-time display
 
         return $this->render('recovery');
     }
 
-    /** Deaktivieren — re-authentifiziert per gültigem TOTP-/Recovery-Code. */
+    /** Deactivate — re-authenticated via a valid TOTP/recovery code. */
     public function disable(): ?\Cake\Http\Response
     {
         $this->request->allowMethod('post');
@@ -162,7 +161,7 @@ class MfaController extends AppController
         return $this->redirect(['action' => 'index']);
     }
 
-    /** Konto-Label für die otpauth-URI (Benutzername aus der DB, typ-sicher). */
+    /** Account label for the otpauth URI (username from the DB, type-safe). */
     private function accountLabel(): string
     {
         $identifier = $this->identity()?->getIdentifier();

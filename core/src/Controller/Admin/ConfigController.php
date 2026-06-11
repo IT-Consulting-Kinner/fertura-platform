@@ -7,11 +7,11 @@ use App\Service\Settings\SettingsCatalog;
 use App\Service\Settings\SettingsManager;
 
 /**
- * Core-Konfiguration (Administrationsbereich „Core-Konfiguration").
+ * Core configuration (administration area "Core Configuration").
  *
- * Bearbeitet die im SettingsCatalog bekannten Schlüssel. Secrets werden
- * niemals im Klartext angezeigt (Entscheidung 159); ein leeres Secret-Feld
- * lässt den bestehenden Wert unverändert.
+ * Edits the keys known to the SettingsCatalog. Secrets are never
+ * displayed in plaintext (Decision 159); an empty secret field
+ * leaves the existing value unchanged.
  */
 class ConfigController extends AdminController
 {

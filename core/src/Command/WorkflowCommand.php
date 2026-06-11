@@ -12,7 +12,7 @@ use Cake\Console\ConsoleOptionParser;
 use Cake\Datasource\ConnectionManager;
 
 /**
- * Verwaltung der Workflow-State-Machines (P12-Ausbau) auf der Konsole.
+ * Console management of workflow state machines (P12 extension).
  *
  *   bin/cake workflow list
  *   bin/cake workflow add --name X --entity-type order --entity-field data.order_id \

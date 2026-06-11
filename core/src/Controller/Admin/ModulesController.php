@@ -7,10 +7,10 @@ use App\Service\Module\ModuleLifecycle;
 use Cake\Datasource\ConnectionManager;
 
 /**
- * Modul-Lebenszyklus (Administrationsbereich „Modul-Lifecycle").
+ * Module lifecycle (admin area "Module Lifecycle").
  *
- * Installation erfolgt über die CLI (signierte Pakete); die GUI steuert
- * Aktivierung/Deaktivierung/Entfernung und zeigt Abhängigkeiten.
+ * Installation happens via the CLI (signed packages); the GUI controls
+ * activation/deactivation/removal and displays dependencies.
  */
 class ModulesController extends AdminController
 {
@@ -33,9 +33,9 @@ class ModulesController extends AdminController
     }
 
     /**
-     * Grafische Abhängigkeitsdarstellung (Kap. 23.13.1): geschichtetes SVG
-     * (Ebene = Tiefe der Abhängigkeitskette), Kanten Modul → Abhängigkeit.
-     * Serverseitig berechnet (kein Client-JS nötig).
+     * Graphical dependency view (ch. 23.13.1): layered SVG
+     * (layer = depth of the dependency chain), edges run module → dependency.
+     * Computed server-side (no client-side JS needed).
      */
     public function graph(): void
     {
@@ -54,7 +54,7 @@ class ModulesController extends AdminController
         foreach ($depRows as $d) {
             $reqsByMod[(string)$d['module']][] = (string)$d['requires'];
         }
-        // Longest-Path-Relaxation (Module sind azyklisch, Lifecycle garantiert).
+        // Longest-path relaxation (modules form an acyclic graph, guaranteed by the lifecycle).
         for ($i = 0, $c = count($keys); $i <= $c; $i++) {
             foreach ($reqsByMod as $m => $reqs) {
                 foreach ($reqs as $r) {
@@ -65,7 +65,7 @@ class ModulesController extends AdminController
             }
         }
 
-        // Positionen je Ebene.
+        // Positions per layer.
         $boxW = 170;
         $boxH = 46;
         $colGap = 90;

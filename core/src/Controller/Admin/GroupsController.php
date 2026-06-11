@@ -8,8 +8,8 @@ use App\Service\Permission\PermissionService;
 use Cake\Datasource\ConnectionManager;
 
 /**
- * Gruppenverwaltung inkl. Mitgliedschaft und BREAD-Ressourcenrechten
- * (Administrationsbereich „Benutzer- und Gruppenverwaltung").
+ * Group management including membership and BREAD resource permissions
+ * (administration area "User and Group Management").
  */
 class GroupsController extends AdminController
 {
@@ -74,7 +74,7 @@ class GroupsController extends AdminController
             . 'FROM group_resource_permissions WHERE group_id = :id ORDER BY module_key, resource_type, coalesce(resource_key, \'*\')',
             ['id' => $id],
         )->fetchAll('assoc');
-        // Nur gruppenfähige Ressourcen sind im Gruppen-Rechte-Editor vergebbar (Kap. 25.11).
+        // Only group-capable resources can be assigned in the group permission editor (ch. 25.11).
         $resources = $conn->execute(
             'SELECT module_key, resource_type, resource_name, is_scoped, extra_actions '
             . 'FROM resources WHERE group_capable = true ORDER BY module_key, resource_name',
@@ -91,8 +91,8 @@ class GroupsController extends AdminController
             return $this->notFound();
         }
         $active = $flag === 'on';
-        // PostgreSQL-Boolean: CakePHPs raw execute() bindet PHP-`false` als ''
-        // (→ "invalid input syntax for type boolean"); daher explizit 'true'/'false'.
+        // PostgreSQL boolean: CakePHP's raw execute() binds PHP `false` as ''
+        // (→ "invalid input syntax for type boolean"); hence explicit 'true'/'false'.
         ConnectionManager::get('default')->execute(
             'UPDATE "groups" SET active = :a, deactivated_at = CASE WHEN :a THEN NULL ELSE now() END WHERE id = :id',
             ['a' => $active ? 'true' : 'false', 'id' => $id],
@@ -151,7 +151,7 @@ class GroupsController extends AdminController
 
             return $this->redirect(['action' => 'view', $id]);
         }
-        // Objektklasse (leer) oder konkretes Einzelobjekt (Kap. 25.4 / 25.11).
+        // Object class (empty) or a concrete single object (ch. 25.4 / 25.11).
         $resourceKey = trim((string)($data['resource_key'] ?? '')) ?: null;
 
         $bread = [
@@ -161,7 +161,7 @@ class GroupsController extends AdminController
             'edit' => !empty($data['can_edit']),
             'delete' => !empty($data['can_delete']),
         ];
-        // Zusatzaktionen (Kap. 25.7): nur als true markierte übernehmen.
+        // Extra actions (ch. 25.7): only apply those marked as true.
         $extra = [];
         foreach ((array)($data['extra'] ?? []) as $name => $on) {
             if (!empty($on)) {
@@ -181,7 +181,7 @@ class GroupsController extends AdminController
         return $this->redirect(['action' => 'view', $id]);
     }
 
-    /** Fehlgeformte ID (UUID-Guard): wie unbekannte Gruppe behandeln. */
+    /** Malformed ID (UUID guard): treat like an unknown group. */
     private function notFound(): ?\Cake\Http\Response
     {
         $this->Flash->error(__('flash.group.not_found'));

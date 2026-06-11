@@ -13,10 +13,10 @@ use Cake\Console\ConsoleOptionParser;
 use Symfony\Component\Uid\Uuid;
 
 /**
- * Legt einen Volladministrator an (oder aktualisiert ihn) und weist ihm alle
- * Core-Administrationsbereiche zu. Macht den Core ohne weiteres Modul nutzbar.
+ * Creates a full administrator (or updates one) and assigns them every core
+ * administration area. Makes the core usable without any additional module.
  *
- * Beispiel:
+ * Example:
  *   bin/cake create_admin admin admin@example.com 'GeheimesPasswort1!'
  */
 class CreateAdminCommand extends Command
@@ -41,7 +41,7 @@ class CreateAdminCommand extends Command
         $email = (string)$args->getArgument('email');
         $password = (string)$args->getArgument('password');
 
-        // Passwort-Policy aus dem Konfigurationsspeicher (Step 4) durchsetzen.
+        // Enforce the password policy from the configuration store (Step 4).
         $policyErrors = (new PasswordPolicy())->validate($password);
         if ($policyErrors) {
             $io->error(implode(' ', $policyErrors));
@@ -82,8 +82,8 @@ class CreateAdminCommand extends Command
         $audit = new AuditLogger();
         $correlationId = Uuid::v7()->toRfc4122();
 
-        // Speichern, Bereiche zuweisen und Audit-Einträge in EINER Transaktion
-        // (transaktionaler Audit-Bezug, Kap. 1.8).
+        // Save, assign areas and write audit entries in ONE transaction
+        // (transactional audit linkage, ch. 1.8).
         $count = $connection->transactional(function () use (
             $users, $user, $connection, $audit, $correlationId, $isNew
         ) {
@@ -103,7 +103,7 @@ class CreateAdminCommand extends Command
                 ->fetchAll('assoc');
             $areaKeys = array_column($areaKeys, 'admin_area_key');
 
-            // Audit (E16: keine Klartext-PII; Benutzer per UUID referenziert).
+            // Audit (E16: no plaintext PII; the user is referenced by UUID).
             $audit->log(
                 $isNew ? 'user.create' : 'user.update',
                 'user',

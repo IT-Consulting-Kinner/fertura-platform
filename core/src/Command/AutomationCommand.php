@@ -11,7 +11,7 @@ use Cake\Console\ConsoleOptionParser;
 use Cake\Datasource\ConnectionManager;
 
 /**
- * Verwaltung der Automations-Regeln (Programm Tier-2, P12) auf der Konsole.
+ * Console management of automation rules (Programme Tier-2, P12).
  *
  *   bin/cake automation list
  *   bin/cake automation add --name X --event "core.notification.created" \

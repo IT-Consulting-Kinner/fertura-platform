@@ -8,21 +8,21 @@ use Cake\Database\Connection;
 use Cake\Datasource\ConnectionManager;
 
 /**
- * Anmeldeschutz: serverseitiges Rate-Limiting / temporäre Sperre bei wiederholt
- * fehlgeschlagenen Anmelde-/Token-Versuchen (Entscheidung 162 / Kap. 27.16.3).
+ * Login protection: server-side rate limiting / temporary lockout on repeated
+ * failed login/token attempts (Decision 162 / ch. 27.16.3).
  *
- * Sichere Vorgabewerte greifen auch ohne Konfiguration. Die Schwellenwerte
- * werden ab Step 4 (Konfigurationsspeicher) aus der DB überschreibbar.
+ * Safe defaults apply even without configuration. From Step 4 (configuration
+ * store) onward the thresholds become overridable from the DB.
  *
- * Persistenz: core.auth_failures (identifier, ip_address, occurred_at).
+ * Persistence: core.auth_failures (identifier, ip_address, occurred_at).
  */
 class LoginThrottle
 {
-    /** Sichere Defaults (Entscheidung 162). */
+    /** Safe defaults (Decision 162). */
     public const DEFAULT_MAX_ATTEMPTS = 10;
     public const DEFAULT_WINDOW_MINUTES = 15;
-    /** Per-IP-Obergrenze: höher als pro Benutzer (geteilte NAT/Office-IPs), aber
-     *  begrenzt Password-Spraying über viele Benutzernamen und die Pre-Auth-CPU. */
+    /** Per-IP cap: higher than per user (shared NAT/office IPs), but bounds
+     *  password spraying across many usernames and the pre-auth CPU cost. */
     public const DEFAULT_IP_MAX_ATTEMPTS = 30;
 
     private int $maxAttempts;
@@ -35,7 +35,7 @@ class LoginThrottle
         ?SettingsManager $settings = null,
         ?int $ipMaxAttempts = null,
     ) {
-        // Schwellen aus dem Konfigurationsspeicher (DB), Code-Konstanten als Netz.
+        // Thresholds from the configuration store (DB), code constants as a safety net.
         $settings ??= new SettingsManager();
         $this->maxAttempts = $maxAttempts
             ?? (int)$settings->get('core', 'login_throttle.max_attempts', self::DEFAULT_MAX_ATTEMPTS);
@@ -54,7 +54,7 @@ class LoginThrottle
     }
 
     /**
-     * Protokolliert einen fehlgeschlagenen Versuch.
+     * Records a failed attempt.
      */
     public function recordFailure(string $identifier, ?string $ip = null): void
     {
@@ -65,7 +65,7 @@ class LoginThrottle
     }
 
     /**
-     * Anzahl der Fehlversuche innerhalb des Zeitfensters.
+     * Number of failed attempts within the time window.
      */
     public function recentFailures(string $identifier): int
     {
@@ -79,7 +79,7 @@ class LoginThrottle
     }
 
     /**
-     * Ist die Kennung aktuell gesperrt (Schwellwert erreicht)?
+     * Is the identifier currently blocked (threshold reached)?
      */
     public function isBlocked(string $identifier): bool
     {
@@ -87,8 +87,8 @@ class LoginThrottle
     }
 
     /**
-     * Anzahl der Fehlversuche **dieser IP** (über beliebige Benutzernamen)
-     * innerhalb des Zeitfensters — fängt Password-Spraying ab.
+     * Number of failed attempts from **this IP** (across arbitrary usernames)
+     * within the time window — catches password spraying.
      */
     public function recentIpFailures(string $ip): int
     {
@@ -104,7 +104,7 @@ class LoginThrottle
         return (int)($row['c'] ?? 0);
     }
 
-    /** Ist die IP aktuell gesperrt (zu viele Fehlversuche über alle Konten)? */
+    /** Is the IP currently blocked (too many failed attempts across all accounts)? */
     public function isIpBlocked(string $ip): bool
     {
         return $ip !== '' && $this->recentIpFailures($ip) >= $this->ipMaxAttempts;
@@ -116,7 +116,7 @@ class LoginThrottle
     }
 
     /**
-     * Setzt den Zähler nach erfolgreicher Anmeldung zurück.
+     * Resets the counter after a successful login.
      */
     public function clear(string $identifier): void
     {

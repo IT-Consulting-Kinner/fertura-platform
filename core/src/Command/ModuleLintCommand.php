@@ -10,7 +10,7 @@ use Cake\Console\ConsoleIo;
 use Cake\Console\ConsoleOptionParser;
 
 /**
- * Prüft ein Modul-Manifest statisch (Programm Tier-3, P16).
+ * Statically checks a module manifest (Programme Tier-3, P16).
  *
  *   bin/cake module_lint ./mein_modul            # Verzeichnis
  *   bin/cake module_lint ./mein_modul/manifest.json

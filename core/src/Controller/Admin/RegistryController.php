@@ -6,10 +6,10 @@ namespace App\Controller\Admin;
 use Cake\Datasource\ConnectionManager;
 
 /**
- * Contract-Registry-Einsicht (Administrationsbereich „Registry / Contracts").
+ * Read-only view into the contract registry (admin area "Registry / Contracts").
  *
- * Lesend: Contracts, ihre Registrierungen und aktive Capability-Bindings.
- * Die Registrierung selbst erfolgt deklarativ über Modul-Manifeste.
+ * Read-only: contracts, their registrations, and active capability bindings.
+ * Registration itself happens declaratively via module manifests.
  */
 class RegistryController extends AdminController
 {
@@ -36,9 +36,9 @@ class RegistryController extends AdminController
     }
 
     /**
-     * Interface-Registry (Kap. 29.12): auf Service-Contracts gefilterte Sicht
-     * der Contract-Registry – pro angebotenem Interface inkl. aktiver Nutzerzahl,
-     * sowie eine Sicht je nutzendem Modul.
+     * Interface registry (ch. 29.12): a view of the contract registry filtered
+     * to service contracts – one row per offered interface including its active
+     * consumer count, plus a view per consuming module.
      */
     public function interfaces(): void
     {
@@ -53,7 +53,7 @@ class RegistryController extends AdminController
             . "FROM contracts c WHERE c.contract_type = 'service' ORDER BY c.name",
         )->fetchAll('assoc');
 
-        // Sicht je nutzendem Modul (Kap. 29.12.2): Status + Kompatibilität.
+        // View per consuming module (ch. 29.12.2): status + compatibility.
         $usages = $conn->execute(
             "SELECT r.module_key, r.module_version, c.name AS interface, c.version AS interface_version, "
             . "r.required_version, r.active, "

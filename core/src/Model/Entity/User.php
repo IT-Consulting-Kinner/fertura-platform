@@ -7,7 +7,7 @@ use Authentication\PasswordHasher\DefaultPasswordHasher;
 use Cake\ORM\Entity;
 
 /**
- * Benutzer (core.users).
+ * User (core.users).
  *
  * @property int $id
  * @property string $username
@@ -30,8 +30,8 @@ class User extends Entity
     public const STATUS_ANONYMIZED = 'anonymized';
 
     /**
-     * Massenzuweisbare Felder. password_hash und Status werden bewusst NICHT
-     * direkt massenzuweisbar gemacht; das Passwort laeuft ueber setPassword().
+     * Mass-assignable fields. password_hash and status are deliberately NOT
+     * made directly mass-assignable; the password goes through setPassword().
      *
      * @var array<string, bool>
      */
@@ -46,7 +46,7 @@ class User extends Entity
     ];
 
     /**
-     * Niemals serialisieren/ausgeben.
+     * Never serialize/output.
      *
      * @var list<string>
      */
@@ -55,8 +55,8 @@ class User extends Entity
     ];
 
     /**
-     * Setzt das Passwort als Argon2id-Hash (Entscheidung E13). Der Identifier
-     * verifiziert via Fallback auch bcrypt-Hashes (zukunftssicher bei Import).
+     * Sets the password as an Argon2id hash (Decision E13). The identifier also
+     * verifies bcrypt hashes via fallback (future-proof on import).
      */
     public function setPassword(string $plain): void
     {

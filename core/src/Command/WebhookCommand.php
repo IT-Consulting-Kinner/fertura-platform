@@ -10,7 +10,7 @@ use Cake\Console\ConsoleIo;
 use Cake\Console\ConsoleOptionParser;
 
 /**
- * Verwaltung der Outbound-Webhooks (Programm Tier-1, P05) auf der Konsole.
+ * Console management of outbound webhooks (Programme Tier-1, P05).
  *
  *   bin/cake webhook list
  *   bin/cake webhook add --name X --url https://… [--events core.user.created] [--secret s]

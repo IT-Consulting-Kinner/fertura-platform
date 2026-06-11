@@ -10,9 +10,9 @@ use Cake\Console\ConsoleIo;
 use Cake\Console\ConsoleOptionParser;
 
 /**
- * Prüft Migrationen auf zero-downtime-gefährdende Muster (Programm Tier-3, P15).
+ * Checks migrations for patterns that jeopardize zero downtime (Programme Tier-3, P15).
  *
- *   bin/cake migration_check          # Core-Migrationen prüfen (advisory)
+ *   bin/cake migration_check          # Check core migrations (advisory)
  */
 class MigrationCheckCommand extends Command
 {
@@ -37,7 +37,7 @@ class MigrationCheckCommand extends Command
         foreach ($findings as $f) {
             $io->out(sprintf('  %s:%d  [%s]  %s', $f['file'], $f['line'], $f['issue'], $f['hint']));
         }
-        // Advisory: kein Fehlercode (der Betreiber entscheidet bewusst).
+        // Advisory: no error code (the operator decides deliberately).
         return self::CODE_SUCCESS;
     }
 }

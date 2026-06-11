@@ -10,14 +10,14 @@ use Cake\Http\Response;
 use PDO;
 
 /**
- * Server-Sent-Events-Stream (Programm Tier-2, P08): liefert dem **angemeldeten
- * Benutzer** Echtzeit-Ereignisse (z. B. In-App-Benachrichtigungen) über seinen
- * `LISTEN/NOTIFY`-Kanal.
+ * Server-Sent-Events stream (program tier-2, P08): delivers real-time events
+ * (e.g. in-app notifications) to the **authenticated user** over their
+ * `LISTEN/NOTIFY` channel.
  *
- * Bewusst **zeitlich begrenzt** (≈30 s/Verbindung) mit Heartbeats: der Browser
- * (`EventSource`) verbindet automatisch neu. So hält die Verbindung keinen
- * FPM-Worker dauerhaft. Der Stream-Body läuft als `CallbackStream` bei der
- * Antwort-Ausgabe — also **außerhalb** der Request-Transaktion (TransactionRls).
+ * Deliberately **time-limited** (≈30 s/connection) with heartbeats: the browser
+ * (`EventSource`) reconnects automatically. This way the connection does not hold
+ * an FPM worker indefinitely. The stream body runs as a `CallbackStream` during
+ * response output — i.e. **outside** the request transaction (TransactionRls).
  */
 class SseController extends AppController
 {
@@ -37,9 +37,9 @@ class SseController extends AppController
             return $this->response->withStatus(401)->withType('text/plain')->withStringBody("unauthorized\n");
         }
 
-        // Begrenzung gleichzeitiger Streams je Benutzer (gegen FPM-/DB-Slot-
-        // Erschöpfung). Zähler im Cache; läuft bei Absturz über die TTL ab
-        // (Selbstheilung), wird sonst am Stream-Ende dekrementiert.
+        // Cap on concurrent streams per user (against FPM/DB slot exhaustion).
+        // Counter in the cache; on a crash it expires via the TTL (self-healing),
+        // otherwise it is decremented at the end of the stream.
         $cap = (int)(new \App\Service\Settings\SettingsManager())->get('core', 'sse.max_streams_per_user', 3);
         $cache = new \App\Service\Cache\CacheStore('_app_ratelimit_');
         $counterKey = 'sse:' . $userId;
@@ -84,7 +84,7 @@ class SseController extends AppController
                 if (is_array($note) && ($note['message'] ?? '') === $channel) {
                     $emit('data: ' . $note['payload'] . "\n\n");
                 } else {
-                    $emit(": ping\n\n"); // Heartbeat (hält Verbindung + erkennt Abbruch)
+                    $emit(": ping\n\n"); // Heartbeat (keeps the connection + detects abort)
                 }
             }
             } finally {
@@ -96,7 +96,7 @@ class SseController extends AppController
             ->withType('text/event-stream')
             ->withHeader('Cache-Control', 'no-cache, no-store')
             ->withHeader('Connection', 'keep-alive')
-            ->withHeader('X-Accel-Buffering', 'no') // nginx: nicht puffern
+            ->withHeader('X-Accel-Buffering', 'no') // nginx: do not buffer
             ->withBody($body);
     }
 }

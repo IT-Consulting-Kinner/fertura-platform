@@ -8,12 +8,12 @@ use App\Service\Webhook\WebhookService;
 use Cake\Datasource\ConnectionManager;
 
 /**
- * Admin-GUI „Integrationen & Automatisierung" im Bereich Core-Konfiguration:
- * Übersicht + Anlegen/Schalten/Löschen für **alle** Core-Integrationstypen
- * (Webhooks, SSO/OIDC+SAML, Automations-Regeln, Workflows) — volle CLI↔GUI-
- * Parität. Bedingungen/Aktionen/Übergänge werden (wie in der CLI) als validiertes
- * JSON entgegengenommen; ein komfortabler visueller Regel-Builder ist eine
- * spätere, ebenfalls Core-seitige Komfortstufe, keine Voraussetzung der Parität.
+ * Admin GUI "Integrations & Automation" within the core configuration area:
+ * overview + create/toggle/delete for **all** core integration types
+ * (webhooks, SSO/OIDC+SAML, automation rules, workflows) — full CLI↔GUI
+ * parity. Conditions/actions/transitions are accepted (as in the CLI) as
+ * validated JSON; a convenient visual rule builder is a later, likewise
+ * core-side convenience tier, not a prerequisite for parity.
  */
 class IntegrationsController extends AdminController
 {
@@ -33,7 +33,7 @@ class IntegrationsController extends AdminController
         )->fetchAll('assoc'));
     }
 
-    /** Legt ein Webhook-Abo an (Name, URL, Event-Filter, optionales HMAC-Secret). */
+    /** Creates a webhook subscription (name, URL, event filter, optional HMAC secret). */
     public function webhookCreate(): ?\Cake\Http\Response
     {
         $this->request->allowMethod('post');
@@ -56,7 +56,7 @@ class IntegrationsController extends AdminController
         return $this->redirect(['action' => 'index']);
     }
 
-    /** Legt einen SSO-Provider an (OIDC oder SAML); Secret wird verschlüsselt abgelegt. */
+    /** Creates an SSO provider (OIDC or SAML); the secret is stored encrypted. */
     public function ssoCreate(): ?\Cake\Http\Response
     {
         $this->request->allowMethod('post');
@@ -94,7 +94,7 @@ class IntegrationsController extends AdminController
                     return $this->redirect(['action' => 'index']);
                 }
                 $config = ['idp_entity_id' => $entityId, 'idp_sso_url' => $ssoUrl, 'idp_x509cert' => $cert];
-                $secret = null; // SP-Signierung (Privatschlüssel) bleibt CLI-Pfad
+                $secret = null; // SP signing (private key) stays on the CLI path
             }
             (new SsoService())->createProvider($type, $name, $config, $secret, $label);
             $this->Flash->success(__('flash.integrations.sso_created'));
@@ -105,7 +105,7 @@ class IntegrationsController extends AdminController
         return $this->redirect(['action' => 'index']);
     }
 
-    /** Legt eine Automations-Regel an (Name/Event + JSON-Bedingung/-Aktionen, wie CLI). */
+    /** Creates an automation rule (name/event + JSON condition/actions, as in the CLI). */
     public function automationCreate(): ?\Cake\Http\Response
     {
         $this->request->allowMethod('post');
@@ -118,7 +118,7 @@ class IntegrationsController extends AdminController
 
             return $this->redirect(['action' => 'index']);
         }
-        // Gleiche JSON-Validierung wie die CLI: Bedingung = Objekt, Aktionen = Array.
+        // Same JSON validation as the CLI: condition = object, actions = array.
         if (!is_array(json_decode($condition, true))) {
             $this->Flash->error(__('flash.integrations.bad_json', 'condition'));
 
@@ -139,7 +139,7 @@ class IntegrationsController extends AdminController
         return $this->redirect(['action' => 'index']);
     }
 
-    /** Legt eine Workflow-Definition an (Name/Entity/Startzustand + JSON-Übergänge, wie CLI). */
+    /** Creates a workflow definition (name/entity/initial state + JSON transitions, as in the CLI). */
     public function workflowCreate(): ?\Cake\Http\Response
     {
         $this->request->allowMethod('post');
@@ -259,9 +259,9 @@ class IntegrationsController extends AdminController
     }
 
     /**
-     * Gemeinsamer Eingangs-Check aller ID-Aktionen: nur POST, und fehlgeformte
-     * IDs (UUID-Guard) wie unbekannte Einträge behandeln. Liefert die
-     * Redirect-Response oder null (Aktion darf weiterlaufen).
+     * Shared entry check for all ID actions: POST only, and treat malformed
+     * IDs (UUID guard) like unknown entries. Returns the redirect response
+     * or null (the action may proceed).
      */
     private function guardId(string $id): ?\Cake\Http\Response
     {

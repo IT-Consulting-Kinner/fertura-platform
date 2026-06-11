@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace App\Controller\Api\V1;
 
 /**
- * GET /api/v1/me — Identität + Scopes des aktuellen Tokens (Scope `me:read`).
+ * GET /api/v1/me — identity and scopes of the current token (scope `me:read`).
  */
 class MeController extends ApiController
 {

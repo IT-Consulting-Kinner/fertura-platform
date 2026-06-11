@@ -15,10 +15,10 @@ use Cake\Console\ConsoleIo;
 use Cake\Datasource\ConnectionManager;
 
 /**
- * Integrationstest des Outbox-Workers (Step 6): registriert Event-Contracts +
- * ladbare Demo-Listener, publiziert Events und wartet auf den LAUFENDEN
- * worker-Container (realistische End-to-End-Prüfung). Verifiziert Erfolg,
- * Retry→Dead-Letter und Listener-Isolation; räumt anschließend auf.
+ * Integration test of the outbox worker (Step 6): registers event contracts +
+ * loadable demo listeners, publishes events and waits for the RUNNING
+ * worker container (a realistic end-to-end check). Verifies success,
+ * retry -> dead-letter and listener isolation; cleans up afterwards.
  */
 class OutboxSelftestCommand extends Command
 {
@@ -50,7 +50,7 @@ class OutboxSelftestCommand extends Command
         $registry->register('modR2', 'selftest6.event.mixed', ContractRegistration::TYPE_LISTENER, ['implementationClass' => $rec, 'priority' => 10]);
         $registry->register('modF2', 'selftest6.event.mixed', ContractRegistration::TYPE_LISTENER, ['implementationClass' => $fail, 'priority' => 5]);
 
-        // fail/mixed mit max_attempts=2 für schnellen Dead-Letter.
+        // fail/mixed use max_attempts=2 for a fast dead-letter.
         $publisher->publish('selftest6.event.ok', ['x' => 1]);
         $publisher->publish('selftest6.event.fail', ['x' => 2], ['maxAttempts' => 2]);
         $publisher->publish('selftest6.event.mixed', ['x' => 3], ['maxAttempts' => 2]);

@@ -4,10 +4,10 @@ declare(strict_types=1);
 namespace App\Log;
 
 /**
- * Prozessweiter Log-Kontext (Kap. 20.2.3): hält operative Felder
- * (`correlation_id`, `request_id`, `component`, `module`), die der
- * `ContextJsonFormatter` automatisch in **jede** Logzeile einmischt — ohne dass
- * sie am Aufrufort mitgegeben werden müssen.
+ * Process-wide log context (ch. 20.2.3): holds operative fields
+ * (`correlation_id`, `request_id`, `component`, `module`) that the
+ * `ContextJsonFormatter` automatically merges into **every** log line — without
+ * them having to be supplied at the call site.
  */
 class LogContext
 {

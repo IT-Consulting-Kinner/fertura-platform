@@ -49,7 +49,7 @@ use Psr\Http\Message\ServerRequestInterface;
  */
 class Application extends BaseApplication implements AuthenticationServiceProviderInterface
 {
-    /** Aktuelle Core-Version (SemVer) für Modul-Kompatibilitätsprüfungen. */
+    /** Current core version (SemVer), used for module compatibility checks. */
     public const CORE_VERSION = '1.0.0';
 
     /**
@@ -65,25 +65,25 @@ class Application extends BaseApplication implements AuthenticationServiceProvid
         // By default, does not allow fallback classes.
         FactoryLocator::add('Table', (new TableLocator())->allowFallbackClass(false));
 
-        // Lokale Authentifizierung (Resolver-Default, Entscheidung 171).
+        // Local authentication (the resolver default, Decision 171).
         $this->addPlugin('Authentication');
 
-        // Aktive Module zur Laufzeit autoloaden (Step 7, fehlertolerant).
+        // Autoload active modules at runtime (Step 7, fault-tolerant).
         ModuleAutoloader::registerActiveModules();
 
-        // i18n (E37/E39): fehlende Schlüssel fallen auf Englisch zurück. CakePHPs
-        // eingebauter Fallback ist nur Domain-, kein Locale-Fallback -> eigener
-        // Merge-Loader (Englisch als Basis) für die Core-Domain `default`.
-        // Modul-Domains werden in i18n-4 analog registriert.
+        // i18n (E37/E39): missing keys fall back to English. CakePHP's built-in
+        // fallback is domain-only, not locale-fallback -> our own merge loader
+        // (English as the base) for the core `default` domain.
+        // Module domains are registered analogously in i18n-4.
         \Cake\I18n\I18n::useFallback(true);
         \App\I18n\EnglishFallbackLoader::register('default');
-        // Modul-/Extension-Domains aus dem Managed Locale Store (i18n-4),
-        // fehlertolerant.
+        // Module/extension domains from the Managed Locale Store (i18n-4),
+        // fault-tolerant.
         \App\I18n\StoreLocaleLoader::registerActiveModules();
 
-        // Session-Timeout aus der DB-Konfiguration anwenden (Kap. 27.16 /
-        // setting core.session.timeout_minutes). Fehlertolerant: greift erst,
-        // wenn die DB verfügbar ist (sonst CakePHP-Default).
+        // Apply the session timeout from the DB configuration (ch. 27.16 /
+        // setting core.session.timeout_minutes). Fault-tolerant: only takes
+        // effect once the DB is available (otherwise the CakePHP default).
         try {
             $minutes = (int)(new \App\Service\Settings\SettingsManager())
                 ->get('core', 'session.timeout_minutes', 120);
@@ -91,7 +91,7 @@ class Application extends BaseApplication implements AuthenticationServiceProvid
                 \Cake\Core\Configure::write('Session.timeout', $minutes);
             }
         } catch (\Throwable) {
-            // DB (noch) nicht verfügbar -> Framework-Default belassen.
+            // DB not (yet) available -> keep the framework default.
         }
     }
 
@@ -104,14 +104,14 @@ class Application extends BaseApplication implements AuthenticationServiceProvid
     public function middleware(MiddlewareQueue $middlewareQueue): MiddlewareQueue
     {
         $middlewareQueue
-            // Log-Kontext (Kap. 20.2.3): correlation_id/request_id/component für
-            // jede Logzeile. Outermost, damit auch ErrorHandler-Logs ihn tragen.
+            // Log context (ch. 20.2.3): correlation_id/request_id/component for
+            // every log line. Outermost, so ErrorHandler logs carry it too.
             ->add(new \App\Middleware\LogContextMiddleware())
 
-            // Security-Header (CSP/nosniff/Frame/Referrer/HSTS) auf JEDER
-            // Antwort — ÜBER dem ErrorHandler: eine Exception fliegt durch diese
-            // Middleware nach oben, erst der zurückkommende (Fehler-)Response
-            // bekommt die Header. Läge sie darunter, blieben Fehlerseiten nackt.
+            // Security headers (CSP/nosniff/Frame/Referrer/HSTS) on EVERY
+            // response — ABOVE the ErrorHandler: an exception travels up through
+            // this middleware, and only the returning (error) response gets the
+            // headers. If it sat below, error pages would be left bare.
             ->add(new \App\Middleware\SecurityHeadersMiddleware())
 
             // Catch any exceptions in the lower layers,
@@ -123,7 +123,7 @@ class Application extends BaseApplication implements AuthenticationServiceProvid
             // the incoming Host header against it.
             ->add(new HostHeaderMiddleware())
 
-            // Wartungsmodus (Step 8): 503, wenn core.maintenance_mode aktiv.
+            // Maintenance mode (Step 8): 503 when core.maintenance_mode is active.
             ->add(new MaintenanceMiddleware())
 
             // Handle plugin/theme assets like CakePHP normally does.
@@ -146,72 +146,72 @@ class Application extends BaseApplication implements AuthenticationServiceProvid
             // https://book.cakephp.org/5/en/security/csrf.html#cross-site-request-forgery-csrf-middleware
             ->add((new CsrfProtectionMiddleware([
                 'httponly' => true,
-                // Defense-in-Depth für das CSRF-Cookie: SameSite=Lax und — sofern
-                // TLS terminiert wird (SESSION_COOKIE_SECURE/HTTPS) — das Secure-Flag.
-                // Lokaler HTTP-Dev-Betrieb bleibt nutzbar (Default false).
+                // Defense-in-depth for the CSRF cookie: SameSite=Lax and — when
+                // TLS is terminated (SESSION_COOKIE_SECURE/HTTPS) — the Secure flag.
+                // Local HTTP dev usage stays functional (default false).
                 'samesite' => 'Lax',
                 'secure' => filter_var(env('SESSION_COOKIE_SECURE', false), FILTER_VALIDATE_BOOL),
             ]))->skipCheckCallback(static function (ServerRequestInterface $request): bool {
                 $path = $request->getUri()->getPath();
 
-                // Externe API nutzt Bearer-Token statt CSRF (Kap. 29).
-                // SAML-ACS ist ein vom IdP gepostetes Formular (kein CSRF-Token);
-                // die Echtheit garantiert die signierte SAML-Assertion (P06).
+                // The external API uses Bearer tokens instead of CSRF (ch. 29).
+                // SAML ACS is a form posted by the IdP (no CSRF token); its
+                // authenticity is guaranteed by the signed SAML assertion (P06).
                 return str_starts_with($path, '/api/') || $path === '/sso/saml/acs';
             }))
 
-            // Per-IP-Anmeldeschutz VOR der Authentifizierung (P-Review #2): eine
-            // IP mit zu vielen Fehlversuchen (Password-Spraying) wird mit 429
-            // abgewiesen, bevor ein Passwort gehasht wird. Nach BodyParser/CSRF,
-            // vor der AuthenticationMiddleware.
+            // Per-IP login protection BEFORE authentication (P-Review #2): an
+            // IP with too many failed attempts (password spraying) is rejected
+            // with 429 before any password is hashed. After BodyParser/CSRF,
+            // before the AuthenticationMiddleware.
             ->add(new \App\Middleware\LoginThrottleMiddleware())
 
-            // Authentifizierung: stellt die Identitaet pro Request bereit.
-            // Erzwingt selbst keinen Login; Controller/Adminbereich entscheiden.
+            // Authentication: provides the identity per request.
+            // Does not enforce a login itself; controllers/admin area decide.
             ->add(new AuthenticationMiddleware($this))
 
-            // Session-Anomalie-Erkennung (UA-Bindung, IP-Wechsel, neues Gerät) —
-            // direkt nach der Authentifizierung (braucht die Identity).
+            // Session anomaly detection (UA binding, IP change, new device) —
+            // immediately after authentication (needs the identity).
             ->add(new \App\Middleware\SessionGuardMiddleware())
 
-            // Externe API: Bearer-Token-Authentifizierung (nur /api/-Pfade);
-            // setzt Identitaet + Scopes, sonst JSON 401. Nach der Session-Auth,
-            // damit die Token-Identitaet fuer API-Requests Vorrang hat. Nur
-            // geladen, wenn die externe API aktiv ist (FEATURE_API); sonst
-            // No-op (leeres Array wird nicht eingereiht).
+            // External API: Bearer-token authentication (only /api/ paths);
+            // sets identity + scopes, otherwise JSON 401. After the session auth,
+            // so the token identity takes precedence for API requests. Only
+            // loaded when the external API is active (FEATURE_API); otherwise a
+            // no-op (an empty array is not enqueued).
             ->add(\App\Service\System\FeatureFlags::enabled('api')
                 ? new \App\Middleware\ApiAuthMiddleware()
                 : [])
 
-            // API-Rate-Limiting (P07): nach der Token-Auth, damit pro Token
-            // begrenzt werden kann (sonst pro IP). Nur bei aktiver API.
+            // API rate limiting (P07): after the token auth, so limiting can be
+            // per token (otherwise per IP). Only when the API is active.
             ->add(\App\Service\System\FeatureFlags::enabled('api')
                 ? new \App\Middleware\ApiRateLimitMiddleware()
                 : [])
 
-            // Anzeigesprache pro Request setzen (i18n, E37) – nach der
-            // AuthenticationMiddleware, damit user.locale verfuegbar ist.
+            // Set the display language per request (i18n, E37) – after the
+            // AuthenticationMiddleware, so user.locale is available.
             ->add(new \App\Middleware\LocaleMiddleware())
 
-            // Footprint: uebernimmt die Identitaet in den ActorContext fuer
-            // created_by/updated_by (muss NACH der AuthenticationMiddleware laufen).
+            // Footprint: carries the identity into the ActorContext for
+            // created_by/updated_by (must run AFTER the AuthenticationMiddleware).
             ->add(new FootprintMiddleware())
 
-            // RLS: Request in Transaktion huellen + Zugriffskontext via SET LOCAL
-            // (Step 9, Entscheidung 175). Nach der AuthenticationMiddleware.
+            // RLS: wrap the request in a transaction + set the access context via
+            // SET LOCAL (Step 9, Decision 175). After the AuthenticationMiddleware.
             ->add(new TransactionRlsMiddleware());
 
         return $middlewareQueue;
     }
 
     /**
-     * Authentifizierungsdienst über den austauschbaren Provider-Resolver-Slot
-     * (Kap. 27.2.2). Der aktive Provider für `core.auth.provider` konfiguriert
-     * den Dienst; ohne aktiven (oder bei defektem) Provider greift der lokale
-     * Default — die Plattform bleibt immer anmeldbar (Break-Glass).
+     * Authentication service via the pluggable provider-resolver slot
+     * (ch. 27.2.2). The active provider for `core.auth.provider` configures the
+     * service; with no active (or a broken) provider the local default applies —
+     * the platform always stays loginable (break-glass).
      *
-     * Identitäten bleiben Core-verwaltet; ein externer Provider (SSO/AD)
-     * authentifiziert nur (JIT-Provisioning). Autorisierung bleibt unabhängig.
+     * Identities remain core-managed; an external provider (SSO/AD) only
+     * authenticates (JIT provisioning). Authorization stays independent.
      *
      * @param \Psr\Http\Message\ServerRequestInterface $request Request.
      * @return \Authentication\AuthenticationServiceInterface

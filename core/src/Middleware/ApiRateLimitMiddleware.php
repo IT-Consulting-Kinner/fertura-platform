@@ -12,13 +12,13 @@ use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 
 /**
- * Rate-Limiting für die externe API (Programm Tier-1, P07).
+ * Rate limiting for the external API (Program Tier-1, P07).
  *
- * Fixed-Window pro Minute, je **API-Token** (bzw. Client-IP, wenn unauthentifiziert)
- * über den Cache (P02; Redis empfohlen für atomare INCR im Mehrinstanzbetrieb).
- * Antwortet mit `429` + `Retry-After` bei Überschreitung und setzt auf jeder
- * Antwort `X-RateLimit-Limit/-Remaining/-Reset`. Cache nicht verfügbar →
- * fail-open (Verfügbarkeit vor strikter Grenze).
+ * Fixed window per minute, keyed per **API token** (or client IP when
+ * unauthenticated) via the cache (P02; Redis recommended for atomic INCR in
+ * multi-instance deployments). Responds with `429` + `Retry-After` when the limit
+ * is exceeded and sets `X-RateLimit-Limit/-Remaining/-Reset` on every response.
+ * Cache unavailable → fail-open (availability over strict enforcement).
  */
 class ApiRateLimitMiddleware implements MiddlewareInterface
 {

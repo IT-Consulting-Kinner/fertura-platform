@@ -7,11 +7,11 @@ use App\Service\Notification\NotificationService;
 use Cake\Http\Response;
 
 /**
- * Externe API für Benachrichtigungen des Token-Inhabers (P09, Scope `me:read`).
+ * External API for the token holder's notifications (P09, scope `me:read`).
  *
- *   GET  /api/v1/notifications            -> ungelesene Benachrichtigungen
- *   POST /api/v1/notifications/{id}/read  -> als gelesen markieren
- *   POST /api/v1/notifications/read-all   -> alle als gelesen markieren
+ *   GET  /api/v1/notifications            -> unread notifications
+ *   POST /api/v1/notifications/{id}/read  -> mark as read
+ *   POST /api/v1/notifications/read-all   -> mark all as read
  */
 class NotificationsController extends ApiController
 {

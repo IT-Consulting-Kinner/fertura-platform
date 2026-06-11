@@ -10,16 +10,16 @@ use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 
 /**
- * Setzt sicherheitsrelevante Antwort-Header auf JEDER Antwort (inkl. Fehler-
- * seiten): CSP, X-Frame-Options, nosniff, Referrer-Policy, Permissions-Policy
- * und — nur über TLS — HSTS.
+ * Sets security-relevant response headers on EVERY response (including error
+ * pages): CSP, X-Frame-Options, nosniff, Referrer-Policy, Permissions-Policy
+ * and — only over TLS — HSTS.
  *
- * Die Default-CSP passt zur SSR-Oberfläche: Assets ausschließlich self-hosted
- * (kein CDN), Inline-Skripte/-Styles werden von UI-Kit/Bootstrap-Markup genutzt
- * (`unsafe-inline`), Framing ist komplett verboten. Betreiber können die Policy
- * über `core.security.csp` ersetzen oder die Header per
- * `core.security.headers.enabled` abschalten (z. B. wenn ein Proxy sie setzt);
- * bereits gesetzte Header werden nie überschrieben.
+ * The default CSP fits the SSR frontend: assets are exclusively self-hosted
+ * (no CDN), inline scripts/styles are used by UI-Kit/Bootstrap markup
+ * (`unsafe-inline`), and framing is entirely forbidden. Operators can replace the
+ * policy via `core.security.csp` or disable the headers via
+ * `core.security.headers.enabled` (e.g. when a proxy sets them); already-set
+ * headers are never overwritten.
  */
 class SecurityHeadersMiddleware implements MiddlewareInterface
 {
@@ -42,11 +42,11 @@ class SecurityHeadersMiddleware implements MiddlewareInterface
             'X-Frame-Options' => 'DENY',
             'X-Content-Type-Options' => 'nosniff',
             'Referrer-Policy' => 'strict-origin-when-cross-origin',
-            // Sensible Browser-Features, die die Oberfläche nicht nutzt.
+            // Sensitive browser features that the frontend does not use.
             'Permissions-Policy' => 'camera=(), microphone=(), geolocation=()',
         ];
-        // HSTS nur über TLS senden (sonst wirkungslos bzw. bei Fehlkonfiguration
-        // schädlich); hinter einem TLS-terminierenden Proxy zählt X-Forwarded-Proto.
+        // Send HSTS only over TLS (otherwise ineffective, or harmful if
+        // misconfigured); behind a TLS-terminating proxy X-Forwarded-Proto counts.
         $https = $request->getUri()->getScheme() === 'https'
             || strtolower((string)($request->getServerParams()['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https';
         if ($https && $hstsMaxAge > 0) {
@@ -71,8 +71,8 @@ class SecurityHeadersMiddleware implements MiddlewareInterface
             $csp = trim((string)($settings->get('core', 'security.csp', '') ?? ''));
             $hsts = (int)$settings->get('core', 'security.hsts_max_age', 31536000);
         } catch (\Throwable) {
-            // Fail-safe: ohne erreichbare Settings (Bootstrap/Migration) gelten
-            // die sicheren Defaults — Header lieber setzen als weglassen.
+            // Fail-safe: without reachable settings (bootstrap/migration) the
+            // secure defaults apply — better to set the headers than to omit them.
             [$enabled, $csp, $hsts] = [true, '', 31536000];
         }
 

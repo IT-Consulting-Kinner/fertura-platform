@@ -13,14 +13,14 @@ use Migrations\Migrations;
 use Throwable;
 
 /**
- * Migrationen mit verpflichtendem Wiederherstellungspunkt (Kap. 28.14.2).
+ * Migrations with a mandatory recovery point (ch. 28.14.2).
  *
- * Wird beim Container-Start aufgerufen (Entrypoint): **nur wenn Migrationen
- * ausstehen**, wird zuerst ein Wiederherstellungspunkt (pg_dump) erzeugt, dann
- * migriert. So ist der „vorher"-Stand garantiert vorhanden, ohne dass der
- * Betreiber daran denken muss — und ohne bei jedem Neustart ohne Schemaänderung
- * unnötig zu dumpen. Scheitert der Wiederherstellungspunkt, wird **nicht**
- * migriert (Schema bleibt konsistent zum letzten gesicherten Stand).
+ * Invoked on container start (entrypoint): **only when migrations are
+ * pending** is a recovery point (pg_dump) created first, then the migrations
+ * run. This guarantees the "before" state exists without the operator having
+ * to remember it — and without dumping needlessly on every restart that
+ * carries no schema change. If the recovery point fails, the migrations do
+ * **not** run (the schema stays consistent with the last secured state).
  */
 class CoreMigrateCommand extends Command
 {
@@ -46,7 +46,7 @@ class CoreMigrateCommand extends Command
                 }
             }
         } catch (Throwable $e) {
-            // z. B. allererster Boot ohne Tracking-Tabelle -> als ausstehend behandeln.
+            // e.g. very first boot without a tracking table -> treat as pending.
             $io->info('Migrationsstatus nicht lesbar, nehme ausstehende an: ' . $e->getMessage());
             $pending = 1;
         }
@@ -73,9 +73,9 @@ class CoreMigrateCommand extends Command
 
         try {
             $migrations->migrate();
-            // ORM-Metadaten-Cache leeren: ein gecachtes Tabellenschema würde neue
-            // Spalten in der ORM-Schicht ignorieren (z. B. INSERTs ohne die neue
-            // Spalte) — bis der Cache abläuft. Nach Migrationen also invalidieren.
+            // Clear the ORM metadata cache: a cached table schema would ignore
+            // new columns in the ORM layer (e.g. INSERTs without the new column)
+            // until the cache expires. So invalidate it after migrations.
             foreach (['_cake_model_', '_cake_translations_'] as $cfg) {
                 try {
                     \Cake\Cache\Cache::clear($cfg);

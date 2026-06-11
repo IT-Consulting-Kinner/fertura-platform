@@ -9,15 +9,15 @@ use Cake\Log\Log;
 use Symfony\Component\Uid\Uuid;
 
 /**
- * Zentraler Schreib-Service für das Audit-Log (Kap. 1.6 / 24.16 / 27.18).
+ * Central write service for the audit log (ch. 1.6 / 24.16 / 27.18).
  *
- * Schreibt über die Default-Connection und damit innerhalb der laufenden
- * Transaktion der fachlichen Änderung (transaktionaler Bezug, Kap. 1.8).
+ * Writes via the default connection and therefore within the running
+ * transaction of the business change (transactional binding, ch. 1.8).
  *
- * Designregel E16: keine personenbezogenen Klartextdaten ins Log. Personen
- * werden per auflösbarer UUID (actor_user_id, ggf. entity_id) referenziert;
- * textuelle Schnappschüsse (entity_label, module_*) nur für nicht-
- * personenbezogene Entitäten (Module/Config) zwecks Referenzrobustheit.
+ * Design rule E16: no personal plaintext data in the log. People are
+ * referenced by a resolvable UUID (actor_user_id, and entity_id where
+ * applicable); textual snapshots (entity_label, module_*) are kept only for
+ * non-personal entities (modules/config) for reference robustness.
  *
  * @param array{
  *     actorUserId?: ?string, entityLabel?: ?string, oldValue?: mixed,
@@ -69,12 +69,12 @@ class AuditLogger
     }
 
     /**
-     * Spiegelt das Ereignis (Punkt 3a) auf den dedizierten `audit`-Log-Kanal —
-     * den der Betreiber per Log-Shipper an ein beliebiges SIEM ausleitet (kein
-     * vendorspezifischer Konnektor im Core). **PII-arm** (E16): Akteur/Entität
-     * per UUID/Bezeichner, **keine** old/new-Wert-Snapshots im Strom — die
-     * bleiben in der DB und sind nur über den autorisierten Export abrufbar.
-     * Fehlerisoliert: ein Log-Problem darf die fachliche Aktion nie scheitern lassen.
+     * Mirrors the event (item 3a) to the dedicated `audit` log channel — which
+     * the operator forwards via a log shipper to any SIEM (no vendor-specific
+     * connector in the core). **Low-PII** (E16): actor/entity by UUID/identifier,
+     * **no** old/new value snapshots in the stream — those stay in the DB and are
+     * only retrievable via the authorized export.
+     * Failure-isolated: a logging problem must never cause the business action to fail.
      *
      * @param array<string,mixed> $options
      */
@@ -101,7 +101,7 @@ class AuditLogger
                 ],
             ]);
         } catch (\Throwable) {
-            // Strom ist Spiegel zur Detektion; die DB bleibt die Quelle der Wahrheit.
+            // The stream is a mirror for detection; the DB remains the source of truth.
         }
     }
 }

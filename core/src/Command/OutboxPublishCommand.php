@@ -10,8 +10,8 @@ use Cake\Console\ConsoleIo;
 use Cake\Console\ConsoleOptionParser;
 
 /**
- * Publiziert ein Event in den Outbox (Admin-/Testhilfe; Module nutzen den
- * OutboxPublisher direkt innerhalb ihrer Transaktion).
+ * Publishes an event into the outbox (admin/test helper; modules use the
+ * OutboxPublisher directly within their own transaction).
  *
  *   bin/cake outbox_publish core.event.ping '{"foo":1}'
  */

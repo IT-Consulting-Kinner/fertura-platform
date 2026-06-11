@@ -10,12 +10,12 @@ use Cake\I18n\I18n;
 use Cake\View\Cell;
 
 /**
- * Sprachumschalter (i18n-7, E37/E44).
+ * Language switcher (i18n-7, E37/E44).
  *
- * Zeigt die wählbaren Sprachen (aktiviert ∩ vom Core nutzbar). Wechsel via
- * `?lang=…` (Session-Override, greift überall, auch öffentlich/Login). Für
- * angemeldete Nutzer wird die Wahl zusätzlich persistent als `user.locale`
- * gespeichert (POST auf `/locale/set`), wenn `persist=true`.
+ * Shows the selectable languages (enabled ∩ usable by the core). Switching via
+ * `?lang=…` (session override, takes effect everywhere, including public/login).
+ * For logged-in users the choice is additionally persisted as `user.locale`
+ * (POST to `/locale/set`) when `persist=true`.
  */
 class LocaleSwitcherCell extends Cell
 {

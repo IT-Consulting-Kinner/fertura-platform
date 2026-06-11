@@ -13,18 +13,17 @@ use Cake\Datasource\ConnectionManager;
 use Throwable;
 
 /**
- * Verwaltung verschlüsselter Settings — insbesondere Schlüsselrotation
- * (Re-Encryption, Entscheidung 164).
+ * Management of encrypted settings — in particular key rotation
+ * (re-encryption, Decision 164).
  *
- *   bin/cake secret rotate --old <altes-Schlüsselmaterial> [--new <neues>] [--dry-run]
+ *   bin/cake secret rotate --old <old-key-material> [--new <new>] [--dry-run]
  *
- * Betriebsablauf: Neues Schlüsselmaterial in der Infrastruktur (env
- * SECURITY_ENCRYPTION_KEY) hinterlegen, dann `secret rotate --old <alt>`
- * ausführen. Ohne --new wird gegen das aktuell konfigurierte
- * Security.encryptionKey re-verschlüsselt. Alle is_secret-Settings werden mit
- * dem alten Schlüssel entschlüsselt und mit dem neuen verschlüsselt; danach wird
- * geprüft, dass jedes Geheimnis mit dem neuen Schlüssel entschlüsselbar ist.
- * Alles in einer Transaktion.
+ * Operational flow: deploy the new key material in the infrastructure (env
+ * SECURITY_ENCRYPTION_KEY), then run `secret rotate --old <old>`. Without --new
+ * it re-encrypts against the currently configured Security.encryptionKey. Every
+ * is_secret setting is decrypted with the old key and encrypted with the new
+ * one; afterwards it is verified that each secret is decryptable with the new
+ * key. All within a single transaction.
  */
 class SecretCommand extends Command
 {
@@ -86,7 +85,7 @@ class SecretCommand extends Command
 
         $io->out(sprintf('%d verschlüsselte Setting(s) gefunden.%s', count($rows), $dryRun ? ' [DRY-RUN]' : ''));
 
-        // 1. Vorab: alle mit dem ALTEN Schlüssel entschlüsselbar?
+        // 1. Up front: are all of them decryptable with the OLD key?
         $reencrypted = [];
         foreach ($rows as $r) {
             $label = $r['namespace'] . '.' . $r['config_key'];
@@ -109,7 +108,7 @@ class SecretCommand extends Command
             return static::CODE_SUCCESS;
         }
 
-        // 2. Transaktional schreiben.
+        // 2. Write transactionally.
         $conn->transactional(function () use ($conn, $reencrypted): void {
             foreach ($reencrypted as $id => $info) {
                 $conn->execute(
@@ -119,7 +118,7 @@ class SecretCommand extends Command
             }
         });
 
-        // 3. Verify: alles mit dem NEUEN Schlüssel entschlüsselbar?
+        // 3. Verify: is everything decryptable with the NEW key?
         $verifyRows = $conn->execute(
             'SELECT namespace, config_key, value_encrypted FROM settings '
             . 'WHERE is_secret = true AND value_encrypted IS NOT NULL',

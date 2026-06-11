@@ -7,10 +7,10 @@ use App\Service\Health\HealthService;
 use App\Service\Health\WorkerHeartbeat;
 
 /**
- * Admin-Statusfläche (Kap. 20.2.4 / 20.3): Betriebszustand auf einen Blick —
- * Subsystem-Health, Modul-Lifecycle, Registry, Outbox/Dead-Letter, Lizenzen
- * und Worker-Aktualität. Für jeden Administrator zugänglich (kein fester
- * Administrationsbereich), da rein lesende Betriebsübersicht.
+ * Admin status dashboard (ch. 20.2.4 / 20.3): operational state at a glance —
+ * subsystem health, module lifecycle, registry, outbox/dead-letter, licenses
+ * and worker freshness. Accessible to any administrator (no fixed
+ * administration area), as it is a purely read-only operations overview.
  */
 class HealthController extends AdminController
 {

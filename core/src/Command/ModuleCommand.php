@@ -12,10 +12,10 @@ use Cake\Console\ConsoleIo;
 use Cake\Console\ConsoleOptionParser;
 
 /**
- * Modul-Lifecycle-Verwaltung.
+ * Module lifecycle management.
  *
  *   bin/cake module list
- *   bin/cake module install /pfad/zum/modul [--isolation out_of_process]
+ *   bin/cake module install /path/to/module [--isolation out_of_process]
  *   bin/cake module activate <key>
  *   bin/cake module deactivate <key>
  *   bin/cake module delete <key>

@@ -10,12 +10,12 @@ use Cake\Event\EventInterface;
 use Cake\Http\Response;
 
 /**
- * Prometheus-Metrik-Endpoint (Programm Tier-3, P04).
+ * Prometheus metrics endpoint (program tier-3, P04).
  *
- * GET /metrics -> Prometheus-Textformat. Geschützt wie der Health-Detailpfad:
- * angemeldete Session ODER gültiges Health-Token (`core.health_token` via Header
- * `X-Health-Token` oder Query `?token=`) — damit externes Monitoring/Prometheus
- * ohne Login scrapen kann, ohne den Zustand unautorisiert offenzulegen.
+ * GET /metrics -> Prometheus text format. Protected like the health detail path:
+ * authenticated session OR valid health token (`core.health_token` via header
+ * `X-Health-Token` or query `?token=`) — so that external monitoring/Prometheus
+ * can scrape without a login, without exposing the state in an unauthorized way.
  */
 class MetricsController extends AppController
 {

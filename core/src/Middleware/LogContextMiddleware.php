@@ -12,11 +12,11 @@ use Psr\Http\Server\RequestHandlerInterface;
 use Symfony\Component\Uid\Uuid;
 
 /**
- * Befüllt den prozessweiten {@see LogContext} pro Request (Kap. 20.2.3):
- * `correlation_id` (aus `X-Correlation-Id` übernommen oder neu), `request_id`,
- * `component=core` sowie den W3C-Trace (`trace_id`/`span_id`, aus `traceparent`
- * fortgeführt oder neu). Outermost platziert, damit auch von der
- * ErrorHandler-Middleware geloggte Ausnahmen den Kontext tragen.
+ * Populates the process-wide {@see LogContext} per request (ch. 20.2.3):
+ * `correlation_id` (taken from `X-Correlation-Id` or newly generated), `request_id`,
+ * `component=core` and the W3C trace (`trace_id`/`span_id`, continued from
+ * `traceparent` or newly generated). Placed outermost so that exceptions logged by
+ * the ErrorHandler middleware also carry the context.
  */
 class LogContextMiddleware implements MiddlewareInterface
 {

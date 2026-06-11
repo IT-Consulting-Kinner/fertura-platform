@@ -11,7 +11,7 @@ use Cake\Console\ConsoleOptionParser;
 use Cake\Datasource\ConnectionManager;
 
 /**
- * BREAD-Rechteverwaltung (bis zur Admin-GUI in Step 10).
+ * BREAD permission management (until the admin GUI in Step 10).
  *
  *   bin/cake permission check <userId> <module> <type> <action> [--key K]
  *   bin/cake permission grant <groupId> <module> <type> <BREAD> [--key K] [--actions a,b]

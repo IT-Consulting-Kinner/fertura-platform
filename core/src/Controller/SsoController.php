@@ -11,9 +11,9 @@ use Cake\Routing\Router;
 use Throwable;
 
 /**
- * SSO-Login-Flows (Programm Tier-1, P06): OIDC (Authorization-Code + PKCE) und
- * SAML — parallel zur lokalen Anmeldung. Bei Erfolg wird der (provisionierte/
- * verknüpfte) Core-Benutzer als Identität gesetzt (Session).
+ * SSO login flows (program tier-1, P06): OIDC (authorization code + PKCE) and
+ * SAML — alongside the local login. On success the (provisioned/linked) core
+ * user is set as the identity (session).
  */
 class SsoController extends AppController
 {
@@ -51,9 +51,9 @@ class SsoController extends AppController
                 return $this->redirect($data['url']);
             }
 
-            // Zufälliger RelayState (vom IdP cookie-unabhängig zurückgespiegelt) als
-            // Bindungs-Nonce — NICHT die Provider-ID. Die AuthnRequest-ID wird
-            // serverseitig daran gebunden und beim ACS einmalig eingelöst.
+            // Random RelayState (reflected back by the IdP independent of cookies)
+            // as a binding nonce — NOT the provider ID. The AuthnRequest ID is
+            // bound to it server-side and redeemed once at the ACS.
             $relayState = bin2hex(random_bytes(16));
             $saml = (new SamlProvider())->loginRequest($provider, $this->samlAcsUrl(), $this->spEntityId(), $relayState);
             (new SsoService())->rememberSamlRequest($relayState, $providerId, (string)$saml['id']);
@@ -102,13 +102,13 @@ class SsoController extends AppController
     {
         $this->request->allowMethod('post');
         $relayState = (string)$this->request->getData('RelayState');
-        // onelogin/php-saml liest die Antwort aus den PHP-Superglobals.
+        // onelogin/php-saml reads the response from the PHP superglobals.
         $_POST['SAMLResponse'] = (string)$this->request->getData('SAMLResponse');
 
-        // RelayState **einmalig** einlösen -> gebundener Provider + erwartete
-        // Request-ID (cookie-unabhängig; kein Replay). Schlägt das fehl (unbekannt/
-        // abgelaufen/verbraucht), wird die Anfrage hart abgelehnt — die Bindung an
-        // die AuthnRequest ist damit verpflichtend (nicht still herabstufbar).
+        // Redeem the RelayState **once** -> bound provider + expected request ID
+        // (cookie-independent; no replay). If that fails (unknown/expired/consumed),
+        // the request is hard-rejected — the binding to the AuthnRequest is thus
+        // mandatory (cannot be silently downgraded).
         $sso = new SsoService();
         $pending = $sso->consumeSamlRequest($relayState);
         if ($pending === null) {
@@ -148,12 +148,12 @@ class SsoController extends AppController
             $identity['email_verified'] ?? null,
         );
         $user = $this->fetchTable('Users')->get($userId);
-        // Session-Fixation-Schutz: vor dem Setzen der Identität die Session-ID
-        // erneuern (der Pre-Auth-Flow lief in derselben Session).
+        // Session fixation protection: before setting the identity, renew the
+        // session ID (the pre-auth flow ran in the same session).
         $this->request->getSession()->renew();
         $this->Authentication->setIdentity($user);
-        // SSO-Anmeldung markieren: die MFA-Pflicht (security.mfa.required) gilt
-        // nur für LOKALE Logins — bei Föderation setzt der IdP die MFA-Policy durch.
+        // Mark the SSO login: MFA enforcement (security.mfa.required) applies
+        // only to LOCAL logins — under federation the IdP enforces the MFA policy.
         $this->request->getSession()->write('Auth.via_sso', true);
         $this->Flash->success(__('flash.auth.loggedin'));
 

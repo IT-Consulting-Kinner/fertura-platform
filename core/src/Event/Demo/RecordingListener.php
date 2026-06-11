@@ -7,9 +7,9 @@ use App\Event\EventListenerInterface;
 use Cake\Datasource\ConnectionManager;
 
 /**
- * Demo-/Test-Listener: protokolliert jeden Aufruf in core.outbox_selftest_log
- * (prozessübergreifend beobachtbar, anders als ein statischer Zähler). Nur vom
- * Outbox-Selbsttest verwendet.
+ * Demo/test listener: records every invocation in core.outbox_selftest_log
+ * (observable across processes, unlike a static counter). Used only by the
+ * outbox self-test.
  */
 class RecordingListener implements EventListenerInterface
 {

@@ -8,23 +8,22 @@ use Cake\I18n\MessagesFileLoader;
 use Cake\I18n\Package;
 
 /**
- * Registriert für eine Übersetzungs-Domain einen Loader, der **Englisch als
- * Basis** lädt und die gewählte Locale darüber legt (E37/E39).
+ * Registers, for a translation domain, a loader that loads **English as the
+ * base** and overlays the selected locale on top of it (E37/E39).
  *
- * CakePHPs eingebauter Fallback ist nur ein *Domain*-Fallback (Custom-Domain →
- * `default`) innerhalb derselben Locale — **kein** Locale-Fallback. Da im Fertura-
- * Modell jede Komponente einen vollständigen Englisch-Katalog mitbringt, ist das
- * Mergen von Englisch als Basis der robuste, vorhersagbare Weg: Ein in der
- * gewählten Sprache fehlender Schlüssel zeigt automatisch den englischen Text
- * statt des rohen Schlüssels.
+ * CakePHP's built-in fallback is only a *domain* fallback (custom domain →
+ * `default`) within the same locale — **not** a locale fallback. Since in the
+ * Fertura model every component ships a complete English catalog, merging
+ * English as the base is the robust, predictable approach: a key missing in the
+ * selected language automatically shows the English text instead of the raw key.
  */
 class EnglishFallbackLoader
 {
     public const BASE_LOCALE = 'en_US';
 
     /**
-     * Registriert den Merge-Loader für eine Domain (z. B. `default` = Core,
-     * später `<module_key>` je Modul).
+     * Registers the merge loader for a domain (e.g. `default` = core,
+     * later `<module_key>` per module).
      */
     public static function register(string $domain): void
     {
@@ -33,18 +32,18 @@ class EnglishFallbackLoader
             if (!$base instanceof Package) {
                 $base = new Package();
             }
-            // sprintf-Platzhalter (%s) statt ICU ({0}); die Core-Kataloge nutzen %s.
+            // sprintf placeholders (%s) instead of ICU ({0}); the core catalogs use %s.
             $base->setFormatter('sprintf');
             if ($locale !== self::BASE_LOCALE) {
                 $localePkg = (new MessagesFileLoader($name, $locale))();
                 if ($localePkg instanceof Package) {
-                    // gewählte Locale überschreibt Englisch (fehlt ein Schlüssel,
-                    // bleibt der englische Basistext).
+                    // The selected locale overrides English (if a key is
+                    // missing, the English base text remains).
                     $base->addMessages($localePkg->getMessages());
                 }
-                // Zusätzlich: nachgeladene Core-Sprachpakete aus dem Store
-                // (i18n-5/6) – z. B. eine später eingespielte Sprache. Versions-
-                // Gate via LocaleResolver; überschreibt die mitgelieferten Texte.
+                // Additionally: core language packs loaded later from the store
+                // (i18n-5/6) – e.g. a language installed afterwards. Version-
+                // gated via LocaleResolver; overrides the bundled texts.
                 $store = self::coreStorePack($domain, $locale);
                 if ($store !== []) {
                     $base->addMessages($store);

@@ -4,21 +4,20 @@ declare(strict_types=1);
 namespace App\Infrastructure;
 
 /**
- * Wohlgeformtheits-Prüfung für UUID-Werte aus URL-/Query-/Formular-Parametern.
+ * Well-formedness check for UUID values from URL/query/form parameters.
  *
- * Raw-SQL (`execute()`) bindet Parameter untypisiert; ein fehlgeformter Wert
- * gegen eine PG-uuid-Spalte wirft SQLSTATE 22P02 ("invalid input syntax for
- * type uuid") und damit HTTP 500 statt eines sauberen "nicht gefunden".
- * Aufrufer prüfen deshalb VOR dem Binden und behandeln fehlgeformte IDs wie
- * unbekannte. ORM-Pfade (`find()->where()`) sind nicht betroffen — dort typed
- * der ORM korrekt.
+ * Raw SQL (`execute()`) binds parameters untyped; a malformed value against a
+ * PG uuid column throws SQLSTATE 22P02 ("invalid input syntax for type uuid")
+ * and thus HTTP 500 instead of a clean "not found". Callers therefore validate
+ * BEFORE binding and treat malformed IDs like unknown ones. ORM paths
+ * (`find()->where()`) are not affected — there the ORM types correctly.
  */
 final class Uuid
 {
-    /** Wohlgeformte UUID (kanonisches 8-4-4-4-12-Format, case-insensitiv)? */
+    /** Well-formed UUID (canonical 8-4-4-4-12 format, case-insensitive)? */
     public static function isValid(string $value): bool
     {
-        // \z statt $: ein abschließender Zeilenumbruch soll NICHT durchrutschen.
+        // \z instead of $: a trailing newline must NOT slip through.
         return preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/i', $value) === 1;
     }
 }

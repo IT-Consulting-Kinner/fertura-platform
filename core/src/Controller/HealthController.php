@@ -9,22 +9,22 @@ use Cake\Event\EventInterface;
 use Cake\Http\Response;
 
 /**
- * Health-Endpoint (Kap. 20.2.1).
+ * Health endpoint (ch. 20.2.1).
  *
- * GET /health        -> öffentlicher Liveness-Check (nur up/down, ohne Detail).
- * GET /health/detail -> token- bzw. session-geschützter Subsystem-Status (JSON).
+ * GET /health        -> public liveness check (only up/down, no detail).
+ * GET /health/detail -> token- or session-protected subsystem status (JSON).
  *
- * Der Detailpfad ist erreichbar mit angemeldeter Session ODER gültigem
- * Health-Token (Setting core.health_token via Header X-Health-Token oder
- * Query ?token=), damit externes Monitoring ohne Login Details abrufen kann,
- * ohne interne Zustände unautorisiert offenzulegen.
+ * The detail path is reachable with an authenticated session OR a valid
+ * health token (setting core.health_token via header X-Health-Token or
+ * query ?token=), so that external monitoring can retrieve details without a
+ * login, without exposing internal state in an unauthorized way.
  */
 class HealthController extends AppController
 {
     public function beforeFilter(EventInterface $event)
     {
         parent::beforeFilter($event);
-        // Health ist nicht auth-pflichtig; der Detailpfad prüft selbst.
+        // Health does not require auth; the detail path checks for itself.
         $this->Authentication->allowUnauthenticated(['index', 'detail', 'ready']);
     }
 
@@ -36,8 +36,8 @@ class HealthController extends AppController
     }
 
     /**
-     * Readiness-Probe (P15) für rollierende/Blue-Green-Deployments: 200 = bereit
-     * für Verkehr, 503 = entleeren (z. B. Wartungsmodus während eines Updates).
+     * Readiness probe (P15) for rolling/blue-green deployments: 200 = ready
+     * for traffic, 503 = drain (e.g. maintenance mode during an update).
      */
     public function ready(): Response
     {

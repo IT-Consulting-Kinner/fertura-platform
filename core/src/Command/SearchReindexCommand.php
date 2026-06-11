@@ -10,9 +10,9 @@ use Cake\Console\ConsoleIo;
 use Cake\Console\ConsoleOptionParser;
 
 /**
- * Such-Wartung: Modul-Indexer neu anstoßen und/oder fehlende Embeddings für die
- * Hybrid-Suche nachziehen (Bestandsdaten, die vor `ai.embed.auto_index` indexiert
- * wurden).
+ * Search maintenance: re-trigger the module indexers and/or backfill missing
+ * embeddings for the hybrid search (existing data that was indexed before
+ * `ai.embed.auto_index` was enabled).
  */
 class SearchReindexCommand extends Command
 {

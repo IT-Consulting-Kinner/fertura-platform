@@ -13,15 +13,15 @@ use Psr\Http\Server\RequestHandlerInterface;
 use Throwable;
 
 /**
- * Wartungsmodus (Kap. 28.11): bei aktivem `core.maintenance_mode` liefert die
- * Plattform 503 (keine reguläre Nutzung), während Lifecycle-/Update-Operationen
- * über die CLI weiterlaufen.
+ * Maintenance mode (ch. 28.11): when `core.maintenance_mode` is active the
+ * platform returns 503 (no regular usage), while lifecycle/update operations
+ * continue to run via the CLI.
  */
 class MaintenanceMiddleware implements MiddlewareInterface
 {
     public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
     {
-        // Datei-Flag (Restore-Cutover, überlebt einen DB-Restore) ODER DB-Setting.
+        // File flag (restore cutover, survives a DB restore) OR DB setting.
         $active = MaintenanceMode::isFileActive();
         if (!$active) {
             try {

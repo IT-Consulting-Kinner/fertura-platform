@@ -9,8 +9,8 @@ use Cake\Console\ConsoleIo;
 use Cake\Datasource\ConnectionManager;
 
 /**
- * Zeigt die registrierten Contracts und ihre aktiven Registrierungen
- * (read-only Admin-/Debug-Sicht bis zur GUI in Step 10).
+ * Shows the registered contracts and their active registrations
+ * (read-only admin/debug view until the GUI arrives in Step 10).
  */
 class RegistryListCommand extends Command
 {

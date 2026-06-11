@@ -4,26 +4,26 @@ declare(strict_types=1);
 namespace App\Log;
 
 /**
- * W3C-Trace-Context-Helfer (Programm Tier-3, P04).
+ * W3C Trace Context helper (Program Tier-3, P04).
  *
- * Erzeugt/parst Trace-/Span-IDs und den `traceparent`-Header, sodass Logzeilen
- * (über {@see LogContext}/`ContextJsonFormatter`) ein `trace_id`/`span_id`
- * tragen und ausgehende Aufrufe (Egress) den Trace fortführen können.
+ * Generates/parses trace and span IDs and the `traceparent` header, so that log
+ * lines (via {@see LogContext}/`ContextJsonFormatter`) carry a `trace_id`/`span_id`
+ * and outgoing (egress) calls can continue the trace.
  */
 final class Trace
 {
     public static function newTraceId(): string
     {
-        return bin2hex(random_bytes(16)); // 16 Byte -> 32 hex
+        return bin2hex(random_bytes(16)); // 16 bytes -> 32 hex
     }
 
     public static function newSpanId(): string
     {
-        return bin2hex(random_bytes(8)); // 8 Byte -> 16 hex
+        return bin2hex(random_bytes(8)); // 8 bytes -> 16 hex
     }
 
     /**
-     * Parst einen W3C-`traceparent` (`00-<32hex>-<16hex>-<2hex>`).
+     * Parses a W3C `traceparent` (`00-<32hex>-<16hex>-<2hex>`).
      *
      * @return array{trace_id:string, parent_id:string}|null
      */
@@ -49,7 +49,7 @@ final class Trace
         ];
     }
 
-    /** Baut den `traceparent`-Header aus dem aktuellen Kontext (oder null). */
+    /** Builds the `traceparent` header from the current context (or null). */
     public static function traceparent(): ?string
     {
         $c = self::current();

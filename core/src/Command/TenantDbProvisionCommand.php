@@ -13,10 +13,10 @@ use Migrations\Migrations;
 use Throwable;
 
 /**
- * Bereitet die **eigene Datenbank** eines DB-isolierten Mandanten vor (#10/4):
- * prüft die Out-of-Band-DSN (`TENANT_DB_<KEY>`), testet die Verbindung und führt
- * die Migrationen auf ihr aus. Voraussetzung (out of scope): die Ziel-DB existiert
- * inkl. Schema-/Rollen-Bootstrap (`schema_init` analog zur Haupt-DB).
+ * Provisions the **dedicated database** of a DB-isolated tenant (#10/4):
+ * checks the out-of-band DSN (`TENANT_DB_<KEY>`), tests connectivity and runs
+ * the migrations against it. Precondition (out of scope): the target DB already
+ * exists, including schema/role bootstrap (`schema_init`, analogous to the main DB).
  */
 class TenantDbProvisionCommand extends Command
 {
@@ -47,11 +47,11 @@ class TenantDbProvisionCommand extends Command
 
         try {
             $conn = (new TenantConnectionResolver())->isolatedConnection($key);
-            $conn->execute('SELECT 1'); // Konnektivität
+            $conn->execute('SELECT 1'); // connectivity
             $io->success("Verbindung zu Mandanten-DB '$key' ok.");
 
-            // Denselben Verbindungsnamen verwenden, den der Resolver registriert hat
-            // (keine zweite, abweichende Ableitung des Namens).
+            // Use the same connection name the resolver registered
+            // (no second, divergent derivation of the name).
             (new Migrations(['connection' => $conn->configName()]))->migrate();
             $io->success("Migrationen auf Mandanten-DB '$key' ausgeführt.");
 

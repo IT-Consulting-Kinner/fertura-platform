@@ -6,9 +6,9 @@ namespace App\Controller\Admin;
 use App\Service\Api\TokenService;
 
 /**
- * Self-Service-Verwaltung der eigenen API-Tokens (Kap. 29 / Entscheidung 162).
- * Jeder Administrator verwaltet ausschließlich seine eigenen Tokens; der
- * Klartext wird nur einmal bei der Erzeugung angezeigt.
+ * Self-service management of one's own API tokens (ch. 29 / Decision 162).
+ * Every administrator manages exclusively their own tokens; the plaintext
+ * is shown only once, at creation time.
  */
 class TokensController extends AdminController
 {
@@ -40,7 +40,7 @@ class TokensController extends AdminController
         }
 
         $result = (new TokenService())->create($userId, $label, $scopes, $expiresAt, $userId);
-        // Klartext einmalig über die Session an die Index-Seite reichen.
+        // Pass the plaintext to the index page once, via the session.
         $this->request->getSession()->write('newApiToken', $result['token']);
         $this->Flash->success(__('flash.token.created'));
 

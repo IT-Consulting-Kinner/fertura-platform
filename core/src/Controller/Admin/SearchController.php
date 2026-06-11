@@ -6,13 +6,13 @@ namespace App\Controller\Admin;
 use App\Service\Search\SearchService;
 
 /**
- * Globale Admin-Suche: durchsucht den zentralen Index (Hybrid = Volltext +
- * semantisch, mit Rückfall auf Volltext) für jeden Admin. Sichtbarkeit wird auf
- * den Aufrufer gefiltert (eigene + öffentliche Dokumente). Gebaut mit dem UI-Kit.
+ * Global admin search: queries the central index (hybrid = full-text +
+ * semantic, falling back to full-text) for any admin. Visibility is filtered
+ * to the caller (own + public documents). Built with the UI kit.
  */
 class SearchController extends AdminController
 {
-    protected ?string $requiredArea = null; // jeder Admin
+    protected ?string $requiredArea = null; // any admin
 
     public function index(): void
     {
@@ -28,8 +28,8 @@ class SearchController extends AdminController
     }
 
     /**
-     * Stößt den Volltext-Reindex an und zieht fehlende Embeddings nach (GUI-
-     * Pendant zu `bin/cake search_reindex`). Wartungsaktion → nur core_config.
+     * Triggers the full-text reindex and backfills missing embeddings (GUI
+     * counterpart to `bin/cake search_reindex`). Maintenance action → core_config only.
      */
     public function reindex(): ?\Cake\Http\Response
     {

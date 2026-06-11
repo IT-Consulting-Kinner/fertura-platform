@@ -12,16 +12,16 @@ use Cake\Console\ConsoleOptionParser;
 use Cake\Datasource\ConnectionManager;
 
 /**
- * Verwaltung von Vertrauensankern und Sperrliste (Kap. 24.9.2).
+ * Management of trust anchors and the revocation list (ch. 24.9.2).
  *
  *   bin/cake trust add-anchor <key_id> <public_key_b64> --type root
- *   bin/cake trust add-anchor --cert <publisher-cert.json>   (Kette wird geprüft)
+ *   bin/cake trust add-anchor --cert <publisher-cert.json>   (chain is verified)
  *   bin/cake trust revoke <key_id> [--reason R]
  *   bin/cake trust list
  *
- * Root-Anker werden direkt (außerhalb des Bandes vertrauenswürdig) installiert.
- * Publisher-Anker werden nur akzeptiert, wenn ihr Zertifikat (aus `mp_tool
- * sign-key`) von einem aktiven Root signiert ist (Kette Root -> Publisher).
+ * Root anchors are installed directly (trusted out of band). Publisher anchors
+ * are only accepted if their certificate (from `mp_tool sign-key`) is signed by
+ * an active Root (chain Root -> Publisher).
  */
 class TrustCommand extends Command
 {
@@ -83,10 +83,10 @@ class TrustCommand extends Command
     }
 
     /**
-     * Gleitende Schlüsselrotation (Kap. 1.4): der neue Anker gilt ab sofort
-     * unbegrenzt, der alte läuft nach einem Überlappungsfenster aus (E45 erzwingt
-     * das `valid_to`). Während des Fensters werden beide akzeptiert → kein
-     * Ausfall. Der neue Anker muss bereits installiert sein (`add-anchor`/`--cert`).
+     * Rolling key rotation (ch. 1.4): the new anchor becomes valid immediately and
+     * indefinitely, while the old one expires after an overlap window (E45 enforces
+     * the `valid_to`). During the window both are accepted -> no outage. The new
+     * anchor must already be installed (`add-anchor`/`--cert`).
      */
     private function rotate(Arguments $args, ConsoleIo $io, TrustStore $trust): int
     {
@@ -104,12 +104,12 @@ class TrustCommand extends Command
         }
         $days = max(0, (int)$args->getOption('overlap-days'));
         $conn = ConnectionManager::get('default');
-        // Neuer Anker: ab jetzt gültig, unbegrenzt.
+        // New anchor: valid from now on, indefinitely.
         $conn->execute(
             'UPDATE trust_anchors SET valid_from = COALESCE(valid_from, now()), valid_to = NULL WHERE key_id = :k',
             ['k' => $new],
         );
-        // Alter Anker: nach dem Fenster auslaufen lassen.
+        // Old anchor: let it expire after the window.
         $n = $conn->execute(
             "UPDATE trust_anchors SET valid_to = now() + (:d || ' days')::interval WHERE key_id = :k",
             ['d' => (string)$days, 'k' => $old],
@@ -125,7 +125,7 @@ class TrustCommand extends Command
 
     private function addAnchor(Arguments $args, ConsoleIo $io, TrustStore $trust): int
     {
-        // Publisher-Anker aus Zertifikat (Kette wird geprüft).
+        // Publisher anchor from a certificate (chain is verified).
         $certPath = $args->getOption('cert');
         if ($certPath !== null) {
             if (!is_file((string)$certPath)) {
@@ -160,7 +160,7 @@ class TrustCommand extends Command
             return static::CODE_SUCCESS;
         }
 
-        // Root-Anker (direkt vertrauenswürdig).
+        // Root anchor (directly trusted).
         $keyId = (string)$args->getArgument('key_id');
         $publicKey = (string)$args->getArgument('public_key');
         if ($keyId === '' || $publicKey === '') {

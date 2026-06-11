@@ -9,18 +9,18 @@ use Cake\Datasource\ConnectionManager;
 use Cake\Http\Response;
 
 /**
- * SCIM 2.0 Users-Ressource (RFC 7643/7644, Kür zu E129) für IdP-Provisioning
- * (Azure AD/Entra, Okta, Keycloak): unter `/api/scim/v2` hinter der bestehenden
- * Bearer-Token-Auth (Scope `scim:manage`).
+ * SCIM 2.0 Users resource (RFC 7643/7644, optional extra to E129) for IdP
+ * provisioning (Azure AD/Entra, Okta, Keycloak): served under `/api/scim/v2`
+ * behind the existing Bearer-token auth (scope `scim:manage`).
  *
- * Bewusster v1-Umfang:
- * - **Users only** (Groups bleiben Core-verwaltet — BREAD-Gruppen sind
- *   Berechtigungs-, keine Verzeichnis-Objekte).
- * - `active:false` deaktiviert (Status `disabled`, historische Referenzen
- *   bleiben — Kap. 27.15); **DELETE deaktiviert ebenfalls** statt hart zu
- *   löschen (Anonymisierung = bewusster DSGVO-Schritt, nicht IdP-Sync).
- * - Filter: `userName eq "..."` (der von IdPs für den Abgleich genutzte Fall).
- * - Neue Benutzer entstehen ohne Passwort als `invited` (Login via SSO/Einladung).
+ * Deliberate v1 scope:
+ * - **Users only** (groups stay core-managed — BREAD groups are permission
+ *   objects, not directory objects).
+ * - `active:false` deactivates (status `disabled`, historical references are
+ *   kept — ch. 27.15); **DELETE deactivates as well** rather than hard-deleting
+ *   (anonymization is a deliberate GDPR step, not an IdP sync).
+ * - Filter: `userName eq "..."` (the case IdPs use for reconciliation).
+ * - New users are created without a password as `invited` (login via SSO/invite).
  */
 class ScimUsersController extends ApiController
 {
@@ -37,7 +37,7 @@ class ScimUsersController extends ApiController
         return $conn;
     }
 
-    /** GET /Users — Liste mit optionalem `filter=userName eq "x"` + Paging. */
+    /** GET /Users — list with optional `filter=userName eq "x"` + paging. */
     public function index(): Response
     {
         if ($denied = $this->requireScope('scim:manage')) {
@@ -61,8 +61,8 @@ class ScimUsersController extends ApiController
             "SELECT count(*) AS c FROM users WHERE $where",
             $params,
         )->fetch('assoc')['c'];
-        // OFFSET/LIMIT als validierte Integer inline (PG akzeptiert keinen
-        // text-gebundenen Parameter für LIMIT; Werte sind oben int-gecastet).
+        // OFFSET/LIMIT inlined as validated integers (PG does not accept a
+        // text-bound parameter for LIMIT; the values are int-cast above).
         $rows = $this->conn()->execute(
             "SELECT * FROM users WHERE $where ORDER BY username OFFSET " . ($startIndex - 1) . ' LIMIT ' . $count,
             $params,
@@ -90,7 +90,7 @@ class ScimUsersController extends ApiController
         return $this->scim($this->toScim($row));
     }
 
-    /** POST /Users — Anlage als `invited` (oder `disabled` bei active:false). */
+    /** POST /Users — creates as `invited` (or `disabled` when active:false). */
     public function add(): Response
     {
         if ($denied = $this->requireScope('scim:manage')) {
@@ -127,7 +127,7 @@ class ScimUsersController extends ApiController
         return $this->scim($this->toScim($row), 201);
     }
 
-    /** PUT /Users/{id} — Voll-Update der gemappten Attribute. */
+    /** PUT /Users/{id} — full update of the mapped attributes. */
     public function replace(string $id): Response
     {
         if ($denied = $this->requireScope('scim:manage')) {
@@ -157,7 +157,7 @@ class ScimUsersController extends ApiController
         return $this->scim($this->toScim((array)$this->find($id)));
     }
 
-    /** PATCH /Users/{id} — `replace`-Operationen (v. a. `active`). */
+    /** PATCH /Users/{id} — `replace` operations (mainly `active`). */
     public function patch(string $id): Response
     {
         if ($denied = $this->requireScope('scim:manage')) {
@@ -178,7 +178,7 @@ class ScimUsersController extends ApiController
             }
             $path = (string)($op['path'] ?? '');
             $value = $op['value'] ?? null;
-            // Sowohl path-basierte als auch objektwertige replace-Ops (Azure AD).
+            // Both path-based and object-valued replace ops (Azure AD).
             $attrs = $path !== '' ? [$path => $value] : (array)$value;
             foreach ($attrs as $attr => $v) {
                 switch (strtolower((string)$attr)) {
@@ -195,7 +195,7 @@ class ScimUsersController extends ApiController
                         $this->conn()->execute('UPDATE users SET last_name = :v WHERE id = :id', ['v' => trim((string)$v) ?: null, 'id' => $id]);
                         break;
                     default:
-                        // Unbekannte Attribute werden (SCIM-üblich) ignoriert.
+                        // Unknown attributes are ignored (as is customary in SCIM).
                 }
             }
         }
@@ -204,7 +204,7 @@ class ScimUsersController extends ApiController
         return $this->scim($this->toScim((array)$this->find($id)));
     }
 
-    /** DELETE /Users/{id} — deaktiviert (kein hartes Löschen, Kap. 27.15). */
+    /** DELETE /Users/{id} — deactivates (no hard delete, ch. 27.15). */
     public function delete(string $id): Response
     {
         if ($denied = $this->requireScope('scim:manage')) {
@@ -219,7 +219,7 @@ class ScimUsersController extends ApiController
         return $this->response->withStatus(204);
     }
 
-    /** GET /ServiceProviderConfig — deklariert den unterstützten Umfang. */
+    /** GET /ServiceProviderConfig — declares the supported scope. */
     public function serviceProviderConfig(): Response
     {
         return $this->scim([
@@ -238,7 +238,7 @@ class ScimUsersController extends ApiController
         ]);
     }
 
-    // ---- intern ---------------------------------------------------------------
+    // ---- internal -------------------------------------------------------------
 
     /** @return array<string,mixed>|null */
     private function find(string $id): ?array
@@ -256,8 +256,8 @@ class ScimUsersController extends ApiController
 
     private function setActive(string $id, bool $active): void
     {
-        // Aktivierung über SCIM nur, wenn lokal ein Passwort existiert ODER der
-        // Benutzer per SSO kommt (invited bleibt invited bis Passwort/SSO-Login).
+        // Activation via SCIM only if a local password exists OR the user comes
+        // in via SSO (invited stays invited until a password/SSO login occurs).
         $status = $active ? 'active' : 'disabled';
         if ($active) {
             $row = $this->conn()->execute(
@@ -265,7 +265,7 @@ class ScimUsersController extends ApiController
                 ['id' => $id],
             )->fetch('assoc');
             if ($row !== false && $row['password_hash'] === null && $row['status'] === 'invited') {
-                return; // bleibt invited (kein Anmeldeweg ohne Passwort/SSO-Erstlogin)
+                return; // stays invited (no login path without a password/first SSO login)
             }
         }
         $this->conn()->execute(
@@ -320,7 +320,7 @@ class ScimUsersController extends ApiController
         try {
             (new \App\Audit\AuditLogger())->log($action, 'user', $userId, ['component' => 'core']);
         } catch (\Throwable) {
-            // fehlerisoliert
+            // error-isolated
         }
     }
 }

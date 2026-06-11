@@ -9,12 +9,12 @@ use Cake\Http\Response;
 use Throwable;
 
 /**
- * Dispatcht modul-registrierte API-Endpunkte (P07): `/api/v1/m/<key>/<pfad>`.
+ * Dispatches module-registered API endpoints (P07): `/api/v1/m/<key>/<path>`.
  *
- * Findet die im Modul-Manifest deklarierte Route (`api_routes`) und ruft die
- * Handler-Klasse über {@see ContributionRuntime} auf — in-process oder
- * (out_of_process) über RPC im isolierten Host (Kap. 23.16.2). Auth/Scopes
- * bleiben Core-Sache (Bearer-Token via Middleware).
+ * Looks up the route declared in the module manifest (`api_routes`) and invokes
+ * the handler class via {@see ContributionRuntime} — in-process or
+ * (out_of_process) via RPC in the isolated host (ch. 23.16.2). Auth/scopes
+ * remain a core responsibility (Bearer token via middleware).
  */
 class ModuleController extends ApiController
 {
@@ -46,7 +46,7 @@ class ModuleController extends ApiController
                 [$request],
             );
         } catch (Throwable $e) {
-            // Interne Details (Pfade/SQL/Klassen) nicht an den Client geben.
+            // Do not leak internal details (paths/SQL/classes) to the client.
             \Cake\Log\Log::error('Modul-Endpunkt-Fehler: ' . $e->getMessage(), [
                 'module' => $moduleKey,
                 'path' => '/' . $path,

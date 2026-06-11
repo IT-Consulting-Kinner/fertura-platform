@@ -10,19 +10,19 @@ use Cake\ORM\Behavior;
 use Symfony\Component\Uid\Uuid;
 
 /**
- * Erzeugt für neue Datensätze eine zeitgeordnete UUIDv7 als Primärschlüssel
- * (Entscheidung E6), damit das ORM die ID sofort kennt. Die Datenbank besitzt
- * zusätzlich einen DEFAULT (core.uuid_generate_v7()) als Netz für Inserts
- * außerhalb des ORM.
+ * Generates a time-ordered UUIDv7 as the primary key for new records
+ * (Decision E6), so the ORM knows the ID immediately. The database additionally
+ * has a DEFAULT (core.uuid_generate_v7()) as a safety net for inserts made
+ * outside the ORM.
  */
 class UuidV7Behavior extends Behavior
 {
     public function beforeSave(EventInterface $event, EntityInterface $entity, ArrayObject $options): void
     {
         $primaryKey = $this->_table->getPrimaryKey();
-        // Nur einspaltige uuid-Primärschlüssel: Text-/zusammengesetzte PKs
-        // (z. B. admin_areas.area_key) bleiben unangetastet. Macht das Behavior
-        // universell anwendbar (siehe AppTable).
+        // Single-column uuid primary keys only: text/composite PKs
+        // (e.g. admin_areas.area_key) are left untouched. This makes the behavior
+        // universally applicable (see AppTable).
         if (!is_string($primaryKey)) {
             return;
         }

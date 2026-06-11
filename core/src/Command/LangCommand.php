@@ -10,10 +10,10 @@ use Cake\Console\ConsoleIo;
 use Cake\Console\ConsoleOptionParser;
 
 /**
- * Verwaltung des Managed Locale Store (i18n-3).
+ * Management of the managed locale store (i18n-3).
  *
- *   bin/cake lang recover   Verwaiste .tmp-Dateien heilen/bereinigen (Recovery)
- *   bin/cake lang path      Store-Basisverzeichnis anzeigen
+ *   bin/cake lang recover   Heal/clean up orphaned .tmp files (recovery)
+ *   bin/cake lang path      Show the store base directory
  */
 class LangCommand extends Command
 {

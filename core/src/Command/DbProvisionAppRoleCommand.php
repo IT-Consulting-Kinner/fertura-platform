@@ -11,12 +11,12 @@ use Cake\Console\ConsoleOptionParser;
 use Cake\Core\Configure;
 
 /**
- * Provisioniert die NOBYPASSRLS-Anwendungsrolle und ihre Rechte (Entscheidung
- * E26 / Aufgabe „App-DB-Rolle ohne Superuser").
+ * Provisions the NOBYPASSRLS application role and its privileges (Decision
+ * E26 / task "app DB role without superuser").
  *
- * Idempotent; läuft über die privilegierte (Superuser-)Connection. Wird vom
- * Entrypoint nach den Migrationen aufgerufen. Die Anwendung verbindet danach
- * über diese Rolle (APP_DATABASE_URL), sodass RLS zur Laufzeit greift.
+ * Idempotent; runs over the privileged (superuser) connection. Invoked by the
+ * entrypoint after the migrations. The application then connects through this
+ * role (APP_DATABASE_URL), so that RLS takes effect at runtime.
  *
  *   bin/cake db_provision_app_role
  */
@@ -48,7 +48,7 @@ class DbProvisionAppRoleCommand extends Command
         $conn = Db::privileged();
         $pwLiteral = "'" . str_replace("'", "''", $password) . "'";
 
-        // 1. Rolle anlegen/aktualisieren (NOBYPASSRLS, nur Login).
+        // 1. Create/update the role (NOBYPASSRLS, login only).
         $conn->execute(
             "DO \$do\$ BEGIN "
             . "IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '$role') THEN "
@@ -57,10 +57,10 @@ class DbProvisionAppRoleCommand extends Command
         );
         $conn->execute("ALTER ROLE $role WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS PASSWORD $pwLiteral");
 
-        // 2. Rechte im core-Schema (DML, keine DDL) + Default-Privilegien.
+        // 2. Privileges on the core schema (DML, no DDL) + default privileges.
         $this->grantSchema($conn, 'core', $role);
 
-        // 3. Bestehende Modul-Schemata (mod_*) ebenfalls berechtigen.
+        // 3. Grant on existing module schemas (mod_*) as well.
         $schemas = $conn->execute(
             "SELECT nspname FROM pg_namespace WHERE nspname LIKE 'mod\\_%'",
         )->fetchAll('assoc');
@@ -80,7 +80,7 @@ class DbProvisionAppRoleCommand extends Command
         $conn->execute("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA $schema TO $role");
         $conn->execute("GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA $schema TO $role");
         $conn->execute("GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA $schema TO $role");
-        // Zukünftige Objekte (von der aktuellen, privilegierten Rolle erzeugt).
+        // Future objects (created by the current, privileged role).
         $conn->execute("ALTER DEFAULT PRIVILEGES IN SCHEMA $schema GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO $role");
         $conn->execute("ALTER DEFAULT PRIVILEGES IN SCHEMA $schema GRANT USAGE, SELECT ON SEQUENCES TO $role");
         $conn->execute("ALTER DEFAULT PRIVILEGES IN SCHEMA $schema GRANT EXECUTE ON FUNCTIONS TO $role");

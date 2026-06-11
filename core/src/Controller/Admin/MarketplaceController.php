@@ -9,8 +9,8 @@ use App\Service\Settings\SettingsManager;
 use Cake\Datasource\ConnectionManager;
 
 /**
- * Marketplace-Anbindung und Lizenzverwaltung
- * (Administrationsbereich „Marketplace / Lizenz").
+ * Marketplace connection and license management
+ * (administration area "Marketplace / License").
  */
 class MarketplaceController extends AdminController
 {
@@ -22,8 +22,8 @@ class MarketplaceController extends AdminController
         $baseUrl = (string)$settings->get('core', 'marketplace.base_url', '');
         $metadata = null;
         $error = null;
-        // Marketplace-Client per Deployment abschaltbar (FEATURE_MARKETPLACE);
-        // die Lizenzverwaltung dieses Bereichs bleibt davon unberührt.
+        // Marketplace client can be disabled per deployment (FEATURE_MARKETPLACE);
+        // this area's license management remains unaffected by that.
         $marketplaceEnabled = \App\Service\System\FeatureFlags::enabled('marketplace');
         if ($marketplaceEnabled && $baseUrl !== '') {
             try {

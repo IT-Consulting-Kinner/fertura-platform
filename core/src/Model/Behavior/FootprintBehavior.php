@@ -10,10 +10,10 @@ use Cake\Event\EventInterface;
 use Cake\ORM\Behavior;
 
 /**
- * Pflegt Akteur-Spalten created_by/updated_by aus dem ActorContext
- * (Entscheidung E8). Ergänzt – ersetzt nicht – das dedizierte Audit-Log (Step 3).
+ * Maintains the actor columns created_by/updated_by from the ActorContext
+ * (Decision E8). Complements – does not replace – the dedicated audit log (Step 3).
  *
- * Ist kein Akteur gesetzt (CLI/System), bleiben die Spalten unangetastet (NULL).
+ * If no actor is set (CLI/system), the columns are left untouched (NULL).
  */
 class FootprintBehavior extends Behavior
 {
@@ -33,9 +33,9 @@ class FootprintBehavior extends Behavior
         $createdField = (string)$this->getConfig('createdBy');
         $updatedField = (string)$this->getConfig('updatedBy');
 
-        // Spalten-tolerant: nur setzen, wenn die Tabelle die Spalte besitzt.
-        // created_by = "durch wen entstanden" (auch Append-only-Joins),
-        // updated_by = "durch wen zuletzt geaendert" (nur editierbare Saetze).
+        // Column-tolerant: only set if the table actually has the column.
+        // created_by = "by whom it was created" (including append-only joins),
+        // updated_by = "by whom it was last changed" (editable records only).
         if ($schema->hasColumn($createdField) && $entity->isNew() && $entity->get($createdField) === null) {
             $entity->set($createdField, $actorId);
         }

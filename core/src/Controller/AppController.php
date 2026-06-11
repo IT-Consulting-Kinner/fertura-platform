@@ -51,14 +51,14 @@ class AppController extends Controller
     {
         parent::beforeFilter($event);
 
-        // MFA-Pflicht (security.mfa.required): angemeldete Benutzer ohne
-        // eingerichtetes TOTP werden auf die Einrichtung gelenkt — überall
-        // außer auf den Auth-/MFA-Seiten selbst (sonst Redirect-Schleife).
+        // MFA enforcement (security.mfa.required): authenticated users without
+        // configured TOTP are redirected to setup — everywhere except the
+        // Auth/MFA pages themselves (otherwise a redirect loop).
         $identity = $this->identity();
         if ($identity === null || in_array($this->request->getParam('controller'), ['Auth', 'Mfa', 'Sso'], true)) {
             return;
         }
-        // SSO-Sitzungen sind ausgenommen (MFA-Policy liegt beim IdP).
+        // SSO sessions are exempt (the MFA policy is owned by the IdP).
         if ($this->request->getSession()->read('Auth.via_sso') === true) {
             return;
         }
@@ -73,14 +73,14 @@ class AppController extends Controller
                 $event->setResult($this->redirect('/mfa'));
             }
         } catch (\Throwable) {
-            // Fail-open hier bewusst NICHT für die Anmeldung selbst (die ist
-            // bereits passiert), sondern nur für die Setup-Umleitung: ein
-            // Settings-/DB-Problem darf die ganze Oberfläche nicht sperren.
+            // Fail-open here is deliberately NOT about the login itself (that
+            // has already happened), only about the setup redirect: a settings
+            // or DB problem must not lock the entire UI.
         }
     }
 
     /**
-     * Stellt die aktuelle Identität (oder null) bereit.
+     * Provides the current identity (or null).
      *
      * @return \Authentication\IdentityInterface|null
      */

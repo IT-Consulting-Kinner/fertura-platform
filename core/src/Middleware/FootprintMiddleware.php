@@ -10,9 +10,9 @@ use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 
 /**
- * Übernimmt die angemeldete Identität (sofern vorhanden) in den ActorContext,
- * damit das FootprintBehavior created_by/updated_by setzen kann (Entscheidung E8).
- * Muss NACH der AuthenticationMiddleware laufen.
+ * Copies the authenticated identity (if any) into the ActorContext so that the
+ * FootprintBehavior can populate created_by/updated_by (Decision E8). Must run
+ * AFTER the AuthenticationMiddleware.
  */
 class FootprintMiddleware implements MiddlewareInterface
 {

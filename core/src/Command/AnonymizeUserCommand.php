@@ -10,10 +10,10 @@ use Cake\Console\ConsoleIo;
 use Cake\Console\ConsoleOptionParser;
 
 /**
- * Setzt das Recht auf Löschung um (Entscheidung 160 / Kap. 27.15.3):
- * - aktivierte/deaktivierte Benutzer werden irreversibel anonymisiert,
- * - noch nicht aktivierte Einladungs-Accounts (Status invited) dürfen
- *   physisch gelöscht werden (keine Fachdaten erzeugt).
+ * Implements the right to erasure (Decision 160 / ch. 27.15.3):
+ * - active/deactivated users are irreversibly anonymized,
+ * - invitation accounts that were never activated (status invited) may be
+ *   physically deleted (no business data has been created for them).
  */
 class AnonymizeUserCommand extends Command
 {
@@ -52,7 +52,7 @@ class AnonymizeUserCommand extends Command
             return static::CODE_SUCCESS;
         }
 
-        // Einladungs-Accounts: physische Löschung zulässig (keine Fachdaten).
+        // Invitation accounts: physical deletion is permitted (no business data).
         if ($user->status === User::STATUS_INVITED) {
             if ($users->delete($user)) {
                 $io->success("Einladungs-Account #{$user->id} ($ref) physisch gelöscht.");

@@ -6,7 +6,7 @@ namespace App\Model\Entity;
 use Cake\ORM\Entity;
 
 /**
- * Registrierung an einem Contract (core.contract_registrations).
+ * Registration against a contract (core.contract_registrations).
  *
  * @property string $id
  * @property string $contract_id

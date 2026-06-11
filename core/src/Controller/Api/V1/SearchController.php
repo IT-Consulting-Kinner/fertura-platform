@@ -7,8 +7,8 @@ use App\Service\Search\SearchService;
 use Cake\Http\Response;
 
 /**
- * Volltextsuche über die API (P10): `GET /api/v1/search?q=…` — sichtbarkeits-
- * gefiltert auf den Token-Inhaber (Scope `me:read`).
+ * Full-text search via the API (P10): `GET /api/v1/search?q=…` — visibility-
+ * filtered to the token holder (scope `me:read`).
  */
 class SearchController extends ApiController
 {
@@ -20,8 +20,8 @@ class SearchController extends ApiController
         $q = (string)$this->request->getQuery('q', '');
         $limit = max(1, min(50, (int)$this->request->getQuery('limit', 20)));
         $uid = $this->userId() ?: null;
-        // mode=fts erzwingt reine Volltextsuche; sonst hybrid (Volltext + semantisch),
-        // das intern auf Volltext zurückfällt, wenn kein Embedding-Provider aktiv ist.
+        // mode=fts forces pure full-text search; otherwise hybrid (full-text + semantic),
+        // which internally falls back to full-text when no embedding provider is active.
         $mode = (string)$this->request->getQuery('mode', 'auto');
         $svc = new SearchService();
         $results = $mode === 'fts'

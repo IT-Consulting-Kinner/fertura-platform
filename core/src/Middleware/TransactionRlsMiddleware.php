@@ -17,9 +17,9 @@ use Psr\Http\Server\RequestHandlerInterface;
 use Throwable;
 
 /**
- * Hüllt jeden Request in eine DB-Transaktion und setzt den RLS-Zugriffskontext
- * via SET LOCAL (Entscheidung 175). Muss NACH der AuthenticationMiddleware
- * laufen (benötigt die Identität).
+ * Wraps every request in a DB transaction and sets the RLS access context
+ * via SET LOCAL (Decision 175). Must run AFTER the AuthenticationMiddleware
+ * (requires the identity).
  */
 class TransactionRlsMiddleware implements MiddlewareInterface
 {
@@ -32,17 +32,17 @@ class TransactionRlsMiddleware implements MiddlewareInterface
             $identity = $request->getAttribute('identity');
             $userId = $identity !== null ? (string)$identity->getIdentifier() : null;
             $groupIds = $userId !== null ? (new PermissionService())->activeGroupIds($userId) : [];
-            // Mandantenkontext aus dem angemeldeten Benutzer ableiten (Single-Org:
-            // Default-Mandant). Pre-Auth (kein Benutzer): aus dem Request-Host
-            // auflösen (mandantenspezifische Login-/SSO-Oberfläche), sonst null →
-            // mandanten-bezogene Daten unsichtbar (fail-closed).
+            // Derive the tenant context from the authenticated user (single-org:
+            // default tenant). Pre-auth (no user): resolve from the request host
+            // (tenant-specific login/SSO frontend), otherwise null →
+            // tenant-scoped data is invisible (fail-closed).
             $hostTenant = (new TenantResolver())->resolve($request->getUri()->getHost());
             if ($userId !== null) {
                 $tenantId = (new TenantService())->tenantIdForUser($userId);
-                // Cross-Tenant-Host-Policy: ein angemeldeter Benutzer auf der Domain
-                // eines FREMDEN Mandanten wird abgewiesen (sofern aktiviert und der
-                // Host überhaupt einem Mandanten zugeordnet ist). Single-Org/Default-
-                // Host lösen auf null auf -> kein Konflikt.
+                // Cross-tenant host policy: an authenticated user on the domain of
+                // a FOREIGN tenant is rejected (provided this is enabled and the
+                // host is mapped to a tenant at all). Single-org/default hosts
+                // resolve to null -> no conflict.
                 if ($hostTenant !== null && $hostTenant !== $tenantId && $this->enforceHostMatch()) {
                     throw new ForbiddenException('Zugriff auf einen fremden Mandanten-Host.');
                 }

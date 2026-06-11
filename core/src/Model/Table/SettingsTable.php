@@ -4,11 +4,11 @@ declare(strict_types=1);
 namespace App\Model\Table;
 
 /**
- * Settings-Model (core.settings).
+ * Settings model (core.settings).
  *
- * Erbt UUIDv7-Erzeugung von AppTable; Footprint pflegt created_by/updated_by.
- * Die `value`-Spalte (jsonb) wird explizit als JSON typisiert, damit beliebige
- * Werte (int/bool/string/Array) transparent kodiert/dekodiert werden.
+ * Inherits UUIDv7 generation from AppTable; Footprint maintains created_by/updated_by.
+ * The `value` column (jsonb) is explicitly typed as JSON so that arbitrary
+ * values (int/bool/string/array) are transparently encoded/decoded.
  *
  * @method \App\Model\Entity\Setting newEmptyEntity()
  * @method \App\Model\Entity\Setting newEntity(array $data, array $options = [])
@@ -24,7 +24,7 @@ class SettingsTable extends AppTable
         $this->setPrimaryKey('id');
         $this->addBehavior('Footprint');
 
-        // jsonb transparent als JSON behandeln (Encode/Decode beliebiger Werte).
+        // Treat jsonb transparently as JSON (encode/decode of arbitrary values).
         $this->getSchema()->setColumnType('value', 'json');
     }
 }

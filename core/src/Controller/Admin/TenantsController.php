@@ -9,9 +9,9 @@ use RuntimeException;
 use Throwable;
 
 /**
- * Admin-GUI „Mandanten" (Multi-Tenancy, Bereich Core-Konfiguration): Übersicht
- * + Anlage. Nutzt das Modul-UI-Kit (sortierbare Köpfe, Paginierung, Formularfelder)
- * und ist zugleich der erste echte Screen, der das Kit adoptiert.
+ * Admin GUI "Tenants" (multi-tenancy, Core Configuration area): overview
+ * + creation. Uses the module UI kit (sortable headers, pagination, form fields)
+ * and is also the first real screen to adopt the kit.
  */
 class TenantsController extends AdminController
 {
@@ -36,7 +36,7 @@ class TenantsController extends AdminController
         });
 
         $total = count($tenants);
-        // Vollständige (aktive) Liste für die Zuweisungs-Auswahl, vor dem Slicen.
+        // Full (active) list for the assignment selector, captured before slicing.
         $allTenants = [];
         foreach ($tenants as $t) {
             if ($t['active']) {
@@ -51,7 +51,7 @@ class TenantsController extends AdminController
         $this->set('query', $this->request->getQueryParams());
     }
 
-    /** Ordnet einen Benutzer (per E-Mail) einem Mandanten zu. */
+    /** Assigns a user (by email) to a tenant. */
     public function assign()
     {
         $this->request->allowMethod('post');
@@ -92,7 +92,7 @@ class TenantsController extends AdminController
         return $this->redirect(['action' => 'index']);
     }
 
-    /** Sammelaktion: ausgewählte Mandanten aktivieren oder suspendieren. */
+    /** Bulk action: activate or suspend the selected tenants. */
     public function bulk()
     {
         $this->request->allowMethod('post');

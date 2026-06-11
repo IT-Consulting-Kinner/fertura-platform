@@ -9,7 +9,7 @@ use App\Service\Mail\MailService;
 use Cake\Datasource\ConnectionManager;
 
 /**
- * Benutzerverwaltung (Administrationsbereich „Benutzer- und Gruppenverwaltung").
+ * User management (admin area "User and Group Management").
  */
 class UsersController extends AdminController
 {
@@ -89,7 +89,7 @@ class UsersController extends AdminController
         $conn = ConnectionManager::get('default');
 
         if ($status === User::STATUS_DISABLED) {
-            // Selbst-Aussperr-Schutz (Kap. 27.14/27.15).
+            // Self-lockout protection (ch. 27.14/27.15).
             if ($id === $this->currentUserId()) {
                 $this->Flash->error(__('flash.user.self_deactivate'));
 
@@ -126,7 +126,7 @@ class UsersController extends AdminController
         $conn = ConnectionManager::get('default');
         $exists = $conn->execute('SELECT 1 FROM user_admin_areas WHERE user_id = :u AND admin_area_key = :a', ['u' => $id, 'a' => $area])->fetch();
         if ($exists) {
-            // Selbst-Aussperr-Schutz: letzten user_group_admin-Bereich nicht entziehen.
+            // Self-lockout protection: do not revoke the last user_group_admin area.
             if ($area === 'user_group_admin' && $this->isLastUserGroupAdmin($id)) {
                 $this->Flash->error(__('flash.user.last_admin_revoke'));
 
@@ -170,9 +170,9 @@ class UsersController extends AdminController
     }
 
     /**
-     * Erzeugt einen Einladungs-/Passwort-Setz-Link (Kap. 27.2/27.15) und versendet
-     * ihn per E-Mail (Core-MailService). Der Link wird zusätzlich angezeigt
-     * (Fallback, falls kein Mailversand möglich ist).
+     * Creates an invitation / password-set link (ch. 27.2/27.15) and sends it
+     * by email (core MailService). The link is also displayed
+     * (fallback in case email delivery is not possible).
      */
     public function invite(string $id)
     {
@@ -201,7 +201,7 @@ class UsersController extends AdminController
         return $this->redirect(['action' => 'view', $id]);
     }
 
-    /** Setzt das Passwort direkt (Administrator) und aktiviert „invited"-Benutzer. */
+    /** Sets the password directly (administrator) and activates "invited" users. */
     public function setPassword(string $id)
     {
         $this->request->allowMethod('post');
@@ -258,7 +258,7 @@ class UsersController extends AdminController
         return $this->redirect(['action' => 'index']);
     }
 
-    /** Fehlgeformte ID (UUID-Guard): wie unbekannten Benutzer behandeln. */
+    /** Malformed ID (UUID guard): treat like an unknown user. */
     private function notFound(): ?\Cake\Http\Response
     {
         $this->Flash->error(__('flash.user.not_found'));
@@ -284,8 +284,8 @@ class UsersController extends AdminController
     }
 
     /**
-     * Hält dieser (aktive) Benutzer den Bereich user_group_admin und wäre er der
-     * letzte aktive Träger? Dann darf er nicht entzogen/deaktiviert werden.
+     * Does this (active) user hold the user_group_admin area and would they be the
+     * last active holder? If so, it must not be revoked/deactivated.
      */
     private function isLastUserGroupAdmin(string $id): bool
     {

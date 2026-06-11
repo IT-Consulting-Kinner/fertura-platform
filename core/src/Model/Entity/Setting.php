@@ -6,7 +6,7 @@ namespace App\Model\Entity;
 use Cake\ORM\Entity;
 
 /**
- * Konfigurationswert (core.settings).
+ * Configuration value (core.settings).
  *
  * @property string $id
  * @property string $namespace
@@ -22,8 +22,7 @@ use Cake\ORM\Entity;
 class Setting extends Entity
 {
     /**
-     * Verwaltung erfolgt über den SettingsManager (kein Mass-Assignment aus
-     * Benutzereingaben).
+     * Managed through the SettingsManager (no mass assignment from user input).
      *
      * @var array<string, bool>
      */

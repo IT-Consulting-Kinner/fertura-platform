@@ -12,15 +12,14 @@ use Cake\Console\ConsoleOptionParser;
 use Cake\Datasource\ConnectionManager;
 
 /**
- * Öffentliche Modul-Interfaces (Service-Contracts, Kap. 29) inspizieren und
- * aufrufen.
+ * Inspect and invoke public module interfaces (service contracts, ch. 29).
  *
  *   bin/cake service list
  *   bin/cake service call <nutzendes_modul> <interface> '<json-input>'
  *
- * `call` nutzt das Interface ausschließlich über das Capability-Handle des
- * nutzenden Moduls (Kap. 29.8.3); ohne gültige Bindung greift das
- * Abweisungsverhalten (Kap. 29.8.4).
+ * `call` invokes the interface exclusively through the consuming module's
+ * capability handle (ch. 29.8.3); without a valid binding the rejection
+ * behaviour applies (ch. 29.8.4).
  */
 class ServiceCommand extends Command
 {
@@ -108,7 +107,7 @@ class ServiceCommand extends Command
         try {
             $output = $handle->invoke($input);
         } catch (CapabilityRejectedException $e) {
-            // Technische Abweisung (Kap. 29.8.4) – hier als Fehler ausgegeben.
+            // Technical rejection (ch. 29.8.4) - reported here as an error.
             $io->error('Abgewiesen: ' . $e->getMessage());
 
             return static::CODE_ERROR;

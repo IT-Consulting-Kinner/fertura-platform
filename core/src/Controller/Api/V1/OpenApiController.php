@@ -8,8 +8,8 @@ use Cake\Http\Response;
 use Cake\Routing\Router;
 
 /**
- * GET /api/v1/openapi.json — maschinenlesbare OpenAPI-3.1-Spezifikation der API
- * (Core-Endpunkte + Modul-Routen), generiert aus dem tatsächlichen Bestand (P07).
+ * GET /api/v1/openapi.json — machine-readable OpenAPI 3.1 specification of the API
+ * (core endpoints + module routes), generated from the actual live state (P07).
  */
 class OpenApiController extends ApiController
 {

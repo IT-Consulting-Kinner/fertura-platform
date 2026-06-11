@@ -9,8 +9,8 @@ use Cake\Console\Arguments;
 use Cake\Console\ConsoleIo;
 
 /**
- * Langlaufender Outbox-Worker (Step 6). Wird vom worker-Container ausgeführt.
- * LISTEN/NOTIFY + Poll-Fallback; SIGTERM/SIGINT beenden nach dem aktuellen Batch.
+ * Long-running outbox worker (Step 6). Run by the worker container.
+ * LISTEN/NOTIFY + poll fallback; SIGTERM/SIGINT stop after the current batch.
  */
 class EventWorkerCommand extends Command
 {

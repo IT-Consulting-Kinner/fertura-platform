@@ -10,7 +10,7 @@ use Cake\Console\ConsoleIo;
 use Cake\Console\ConsoleOptionParser;
 
 /**
- * Erzeugt ein lauffähiges Modul-Gerüst (Programm Tier-3, P16).
+ * Generates a runnable module skeleton (Programme Tier-3, P16).
  *
  *   bin/cake module_scaffold mein_modul --namespace "Acme\\MeinModul" --into ./modules-dev
  */

@@ -10,8 +10,8 @@ use Cake\Datasource\ConnectionManager;
 use Cake\Event\EventInterface;
 
 /**
- * Anmeldung/Abmeldung (Step 10). Verdrahtet die lokale Authentifizierung
- * (Step 2) mit Anmeldeschutz (Step 2/4) und dem zweiten Faktor (TOTP).
+ * Login/logout (Step 10). Wires local authentication (Step 2) together with
+ * login protection (Step 2/4) and the second factor (TOTP).
  *
  * @property \Authentication\Controller\Component\AuthenticationComponent $Authentication
  */
@@ -31,14 +31,14 @@ class AuthController extends AppController
 
     public function login()
     {
-        // Aktive SSO-Provider für die Login-Auswahl (P06); fehlertolerant, damit
-        // ein SSO-Problem den lokalen Login nie blockiert (Break-Glass).
+        // Active SSO providers for the login selection (P06); fault-tolerant so
+        // that an SSO problem never blocks the local login (break-glass).
         try {
             $this->set('ssoProviders', (new \App\Service\Auth\Sso\SsoService())->activeProviders());
         } catch (\Throwable) {
             $this->set('ssoProviders', []);
         }
-        // Mandantenspezifisches Branding (aus dem pre-auth host-aufgelösten Mandanten).
+        // Tenant-specific branding (from the pre-auth host-resolved tenant).
         try {
             $this->set('tenantBranding', (new \App\Service\Tenant\TenantService())->currentBranding());
         } catch (\Throwable) {
@@ -49,11 +49,11 @@ class AuthController extends AppController
         $throttle = new LoginThrottle();
         $username = (string)($this->request->getData('username') ?? '');
 
-        // Echte Sperre: Ist das Konto gedrosselt, wird die Anmeldung verweigert —
-        // AUCH bei korrektem Passwort. Sonst prüft die Authentication-Middleware
-        // die Zugangsdaten bei jedem POST und der `isBlocked`-Zweig würde nur die
-        // Fehlermeldung unterdrücken, die Anmeldung aber durchlassen (wirkungslose
-        // Drosselung, Brute-Force-Schutz ausgehebelt).
+        // Hard lockout: if the account is throttled, the login is denied —
+        // EVEN with a correct password. Otherwise the authentication middleware
+        // verifies the credentials on every POST and the `isBlocked` branch would
+        // only suppress the error message while still letting the login through
+        // (ineffective throttling, brute-force protection defeated).
         if ($this->request->is('post') && $username !== '' && $throttle->isBlocked($username)) {
             $this->Flash->error(__('flash.auth.throttled'));
 
@@ -61,10 +61,10 @@ class AuthController extends AppController
         }
 
         if ($result !== null && $result->isValid()) {
-            // MFA-Gate (zweiter Faktor): Das Passwort allein schließt die
-            // Anmeldung NICHT ab, wenn TOTP aktiv ist — die von der Middleware
-            // persistierte Identity wird wieder entfernt und erst nach gültigem
-            // Code (mfa()) neu gesetzt. SSO-Logins laufen separat (IdP-MFA).
+            // MFA gate (second factor): the password alone does NOT complete the
+            // login when TOTP is active — the identity persisted by the middleware
+            // is removed again and only re-set after a valid code (mfa()). SSO
+            // logins run separately (IdP MFA).
             $identity = $result->getData();
             $userId = (string)($identity['id'] ?? '');
             $mfa = new \App\Service\Security\MfaService();
@@ -75,7 +75,7 @@ class AuthController extends AppController
                     'id' => $userId,
                     'username' => (string)($identity['username'] ?? $username),
                     'target' => $target,
-                    'expires' => time() + 300, // 5-Minuten-Fenster für den 2. Faktor
+                    'expires' => time() + 300, // 5-minute window for the 2nd factor
                 ]);
 
                 return $this->redirect('/login/mfa');
@@ -84,13 +84,13 @@ class AuthController extends AppController
             if ($username !== '') {
                 $throttle->clear($username);
             }
-            // Session-Fixation-Schutz: nach erfolgreicher Anmeldung die Session-ID
-            // erneuern, damit eine vor dem Login fixierte ID nicht authentifiziert wird.
+            // Session fixation protection: after a successful login, renew the
+            // session ID so that an ID fixed before login is not authenticated.
             $this->request->getSession()->renew();
             $target = $this->Authentication->getLoginRedirect() ?? '/admin';
 
-            // MFA-Pflicht (Betreiber-Setting): ohne eingerichtetes TOTP direkt
-            // in die Einrichtung leiten (AppController erzwingt das zusätzlich).
+            // MFA enforcement (operator setting): without configured TOTP, redirect
+            // straight to setup (the AppController additionally enforces this).
             if ($mfa->required()) {
                 $this->Flash->error(__('flash.mfa.setup_required'));
 
@@ -111,10 +111,10 @@ class AuthController extends AppController
     }
 
     /**
-     * Zweiter Faktor nach gültigem Passwort: GET zeigt das Code-Formular,
-     * POST prüft TOTP- oder Recovery-Code. Die Anmeldung wird erst hier
-     * abgeschlossen (Identity gesetzt + Session erneuert). Fehlversuche
-     * laufen über dieselbe Drosselung wie der Passwort-Login.
+     * Second factor after a valid password: GET shows the code form,
+     * POST verifies the TOTP or recovery code. The login is only completed
+     * here (identity set + session renewed). Failed attempts go through the
+     * same throttling as the password login.
      *
      * @return \Cake\Http\Response|null
      */
@@ -144,7 +144,7 @@ class AuthController extends AppController
             return null;
         }
 
-        // Zweiter Faktor: Passkey-Assertion (JS-befüllte Felder) ODER TOTP-/Recovery-Code.
+        // Second factor: passkey assertion (JS-populated fields) OR TOTP/recovery code.
         $verified = false;
         if ((string)$this->request->getData('credential_id') !== '') {
             $challenge = (string)($session->read('Mfa.passkey_challenge') ?? '');
@@ -169,7 +169,7 @@ class AuthController extends AppController
             return null;
         }
 
-        // Faktor 2 ok -> Anmeldung abschließen (wie der SSO-Pfad: ORM-Entity).
+        // Factor 2 ok -> complete the login (like the SSO path: ORM entity).
         $session->delete('Mfa.pending');
         $throttle->clear($username);
         $user = $this->fetchTable('Users')->find()
@@ -185,8 +185,8 @@ class AuthController extends AppController
     }
 
     /**
-     * JSON-Optionen für `navigator.credentials.get()` im Challenge-Schritt
-     * (nur mit gültigem Pending aus dem Passwort-Schritt).
+     * JSON options for `navigator.credentials.get()` in the challenge step
+     * (only with a valid pending state from the password step).
      */
     public function mfaPasskeys(): \Cake\Http\Response
     {
@@ -217,9 +217,9 @@ class AuthController extends AppController
     }
 
     /**
-     * Self-Service „Passwort vergessen" (Kap. 27.2/27.15): erzeugt einen
-     * Reset-Token und versendet den Link per E-Mail (Core-MailService). Die
-     * Antwort ist immer neutral (keine Konto-Enumeration).
+     * Self-service "forgot password" (ch. 27.2/27.15): creates a reset token
+     * and sends the link by email (Core MailService). The response is always
+     * neutral (no account enumeration).
      */
     public function forgotPassword()
     {
@@ -247,8 +247,8 @@ class AuthController extends AppController
     }
 
     /**
-     * Öffentliches Setzen des Passworts per Einladungs-/Reset-Token (Kap.
-     * 27.2/27.15). GET zeigt das Formular, POST löst den Token ein.
+     * Public password setting via invitation/reset token (ch. 27.2/27.15).
+     * GET shows the form, POST redeems the token.
      */
     public function setPassword()
     {

@@ -11,18 +11,18 @@ use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 
 /**
- * Setzt die Anzeigesprache pro Request (i18n, E37).
+ * Sets the display language per request (i18n, E37).
  *
- * Präzedenz (jeweils nur, wenn die Locale aktiviert ist, `locale.enabled`):
- *   1. Expliziter Wechsel `?lang=…` → in der Session gemerkt (Session-Override)
- *   2. Session-Override
- *   3. Benutzer-Präferenz `user.locale`
- *   4. System-Default `locale.default`
+ * Precedence (each only if the locale is enabled, `locale.enabled`):
+ *   1. Explicit switch `?lang=…` → stored in the session (session override)
+ *   2. Session override
+ *   3. User preference `user.locale`
+ *   4. System default `locale.default`
  *
- * `I18n::setLocale()` setzt die Übersetzungs-Locale **und** die ICU-Default-Locale
- * (Datums-/Zahlenformat). Die Default-/Fallback-Locale bleibt `App.defaultLocale`
- * (Englisch) → fehlende Schlüssel fallen auf Englisch zurück. Läuft NACH der
- * AuthenticationMiddleware (Identität verfügbar).
+ * `I18n::setLocale()` sets the translation locale **and** the ICU default locale
+ * (date/number formatting). The default/fallback locale stays `App.defaultLocale`
+ * (English) → missing keys fall back to English. Runs AFTER the
+ * AuthenticationMiddleware (identity available).
  */
 class LocaleMiddleware implements MiddlewareInterface
 {
@@ -34,7 +34,7 @@ class LocaleMiddleware implements MiddlewareInterface
 
         $session = $request->getAttribute('session');
 
-        // 1. ?lang -> Session-Override (nur aktivierte Locales).
+        // 1. ?lang -> session override (enabled locales only).
         $query = $request->getQueryParams();
         $qlang = isset($query['lang']) ? (string)$query['lang'] : '';
         if ($qlang !== '' && in_array($qlang, $enabled, true) && $session !== null) {
@@ -43,19 +43,19 @@ class LocaleMiddleware implements MiddlewareInterface
 
         $locale = null;
 
-        // 2. Session-Override.
+        // 2. Session override.
         $sessLocale = $session?->read('locale');
         if (is_string($sessLocale) && in_array($sessLocale, $enabled, true)) {
             $locale = $sessLocale;
         }
 
-        // 3. Benutzer-Präferenz.
+        // 3. User preference.
         if ($locale === null) {
             $identity = $request->getAttribute('identity');
             if ($identity !== null && method_exists($identity, 'getOriginalData')) {
                 $data = $identity->getOriginalData();
-                // Daten können ein ORM-Entity (->get) oder ein ArrayObject/Array
-                // sein (z. B. Token-Identität) — beide robust behandeln.
+                // Data may be an ORM entity (->get) or an ArrayObject/array
+                // (e.g. token identity) — handle both robustly.
                 $userLocale = null;
                 if (is_object($data) && method_exists($data, 'get')) {
                     $userLocale = $data->get('locale');
@@ -68,7 +68,7 @@ class LocaleMiddleware implements MiddlewareInterface
             }
         }
 
-        // 3b. Accept-Language (v. a. öffentlich/Login ohne Session/Identität).
+        // 3b. Accept-Language (mainly public/login without session/identity).
         if ($locale === null) {
             $locale = $this->matchAcceptLanguage(
                 (string)($request->getHeaderLine('Accept-Language')),
@@ -76,7 +76,7 @@ class LocaleMiddleware implements MiddlewareInterface
             );
         }
 
-        // 4. System-Default (geht nicht auf eine nicht-aktivierte Locale).
+        // 4. System default (never falls onto a non-enabled locale).
         if ($locale === null) {
             $locale = in_array($default, $enabled, true) ? $default : (string)($enabled[0] ?? 'en_US');
         }
@@ -87,8 +87,8 @@ class LocaleMiddleware implements MiddlewareInterface
     }
 
     /**
-     * Beste aktivierte Locale aus dem Accept-Language-Header (nach q-Gewicht).
-     * Direktes `ll_CC` oder Sprach-Präfix `ll` → erste aktivierte `ll_*`.
+     * Best enabled locale from the Accept-Language header (by q weight).
+     * Direct `ll_CC` or language prefix `ll` → first enabled `ll_*`.
      *
      * @param list<string> $enabled
      */
@@ -116,7 +116,7 @@ class LocaleMiddleware implements MiddlewareInterface
             if (in_array($tag, $enabled, true)) {
                 return $tag;
             }
-            // Sprach-Präfix: 'de' → erste aktivierte 'de_*'.
+            // Language prefix: 'de' → first enabled 'de_*'.
             $lang = strtolower(explode('_', $tag)[0]);
             foreach ($enabled as $e) {
                 if (strtolower(explode('_', $e)[0]) === $lang) {

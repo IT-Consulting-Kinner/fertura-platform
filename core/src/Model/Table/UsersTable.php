@@ -9,10 +9,10 @@ use Cake\ORM\Query\SelectQuery;
 use Cake\Validation\Validator;
 
 /**
- * Users-Model (core.users).
+ * Users model (core.users).
  *
- * Zeitstempel werden in der Datenbank gepflegt (Defaults + Trigger
- * core.set_updated_at), daher kein Timestamp-Behavior.
+ * Timestamps are maintained in the database (defaults + trigger
+ * core.set_updated_at), hence no Timestamp behavior.
  *
  * @method \App\Model\Entity\User newEntity(array $data, array $options = [])
  * @method \App\Model\Entity\User get($primaryKey, array $options = [])
@@ -21,18 +21,18 @@ class UsersTable extends AppTable
 {
     public function initialize(array $config): void
     {
-        // AppTable aktiviert das UuidV7-Behavior (universelle UUIDv7-Erzeugung).
+        // AppTable enables the UuidV7 behavior (universal UUIDv7 generation).
         parent::initialize($config);
 
         $this->setTable('users');
         $this->setDisplayField('username');
         $this->setPrimaryKey('id');
 
-        // Akteur-Spalten created_by/updated_by (E8) – nur Fachtabellen.
+        // Actor columns created_by/updated_by (E8) – domain tables only.
         $this->addBehavior('Footprint');
 
-        // Assoziationen (Groups, UserAdminAreas, ApiTokens) folgen mit ihren
-        // Table-Klassen in spaeteren Schritten (allowFallbackClass=false).
+        // Associations (Groups, UserAdminAreas, ApiTokens) follow with their
+        // Table classes in later steps (allowFallbackClass=false).
     }
 
     public function validationDefault(Validator $validator): Validator
@@ -63,8 +63,8 @@ class UsersTable extends AppTable
     }
 
     /**
-     * Finder fuer den Auth-Resolver: nur aktive Benutzer koennen sich anmelden
-     * (Kap. 27.15: deaktivierte/anonymisierte Benutzer erhalten keinen Zugriff).
+     * Finder for the auth resolver: only active users can sign in
+     * (ch. 27.15: disabled/anonymized users get no access).
      */
     public function findActive(SelectQuery $query, array $options = []): SelectQuery
     {
@@ -72,16 +72,15 @@ class UsersTable extends AppTable
     }
 
     /**
-     * Irreversible Anonymisierung eines Benutzers (Recht auf Löschung,
-     * Entscheidung 160 / Kap. 27.15.3).
+     * Irreversible anonymization of a user (right to erasure,
+     * Decision 160 / ch. 27.15.3).
      *
-     * Personenbezogene Identitätsfelder werden durch nicht rückführbare
-     * Platzhalter ersetzt; technische ID, Gruppenmitgliedschaften und
-     * historische Referenzen bleiben erhalten. Keine Zuordnungstabelle,
-     * kein Schlüssel -> nicht umkehrbar. API-Tokens werden widerrufen.
-     * Alles in einer Transaktion (atomar).
+     * Personal identity fields are replaced with non-reversible placeholders;
+     * the technical ID, group memberships and historical references are kept.
+     * No mapping table, no key -> not reversible. API tokens are revoked.
+     * Everything in a single transaction (atomic).
      *
-     * Hinweis: Der zugehörige Audit-Eintrag wird in Step 3 (Audit-Log) ergänzt.
+     * Note: The corresponding audit entry is added in Step 3 (audit log).
      */
     public function anonymize(User $user): bool
     {
@@ -102,20 +101,20 @@ class UsersTable extends AppTable
                 return false;
             }
 
-            // Aktive API-Tokens widerrufen (Entscheidung 162: sofort ungültig).
+            // Revoke active API tokens (Decision 162: invalid immediately).
             $this->getConnection()->execute(
                 'UPDATE api_tokens SET revoked_at = now() WHERE user_id = :uid AND revoked_at IS NULL',
                 ['uid' => $id],
             );
 
-            // Module ihre eigenen personenbezogenen Daten bereinigen lassen
-            // (Kap. 27.15.3, Collector core.collector.anonymize) — in derselben
-            // Transaktion (atomar). Scheitert ein Beitrag, scheitert die gesamte
-            // Anonymisierung.
+            // Let modules scrub their own personal data
+            // (ch. 27.15.3, collector core.collector.anonymize) — in the same
+            // transaction (atomic). If any contribution fails, the whole
+            // anonymization fails.
             $scrubbed = (new \App\Service\Privacy\AnonymizationService())->run((string)$id, $this->getConnection());
 
-            // Audit (Kap. 27.18): Anonymisierung protokollieren. Keine PII im
-            // Payload (E16); Benutzer per UUID referenziert.
+            // Audit (ch. 27.18): log the anonymization. No PII in the
+            // payload (E16); user referenced by UUID.
             (new AuditLogger())->log('user.anonymize', 'user', $id, [
                 'oldValue' => ['status' => $previousStatus],
                 'newValue' => ['status' => User::STATUS_ANONYMIZED, 'module_records_scrubbed' => $scrubbed],

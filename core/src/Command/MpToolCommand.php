@@ -14,14 +14,14 @@ use Cake\Console\ConsoleIo;
 use Cake\Console\ConsoleOptionParser;
 
 /**
- * Betreiber-/Marketplace-Werkzeug für das Schlüssel-, Signatur- und
- * Lizenzverfahren (Kap. 24.9.2 / 28.7). Agiert als signierende Gegenstelle.
+ * Operator/marketplace tooling for the key, signature and licensing workflow
+ * (ch. 24.9.2 / 28.7). Acts as the signing counterpart to the Core.
  *
- * Schlüsselhierarchie (Root -> Publisher):
- *   - Root-Schlüssel: oberster Vertrauensanker (offline/HSM aufbewahren).
- *     Signiert Publisher-Zertifikate sowie Marketplace-Dokumente (anchors/crl).
- *   - Publisher-Schlüssel: operativ; signiert Pakete und Lizenzen. Ihr
- *     Zertifikat wird vom Root signiert (Kette, vom Core geprüft).
+ * Key hierarchy (Root -> Publisher):
+ *   - Root key: the top-level trust anchor (keep offline / in an HSM).
+ *     Signs publisher certificates as well as marketplace documents (anchors/crl).
+ *   - Publisher key: operational; signs packages and licenses. Its
+ *     certificate is signed by the Root (chain, verified by the Core).
  *
  *   bin/cake mp_tool keygen
  *   bin/cake mp_tool sign-key      --secret <rootSecret> --key-id <rootId> \
@@ -30,7 +30,7 @@ use Cake\Console\ConsoleOptionParser;
  *   bin/cake mp_tool license       <module> --secret <pubSecret> --key-id <pubId> --valid-to <ISO> [--grace N] [--online]
  *   bin/cake mp_tool sign-doc      <payload.json> --secret <rootSecret> --key-id <rootId>
  *
- * Siehe SIGNING.md für das vollständige Betriebsverfahren.
+ * See SIGNING.md for the complete operational procedure.
  */
 class MpToolCommand extends Command
 {
@@ -106,8 +106,8 @@ class MpToolCommand extends Command
     }
 
     /**
-     * Root signiert ein Publisher-Zertifikat (Kette Root -> Publisher).
-     * Ausgabe: Anker-Dokument inkl. Root-Signatur über (key_id, public_key, publisher).
+     * The Root signs a publisher certificate (chain Root -> Publisher).
+     * Output: an anchor document including the Root signature over (key_id, public_key, publisher).
      */
     private function signKey(Arguments $args, ConsoleIo $io, Signer $signer): int
     {
@@ -137,8 +137,8 @@ class MpToolCommand extends Command
     }
 
     /**
-     * Signiert ein Marketplace-Dokument (anchors.json/crl.json/metadata.json):
-     * liest ein JSON-Payload und gibt die Hülle {payload, key_id, signature} aus.
+     * Signs a marketplace document (anchors.json/crl.json/metadata.json):
+     * reads a JSON payload and emits the envelope {payload, key_id, signature}.
      */
     private function signDoc(Arguments $args, ConsoleIo $io, Signer $signer): int
     {

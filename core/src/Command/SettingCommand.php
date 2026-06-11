@@ -12,7 +12,7 @@ use Cake\Console\ConsoleOptionParser;
 use InvalidArgumentException;
 
 /**
- * Liest/schreibt Konfigurationswerte (bis die Admin-GUI in Step 10 folgt).
+ * Reads/writes configuration values (until the admin GUI arrives in Step 10).
  *
  *   bin/cake setting get core password.min_length
  *   bin/cake setting set core password.min_length 16

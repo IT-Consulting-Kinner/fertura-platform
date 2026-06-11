@@ -6,10 +6,10 @@ namespace App\Model\Table;
 use Cake\ORM\Table;
 
 /**
- * Sessions-Tabelle (core.sessions) für den DB-gestützten, instanzübergreifenden
- * Session-Speicher (Kap. 20.8/30.7, HA). Wird von CakePHPs `DatabaseSession`
- * über den Alias `Sessions` genutzt. Eigene Modellklasse, damit der Alias auch
- * ohne generischen Fallback (z. B. bei `Orm.mappedClassesOnly`) auflösbar ist.
+ * Sessions table (core.sessions) for the DB-backed, cross-instance session store
+ * (ch. 20.8/30.7, HA). Used by CakePHP's `DatabaseSession` via the `Sessions`
+ * alias. Dedicated model class so the alias resolves even without a generic
+ * fallback (e.g. when `Orm.mappedClassesOnly` is set).
  */
 class SessionsTable extends Table
 {

@@ -12,18 +12,18 @@ use Psr\Http\Server\RequestHandlerInterface;
 use Throwable;
 
 /**
- * Per-IP-Anmeldeschutz **vor** der eigentlichen Authentifizierung (Peer-Review #2,
- * E99). Die `AuthenticationMiddleware` prüft die Zugangsdaten (Argon2/bcrypt =
- * CPU) bei jedem POST; eine reine Per-Benutzer-Sperre im Controller greift erst
- * danach und bremst weder **Password-Spraying** über viele Benutzernamen noch die
- * Pre-Auth-CPU-Last.
+ * Per-IP login protection **before** the actual authentication (Peer-Review #2,
+ * E99). The `AuthenticationMiddleware` verifies the credentials (Argon2/bcrypt =
+ * CPU) on every POST; a purely per-user lockout in the controller only takes effect
+ * afterwards and throttles neither **password spraying** across many usernames nor
+ * the pre-auth CPU load.
  *
- * Diese Middleware blockt eine IP, die im Zeitfenster zu viele Fehlversuche (über
- * beliebige Konten) hatte, mit `429` — bevor überhaupt ein Passwort gehasht wird.
- * Die feinkörnige, UX-freundliche Per-Benutzer-Sperre bleibt im `AuthController`.
+ * This middleware blocks an IP that has had too many failed attempts (across any
+ * accounts) within the time window with `429` — before any password is even hashed.
+ * The fine-grained, UX-friendly per-user lockout stays in the `AuthController`.
  *
- * Sie schlüsselt bewusst auf `clientIp()` (= `REMOTE_ADDR`, solange keine Trusted
- * Proxies konfiguriert sind) und ist damit nicht per `X-Forwarded-For` fälschbar.
+ * It deliberately keys on `clientIp()` (= `REMOTE_ADDR` as long as no trusted
+ * proxies are configured) and is therefore not spoofable via `X-Forwarded-For`.
  */
 class LoginThrottleMiddleware implements MiddlewareInterface
 {
@@ -41,8 +41,8 @@ class LoginThrottleMiddleware implements MiddlewareInterface
                         ->withStringBody("Zu viele Anmeldeversuche. Bitte später erneut versuchen.\n");
                 }
             } catch (Throwable) {
-                // Throttle-Speicher (DB) nicht verfügbar -> Anmeldung nicht blockieren
-                // (Verfügbarkeit vor strikter Grenze; der Controller bleibt zuständig).
+                // Throttle store (DB) unavailable -> do not block the login
+                // (availability over strict enforcement; the controller remains responsible).
             }
         }
 

@@ -7,11 +7,11 @@ use App\Service\Update\UpdateManager;
 use Cake\Datasource\ConnectionManager;
 
 /**
- * Update-Manager (Administrationsbereich „Update-Manager").
+ * Update manager (admin area "Update Manager").
  *
- * Zeigt die Update-Historie und erlaubt das Auslösen von Modul-/Core-Updates
- * aus einem bereitgestellten (signierten) Paketpfad. Bei Fehlern wird gemäß
- * Step 8 ein Down-Migrations-Rollback gefahren.
+ * Shows the update history and allows triggering module/core updates
+ * from a provided (signed) package path. On failure, a down-migration
+ * rollback is performed in accordance with step 8.
  */
 class UpdatesController extends AdminController
 {

@@ -6,9 +6,9 @@ namespace App\Auth;
 use App\Service\Settings\SettingsManager;
 
 /**
- * Passwort-Policy (Kap. 1.4 / 27): liest die Regeln aus dem Konfigurationsspeicher
- * (DB), mit sicheren Vorgabewerten aus dem Katalog. Ersetzt die festen Code-
- * Defaults aus Step 2.
+ * Password policy (ch. 1.4 / 27): reads the rules from the configuration store
+ * (DB), with safe defaults from the catalog. Replaces the hard-coded defaults
+ * from Step 2.
  */
 class PasswordPolicy
 {
@@ -25,7 +25,7 @@ class PasswordPolicy
     }
 
     /**
-     * @return list<string> Liste der Verstöße (leer = gültig).
+     * @return list<string> List of violations (empty = valid).
      */
     public function validate(string $plain): array
     {

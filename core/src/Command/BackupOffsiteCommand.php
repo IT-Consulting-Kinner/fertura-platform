@@ -10,11 +10,11 @@ use Cake\Console\ConsoleIo;
 use Cake\Console\ConsoleOptionParser;
 
 /**
- * Off-Site-Ablage der Backups (Programm Tier-2, P14) auf der Konsole.
+ * Console-side off-site storage of backups (Programme Tier-2, P14).
  *
- *   bin/cake backup_offsite push /pfad/zum/backup.zip
+ *   bin/cake backup_offsite push /path/to/backup.zip
  *   bin/cake backup_offsite list
- *   bin/cake backup_offsite pull backup.zip --to /pfad/lokal.zip
+ *   bin/cake backup_offsite pull backup.zip --to /path/local.zip
  *   bin/cake backup_offsite rm backup.zip
  */
 class BackupOffsiteCommand extends Command

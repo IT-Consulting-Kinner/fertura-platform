@@ -6,11 +6,11 @@ namespace App\Log;
 use Cake\Log\Formatter\JsonFormatter;
 
 /**
- * JSON-Log-Formatter, der den prozessweiten {@see LogContext} sowie am
- * Aufrufort mitgegebene operative Felder automatisch in jede Zeile einmischt
- * (Kap. 20.2.3). So enthalten Logzeilen verlässlich `correlation_id`,
- * `request_id`, `component` und (falls gesetzt) `module` — ohne dass jeder
- * Aufrufer sie übergeben muss. Aufruf-Kontext hat Vorrang vor dem Holder.
+ * JSON log formatter that automatically merges the process-wide {@see LogContext}
+ * as well as operative fields supplied at the call site into every line
+ * (ch. 20.2.3). This way log lines reliably contain `correlation_id`,
+ * `request_id`, `component` and (if set) `module` — without every caller having
+ * to pass them. Call-site context takes precedence over the holder.
  */
 class ContextJsonFormatter extends JsonFormatter
 {
@@ -34,8 +34,8 @@ class ContextJsonFormatter extends JsonFormatter
                 $log[$f] = $merged[$f];
             }
         }
-        // Audit-Ereignis (Punkt 3a): strukturiertes Feld für SIEM-Parsing
-        // durchreichen, statt es im freien Text zu verstecken.
+        // Audit event (item 3a): pass through as a structured field for SIEM
+        // parsing, instead of hiding it in free text.
         if (isset($merged['audit']) && is_array($merged['audit'])) {
             $log['audit'] = $merged['audit'];
         }

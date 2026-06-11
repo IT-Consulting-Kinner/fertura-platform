@@ -16,21 +16,20 @@ use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 
 /**
- * Session-Anomalie-Erkennung (Kür zu E129) für **Session-basierte** Identitäten:
+ * Session anomaly detection (stretch goal of E129) for **session-based** identities:
  *
- * - **UA-Bindung** (`security.session.bind_ua`, Default an): die Session wird an
- *   den User-Agent-Hash des Logins gebunden — wechselt er (gestohlenes Cookie in
- *   anderem Browser), wird die Session **zerstört** (fail-closed) und auditiert.
- * - **IP-Wechsel**: wird auditiert (`session.ip_change`); bei
- *   `security.session.ip_strict` (Default aus — mobile Netze/NAT wechseln IPs
- *   legitim) wird die Session ebenfalls beendet.
- * - **Neues Gerät**: erster Login mit unbekanntem User-Agent-Fingerprint je
- *   Benutzer → In-App-Benachrichtigung (`security.session.notify_new_device`)
- *   + Audit (`session.new_device`).
+ * - **UA binding** (`security.session.bind_ua`, default on): the session is bound to
+ *   the User-Agent hash of the login — if it changes (stolen cookie used in a
+ *   different browser), the session is **destroyed** (fail-closed) and audited.
+ * - **IP change**: is audited (`session.ip_change`); with
+ *   `security.session.ip_strict` (default off — mobile networks/NAT change IPs
+ *   legitimately) the session is also terminated.
+ * - **New device**: first login with an unknown User-Agent fingerprint per
+ *   user → in-app notification (`security.session.notify_new_device`)
+ *   + audit (`session.new_device`).
  *
- * API-Pfade (Bearer-Token, keine Session) sind ausgenommen. Alle Neben-
- * wirkungen (Audit/Notify) sind fehlerisoliert — sie dürfen den Request
- * nie brechen.
+ * API paths (bearer token, no session) are exempt. All side effects
+ * (audit/notify) are error-isolated — they must never break the request.
  */
 class SessionGuardMiddleware implements MiddlewareInterface
 {
@@ -54,7 +53,7 @@ class SessionGuardMiddleware implements MiddlewareInterface
         /** @var array{ua:string,ip:string}|null $guard */
         $guard = $session->read('Guard');
         if (!is_array($guard)) {
-            // Erster authentifizierter Request dieser Session: binden + Gerät prüfen.
+            // First authenticated request of this session: bind + check device.
             $session->write('Guard', ['ua' => $uaHash, 'ip' => $ip]);
             $this->checkKnownDevice($userId, $uaHash, $notify);
 
@@ -75,13 +74,13 @@ class SessionGuardMiddleware implements MiddlewareInterface
 
                 return (new Response())->withStatus(302)->withLocation('/login');
             }
-            $session->write('Guard.ip', $ip); // Wechsel registriert, weiter beobachten
+            $session->write('Guard.ip', $ip); // change recorded, keep observing
         }
 
         return $handler->handle($request);
     }
 
-    /** Unbekannter UA-Fingerprint für diesen Benutzer? -> merken + benachrichtigen. */
+    /** Unknown UA fingerprint for this user? -> remember + notify. */
     private function checkKnownDevice(string $userId, string $uaHash, bool $notify): void
     {
         try {
@@ -98,7 +97,7 @@ class SessionGuardMiddleware implements MiddlewareInterface
                 return;
             }
             $this->audit('session.new_device', $userId, ['fingerprint' => substr($uaHash, 0, 12)]);
-            // Erstes Gerät überhaupt = die Einrichtung selbst -> kein Alarm nötig.
+            // The very first device = the setup itself -> no alert needed.
             $count = (int)$conn->execute(
                 'SELECT count(*) AS c FROM user_known_devices WHERE user_id = :u',
                 ['u' => $userId],
@@ -107,7 +106,7 @@ class SessionGuardMiddleware implements MiddlewareInterface
                 (new NotificationService())->notify($userId, 'security.new_device', __('security.new_device_notice'));
             }
         } catch (\Throwable) {
-            // Geräte-Heuristik darf den Request nie brechen.
+            // The device heuristic must never break the request.
         }
     }
 
@@ -117,7 +116,7 @@ class SessionGuardMiddleware implements MiddlewareInterface
         try {
             (new AuditLogger())->log($action, 'user', $userId, ['newValue' => $detail, 'component' => 'core']);
         } catch (\Throwable) {
-            // fehlerisoliert
+            // error-isolated
         }
     }
 

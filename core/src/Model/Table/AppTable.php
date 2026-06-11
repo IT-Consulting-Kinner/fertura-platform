@@ -6,13 +6,13 @@ namespace App\Model\Table;
 use Cake\ORM\Table;
 
 /**
- * Basisklasse für alle Core-Tabellen.
+ * Base class for all core tables.
  *
- * Aktiviert die universelle, zeitgeordnete UUIDv7-Erzeugung (Entscheidung E6)
- * für jede Tabelle mit einspaltigem uuid-Primärschlüssel. Das UuidV7Behavior
- * prüft den PK-Typ selbst und lässt Tabellen mit Text-/zusammengesetzten PKs
- * (z. B. admin_areas) unangetastet. So bleibt die Konvention konsistent, ohne
- * dass jede Table-Klasse das Behavior einzeln registrieren muss.
+ * Enables universal, time-ordered UUIDv7 generation (Decision E6) for every
+ * table with a single-column uuid primary key. The UuidV7Behavior checks the PK
+ * type itself and leaves tables with text/composite PKs (e.g. admin_areas)
+ * untouched. This keeps the convention consistent without each Table class
+ * having to register the behavior individually.
  */
 class AppTable extends Table
 {

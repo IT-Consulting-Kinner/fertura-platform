@@ -7,8 +7,8 @@ use App\Event\EventListenerInterface;
 use RuntimeException;
 
 /**
- * Demo-/Test-Listener: schlägt immer fehl (für Retry/Dead-Letter/Isolation).
- * Nur vom Outbox-Selbsttest verwendet.
+ * Demo/test listener: always fails (for retry/dead-letter/isolation).
+ * Used only by the outbox self-test.
  */
 class FailingListener implements EventListenerInterface
 {

@@ -12,14 +12,14 @@ use DateTimeImmutable;
 use DateTimeZone;
 
 /**
- * Stellt monatliche Partitionen für die zeitbereichs-partitionierten Tabellen
- * (core.audit_log, core.event_outbox) sicher: Vormonat, aktueller Monat,
- * Folgemonat. Idempotent. Wird im Entrypoint nach den Migrationen und VOR dem
- * ersten Schreiben aufgerufen, damit Einträge in Monatspartitionen statt in die
- * DEFAULT-Partition fallen.
+ * Ensures monthly partitions exist for the range-partitioned tables
+ * (core.audit_log, core.event_outbox): previous month, current month, next
+ * month. Idempotent. Invoked from the entrypoint after the migrations and
+ * BEFORE the first write, so that rows land in the monthly partitions instead
+ * of the DEFAULT partition.
  *
- * Laufende, vorausschauende Partitionspflege + Archivierung alter Partitionen
- * = Wartungs-Worker/Operations (später).
+ * Ongoing, look-ahead partition maintenance + archiving of old partitions is
+ * handled by a maintenance worker/operations (later).
  */
 class AuditPartitionCommand extends Command
 {
@@ -46,7 +46,7 @@ class AuditPartitionCommand extends Command
                     continue;
                 }
 
-                // Bounds aus kontrollierter Datumsformatierung (kein Injection-Risiko).
+                // Bounds come from controlled date formatting (no injection risk).
                 $sql = sprintf(
                     "CREATE TABLE core.%s PARTITION OF core.%s FOR VALUES FROM ('%s') TO ('%s')",
                     $name,

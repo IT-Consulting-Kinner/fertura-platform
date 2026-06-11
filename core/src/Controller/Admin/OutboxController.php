@@ -6,8 +6,8 @@ namespace App\Controller\Admin;
 use App\Service\Event\OutboxAdmin;
 
 /**
- * Dead-Letter-Verwaltung (Kap. 26.9.2) im Bereich Core-Konfiguration:
- * Übersicht der Event-Stati + manuelles Retry/Verwerfen fehlgeschlagener Events.
+ * Dead-letter management (ch. 26.9.2) within the Core configuration area:
+ * overview of event statuses plus manual retry/discard of failed events.
  */
 class OutboxController extends AdminController
 {

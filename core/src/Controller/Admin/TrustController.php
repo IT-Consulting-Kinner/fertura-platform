@@ -8,14 +8,14 @@ use App\Service\Security\TrustStore;
 use Cake\Datasource\ConnectionManager;
 
 /**
- * Verwaltung der **Vertrauensanker & Sperrliste** (Kap. 24.9.2) — GUI-Pendant zu
- * `bin/cake trust`. Sicherheitskritisch: Anker = Wurzel der Modul-Signaturkette;
- * Aktionen daher mit harter Bestätigung. Liefert Anzeige (Anker + Gültigkeit +
- * Sperrliste + CRL-Alter), **Widerruf** eines Schlüssels (markiert betroffene
- * Module) und **manuelles Hinzufügen** eines Ankers (Out-of-band-Vertrauen).
+ * Management of **trust anchors & revocation list** (ch. 24.9.2) — GUI counterpart to
+ * `bin/cake trust`. Security-critical: an anchor is the root of the module signature
+ * chain, so actions require hard confirmation. Provides display (anchors + validity +
+ * revocation list + CRL age), **revocation** of a key (flags affected modules), and
+ * **manual addition** of an anchor (out-of-band trust).
  *
- * Bewusst CLI belassen: gleitende Schlüsselrotation mit Überlappungsfenster
- * (`trust rotate`) und das Einlesen aus Zertifikatsdateien — Operator-/Datei-Pfad.
+ * Deliberately left CLI-only: rolling key rotation with an overlap window
+ * (`trust rotate`) and importing from certificate files — an operator/file-path concern.
  */
 class TrustController extends AdminController
 {
@@ -39,7 +39,7 @@ class TrustController extends AdminController
             'SELECT key_id, reason, source, revoked_at FROM revoked_keys ORDER BY revoked_at DESC LIMIT 100',
         )->fetchAll('assoc');
 
-        // Jeden Anker um sein Gültigkeits-/Sperr-Resultat anreichern (E45/24.9.2).
+        // Enrich each anchor with its validity/revocation result (E45/24.9.2).
         $trust = new TrustStore();
         foreach ($anchors as &$a) {
             $a['revoked'] = $trust->isRevoked((string)$a['key_id']);
@@ -51,13 +51,13 @@ class TrustController extends AdminController
         try {
             $crl = (new MarketplaceClient())->crlState();
         } catch (\Throwable) {
-            // CRL-Status ist informativ; ohne Marketplace-Konfig leer.
+            // The CRL status is informational; empty without marketplace config.
         }
 
         $this->set(compact('anchors', 'revoked', 'crl'));
     }
 
-    /** Widerruft einen Schlüssel und markiert betroffene Module (deny-side). */
+    /** Revokes a key and flags affected modules (deny-side). */
     public function revoke(string $keyId): ?\Cake\Http\Response
     {
         $this->request->allowMethod('post');
@@ -68,14 +68,14 @@ class TrustController extends AdminController
         }
         $trust = new TrustStore();
         $trust->revokeKey($keyId, (string)$this->request->getData('reason') ?: null, 'manual');
-        // Module, die mit diesem Schlüssel signiert wurden, als revoked kennzeichnen.
+        // Mark modules that were signed with this key as revoked.
         $affected = $trust->reconcileModuleSignatures();
         $this->Flash->success(__('flash.trust.revoked', $keyId, $affected));
 
         return $this->redirect(['action' => 'index']);
     }
 
-    /** Fügt einen Vertrauensanker hinzu (manuelle, out-of-band Vertrauensentscheidung). */
+    /** Adds a trust anchor (manual, out-of-band trust decision). */
     public function addAnchor(): ?\Cake\Http\Response
     {
         $this->request->allowMethod('post');

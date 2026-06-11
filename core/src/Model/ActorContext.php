@@ -4,12 +4,12 @@ declare(strict_types=1);
 namespace App\Model;
 
 /**
- * Request-/prozessweiter Kontext des handelnden Benutzers (Akteur) für
- * Footprint-Spalten (created_by/updated_by, Entscheidung E8).
+ * Request-/process-wide context of the acting user (actor) for footprint
+ * columns (created_by/updated_by, Decision E8).
  *
- * Wird pro HTTP-Request von der FootprintMiddleware aus der Identität gesetzt
- * und danach geleert. In CLI-/Systemkontexten ohne angemeldeten Benutzer bleibt
- * der Akteur null (z. B. Bootstrap-Admin via Konsole).
+ * Set per HTTP request by the FootprintMiddleware from the identity, then
+ * cleared afterwards. In CLI/system contexts without a logged-in user the actor
+ * stays null (e.g. bootstrap admin via console).
  */
 class ActorContext
 {

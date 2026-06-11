@@ -10,21 +10,21 @@ use Cake\Event\EventInterface;
 use Cake\Http\Exception\ForbiddenException;
 
 /**
- * Basis für alle Admin-Controller (scoped admin, Kap. 27.3.1 / Entscheidung 170).
+ * Base class for all admin controllers (scoped admin, ch. 27.3.1 / Decision 170).
  *
- * Erzwingt serverseitig: angemeldet + Benutzer hält den geforderten
- * Administrationsbereich. Die Navigation wird auf die gehaltenen Bereiche
- * gescoped (Sichtbarkeit = serverseitige Berechtigung, Kap. 27.16.2).
+ * Enforces server-side: authenticated + the user holds the required
+ * administration area. Navigation is scoped to the held areas
+ * (visibility = server-side authorization, ch. 27.16.2).
  */
 class AdminController extends AppController
 {
-    /** Geforderter Administrationsbereich (null = jeder Admin). */
+    /** Required administration area (null = any admin). */
     protected ?string $requiredArea = null;
 
     /** @var list<string> */
     protected array $userAreaKeys = [];
 
-    /** Bereichs-Navigation (Bereich-Key => Label + Menüpunkte). */
+    /** Area navigation (area key => label + menu items). */
     public const NAV = [
         'user_group_admin' => [
             'label' => 'admin.nav.users_groups',
@@ -95,10 +95,10 @@ class AdminController extends AppController
     }
 
     /**
-     * UUID-Guard für Routen-/Formular-Parameter, die in raw SQL gegen
-     * PG-uuid-Spalten gebunden werden: fehlgeformte Werte würden dort 22P02
-     * (-> HTTP 500) auslösen, statt wie unbekannte IDs als "nicht gefunden"
-     * zu enden (vgl. \App\Infrastructure\Uuid).
+     * UUID guard for route/form parameters that are bound in raw SQL against
+     * PG uuid columns: malformed values would raise 22P02 there
+     * (-> HTTP 500) instead of being treated as "not found" like unknown IDs
+     * (cf. \App\Infrastructure\Uuid).
      */
     protected function isUuid(string ...$values): bool
     {

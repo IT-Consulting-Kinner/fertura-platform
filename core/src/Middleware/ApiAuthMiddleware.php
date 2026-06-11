@@ -13,12 +13,12 @@ use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 
 /**
- * Bearer-Token-Authentifizierung für die externe API (Kap. 29, Entscheidung 162).
+ * Bearer-token authentication for the external API (ch. 29, Decision 162).
  *
- * Greift nur auf `/api/`-Pfade. Liest `Authorization: Bearer <token>`, löst den
- * Benutzer über den `TokenService` auf und setzt die Identität (für RLS/Audit)
- * sowie die Token-Scopes als Request-Attribute. Fehlt/ungültig → JSON 401.
- * Nicht-API-Requests werden unverändert durchgereicht.
+ * Applies only to `/api/` paths. Reads `Authorization: Bearer <token>`, resolves
+ * the user via `TokenService` and sets the identity (for RLS/audit) as well as the
+ * token scopes as request attributes. Missing/invalid → JSON 401. Non-API requests
+ * are passed through unchanged.
  */
 class ApiAuthMiddleware implements MiddlewareInterface
 {

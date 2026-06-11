@@ -11,12 +11,12 @@ use Cake\I18n\Parser\PoFileParser;
 use Throwable;
 
 /**
- * Registriert Übersetzungs-Domains, die ihre Kataloge aus dem **Managed Locale
- * Store** laden (i18n-4) — Englisch als Basis, gewählte Locale darüber (E37/E39).
+ * Registers translation domains that load their catalogs from the **Managed
+ * Locale Store** (i18n-4) — English as the base, selected locale on top (E37/E39).
  *
- * Im Gegensatz zu {@see EnglishFallbackLoader} (Core-Domain `default` aus
- * resources/locales) lesen Modul-/Extension-Domains aus dem Store für die
- * jeweils aktive Komponentenversion.
+ * Unlike {@see EnglishFallbackLoader} (core domain `default` from
+ * resources/locales), module/extension domains read from the store for the
+ * respective active component version.
  */
 class StoreLocaleLoader
 {
@@ -28,7 +28,7 @@ class StoreLocaleLoader
             $store = new LanguagePackStore();
             $resolver = new \App\Service\I18n\LocaleResolver();
 
-            // Englisch-Basis (Versions-Gate: exakt > Same-Major > keine).
+            // English base (version gate: exact > same-major > none).
             $en = $resolver->resolveVersion($componentKey, $activeVersion, self::BASE_LOCALE);
             $messages = $en !== null ? self::load($store, $componentKey, $en['version'], self::BASE_LOCALE, $domain) : [];
 
@@ -37,7 +37,7 @@ class StoreLocaleLoader
                 if ($loc !== null) {
                     $messages = array_merge($messages, self::load($store, $componentKey, $loc['version'], $locale, $domain));
                 }
-                // Major-Mismatch (resolveVersion null) → kein Overlay → Englisch.
+                // Major mismatch (resolveVersion null) → no overlay → English.
             }
 
             return new Package('sprintf', null, $messages);
@@ -45,9 +45,9 @@ class StoreLocaleLoader
     }
 
     /**
-     * Registriert die Domains aller aktiven Module/Extensions, deren
-     * Sprachdateien in der für die aktive Version passenden Fassung im Store
-     * liegen. Fehlertolerant (DB/Store evtl. noch nicht verfügbar).
+     * Registers the domains of all active modules/extensions whose language
+     * files are present in the store in the version matching the active
+     * version. Fault-tolerant (DB/store may not yet be available).
      */
     public static function registerActiveModules(): void
     {

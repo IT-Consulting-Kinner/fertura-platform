@@ -6,20 +6,20 @@ namespace App\View\Helper;
 use Cake\View\Helper;
 
 /**
- * Modul-UI-Kit (Wettbewerbs-Hebel): wiederverwendbare, deklarative CRUD-Bausteine
- * für **Modul-Oberflächen**, damit ein Modul Listen-, Detail- und Formular-Ansichten
- * ohne handgeschriebenes Markup im einheitlichen (Bootstrap-5-)Stil des Core rendert.
+ * Module UI kit (competitive lever): reusable, declarative CRUD building blocks
+ * for **module UIs**, so a module renders list, detail and form views without
+ * hand-written markup, in the core's unified (Bootstrap 5) style.
  *
- * Alle Werte werden HTML-sicher ausgegeben (`h()`); Spalten-/Feld-„Labels" sind
- * vom Aufrufer bereits lokalisiert (`__()`) zu übergeben.
+ * All values are output HTML-safe (`h()`); column/field "labels" must already be
+ * localized (`__()`) by the caller.
  *
- * Spaltendefinition (index):
+ * Column definition (index):
  *   ['key'=>'name', 'label'=>'Name', 'type'=>'text|bool|datetime|badge|code',
  *    'link'=>callable($row):string|array|null, 'format'=>callable($value,$row):string,
- *    'badge'=>callable($value):string  // Bootstrap-Variante (success/secondary/…)]
- * Aktion (index/options['actions'][]):
- *   ['label'=>'Bearbeiten', 'url'=>callable($row):string|array, 'class'=>'btn …',
- *    'confirm'=>'Wirklich löschen?']
+ *    'badge'=>callable($value):string  // Bootstrap variant (success/secondary/…)]
+ * Action (index/options['actions'][]):
+ *   ['label'=>'Edit', 'url'=>callable($row):string|array, 'class'=>'btn …',
+ *    'confirm'=>'Really delete?']
  *
  * @property \Cake\View\Helper\HtmlHelper $Html
  * @property \Cake\View\Helper\FormHelper $Form
@@ -31,11 +31,11 @@ class UiKitHelper extends Helper
     protected array $helpers = ['Html', 'Form', 'Url'];
 
     /**
-     * Tabellenliste aus Zeilen + Spaltenspezifikation.
+     * Table list from rows + column specification.
      *
      * @param list<array<string,mixed>> $rows
      * @param list<array<string,mixed>> $columns
-     * @param array<string,mixed> $options actions, empty (Text), class, id
+     * @param array<string,mixed> $options actions, empty (text), class, id
      */
     public function index(array $rows, array $columns, array $options = []): string
     {
@@ -48,7 +48,7 @@ class UiKitHelper extends Helper
 
         $head = '';
         if ($select) {
-            // Kopf-Checkbox „alle umschalten" — minimaler Inline-Toggle, kein JS-Framework.
+            // Header "toggle all" checkbox — minimal inline toggle, no JS framework.
             $head .= '<th scope="col" style="width:1%"><input type="checkbox" class="form-check-input" '
                 . 'onclick="this.closest(\'table\').querySelectorAll(\'tbody input[type=checkbox]\')'
                 . '.forEach(function(c){c.checked=this.checked}.bind(this))" aria-label="'
@@ -87,10 +87,10 @@ class UiKitHelper extends Helper
     }
 
     /**
-     * Sammelaktions-Leiste (Submit-Buttons) für eine Liste mit `select`. MUSS mit
-     * der Liste in EINEM `Form->create()/end()` stehen; der Controller liest die
-     * Auswahl über `ids[]` und die gewählte Aktion über deren `name`/`value`.
-     * Knopf: ['label','value','name'?(=op),'class'?,'confirm'?].
+     * Bulk-action bar (submit buttons) for a list with `select`. MUST sit with
+     * the list inside ONE `Form->create()/end()`; the controller reads the
+     * selection via `ids[]` and the chosen action via its `name`/`value`.
+     * Button: ['label','value','name'?(=op),'class'?,'confirm'?].
      *
      * @param list<array<string,mixed>> $buttons
      */
@@ -111,7 +111,7 @@ class UiKitHelper extends Helper
     }
 
     /**
-     * Detail-/Lese-Ansicht eines Datensatzes als Definitionsliste.
+     * Detail/read view of a record as a definition list.
      *
      * @param array<string,mixed> $row
      * @param list<array<string,mixed>> $fields
@@ -131,10 +131,10 @@ class UiKitHelper extends Helper
     }
 
     /**
-     * Rendert Formularfelder aus einer Spezifikation (INNERHALB eines vom Modul
-     * geöffneten `Form->create()/end()`). Feld:
+     * Renders form fields from a specification (INSIDE a `Form->create()/end()`
+     * opened by the module). Field:
      *   ['key'=>'name','label'=>'Name','input'=>'text|textarea|select|checkbox|…',
-     *    'options'=>[…] (für select),'required'=>bool,'help'=>'…','value'=>mixed]
+     *    'options'=>[…] (for select),'required'=>bool,'help'=>'…','value'=>mixed]
      *
      * @param list<array<string,mixed>> $fields
      */
@@ -168,11 +168,11 @@ class UiKitHelper extends Helper
     }
 
     /**
-     * Sortierbarer Spaltenkopf: Link, der zwischen aufsteigend/absteigend umschaltet,
-     * mit Richtungspfeil. `$query` = aktuelle Query-Parameter (mit `sort`/`dir`).
+     * Sortable column header: a link that toggles between ascending/descending,
+     * with a direction arrow. `$query` = current query parameters (with `sort`/`dir`).
      *
      * @param array<string,mixed> $query
-     * @param array<string,mixed>|string|null $url Ziel (Cake-Route-Array, String, oder aktuell)
+     * @param array<string,mixed>|string|null $url Target (Cake route array, string, or current)
      */
     public function sortHeader(string $label, string $sortKey, array $query, array|string|null $url = null): string
     {
@@ -188,8 +188,8 @@ class UiKitHelper extends Helper
     }
 
     /**
-     * Bootstrap-Paginierung. Leer, wenn nur eine Seite. Hängt `page` an die
-     * (sonst erhaltenen) Query-Parameter an.
+     * Bootstrap pagination. Empty when there is only one page. Appends `page` to
+     * the (otherwise preserved) query parameters.
      *
      * @param array<string,mixed>|string|null $url
      * @param array<string,mixed> $query
@@ -228,11 +228,11 @@ class UiKitHelper extends Helper
     }
 
     /**
-     * GET-Filterleiste aus einer Feld-Spezifikation (text/select).
+     * GET filter bar from a field specification (text/select).
      *
      * @param list<array<string,mixed>> $fields
-     * @param array<string,mixed> $values aktuelle Werte
-     * @param array<string,mixed> $options submit (Label), url
+     * @param array<string,mixed> $values current values
+     * @param array<string,mixed> $options submit (label), url
      */
     public function filters(array $fields, array $values = [], array $options = []): string
     {
@@ -287,7 +287,7 @@ class UiKitHelper extends Helper
     }
 
     /**
-     * Formatiert einen einzelnen Wert HTML-sicher nach Typ.
+     * Formats a single value HTML-safe according to its type.
      */
     public function value(mixed $val, string $type = 'text'): string
     {
@@ -303,7 +303,7 @@ class UiKitHelper extends Helper
     }
 
     /**
-     * Rendert eine Tabellen-/Detail-Zelle nach Spaltenspezifikation (Format/Link/Typ).
+     * Renders a table/detail cell according to the column specification (format/link/type).
      *
      * @param array<string,mixed> $row
      * @param array<string,mixed> $col
@@ -314,7 +314,7 @@ class UiKitHelper extends Helper
         $raw = $key !== '' ? ($row[$key] ?? null) : null;
 
         if (isset($col['format']) && is_callable($col['format'])) {
-            // Eigenes Format liefert bereits fertiges (sicheres) HTML/Text -> escapen.
+            // A custom format already yields finished (safe) HTML/text -> escape it.
             $html = h((string)($col['format'])($raw, $row));
         } elseif (isset($col['badge']) && is_callable($col['badge'])) {
             $variant = (string)($col['badge'])($raw);
@@ -326,8 +326,8 @@ class UiKitHelper extends Helper
         if (isset($col['link']) && is_callable($col['link'])) {
             $url = ($col['link'])($row);
             if ($url !== null && $url !== '') {
-                // Html->link escapt den (Klartext-)Linktext; wir wollen das bereits
-                // formatierte HTML behalten -> selbst bauen mit escapter URL.
+                // Html->link escapes the (plain-text) link text; we want to keep the
+                // already-formatted HTML -> build it ourselves with an escaped URL.
                 return '<a href="' . h($this->Url->build($url)) . '">' . $html . '</a>';
             }
         }

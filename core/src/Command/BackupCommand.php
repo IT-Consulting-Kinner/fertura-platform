@@ -10,13 +10,13 @@ use Cake\Console\ConsoleIo;
 use Cake\Console\ConsoleOptionParser;
 
 /**
- * Core-Backup (Kap. 20.1 / E53).
+ * Core backup (ch. 20.1 / E53).
  *
  *   bin/cake backup create [--note "..."]
  *   bin/cake backup list
- *   bin/cake backup verify <id>           Checksummen prüfen
- *   bin/cake backup test-restore <id>     Probe-Restore in Scratch-DB (prüfbar)
- *   bin/cake backup restore <id> --yes    DESTRUKTIV: Produktion wiederherstellen
+ *   bin/cake backup verify <id>           verify checksums
+ *   bin/cake backup test-restore <id>     trial restore into scratch DB (verifiable)
+ *   bin/cake backup restore <id> --yes    DESTRUCTIVE: restore production
  *   bin/cake backup delete <id>
  */
 class BackupCommand extends Command

@@ -8,10 +8,10 @@ use Cake\Datasource\ConnectionManager;
 use Cake\Http\CallbackStream;
 
 /**
- * Audit-Log-Einsicht (für jeden Administrator, kein spezifischer Bereich).
+ * Audit log inspection (available to any administrator, no specific area).
  *
- * Lesend und gefiltert. Personenbezug bleibt per UUID referenziert (E16);
- * der Benutzername wird nur zur Anzeige aufgelöst, nicht aus dem Log gelesen.
+ * Read-only and filtered. Personal data stays referenced by UUID (E16);
+ * the username is resolved for display only, not read from the log itself.
  */
 class AuditController extends AdminController
 {
@@ -55,10 +55,10 @@ class AuditController extends AdminController
     }
 
     /**
-     * Zeitbereichs-Export (Punkt 3b) als **NDJSON-Download** für Compliance-/
-     * Auditor-Pulls — inkl. der Wert-Snapshots (Administrator ist autorisiert).
-     * Query-Filter: from/to (ISO-Datum), action, entity_type, entity_id,
-     * module_key, actor_user_id. Keyset-gestreamt (speicherschonend).
+     * Time-range export (item 3b) as an **NDJSON download** for compliance/
+     * auditor pulls — including the value snapshots (the administrator is authorized).
+     * Query filters: from/to (ISO date), action, entity_type, entity_id,
+     * module_key, actor_user_id. Keyset-streamed (memory-efficient).
      */
     public function export(): \Cake\Http\Response
     {

@@ -6,11 +6,11 @@ namespace App\Controller\Admin;
 use App\Service\I18n\LanguagePackAdmin;
 
 /**
- * Sprachverwaltung (Administrationsbereich „Sprachverwaltung", 7., E41).
+ * Language management (administration area "Language Management", 7., E41).
  *
- * Übersicht aktiver/inaktiver Komponenten mit ihren Sprachpaketen (Versions-
- * Status), feld-basierter verlustfreier Editor, Import (unsignierter Upload,
- * E42), Löschen (Regeln E41) und Review.
+ * Overview of active/inactive components with their language packs (version
+ * status), field-based lossless editor, import (unsigned upload, E42),
+ * deletion (rules in E41) and review.
  */
 class LocalizationController extends AdminController
 {
@@ -94,8 +94,8 @@ class LocalizationController extends AdminController
     }
 
     /**
-     * Import: GET zeigt das Formular; POST(step=preview) lädt hoch + zeigt die
-     * Review-Vorschau (unsigniert!, E42); POST(step=commit) übernimmt.
+     * Import: GET shows the form; POST(step=preview) uploads + shows the
+     * review preview (unsigned!, E42); POST(step=commit) applies it.
      */
     public function import()
     {

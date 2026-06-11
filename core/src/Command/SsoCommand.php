@@ -10,11 +10,11 @@ use Cake\Console\ConsoleIo;
 use Cake\Console\ConsoleOptionParser;
 
 /**
- * Verwaltung der SSO-Provider (Programm Tier-1, P06) auf der Konsole.
+ * Console management of the SSO providers (Tier-1 programme, P06).
  *
  *   bin/cake sso list
  *   bin/cake sso add-oidc --name X --issuer https://idp/ --client-id … --client-secret … [--scopes "openid email profile"] [--label "Login mit X"]
- *   bin/cake sso add-saml --name X --idp-entity-id … --idp-sso-url … --idp-cert-file /pfad/cert.pem [--label …]
+ *   bin/cake sso add-saml --name X --idp-entity-id … --idp-sso-url … --idp-cert-file /path/cert.pem [--label …]
  *   bin/cake sso on|off|rm <id>
  */
 class SsoCommand extends Command
@@ -93,8 +93,8 @@ class SsoCommand extends Command
 
                     return self::CODE_ERROR;
                 }
-                // Optionale SP-Signierung: Zertifikat in die Konfig, Privatschlüssel
-                // als (verschlüsseltes) Secret.
+                // Optional SP signing: certificate goes into the config, private key
+                // as an (encrypted) secret.
                 $spCertFile = (string)$args->getOption('sp-cert-file');
                 $spKeyFile = (string)$args->getOption('sp-key-file');
                 $config = [

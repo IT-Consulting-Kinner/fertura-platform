@@ -10,8 +10,8 @@ use Cake\Console\ConsoleIo;
 use Cake\Console\ConsoleOptionParser;
 
 /**
- * Authentifizierungs-Status: zeigt den registrierten und den effektiv aktiven
- * Provider für den Resolver-Slot `core.auth.provider` (Kap. 27.2.2).
+ * Authentication status: shows the registered provider and the one effectively
+ * active for the resolver slot `core.auth.provider` (ch. 27.2.2).
  *
  *   bin/cake auth status
  */

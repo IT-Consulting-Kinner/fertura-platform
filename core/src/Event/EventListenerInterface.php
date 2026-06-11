@@ -4,17 +4,17 @@ declare(strict_types=1);
 namespace App\Event;
 
 /**
- * Vertrag für Event-Listener (Kap. 26.9). Module implementieren dieses Interface
- * in ihren Listener-Klassen; der Outbox-Worker ruft `handle()` auf.
+ * Contract for event listeners (ch. 26.9). Modules implement this interface in
+ * their listener classes; the outbox worker calls `handle()`.
  *
- * WICHTIG: Zustellung erfolgt mindestens einmal — Listener MÜSSEN idempotent
- * sein (Kap. 26.9.2). Der `$context['event_id']` dient zur Deduplizierung.
+ * IMPORTANT: delivery is at-least-once — listeners MUST be idempotent
+ * (ch. 26.9.2). The `$context['event_id']` is used for deduplication.
  */
 interface EventListenerInterface
 {
     /**
-     * @param array<string, mixed> $payload Event-Nutzlast.
-     * @param array<string, mixed> $context u. a. event_id, contract_name, attempt, correlation_id.
+     * @param array<string, mixed> $payload Event payload.
+     * @param array<string, mixed> $context includes event_id, contract_name, attempt, correlation_id, among others.
      */
     public function handle(array $payload, array $context): void;
 }

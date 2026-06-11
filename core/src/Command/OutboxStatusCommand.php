@@ -9,8 +9,9 @@ use Cake\Console\ConsoleIo;
 use Cake\Datasource\ConnectionManager;
 
 /**
- * Zeigt den Outbox-Stand (Zähler je Status) und die letzten Dead-Letter-Events
- * (Sichtbarkeit bis zur Admin-GUI in Step 10; Health-Endpoint in Step 12).
+ * Shows the outbox state (counts per status) and the most recent dead-letter
+ * events (interim visibility until the admin GUI in Step 10; health endpoint
+ * in Step 12).
  */
 class OutboxStatusCommand extends Command
 {
