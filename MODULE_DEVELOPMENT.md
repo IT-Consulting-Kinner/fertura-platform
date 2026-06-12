@@ -77,6 +77,81 @@ Fachliche Ereignisse über die Outbox publizieren (transaktional, At-least-once)
 Listener anderer Module reagieren entkoppelt. Dead-Letter-Handling + Retry-GUI
 stellt der Core bereit.
 
+### 2.5 Web-Oberflächen (Web-Mount, Kap. 23.16.3)
+
+Server-gerenderte Modul-Seiten werden vom Core unter `/m/<key>[/<pfad>]` montiert
+(volle Web-Kette: Session-Auth, CSRF, RLS, Security-Header). **Der Core behält die
+Hoheit** über Routing, Auth, Layout und Ausgabe — das Modul liefert nur einen
+Handler + eine Template-Datei, **niemals** eigene Core-Routen oder Core-Code.
+
+Manifest-Sektion `web_routes`, je Eintrag:
+
+```json
+"web_routes": [
+  { "path": "/tickets/{id}", "class": "Ticketing\\Web\\TicketView",
+    "template": "ticket_view", "auth": "user" },
+  { "path": "/portal", "class": "Ticketing\\Web\\GuestPortal",
+    "template": "guest_portal", "auth": "guest" },
+  { "path": "/admin/queues", "class": "Ticketing\\Web\\QueueAdmin",
+    "template": "admin/queues", "auth": "user",
+    "area": "ticketing_admin", "nav_group": "ticketing.nav.group",
+    "nav": "ticketing.nav.queues", "title": "Warteschlangen" }
+]
+```
+
+- **`class`** implementiert `App\Service\Module\ModuleWebInterface::handle(array): array`
+  und gibt **nur Daten** zurück (`vars`/`status`/`template`/`redirect`) — kein HTML,
+  keine Response-Manipulation. Aufruf **in-process** (Web-Mount ist mit
+  `out_of_process` unvereinbar — bei Aktivierung abgewiesen).
+- **`template`**: Datei unter dem modul-eigenen `templates/`-Verzeichnis,
+  **snake_case** (CakePHP inflektiert; PascalCase bricht auf Linux/CI). Unterpfade
+  erlaubt (`admin/queues` → `templates/admin/queues.php`). Es stehen die Core-
+  `Form`/`UiKit`-Helfer + das gewählte Layout zur Verfügung (CSRF wird automatisch
+  eingebunden).
+- **`auth`**: `user` (Login nötig) | `guest` (öffentlich).
+- **`area`** (optional): macht die Seite zu einer **Admin-Seite** → Rendern im
+  Core-Admin-Shell (Admin-Layout + scoped Sidebar), Zugriff nur mit diesem Bereich.
+  Mit `nav`+`nav_group` erscheint sie als Sidebar-Eintrag. Der Bereich wird bei
+  Aktivierung in `admin_areas` registriert (→ vergebbar) und bei Deinstallation
+  entfernt. Ohne `area` rendert die Seite eigenständig im `module`-Layout.
+- Vor dem Packen `bin/cake module_lint` (prüft `web_routes`).
+
+### 2.6 Externe REST-API & Auth-Modus (Kap. 29)
+
+Modul-Endpunkte werden unter `/api/v1/m/<key>[/<pfad>]` gemountet (Sektion
+`api_routes`: `method`, `path`, `class`→`handle(array):array`, optional `scope`).
+Neu: das Feld **`auth`**:
+
+- **`user`** (Default): erfordert ein gültiges Core-Bearer-Token; optionaler
+  `scope` wird geprüft.
+- **`public`**: **kein** Core-Token nötig — das **Modul verantwortet die Auth
+  selbst** (z. B. ein queue-gebundenes Modul-Token, das es aus einem Header liest;
+  der Core reicht alle Request-Header im `request['headers']`-Array durch). Läuft
+  **ohne Core-Identität** (anonymer RLS-Kontext — gast-sichtbare Daten brauchen
+  eine explizite „public-read"-Policy im Modul-Schema) und bleibt **rate-limited
+  pro IP**.
+
+Der Core stellt **kein** eigenes Modul-Token-System bereit (Entscheidung D1) — das
+Modul speichert/prüft seine Tokens selbst (z. B. in `mod_<key>`).
+
+### 2.7 Benutzer/Gruppen lesen (Identitäts-Zugriff, Kap. 27)
+
+Für eigene Zuordnungen (Queue↔Gruppe, Bearbeiter-Anzeige) löst ein Modul Benutzer
+und Gruppen über den Core-Service `App\Service\Identity\IdentityReader` auf
+(direkt instanziierbar, wie `MailService`) — **nicht** durch Zugriff auf die
+Core-Identitätstabellen.
+
+```php
+$reader = new \App\Service\Identity\IdentityReader();
+$reader->users();              // [['id'=>…, 'display_name'=>…], …]  (aktive)
+$reader->groups();             // [['id'=>…, 'name'=>…], …]
+$reader->userGroups($userId);  // Gruppen eines Benutzers
+```
+
+**Datensparsam (Entscheidung D4):** nur IDs, Anzeigename und Gruppen-IDs/-Namen —
+**kein** E-Mail/Status/sonstiges PII. Läuft im RLS-Kontext des Aufrufers. Wer mehr
+braucht, muss eine eigene, auditierte Capability beantragen.
+
 ## 3. Integrations-Extension-Module (Kap. 29.9/29.10) — *C5 (Konzept)*
 
 Ein Integrations-Extension-Modul verknüpft **mehrere Main-Module**, ohne deren
