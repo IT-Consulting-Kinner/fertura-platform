@@ -82,8 +82,8 @@ class LocaleResolutionTest extends TestCase
             $map[$s['version']] = $s['status'];
         }
         $this->assertSame('notice', $map['1.0.0']); // same major, different version
-        $this->assertSame('clean', $map['1.5.0']);  // exactly active
-        $this->assertSame('error', $map['2.0.0']);  // different major
+        $this->assertSame('clean', $map['1.5.0']); // exactly active
+        $this->assertSame('error', $map['2.0.0']); // different major
     }
 
     public function testSelectableAlwaysIncludesEnglishAndFiltersUnavailable(): void

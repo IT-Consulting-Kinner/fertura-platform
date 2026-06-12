@@ -26,7 +26,7 @@ class GroupsController extends AdminController
         $this->set(compact('groups'));
     }
 
-    public function add()
+    public function add(): ?Response
     {
         if ($this->request->is('post')) {
             $name = trim((string)$this->request->getData('name'));
@@ -48,7 +48,7 @@ class GroupsController extends AdminController
         return null;
     }
 
-    public function view(string $id)
+    public function view(string $id): ?Response
     {
         if (!$this->isUuid($id)) {
             return $this->notFound();
@@ -85,7 +85,7 @@ class GroupsController extends AdminController
         return null;
     }
 
-    public function setActive(string $id, string $flag)
+    public function setActive(string $id, string $flag): ?Response
     {
         $this->request->allowMethod('post');
         if (!$this->isUuid($id)) {
@@ -104,7 +104,7 @@ class GroupsController extends AdminController
         return $this->redirect(['action' => 'view', $id]);
     }
 
-    public function addMember(string $id)
+    public function addMember(string $id): ?Response
     {
         $this->request->allowMethod('post');
         if (!$this->isUuid($id)) {
@@ -123,7 +123,7 @@ class GroupsController extends AdminController
         return $this->redirect(['action' => 'view', $id]);
     }
 
-    public function removeMember(string $id, string $userId)
+    public function removeMember(string $id, string $userId): ?Response
     {
         $this->request->allowMethod('post');
         if (!$this->isUuid($id, $userId)) {
@@ -139,7 +139,7 @@ class GroupsController extends AdminController
         return $this->redirect(['action' => 'view', $id]);
     }
 
-    public function setPermission(string $id)
+    public function setPermission(string $id): ?Response
     {
         $this->request->allowMethod('post');
         if (!$this->isUuid($id)) {

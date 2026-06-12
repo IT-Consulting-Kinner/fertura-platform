@@ -6,6 +6,7 @@ namespace App\Controller\Admin;
 use App\Application;
 use App\Service\Update\UpdateManager;
 use Cake\Datasource\ConnectionManager;
+use Cake\Http\Response;
 use Throwable;
 
 /**
@@ -29,7 +30,7 @@ class UpdatesController extends AdminController
         $this->set(compact('history', 'modules', 'coreVersion'));
     }
 
-    public function previewModule()
+    public function previewModule(): ?Response
     {
         $this->request->allowMethod('post');
         $key = (string)$this->request->getData('module_key');
@@ -47,7 +48,7 @@ class UpdatesController extends AdminController
         return null;
     }
 
-    public function previewCore()
+    public function previewCore(): ?Response
     {
         $this->request->allowMethod('post');
         $target = trim((string)$this->request->getData('target_version'));
@@ -64,7 +65,7 @@ class UpdatesController extends AdminController
         return null;
     }
 
-    public function module()
+    public function module(): ?Response
     {
         $this->request->allowMethod('post');
         $key = (string)$this->request->getData('module_key');
@@ -79,7 +80,7 @@ class UpdatesController extends AdminController
         return $this->redirect(['action' => 'index']);
     }
 
-    public function core()
+    public function core(): ?Response
     {
         $this->request->allowMethod('post');
         $target = trim((string)$this->request->getData('target_version'));

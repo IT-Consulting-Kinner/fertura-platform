@@ -91,7 +91,7 @@ class UiKitHelperTest extends TestCase
         $this->assertStringContainsString('pagination', $html);
         $this->assertStringContainsString('page=4', $html); // next
         $this->assertStringContainsString('page=2', $html); // previous
-        $this->assertStringContainsString('active', $html);  // current page marked
+        $this->assertStringContainsString('active', $html); // current page marked
     }
 
     public function testSelectColumnAndBulkActions(): void

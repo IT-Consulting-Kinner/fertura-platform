@@ -52,7 +52,7 @@ class BackupController extends AdminController
         $this->set(compact('offsiteEnabled', 'offsiteBackups'));
     }
 
-    public function create()
+    public function create(): ?Response
     {
         $this->request->allowMethod('post');
         try {
@@ -67,7 +67,7 @@ class BackupController extends AdminController
         return $this->redirect(['action' => 'index']);
     }
 
-    public function verify(string $id)
+    public function verify(string $id): ?Response
     {
         $this->request->allowMethod('post');
         $v = $this->service()->verify($id);
@@ -76,7 +76,7 @@ class BackupController extends AdminController
         return $this->redirect(['action' => 'index']);
     }
 
-    public function testRestore(string $id)
+    public function testRestore(string $id): ?Response
     {
         $this->request->allowMethod('post');
         $t = $this->service()->testRestore($id);
@@ -85,7 +85,7 @@ class BackupController extends AdminController
         return $this->redirect(['action' => 'index']);
     }
 
-    public function delete(string $id)
+    public function delete(string $id): ?Response
     {
         $this->request->allowMethod('post');
         $this->service()->delete($id) ? $this->Flash->success(__('flash.backup.deleted')) : $this->Flash->error(__('flash.backup.not_found'));
@@ -94,7 +94,7 @@ class BackupController extends AdminController
     }
 
     /** Downloads the archive (data export) and logs the download. */
-    public function download(string $id)
+    public function download(string $id): ?Response
     {
         $row = (new BackupService())->get($id);
         if ($row === null || !is_file((string)$row['path'])) {

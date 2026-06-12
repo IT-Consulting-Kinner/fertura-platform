@@ -3,12 +3,14 @@ declare(strict_types=1);
 
 namespace App\Controller\Api\V1;
 
+use Cake\Http\Response;
+
 /**
  * GET /api/v1/me — identity and scopes of the current token (scope `me:read`).
  */
 class MeController extends ApiController
 {
-    public function index()
+    public function index(): Response
     {
         if ($denied = $this->requireScope('me:read')) {
             return $denied;

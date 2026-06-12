@@ -17,7 +17,7 @@ class UsersController extends AdminController
 {
     protected ?string $requiredArea = 'user_group_admin';
 
-    private function audit()
+    private function audit(): AuditLogger
     {
         return new AuditLogger();
     }
@@ -57,7 +57,7 @@ class UsersController extends AdminController
         $this->set(compact('user', 'areas', 'groups'));
     }
 
-    public function add()
+    public function add(): ?Response
     {
         $users = $this->fetchTable('Users');
         $user = $users->newEmptyEntity();
@@ -77,7 +77,7 @@ class UsersController extends AdminController
         return null;
     }
 
-    public function setStatus(string $id, string $status)
+    public function setStatus(string $id, string $status): ?Response
     {
         $this->request->allowMethod('post');
         if (!$this->isUuid($id)) {
@@ -119,7 +119,7 @@ class UsersController extends AdminController
         return $this->redirect(['action' => 'view', $id]);
     }
 
-    public function toggleArea(string $id, string $area)
+    public function toggleArea(string $id, string $area): ?Response
     {
         $this->request->allowMethod('post');
         if (!$this->isUuid($id)) {
@@ -145,7 +145,7 @@ class UsersController extends AdminController
         return $this->redirect(['action' => 'view', $id]);
     }
 
-    public function edit(string $id)
+    public function edit(string $id): ?Response
     {
         $users = $this->fetchTable('Users');
         $user = $users->find()->where(['id' => $id])->first();
@@ -176,7 +176,7 @@ class UsersController extends AdminController
      * by email (core MailService). The link is also displayed
      * (fallback in case email delivery is not possible).
      */
-    public function invite(string $id)
+    public function invite(string $id): ?Response
     {
         $this->request->allowMethod('post');
         if (!$this->isUuid($id)) {
@@ -204,7 +204,7 @@ class UsersController extends AdminController
     }
 
     /** Sets the password directly (administrator) and activates "invited" users. */
-    public function setPassword(string $id)
+    public function setPassword(string $id): ?Response
     {
         $this->request->allowMethod('post');
         $password = (string)$this->request->getData('password');
@@ -233,7 +233,7 @@ class UsersController extends AdminController
         return $this->redirect(['action' => 'view', $id]);
     }
 
-    public function anonymize(string $id)
+    public function anonymize(string $id): ?Response
     {
         $this->request->allowMethod('post');
         if (!$this->isUuid($id)) {

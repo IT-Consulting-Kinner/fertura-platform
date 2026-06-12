@@ -8,6 +8,7 @@ use App\Service\Marketplace\MarketplaceClient;
 use App\Service\Settings\SettingsManager;
 use App\Service\System\FeatureFlags;
 use Cake\Datasource\ConnectionManager;
+use Cake\Http\Response;
 use Throwable;
 
 /**
@@ -37,7 +38,7 @@ class MarketplaceController extends AdminController
         $this->set(compact('baseUrl', 'metadata', 'error', 'marketplaceEnabled'));
     }
 
-    public function sync()
+    public function sync(): ?Response
     {
         $this->request->allowMethod('post');
         if (!FeatureFlags::enabled('marketplace')) {
@@ -74,7 +75,7 @@ class MarketplaceController extends AdminController
         $this->set(compact('licenses'));
     }
 
-    public function uploadLicense()
+    public function uploadLicense(): ?Response
     {
         $this->request->allowMethod('post');
         $file = $this->request->getData('license_file');

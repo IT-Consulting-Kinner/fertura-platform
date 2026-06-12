@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Service\I18n;
 
+use Cake\Database\Connection;
 use Cake\Datasource\ConnectionManager;
 use FilesystemIterator;
 use RecursiveDirectoryIterator;
@@ -46,9 +47,12 @@ class LanguagePackStore
         return $this->dir($componentKey, $version, $locale) . '/' . $domain . '.po';
     }
 
-    private function conn()
+    private function conn(): Connection
     {
-        return ConnectionManager::get('default');
+        /** @var \Cake\Database\Connection $conn */
+        $conn = ConnectionManager::get('default');
+
+        return $conn;
     }
 
     /**
@@ -177,7 +181,7 @@ class LanguagePackStore
         } finally {
             fclose($h);
         }
-        if (!rename($tmp, $file)) {  // atomic on POSIX: replaces the original
+        if (!rename($tmp, $file)) { // atomic on POSIX: replaces the original
             @unlink($tmp);
             throw new RuntimeException("Atomarer Rename fehlgeschlagen: $file");
         }

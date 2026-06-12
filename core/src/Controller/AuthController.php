@@ -35,7 +35,7 @@ class AuthController extends AppController
         $this->viewBuilder()->setLayout('login');
     }
 
-    public function login()
+    public function login(): ?Response
     {
         // Active SSO providers for the login selection (P06); fault-tolerant so
         // that an SSO problem never blocks the local login (break-glass).
@@ -214,7 +214,7 @@ class AuthController extends AppController
         return $this->response->withType('application/json')->withStringBody((string)json_encode($options));
     }
 
-    public function logout()
+    public function logout(): ?Response
     {
         $this->Authentication->logout();
         $this->Flash->success(__('flash.auth.loggedout'));
@@ -227,7 +227,7 @@ class AuthController extends AppController
      * and sends the link by email (Core MailService). The response is always
      * neutral (no account enumeration).
      */
-    public function forgotPassword()
+    public function forgotPassword(): ?Response
     {
         if ($this->request->is('post')) {
             $q = trim((string)$this->request->getData('identifier'));
@@ -256,7 +256,7 @@ class AuthController extends AppController
      * Public password setting via invitation/reset token (ch. 27.2/27.15).
      * GET shows the form, POST redeems the token.
      */
-    public function setPassword()
+    public function setPassword(): ?Response
     {
         $token = (string)($this->request->getQuery('token') ?? $this->request->getData('token') ?? '');
         $service = new PasswordResetService();

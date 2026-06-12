@@ -7,6 +7,7 @@ use App\Service\Auth\Sso\OidcProvider;
 use App\Service\Auth\Sso\SamlProvider;
 use App\Service\Auth\Sso\SsoService;
 use Cake\Event\EventInterface;
+use Cake\Http\Response;
 use Cake\Routing\Router;
 use RuntimeException;
 use Throwable;
@@ -30,7 +31,7 @@ class SsoController extends AppController
         $this->viewBuilder()->setLayout('login');
     }
 
-    public function start(string $providerId)
+    public function start(string $providerId): ?Response
     {
         $provider = (new SsoService())->provider($providerId);
         if ($provider === null || !$provider['active']) {
@@ -67,7 +68,7 @@ class SsoController extends AppController
         }
     }
 
-    public function oidcCallback()
+    public function oidcCallback(): ?Response
     {
         $session = $this->request->getSession();
         $flow = $session->read('sso_oidc');
@@ -99,7 +100,7 @@ class SsoController extends AppController
         }
     }
 
-    public function samlAcs()
+    public function samlAcs(): ?Response
     {
         $this->request->allowMethod('post');
         $relayState = (string)$this->request->getData('RelayState');
@@ -138,7 +139,7 @@ class SsoController extends AppController
     /**
      * @param array{sub:string,email:string,first:?string,last:?string} $identity
      */
-    private function establish(string $providerId, array $identity)
+    private function establish(string $providerId, array $identity): ?Response
     {
         $userId = (new SsoService())->loginExternalUser(
             $providerId,

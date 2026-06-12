@@ -17,6 +17,7 @@ use App\Service\Registry\VersionConstraint;
 use App\Service\Security\PackageVerificationException;
 use App\Service\Security\PackageVerifier;
 use App\Service\Settings\SettingsManager;
+use Cake\Database\Connection;
 use Migrations\Migrations;
 use Throwable;
 
@@ -57,7 +58,7 @@ class UpdateManager
         $this->coreVersion = $coreVersion ?? Application::CORE_VERSION;
     }
 
-    private function conn()
+    private function conn(): Connection
     {
         return Db::privileged();
     }
@@ -381,10 +382,10 @@ class UpdateManager
     /** @return list<array<string, mixed>> */
     public function listHistory(): array
     {
-        return $this->conn()->execute(
+        return array_values($this->conn()->execute(
             'SELECT component_type, component_key, old_version, new_version, result, executed_at, is_security, severity '
             . 'FROM update_history ORDER BY executed_at DESC LIMIT 20',
-        )->fetchAll('assoc');
+        )->fetchAll('assoc'));
     }
 
     // ---- internal ------------------------------------------------------------

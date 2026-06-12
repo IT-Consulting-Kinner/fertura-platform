@@ -5,6 +5,7 @@ namespace App\Controller\Admin;
 
 use App\Service\Settings\SettingsCatalog;
 use App\Service\Settings\SettingsManager;
+use Cake\Http\Response;
 
 /**
  * Core configuration (administration area "Core Configuration").
@@ -41,7 +42,7 @@ class ConfigController extends AdminController
         $this->set(compact('settings'));
     }
 
-    public function save()
+    public function save(): ?Response
     {
         $this->request->allowMethod('post');
         $namespace = (string)$this->request->getData('namespace');

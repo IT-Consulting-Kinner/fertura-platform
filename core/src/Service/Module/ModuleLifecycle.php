@@ -16,6 +16,7 @@ use App\Service\Registry\VersionConstraint;
 use App\Service\Security\PackageVerificationException;
 use App\Service\Security\PackageVerifier;
 use App\Service\Settings\SettingsManager;
+use Cake\Database\Connection;
 use Throwable;
 
 /**
@@ -61,7 +62,7 @@ class ModuleLifecycle
         return $this->license;
     }
 
-    private function conn()
+    private function conn(): Connection
     {
         // The module lifecycle performs DDL (CREATE/DROP SCHEMA) -> privileged
         // (superuser) connection that bypasses RLS (E26).
@@ -655,9 +656,9 @@ class ModuleLifecycle
     /** @return list<array<string, mixed>> */
     public function listModules(): array
     {
-        return $this->conn()->execute(
+        return array_values($this->conn()->execute(
             'SELECT module_key, name, version, type, status, isolation FROM modules ORDER BY module_key',
-        )->fetchAll('assoc');
+        )->fetchAll('assoc'));
     }
 
     /**

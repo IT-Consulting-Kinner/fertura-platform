@@ -5,6 +5,7 @@ namespace App\Controller\Admin;
 
 use App\Service\Module\ModuleLifecycle;
 use Cake\Datasource\ConnectionManager;
+use Cake\Http\Response;
 use Throwable;
 
 /**
@@ -122,14 +123,14 @@ class ModulesController extends AdminController
         $this->set(compact('nodes', 'edges', 'width', 'height'));
     }
 
-    public function activate(string $key)
+    public function activate(string $key): ?Response
     {
         $this->request->allowMethod('post');
 
         return $this->run(fn(ModuleLifecycle $l) => $l->activate($key), __('flash.module.activated'));
     }
 
-    public function deactivate(string $key)
+    public function deactivate(string $key): ?Response
     {
         $this->request->allowMethod('post');
 
@@ -138,7 +139,7 @@ class ModulesController extends AdminController
         }, __('flash.module.deactivated'));
     }
 
-    public function delete(string $key)
+    public function delete(string $key): ?Response
     {
         $this->request->allowMethod('post');
 
@@ -147,7 +148,7 @@ class ModulesController extends AdminController
         }, __('flash.module.deleted'));
     }
 
-    private function run(callable $fn, string $okMessage)
+    private function run(callable $fn, string $okMessage): ?Response
     {
         try {
             $fn(new ModuleLifecycle());

@@ -5,6 +5,7 @@ namespace App\Service\Api;
 
 use App\Audit\AuditLogger;
 use App\Infrastructure\Uuid;
+use Cake\Database\Connection;
 use Cake\Datasource\ConnectionManager;
 
 /**
@@ -33,9 +34,12 @@ class TokenService
         $this->audit ??= new AuditLogger();
     }
 
-    private function conn()
+    private function conn(): Connection
     {
-        return ConnectionManager::get('default');
+        /** @var \Cake\Database\Connection $conn */
+        $conn = ConnectionManager::get('default');
+
+        return $conn;
     }
 
     public static function hash(string $plain): string
@@ -127,7 +131,7 @@ class TokenService
             $r['scopes'] = $this->decodeScopes($r['scopes']);
         }
 
-        return $rows;
+        return array_values($rows);
     }
 
     /** Revokes one of the user's tokens (idempotent). */

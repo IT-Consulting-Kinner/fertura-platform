@@ -5,6 +5,7 @@ namespace App\Controller\Admin;
 
 use App\Service\Tenant\TenantService;
 use Cake\Datasource\ConnectionManager;
+use Cake\Http\Response;
 use RuntimeException;
 use Throwable;
 
@@ -52,7 +53,7 @@ class TenantsController extends AdminController
     }
 
     /** Assigns a user (by email) to a tenant. */
-    public function assign()
+    public function assign(): ?Response
     {
         $this->request->allowMethod('post');
         $email = trim((string)$this->request->getData('email'));
@@ -74,7 +75,7 @@ class TenantsController extends AdminController
         return $this->redirect(['action' => 'index']);
     }
 
-    public function add()
+    public function add(): ?Response
     {
         $this->request->allowMethod('post');
         try {
@@ -93,7 +94,7 @@ class TenantsController extends AdminController
     }
 
     /** Bulk action: activate or suspend the selected tenants. */
-    public function bulk()
+    public function bulk(): ?Response
     {
         $this->request->allowMethod('post');
         $op = (string)$this->request->getData('op');

@@ -5,6 +5,7 @@ namespace App\Service\Module;
 
 use App\Infrastructure\Db;
 use App\Service\Settings\SecretCipher;
+use Cake\Database\Connection;
 use Cake\Datasource\ConnectionManager;
 use RuntimeException;
 
@@ -33,7 +34,7 @@ class ModuleDbRole
         'core.rls_bypass()',
     ];
 
-    private function conn()
+    private function conn(): Connection
     {
         return Db::privileged();
     }

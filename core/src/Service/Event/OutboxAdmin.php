@@ -5,6 +5,7 @@ namespace App\Service\Event;
 
 use App\Audit\AuditLogger;
 use App\Infrastructure\Uuid;
+use Cake\Database\Connection;
 use Cake\Datasource\ConnectionManager;
 
 /**
@@ -21,9 +22,12 @@ class OutboxAdmin
         $this->audit ??= new AuditLogger();
     }
 
-    private function conn()
+    private function conn(): Connection
     {
-        return ConnectionManager::get('default');
+        /** @var \Cake\Database\Connection $conn */
+        $conn = ConnectionManager::get('default');
+
+        return $conn;
     }
 
     /** @return array<string,int> Counts per status. */
@@ -47,11 +51,11 @@ class OutboxAdmin
      */
     public function deadLetters(int $limit = 200): array
     {
-        return $this->conn()->execute(
+        return array_values($this->conn()->execute(
             'SELECT id, created_at, contract_name, correlation_id, attempt_count, max_attempts, last_error '
             . "FROM event_outbox WHERE status = 'dead_letter' ORDER BY created_at DESC LIMIT :l",
             ['l' => $limit],
-        )->fetchAll('assoc');
+        )->fetchAll('assoc'));
     }
 
     /** Requeues a dead-letter event (retry). */

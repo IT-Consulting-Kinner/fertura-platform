@@ -67,8 +67,8 @@ class SettingsManagerCacheTest extends TestCase
         try {
             $tenantB = (new TenantService())->create('zztest-cfg', 'CFG')['id'];
             $sm = new SettingsManager();
-            $sm->set('core', 'session.timeout_minutes', 120);            // global
-            $sm->set('core', 'session.timeout_minutes', 30, $tenantB);   // per tenant
+            $sm->set('core', 'session.timeout_minutes', 120); // global
+            $sm->set('core', 'session.timeout_minutes', 30, $tenantB); // per tenant
 
             // Within tenant B -> tenant-specific value.
             $conn->execute("SELECT set_config('app.current_tenant_id', :t, true)", ['t' => $tenantB]);

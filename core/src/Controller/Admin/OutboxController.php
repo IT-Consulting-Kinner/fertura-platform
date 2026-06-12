@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Controller\Admin;
 
 use App\Service\Event\OutboxAdmin;
+use Cake\Http\Response;
 
 /**
  * Dead-letter management (ch. 26.9.2) within the Core configuration area:
@@ -20,7 +21,7 @@ class OutboxController extends AdminController
         $this->set('deadLetters', $admin->deadLetters());
     }
 
-    public function retry(string $id)
+    public function retry(string $id): ?Response
     {
         $this->request->allowMethod('post');
         $ok = (new OutboxAdmin())->retry($id);
@@ -29,7 +30,7 @@ class OutboxController extends AdminController
         return $this->redirect(['action' => 'index']);
     }
 
-    public function discard(string $id)
+    public function discard(string $id): ?Response
     {
         $this->request->allowMethod('post');
         $ok = (new OutboxAdmin())->discard($id);
@@ -38,7 +39,7 @@ class OutboxController extends AdminController
         return $this->redirect(['action' => 'index']);
     }
 
-    public function retryAll()
+    public function retryAll(): ?Response
     {
         $this->request->allowMethod('post');
         $n = (new OutboxAdmin())->retryAll();

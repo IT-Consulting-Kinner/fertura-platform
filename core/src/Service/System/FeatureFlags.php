@@ -21,8 +21,8 @@ final class FeatureFlags
 {
     /** Known flags and their default (true = active). */
     public const DEFAULTS = [
-        'api' => true,              // External API v1 (/api/v1, bearer token)
-        'marketplace' => true,      // Marketplace client/sync (outbound calls)
+        'api' => true, // External API v1 (/api/v1, bearer token)
+        'marketplace' => true, // Marketplace client/sync (outbound calls)
         'backup_scheduler' => true, // Automatic (scheduled) backups
     ];
 

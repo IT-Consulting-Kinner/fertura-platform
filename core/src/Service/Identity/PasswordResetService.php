@@ -6,6 +6,7 @@ namespace App\Service\Identity;
 use App\Audit\AuditLogger;
 use App\Model\Entity\User;
 use App\Service\Settings\SettingsManager;
+use Cake\Database\Connection;
 use Cake\Datasource\ConnectionManager;
 use Cake\I18n\DateTime;
 use Cake\ORM\Locator\LocatorAwareTrait;
@@ -29,9 +30,12 @@ class PasswordResetService
         $this->audit ??= new AuditLogger();
     }
 
-    private function conn()
+    private function conn(): Connection
     {
-        return ConnectionManager::get('default');
+        /** @var \Cake\Database\Connection $conn */
+        $conn = ConnectionManager::get('default');
+
+        return $conn;
     }
 
     /**

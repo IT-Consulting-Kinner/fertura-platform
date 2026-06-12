@@ -171,7 +171,7 @@ class IntegrationsController extends AdminController
         return $this->redirect(['action' => 'index']);
     }
 
-    public function webhookToggle(string $id)
+    public function webhookToggle(string $id): ?Response
     {
         if ($denied = $this->guardId($id)) {
             return $denied;
@@ -181,7 +181,7 @@ class IntegrationsController extends AdminController
         return $this->back();
     }
 
-    public function webhookDelete(string $id)
+    public function webhookDelete(string $id): ?Response
     {
         if ($denied = $this->guardId($id)) {
             return $denied;
@@ -191,7 +191,7 @@ class IntegrationsController extends AdminController
         return $this->back();
     }
 
-    public function deliveryRetry(string $id)
+    public function deliveryRetry(string $id): ?Response
     {
         if ($denied = $this->guardId($id)) {
             return $denied;
@@ -201,7 +201,7 @@ class IntegrationsController extends AdminController
         return $this->back();
     }
 
-    public function ssoToggle(string $id)
+    public function ssoToggle(string $id): ?Response
     {
         if ($denied = $this->guardId($id)) {
             return $denied;
@@ -211,7 +211,7 @@ class IntegrationsController extends AdminController
         return $this->back();
     }
 
-    public function ssoDelete(string $id)
+    public function ssoDelete(string $id): ?Response
     {
         if ($denied = $this->guardId($id)) {
             return $denied;
@@ -221,7 +221,7 @@ class IntegrationsController extends AdminController
         return $this->back();
     }
 
-    public function automationToggle(string $id)
+    public function automationToggle(string $id): ?Response
     {
         if ($denied = $this->guardId($id)) {
             return $denied;
@@ -231,7 +231,7 @@ class IntegrationsController extends AdminController
         return $this->back();
     }
 
-    public function automationDelete(string $id)
+    public function automationDelete(string $id): ?Response
     {
         if ($denied = $this->guardId($id)) {
             return $denied;
@@ -241,7 +241,7 @@ class IntegrationsController extends AdminController
         return $this->back();
     }
 
-    public function workflowToggle(string $id)
+    public function workflowToggle(string $id): ?Response
     {
         if ($denied = $this->guardId($id)) {
             return $denied;
@@ -251,7 +251,7 @@ class IntegrationsController extends AdminController
         return $this->back();
     }
 
-    public function workflowDelete(string $id)
+    public function workflowDelete(string $id): ?Response
     {
         if ($denied = $this->guardId($id)) {
             return $denied;
@@ -300,7 +300,7 @@ class IntegrationsController extends AdminController
         );
     }
 
-    private function back()
+    private function back(): ?Response
     {
         $this->Flash->success(__('flash.integrations.done'));
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Controller\Admin;
 
 use App\Service\I18n\LanguagePackAdmin;
+use Cake\Http\Response;
 use Throwable;
 
 /**
@@ -24,7 +25,7 @@ class LocalizationController extends AdminController
         $this->set('installed', $admin->installedComponents());
     }
 
-    public function edit()
+    public function edit(): ?Response
     {
         $admin = new LanguagePackAdmin();
         [$component, $version, $locale, $domain] = $this->target();
@@ -43,7 +44,7 @@ class LocalizationController extends AdminController
         return null;
     }
 
-    public function save()
+    public function save(): ?Response
     {
         $this->request->allowMethod('post');
         [$component, $version, $locale, $domain] = $this->target();
@@ -66,7 +67,7 @@ class LocalizationController extends AdminController
         return $this->redirect(['action' => 'index']);
     }
 
-    public function delete()
+    public function delete(): ?Response
     {
         $this->request->allowMethod('post');
         [$component, $version, $locale, $domain] = $this->target();
@@ -80,7 +81,7 @@ class LocalizationController extends AdminController
         return $this->redirect(['action' => 'index']);
     }
 
-    public function review()
+    public function review(): ?Response
     {
         $this->request->allowMethod('post');
         [$component, $version, $locale, $domain] = $this->target();
@@ -98,7 +99,7 @@ class LocalizationController extends AdminController
      * Import: GET shows the form; POST(step=preview) uploads + shows the
      * review preview (unsigned!, E42); POST(step=commit) applies it.
      */
-    public function import()
+    public function import(): ?Response
     {
         $admin = new LanguagePackAdmin();
         $this->set('installed', $admin->installedComponents());

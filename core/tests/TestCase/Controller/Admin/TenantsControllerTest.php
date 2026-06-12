@@ -61,9 +61,9 @@ class TenantsControllerTest extends TestCase
         $this->get('/admin/tenants');
 
         $this->assertResponseOk();
-        $this->assertResponseContains('Default');          // default tenant in the list
-        $this->assertResponseContains('sort=name');         // sortable header (UiKit::sortHeader)
-        $this->assertResponseContains('Create tenant');     // form (UiKit::fields + button), i18n en_US
+        $this->assertResponseContains('Default'); // default tenant in the list
+        $this->assertResponseContains('sort=name'); // sortable header (UiKit::sortHeader)
+        $this->assertResponseContains('Create tenant'); // form (UiKit::fields + button), i18n en_US
         // A11y: skip link, main landmark, active nav entry, scoped column headers.
         $this->assertResponseContains('Skip to main content');
         $this->assertResponseContains('id="main"');

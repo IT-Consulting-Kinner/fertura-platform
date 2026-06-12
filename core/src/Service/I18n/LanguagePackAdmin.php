@@ -5,6 +5,7 @@ namespace App\Service\I18n;
 
 use App\Application;
 use App\Audit\AuditLogger;
+use Cake\Database\Connection;
 use Cake\Datasource\ConnectionManager;
 use RuntimeException;
 use Throwable;
@@ -48,9 +49,12 @@ class LanguagePackAdmin
         }
     }
 
-    private function conn()
+    private function conn(): Connection
     {
-        return ConnectionManager::get('default');
+        /** @var \Cake\Database\Connection $conn */
+        $conn = ConnectionManager::get('default');
+
+        return $conn;
     }
 
     /**

@@ -79,9 +79,12 @@ class BackupService
         return $this->password() !== '';
     }
 
-    private function conn()
+    private function conn(): Connection
     {
-        return ConnectionManager::get('default');
+        /** @var \Cake\Database\Connection $conn */
+        $conn = ConnectionManager::get('default');
+
+        return $conn;
     }
 
     /**
@@ -314,10 +317,10 @@ class BackupService
     /** @return list<array<string,mixed>> */
     public function list(): array
     {
-        return $this->conn()->execute(
+        return array_values($this->conn()->execute(
             'SELECT id, created_at, core_version, status, db_bytes, files_bytes, path, note, encrypted, verified '
             . 'FROM backups ORDER BY created_at DESC',
-        )->fetchAll('assoc');
+        )->fetchAll('assoc'));
     }
 
     /**
@@ -327,12 +330,12 @@ class BackupService
      */
     public function logEntries(int $limit = 100): array
     {
-        return $this->conn()->execute(
+        return array_values($this->conn()->execute(
             'SELECT l.occurred_at, l.operation, l.backup_id, l.source, l.result, l.message, u.username AS actor '
             . 'FROM backup_log l LEFT JOIN users u ON u.id = l.actor_user_id '
             . 'ORDER BY l.occurred_at DESC LIMIT :lim',
             ['lim' => $limit],
-        )->fetchAll('assoc');
+        )->fetchAll('assoc'));
     }
 
     /** @return array<string,mixed>|null */
@@ -340,6 +343,8 @@ class BackupService
     {
         // UUID guard: the ID comes from URL/CLI; a malformed value would throw in
         // the PG uuid comparison (22P02) -> 500 instead of a clean "unknown".
+        // Fully qualified on purpose: the short `Uuid` here is Symfony's (used for
+        // v7 generation); this guard needs App's strict, `\z`-anchored validator.
         if (!\App\Infrastructure\Uuid::isValid($id)) {
             return null;
         }

@@ -7,6 +7,7 @@ use App\Audit\AuditLogger;
 use App\Service\Security\Signer;
 use App\Service\Security\TrustStore;
 use App\Service\Settings\SettingsManager;
+use Cake\Database\Connection;
 use Cake\Datasource\ConnectionManager;
 use RuntimeException;
 
@@ -33,9 +34,12 @@ class LicenseService
 
     private ?SettingsManager $settings = null;
 
-    private function conn()
+    private function conn(): Connection
     {
-        return ConnectionManager::get('default');
+        /** @var \Cake\Database\Connection $conn */
+        $conn = ConnectionManager::get('default');
+
+        return $conn;
     }
 
     private function settings(): SettingsManager

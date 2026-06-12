@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Service\Permission;
 
 use App\Audit\AuditLogger;
+use Cake\Database\Connection;
 use Cake\Datasource\ConnectionManager;
 
 /**
@@ -37,9 +38,12 @@ class PermissionService
         $this->audit = $audit ?? new AuditLogger();
     }
 
-    private function conn()
+    private function conn(): Connection
     {
-        return ConnectionManager::get('default');
+        /** @var \Cake\Database\Connection $conn */
+        $conn = ConnectionManager::get('default');
+
+        return $conn;
     }
 
     /**

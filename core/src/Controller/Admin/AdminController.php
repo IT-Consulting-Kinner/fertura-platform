@@ -8,6 +8,7 @@ use App\Infrastructure\Uuid;
 use Cake\Datasource\ConnectionManager;
 use Cake\Event\EventInterface;
 use Cake\Http\Exception\ForbiddenException;
+use Cake\Http\Response;
 
 /**
  * Base class for all admin controllers (scoped admin, ch. 27.3.1 / Decision 170).
@@ -66,7 +67,7 @@ class AdminController extends AppController
         $this->viewBuilder()->setLayout('admin');
     }
 
-    public function beforeFilter(EventInterface $event)
+    public function beforeFilter(EventInterface $event): ?Response
     {
         parent::beforeFilter($event);
 

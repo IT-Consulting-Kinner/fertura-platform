@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Controller\Admin;
 
 use App\Service\Api\TokenService;
+use Cake\Http\Response;
 
 /**
  * Self-service management of one's own API tokens (ch. 29 / Decision 162).
@@ -25,7 +26,7 @@ class TokensController extends AdminController
         $this->set('newToken', $newToken);
     }
 
-    public function create()
+    public function create(): ?Response
     {
         $this->request->allowMethod('post');
         $userId = (string)$this->identity()->getIdentifier();
@@ -47,7 +48,7 @@ class TokensController extends AdminController
         return $this->redirect(['action' => 'index']);
     }
 
-    public function revoke(string $id)
+    public function revoke(string $id): ?Response
     {
         $this->request->allowMethod('post');
         $userId = (string)$this->identity()->getIdentifier();

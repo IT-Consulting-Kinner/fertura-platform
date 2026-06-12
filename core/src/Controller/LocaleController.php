@@ -5,6 +5,7 @@ namespace App\Controller;
 
 use App\Infrastructure\Db;
 use App\Service\Settings\SettingsManager;
+use Cake\Http\Response;
 
 /**
  * Persistent language switch (i18n-7, E44).
@@ -15,7 +16,7 @@ use App\Service\Settings\SettingsManager;
  */
 class LocaleController extends AppController
 {
-    public function change()
+    public function change(): ?Response
     {
         $this->request->allowMethod('post');
         $lang = (string)$this->request->getData('lang');

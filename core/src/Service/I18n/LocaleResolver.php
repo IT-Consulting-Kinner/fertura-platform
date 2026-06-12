@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Service\I18n;
 
+use Cake\Database\Connection;
 use Cake\Datasource\ConnectionManager;
 use Throwable;
 
@@ -21,9 +22,12 @@ use Throwable;
  */
 class LocaleResolver
 {
-    private function conn()
+    private function conn(): Connection
     {
-        return ConnectionManager::get('default');
+        /** @var \Cake\Database\Connection $conn */
+        $conn = ConnectionManager::get('default');
+
+        return $conn;
     }
 
     private static function major(string $version): string
