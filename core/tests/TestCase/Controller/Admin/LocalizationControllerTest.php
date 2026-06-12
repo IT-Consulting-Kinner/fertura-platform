@@ -10,9 +10,9 @@ use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
 
 /**
- * Integrationstest der Sprachverwaltungs-GUI (Administrationsbereich
- * `localization`, E41/E42): Übersicht, Editor (laden/speichern), Review,
- * Lösch-Regeln (Englisch-Schutz) und Import-Validierung/-Commit.
+ * Integration test for the language management GUI (admin area `localization`,
+ * E41/E42): overview, editor (load/save), review, deletion rules (English
+ * protection), and import validation/commit.
  */
 class LocalizationControllerTest extends TestCase
 {
@@ -27,7 +27,7 @@ class LocalizationControllerTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->store = new LanguagePackStore(); // Default-Base: der Controller nutzt sie intern
+        $this->store = new LanguagePackStore(); // default base: the controller uses it internally
         $this->cleanup();
         $conn = ConnectionManager::get('default');
         $conn->execute(
@@ -53,7 +53,7 @@ class LocalizationControllerTest extends TestCase
     private function cleanup(): void
     {
         $conn = ConnectionManager::get('default');
-        // Store-Dateien der Test-Locales entfernen (Metadaten kaskadieren nicht auf Dateien).
+        // Remove store files of the test locales (metadata does not cascade to files).
         $rows = $conn->execute(
             "SELECT component_key, version, locale, domain FROM language_packs WHERE locale LIKE 'xx_%'",
         )->fetchAll('assoc');
@@ -71,7 +71,7 @@ class LocalizationControllerTest extends TestCase
         $this->enableSecurityToken();
     }
 
-    /** Legt ein Test-Pack über den (Default-)Store an. */
+    /** Creates a test pack through the (default) store. */
     private function seedPack(string $locale): void
     {
         (new LanguagePackAdmin($this->store))->importCommit(
@@ -117,7 +117,7 @@ class LocalizationControllerTest extends TestCase
         $this->assertResponseOk();
         $this->assertResponseContains('t.greet');
 
-        $this->get('/admin/localization/edit?' . $this->target('xx_ZZ')); // existiert nicht
+        $this->get('/admin/localization/edit?' . $this->target('xx_ZZ')); // does not exist
         $this->assertRedirect(['action' => 'index']);
     }
 
@@ -158,7 +158,7 @@ class LocalizationControllerTest extends TestCase
         $this->assertRedirect(['action' => 'index']);
         $this->assertNull((new LanguagePackAdmin($this->store))->meta('core', '1.0.0', 'xx_LF'));
 
-        // Englisch bei aktiver Komponente: Service wirft, GUI fängt -> Flash + Redirect.
+        // English on an active component: service throws, GUI catches -> flash + redirect.
         $this->post('/admin/localization/delete?component=core&version=1.0.0&locale=en_US&domain=default');
         $this->assertRedirect(['action' => 'index']);
     }
@@ -167,15 +167,15 @@ class LocalizationControllerTest extends TestCase
     {
         $this->login();
 
-        // GET: Formular rendert mit Komponenten-Auswahl.
+        // GET: form renders with component selection.
         $this->get('/admin/localization/import');
         $this->assertResponseOk();
 
-        // Ungültige Locale -> zurück zum Formular.
+        // Invalid locale -> back to the form.
         $this->post('/admin/localization/import', ['step' => 'preview', 'locale' => 'nope', 'component' => 'core', 'version' => '1.0.0']);
         $this->assertRedirect(['action' => 'import']);
 
-        // Commit-Schritt: Token-Datei liegt bereits im Import-Puffer (wie nach Preview).
+        // Commit step: token file already sits in the import buffer (as after preview).
         $token = bin2hex(random_bytes(16));
         $tmpDir = TMP . 'langimport';
         if (!is_dir($tmpDir)) {

@@ -10,10 +10,10 @@ use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
 
 /**
- * End-to-End-Test des MFA-Login-Flows: Passwort allein schließt die Anmeldung
- * NICHT ab (Identity wird erst nach gültigem zweiten Faktor gesetzt), falscher
- * Code wird gedrosselt abgelehnt, Recovery-Code funktioniert, und die
- * Challenge verfällt nach Ablauf des Pending-Fensters.
+ * End-to-end test of the MFA login flow: a password alone does NOT complete the
+ * login (identity is only set after a valid second factor), a wrong code is
+ * rejected with throttling, the recovery code works, and the challenge expires
+ * once the pending window has elapsed.
  */
 class AuthMfaFlowTest extends TestCase
 {
@@ -38,7 +38,7 @@ class AuthMfaFlowTest extends TestCase
                 'p' => password_hash(self::PASSWORD, PASSWORD_ARGON2ID),
             ],
         )->fetch('assoc')['id'];
-        // TOTP über den echten Enrollment-Pfad aktivieren.
+        // Enable TOTP through the real enrollment path.
         $this->secret = Totp::generateSecret();
         (new MfaService())->confirmEnrollment($this->userId, $this->secret, Totp::code($this->secret));
     }
@@ -66,10 +66,10 @@ class AuthMfaFlowTest extends TestCase
     }
 
     /**
-     * Übernimmt server-seitig geschriebene Session-Daten in den NÄCHSTEN
-     * Test-Request. Das IntegrationTestTrait persistiert Session-Writes nicht
-     * zwischen Requests (jeder Request startet nur mit `$this->session()`-Daten);
-     * im echten Betrieb übernimmt das der Session-Store.
+     * Carries server-side written session data into the NEXT test request. The
+     * IntegrationTestTrait does not persist session writes between requests (each
+     * request starts only with `$this->session()` data); in real operation the
+     * session store handles this.
      *
      * @param list<string> $keys
      */
@@ -88,15 +88,15 @@ class AuthMfaFlowTest extends TestCase
     {
         $this->postLogin();
 
-        // Statt /admin: Umleitung zur MFA-Challenge.
+        // Instead of /admin: redirect to the MFA challenge.
         $this->assertRedirectContains('/login/mfa');
 
-        // Identity ist NICHT gesetzt (die Middleware-persistierte wurde wieder
-        // entfernt) — nur der Pending-Marker liegt in der Session.
+        // Identity is NOT set (the one persisted by the middleware was removed
+        // again) — only the pending marker sits in the session.
         $this->assertArrayNotHasKey('Auth', $_SESSION);
         $this->assertArrayHasKey('Mfa', $_SESSION);
 
-        // Geschützte Seite verlangt weiterhin Login.
+        // A protected page still requires login.
         $this->get('/mfa');
         $this->assertRedirectContains('/login');
     }
@@ -107,10 +107,10 @@ class AuthMfaFlowTest extends TestCase
         $this->carrySession(['Mfa']);
 
         $this->post('/login/mfa', ['code' => '000000']);
-        $this->assertResponseOk(); // Formular erneut, kein Login
-        $this->assertArrayNotHasKey('Auth', $_SESSION); // keine Identity gesetzt
+        $this->assertResponseOk(); // form again, no login
+        $this->assertArrayNotHasKey('Auth', $_SESSION); // no identity set
 
-        // Fehlversuch zählt in die Anmelde-Drosselung.
+        // A failed attempt counts toward the login throttling.
         $failures = (int)ConnectionManager::get('default')->execute(
             'SELECT count(*) AS c FROM auth_failures WHERE identifier = :u',
             ['u' => $this->username],
@@ -125,9 +125,9 @@ class AuthMfaFlowTest extends TestCase
 
         $this->post('/login/mfa', ['code' => Totp::code($this->secret)]);
         $this->assertRedirect('/admin');
-        $this->assertArrayHasKey('Auth', $_SESSION); // Identity erst JETZT gesetzt
+        $this->assertArrayHasKey('Auth', $_SESSION); // identity set only NOW
 
-        // Jetzt angemeldet: MFA-Selbstverwaltung erreichbar.
+        // Now logged in: MFA self-management is reachable.
         $this->carrySession(['Auth']);
         $this->get('/mfa');
         $this->assertResponseOk();
@@ -136,7 +136,7 @@ class AuthMfaFlowTest extends TestCase
 
     public function testRecoveryCodeCompletesLogin(): void
     {
-        // Frisches Enrollment, um an Klartext-Recovery-Codes zu kommen.
+        // Fresh enrollment to obtain plaintext recovery codes.
         (new MfaService())->disable($this->userId);
         $codes = (new MfaService())->confirmEnrollment($this->userId, $this->secret, Totp::code($this->secret));
         $this->assertNotNull($codes);
@@ -150,11 +150,11 @@ class AuthMfaFlowTest extends TestCase
 
     public function testPasskeyAssertionCompletesLogin(): void
     {
-        // Passkey direkt über den Service registrieren (echtes EC-P-256-Paar).
+        // Register the passkey directly via the service (real EC P-256 pair).
         $key = openssl_pkey_new(['curve_name' => 'prime256v1', 'private_key_type' => OPENSSL_KEYTYPE_EC]);
         assert($key !== false);
         $credentialId = random_bytes(16);
-        $rpId = 'localhost'; // Host der Test-Requests
+        $rpId = 'localhost'; // host of the test requests
         $details = openssl_pkey_get_details($key);
         $coseKey = \App\Service\Security\Cbor::encode([
             1 => 2, 3 => -7, -1 => 1,
@@ -176,7 +176,7 @@ class AuthMfaFlowTest extends TestCase
             $rpId,
         );
 
-        // Passwort-Schritt -> Challenge-Optionen holen (Challenge landet in der Session).
+        // Password step -> fetch the challenge options (challenge lands in the session).
         $this->postLogin();
         $this->carrySession(['Mfa']);
         $this->get('/login/mfa/passkeys');
@@ -185,12 +185,12 @@ class AuthMfaFlowTest extends TestCase
         $this->assertNotEmpty($options['allowCredentials']);
         $challenge = (string)$options['challenge'];
 
-        // Assertion clientseitig "signieren" und als Formular-POST einreichen.
+        // "Sign" the assertion client-side and submit it as a form POST.
         $clientData = (string)json_encode(['type' => 'webauthn.get', 'challenge' => $challenge, 'origin' => 'http://' . $rpId]);
         $assertAuthData = hash('sha256', $rpId, true) . chr(0x01) . pack('N', 7);
         openssl_sign($assertAuthData . hash('sha256', $clientData, true), $signature, $key, OPENSSL_ALGO_SHA256);
 
-        $this->carrySession(['Mfa']); // pending + passkey_challenge übernehmen
+        $this->carrySession(['Mfa']); // carry pending + passkey_challenge
         $this->post('/login/mfa', [
             'credential_id' => \App\Service\Security\WebAuthnService::b64uEncode($credentialId),
             'client_data' => \App\Service\Security\WebAuthnService::b64uEncode($clientData),
@@ -199,14 +199,14 @@ class AuthMfaFlowTest extends TestCase
         ]);
 
         $this->assertRedirect('/admin');
-        $this->assertArrayHasKey('Auth', $_SESSION); // Anmeldung abgeschlossen
+        $this->assertArrayHasKey('Auth', $_SESSION); // login completed
     }
 
     public function testChallengeWithoutPendingRedirectsToLogin(): void
     {
         $this->enableCsrfToken();
         $this->enableSecurityToken();
-        // Direktaufruf ohne vorherigen Passwort-Schritt -> zurück zum Login.
+        // Direct call without a prior password step -> back to login.
         $this->get('/login/mfa');
         $this->assertRedirectContains('/login');
     }
@@ -215,6 +215,6 @@ class AuthMfaFlowTest extends TestCase
     {
         (new MfaService())->disable($this->userId);
         $this->postLogin();
-        $this->assertRedirect('/admin'); // kein MFA-Umweg
+        $this->assertRedirect('/admin'); // no MFA detour
     }
 }

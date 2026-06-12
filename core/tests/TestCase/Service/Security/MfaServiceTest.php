@@ -9,9 +9,9 @@ use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\TestCase;
 
 /**
- * Test der MFA-Verwaltung: zweistufiges Enrollment (falscher Code lehnt ab,
- * Secret landet verschlüsselt in der DB), TOTP-Verifikation mit
- * **Replay-Schutz**, einmal-verwendbare Recovery-Codes und Deaktivierung.
+ * Test of MFA management: two-step enrollment (wrong code is rejected, the
+ * secret is stored encrypted in the DB), TOTP verification with
+ * **replay protection**, single-use recovery codes, and deactivation.
  */
 class MfaServiceTest extends TestCase
 {
@@ -43,18 +43,18 @@ class MfaServiceTest extends TestCase
         $mfa = new MfaService();
         $secret = Totp::generateSecret();
 
-        // Falscher Code -> kein Enrollment.
+        // Wrong code -> no enrollment.
         $this->assertNull($mfa->confirmEnrollment($this->userId, $secret, '000000'));
         $this->assertFalse($mfa->enabled($this->userId));
 
-        // Gültiger Code -> aktiv + 8 Recovery-Codes.
+        // Valid code -> active + 8 recovery codes.
         $codes = $mfa->confirmEnrollment($this->userId, $secret, Totp::code($secret));
         $this->assertNotNull($codes);
         $this->assertCount(MfaService::RECOVERY_CODE_COUNT, $codes);
         $this->assertTrue($mfa->enabled($this->userId));
         $this->assertSame(MfaService::RECOVERY_CODE_COUNT, $mfa->recoveryCodesLeft($this->userId));
 
-        // Secret liegt NIE im Klartext in der DB.
+        // The secret is NEVER stored in plaintext in the DB.
         $stored = (string)ConnectionManager::get('default')->execute(
             'SELECT totp_secret FROM users WHERE id = :id',
             ['id' => $this->userId],
@@ -70,9 +70,9 @@ class MfaServiceTest extends TestCase
 
         $code = Totp::code($secret);
         $this->assertTrue($mfa->verify($this->userId, $code));
-        // Replay desselben Codes (gleicher Zeitschritt) -> abgelehnt.
+        // Replay of the same code (same time step) -> rejected.
         $this->assertFalse($mfa->verify($this->userId, $code));
-        // Falscher Code -> abgelehnt.
+        // Wrong code -> rejected.
         $this->assertFalse($mfa->verify($this->userId, '000000'));
     }
 
@@ -86,9 +86,9 @@ class MfaServiceTest extends TestCase
         $recovery = $codes[0];
         $this->assertTrue($mfa->verify($this->userId, $recovery));
         $this->assertSame(MfaService::RECOVERY_CODE_COUNT - 1, $mfa->recoveryCodesLeft($this->userId));
-        // Zweite Einlösung desselben Codes -> abgelehnt.
+        // Second redemption of the same code -> rejected.
         $this->assertFalse($mfa->verify($this->userId, $recovery));
-        // Auch normalisiert (klein, ohne Bindestrich) einlösbar: nächster Code.
+        // Also redeemable in normalized form (lowercase, no hyphen): the next code.
         $this->assertTrue($mfa->verify($this->userId, strtolower(str_replace('-', '', $codes[1]))));
     }
 

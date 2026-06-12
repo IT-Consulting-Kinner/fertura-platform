@@ -9,8 +9,8 @@ use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
 
 /**
- * Integrationstest der Mandanten-Admin-GUI: rendert für einen core_config-Admin
- * (prüft Controller + Template + das Modul-UI-Kit im echten Render) und legt an.
+ * Integration test for the tenants admin GUI: renders for a core_config admin
+ * (verifies controller + template + the module UI kit in a real render) and creates.
  */
 class TenantsControllerTest extends TestCase
 {
@@ -61,10 +61,10 @@ class TenantsControllerTest extends TestCase
         $this->get('/admin/tenants');
 
         $this->assertResponseOk();
-        $this->assertResponseContains('Default');          // Default-Mandant in der Liste
-        $this->assertResponseContains('sort=name');         // sortierbarer Kopf (UiKit::sortHeader)
-        $this->assertResponseContains('Create tenant');     // Formular (UiKit::fields + Button), i18n en_US
-        // A11y: Skip-Link, Main-Landmark, aktiver Nav-Eintrag, scope-Spaltenköpfe.
+        $this->assertResponseContains('Default');          // default tenant in the list
+        $this->assertResponseContains('sort=name');         // sortable header (UiKit::sortHeader)
+        $this->assertResponseContains('Create tenant');     // form (UiKit::fields + button), i18n en_US
+        // A11y: skip link, main landmark, active nav entry, scoped column headers.
         $this->assertResponseContains('Skip to main content');
         $this->assertResponseContains('id="main"');
         $this->assertResponseContains('aria-current="page"');
@@ -73,13 +73,13 @@ class TenantsControllerTest extends TestCase
 
     public function testHandRolledAdminTableHasScopedHeaders(): void
     {
-        // Guard für den systematischen A11y-Rollout: auch *handgebaute* Admin-Tabellen
-        // (nicht nur UiKit-generierte) tragen scope="col" an den Spaltenköpfen.
+        // Guard for the systematic A11y rollout: *hand-built* admin tables too
+        // (not only UiKit-generated ones) carry scope="col" on the column headers.
         $this->login();
         $this->get('/admin/config');
 
         $this->assertResponseOk();
-        $this->assertResponseContains('<th scope="col">'); // Config/index.php ist handgebaut
+        $this->assertResponseContains('<th scope="col">'); // Config/index.php is hand-built
     }
 
     public function testAddCreatesTenant(): void
@@ -122,8 +122,8 @@ class TenantsControllerTest extends TestCase
 
     public function testMalformedTenantIdsFailGracefully(): void
     {
-        // Fehlgeformte UUID im Formular: UUID-Guard an der Service-Grenze
-        // (TenantService) -> Fehler-Flash + Redirect statt 22P02 -> 500.
+        // Malformed UUID in the form: UUID guard at the service boundary
+        // (TenantService) -> error flash + redirect instead of 22P02 -> 500.
         ConnectionManager::get('default')->execute(
             "INSERT INTO users (username, email, status) VALUES (:u, :e, 'active')",
             ['u' => 'zztest_badassign_' . bin2hex(random_bytes(3)), 'e' => 'badassign@zztenant.local'],

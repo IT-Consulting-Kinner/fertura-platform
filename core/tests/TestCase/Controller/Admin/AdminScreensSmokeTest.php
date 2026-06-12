@@ -8,10 +8,10 @@ use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
 
 /**
- * Render-Smoke der bislang ungetesteten Admin-Screens: Dashboard, Audit-Log,
- * Backup, Update-Historie, Registry (Contracts + Interfaces), Marketplace
- * (Status + Lizenzen) — echte Route + Template + A11y-Grundgerüst je Screen,
- * plus Fehlerpfade der Backup-Aktionen (unbekannte ID → Flash statt 500).
+ * Render smoke test for the previously untested admin screens: Dashboard, audit
+ * log, backup, update history, registry (contracts + interfaces), marketplace
+ * (status + licenses) — real route + template + A11y scaffolding per screen,
+ * plus the error paths of the backup actions (unknown ID → flash instead of 500).
  */
 class AdminScreensSmokeTest extends TestCase
 {
@@ -66,7 +66,7 @@ class AdminScreensSmokeTest extends TestCase
     public function testCoreAdminScreensRender(): void
     {
         $this->login();
-        // URL => erwarteter Inhalts-Marker (Screen wirklich gerendert, nicht nur 200).
+        // URL => expected content marker (screen actually rendered, not just 200).
         $screens = [
             '/admin' => 'id="main"',
             '/admin/audit' => 'scope="col"',
@@ -88,7 +88,7 @@ class AdminScreensSmokeTest extends TestCase
     {
         $this->login();
 
-        // Unbekannte Backup-ID -> Flash + Redirect (kein 500), kein Download-Leak.
+        // Unknown backup ID -> flash + redirect (no 500), no download leak.
         $this->post('/admin/backup/verify/zz-no-such-backup');
         $this->assertRedirect(['action' => 'index']);
 
@@ -96,9 +96,9 @@ class AdminScreensSmokeTest extends TestCase
         $this->assertRedirect(['action' => 'index']);
 
         $this->get('/admin/backup/download/zz-no-such-backup');
-        $this->assertResponseCode(302); // zurück zur Liste statt Datei
+        $this->assertResponseCode(302); // back to the list instead of a file
 
-        // Off-Site standardmäßig deaktiviert -> Upload-Aktion lehnt ab (kein 500).
+        // Off-site disabled by default -> upload action refuses (no 500).
         $this->post('/admin/backup/offsiteUpload/00000000-0000-0000-0000-000000000000');
         $this->assertRedirect(['action' => 'index']);
         $this->post('/admin/backup/offsiteDelete/whatever.zip');
@@ -107,8 +107,8 @@ class AdminScreensSmokeTest extends TestCase
 
     public function testOutboxAndTokenActionsFailGracefullyForMalformedId(): void
     {
-        // Fehlgeformte UUID in der URL: UUID-Guard an der Service-Grenze
-        // (OutboxAdmin/TokenService) -> not_found-Flash + Redirect statt
+        // Malformed UUID in the URL: UUID guard at the service boundary
+        // (OutboxAdmin/TokenService) -> not_found flash + redirect instead of
         // 22P02 ("invalid input syntax for type uuid") -> 500.
         $this->login();
 
@@ -124,7 +124,7 @@ class AdminScreensSmokeTest extends TestCase
 
     public function testAdminScreensRequireTheirArea(): void
     {
-        // Benutzer OHNE Bereiche: Admin-Screens verweigern (Redirect/403, kein Inhalt).
+        // User WITHOUT areas: admin screens are denied (redirect/403, no content).
         $conn = ConnectionManager::get('default');
         $plain = (string)$conn->execute(
             "INSERT INTO users (username, email, status) VALUES (:u, :e, 'active') RETURNING id",

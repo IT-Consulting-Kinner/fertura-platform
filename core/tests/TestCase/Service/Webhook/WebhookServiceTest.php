@@ -10,9 +10,9 @@ use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\TestCase;
 
 /**
- * Test der Outbound-Webhooks (P05): HMAC-Signatur, Filter-Matching, idempotentes
- * Einreihen, erfolgreiche Zustellung (inkl. Signatur-Header) sowie Retry →
- * Dead-Letter. Der HTTP-Egress wird gestubbt (kein realer Verkehr).
+ * Tests outbound webhooks (P05): HMAC signature, filter matching, idempotent
+ * enqueueing, successful delivery (incl. signature header), and retry →
+ * dead-letter. The HTTP egress is stubbed (no real traffic).
  */
 class WebhookServiceTest extends TestCase
 {
@@ -55,7 +55,7 @@ class WebhookServiceTest extends TestCase
         $n = $s->enqueueForEvent('zztest.hit', ['x' => 1], $eventId);
         $this->assertSame(2, $n, 'nur Wildcard + exakter Treffer');
 
-        // Idempotent: gleiches Event erneut -> 0 neue.
+        // Idempotent: the same event again -> 0 new ones.
         $this->assertSame(0, $s->enqueueForEvent('zztest.hit', ['x' => 1], $eventId));
 
         $subs = array_column($s->listDeliveries(), 'subscription_id');
@@ -86,12 +86,12 @@ class WebhookServiceTest extends TestCase
 
     public function testRetryThenDeadLetter(): void
     {
-        $egress = new FakeEgress(500); // dauerhaft fehlerhaft
+        $egress = new FakeEgress(500); // permanently failing
         $s = new WebhookService($egress);
         $s->createSubscription('zztest_dead', 'https://example.com/fail', 'zztest.dead', 'k');
         $s->enqueueForEvent('zztest.dead', [], $this->uuid());
 
-        // max_attempts auf 1 setzen -> erster Fehlversuch landet im Dead-Letter.
+        // Set max_attempts to 1 -> the first failed attempt lands in the dead-letter.
         ConnectionManager::get('default')->execute(
             "UPDATE webhook_deliveries SET max_attempts = 1 WHERE event_name = 'zztest.dead'",
         );
@@ -110,7 +110,7 @@ class WebhookServiceTest extends TestCase
 }
 
 /**
- * HTTP-Egress-Stub: zeichnet Aufrufe auf und liefert eine vorgegebene Antwort.
+ * HTTP egress stub: records calls and returns a predetermined response.
  */
 class FakeEgress extends EgressClient
 {

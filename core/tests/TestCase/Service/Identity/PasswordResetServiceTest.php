@@ -8,10 +8,10 @@ use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\TestCase;
 
 /**
- * Test des Einladungs-/Reset-Token-Lebenszyklus (Kap. 27.2/27.15): Token nur als
- * Hash gespeichert, Einlösung setzt Passwort + aktiviert „invited", verbraucht
- * den Token (und weitere offene), und lehnt zu kurze/ungültige/abgelaufene/
- * bereits verwendete Token ab.
+ * Tests the invitation/reset token lifecycle (ch. 27.2/27.15): the token is
+ * stored only as a hash, redemption sets the password + activates an „invited"
+ * user, consumes the token (and any other open ones), and rejects tokens that
+ * are too short/invalid/expired/already used.
  */
 class PasswordResetServiceTest extends TestCase
 {
@@ -60,7 +60,7 @@ class PasswordResetServiceTest extends TestCase
             ['u' => $this->userId],
         )->fetch('assoc');
         $this->assertSame(hash('sha256', $token), $row['token_hash']);
-        $this->assertNotSame($token, $row['token_hash']); // Klartext nie gespeichert
+        $this->assertNotSame($token, $row['token_hash']); // plaintext is never stored
     }
 
     public function testRedeemSetsPasswordActivatesAndConsumes(): void
@@ -77,7 +77,7 @@ class PasswordResetServiceTest extends TestCase
         $this->assertNotEmpty($hash);
         $this->assertTrue(password_verify('correct-horse-battery', $hash));
 
-        // Token verbraucht -> zweite Einlösung abgelehnt.
+        // Token consumed -> second redemption rejected.
         $this->assertNotNull($svc->redeem($token, 'another-strong-pw'));
     }
 
@@ -86,14 +86,14 @@ class PasswordResetServiceTest extends TestCase
         $svc = new PasswordResetService();
         $token = $svc->create($this->userId, 'invite');
 
-        // Zu kurz.
+        // Too short.
         $this->assertNotNull($svc->redeem($token, 'short'));
         $this->assertSame('invited', $this->userStatus());
 
-        // Unbekannter Token.
+        // Unknown token.
         $this->assertNotNull($svc->redeem('voellig-unbekannt', 'correct-horse-battery'));
 
-        // Abgelaufen.
+        // Expired.
         ConnectionManager::get('default')->execute(
             "UPDATE password_reset_tokens SET expires_at = now() - interval '1 hour' WHERE user_id = :u",
             ['u' => $this->userId],
@@ -109,7 +109,7 @@ class PasswordResetServiceTest extends TestCase
         $t2 = $svc->create($this->userId, 'reset');
 
         $this->assertNull($svc->redeem($t1, 'correct-horse-battery'));
-        // Der zweite, zuvor offene Token ist jetzt ebenfalls entwertet.
+        // The second, previously open token is now invalidated as well.
         $this->assertNotNull($svc->redeem($t2, 'correct-horse-battery'));
     }
 

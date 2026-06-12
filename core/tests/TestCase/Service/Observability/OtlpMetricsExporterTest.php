@@ -10,8 +10,8 @@ use App\Service\Observability\OtlpMetricsExporter;
 use Cake\TestSuite\TestCase;
 
 /**
- * Test des schlanken OTLP/HTTP-Metrik-Exporters (#12): OTLP-Payload-Struktur und
- * Versand an `OTEL_EXPORTER_OTLP_ENDPOINT` (gestubbt, kein realer HTTP-Verkehr).
+ * Tests the lightweight OTLP/HTTP metrics exporter (#12): OTLP payload structure
+ * and dispatch to `OTEL_EXPORTER_OTLP_ENDPOINT` (stubbed, no real HTTP traffic).
  */
 class OtlpMetricsExporterTest extends TestCase
 {

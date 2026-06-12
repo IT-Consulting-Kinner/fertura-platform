@@ -9,8 +9,8 @@ use App\Service\Metrics\PrometheusRenderer;
 use Cake\TestSuite\TestCase;
 
 /**
- * Test des Metrik-Sammlers (P04): liefert mindestens `fertura_up` und ist
- * renderbar; Teil-Abfragen sind fehlerisoliert.
+ * Tests the metrics collector (P04): yields at least `fertura_up` and is
+ * renderable; partial queries are error-isolated.
  */
 class MetricsServiceTest extends TestCase
 {
@@ -28,8 +28,8 @@ class MetricsServiceTest extends TestCase
 
     public function testWorkerHeartbeatBecomesAGauge(): void
     {
-        // Schützt vor Schema-Drift: ein vorhandener Heartbeat MUSS als Metrik
-        // erscheinen (eine fehlerhafte Spalte würde sonst still verschluckt).
+        // Guards against schema drift: an existing heartbeat MUST appear as a
+        // metric (otherwise a broken column would be silently swallowed).
         $conn = Db::privileged();
         $conn->execute('DELETE FROM worker_heartbeats WHERE worker_key = :k', ['k' => 'test:metric']);
         $conn->execute(

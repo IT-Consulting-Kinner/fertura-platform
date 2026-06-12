@@ -7,7 +7,7 @@ use App\Service\Realtime\RealtimeService;
 use Cake\TestSuite\TestCase;
 
 /**
- * Test des Realtime-Services (P08): identifier-sichere Kanalnamen + Publish.
+ * Test of the realtime service (P08): identifier-safe channel names + publish.
  */
 class RealtimeServiceTest extends TestCase
 {
@@ -21,7 +21,7 @@ class RealtimeServiceTest extends TestCase
 
     public function testPublishDoesNotThrow(): void
     {
-        // pg_notify ohne LISTEN-Empfänger ist ein No-op (kein Fehler).
+        // pg_notify without a LISTEN receiver is a no-op (no error).
         (new RealtimeService())->publish('user-1', 'test.ping', ['x' => 1]);
         $this->assertTrue(true);
     }

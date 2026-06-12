@@ -7,10 +7,10 @@ use App\Service\Privacy\AnonymizeContributorInterface;
 use Cake\Datasource\ConnectionManager;
 
 /**
- * Anonymisierungs-Beitrag eines isolierten Moduls: bereinigt die eigene
- * Tabelle `user_data` für den Benutzer. Läuft im isolierten Host über die
- * Modul-Rolle (Phase 3) — `ConnectionManager::get('default')` ist dort die
- * eingeschränkte Modul-Connection mit Search-Path auf das Modul-Schema.
+ * Anonymization contributor of an isolated module: scrubs its own `user_data`
+ * table for the user. Runs in the isolated host under the module role (phase 3) —
+ * there `ConnectionManager::get('default')` is the restricted module connection
+ * with the search path set to the module schema.
  */
 class AnonContributor implements AnonymizeContributorInterface
 {

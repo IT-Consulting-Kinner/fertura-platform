@@ -9,8 +9,8 @@ use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\TestCase;
 
 /**
- * Test der Automations-Engine (P12): Event-Matching, Bedingung, Aktions-
- * ausführung (Benachrichtigung über einen Stub).
+ * Test of the automation engine (P12): event matching, condition evaluation,
+ * action execution (notification via a stub).
  */
 class AutomationEngineTest extends TestCase
 {
@@ -83,7 +83,7 @@ class AutomationEngineTest extends TestCase
     }
 }
 
-/** NotificationService-Stub: zeichnet notify-Aufrufe auf. */
+/** NotificationService stub: records notify() calls. */
 class StubNotifier extends NotificationService
 {
     /** @var list<array<string,mixed>> */

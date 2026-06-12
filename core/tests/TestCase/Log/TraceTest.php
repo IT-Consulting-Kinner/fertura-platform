@@ -8,7 +8,7 @@ use App\Log\Trace;
 use Cake\TestSuite\TestCase;
 
 /**
- * Test des W3C-Trace-Helfers (P04): Parsen/Erzeugen, traceparent aus Kontext.
+ * Tests the W3C trace helper (P04): parsing/generating, traceparent from context.
  */
 class TraceTest extends TestCase
 {

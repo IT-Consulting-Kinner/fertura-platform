@@ -8,11 +8,10 @@ use Cake\Http\Session\DatabaseSession;
 use Cake\TestSuite\TestCase;
 
 /**
- * Instanzübergreifender Session-Speicher (Kap. 20.8/30.7, HA-Voraussetzung):
- * Sessions liegen in core.sessions, sodass mehrere Web-Instanzen denselben
- * Zustand sehen. Prüft Schreiben/Lesen, Aktualisierung, Löschen und —
- * entscheidend für HA — die Sichtbarkeit über eine zweite Handler-Instanz
- * (simuliert einen zweiten Knoten).
+ * Cross-instance session store (ch. 20.8/30.7, HA prerequisite): sessions live in
+ * core.sessions so that multiple web instances see the same state. Verifies
+ * write/read, update, delete and — crucial for HA — visibility across a second
+ * handler instance (simulating a second node).
  */
 class DatabaseSessionTest extends TestCase
 {
@@ -41,7 +40,7 @@ class DatabaseSessionTest extends TestCase
         $this->assertTrue($h->write($this->sid, 'erste-daten'));
         $this->assertSame('erste-daten', $h->read($this->sid));
 
-        // Aktualisierung derselben Session.
+        // Update of the same session.
         $this->assertTrue($h->write($this->sid, 'zweite-daten'));
         $this->assertSame('zweite-daten', $h->read($this->sid));
 
@@ -51,17 +50,17 @@ class DatabaseSessionTest extends TestCase
 
     public function testVisibleAcrossInstances(): void
     {
-        // Knoten A schreibt ...
+        // Node A writes ...
         $this->handler()->write($this->sid, 'gemeinsam');
-        // ... Knoten B (frische Handler-/Tabelleninstanz) liest denselben Zustand.
+        // ... node B (fresh handler/table instance) reads the same state.
         $nodeB = $this->handler();
         $this->assertSame('gemeinsam', $nodeB->read($this->sid));
     }
 
     public function testStoresBinaryDataWithNulBytes(): void
     {
-        // PHP-Session-Serialisierung kann NUL-Bytes enthalten (z. B. private
-        // Objekt-Properties). Eine text-Spalte würde daran scheitern -> bytea.
+        // PHP session serialization can contain NUL bytes (e.g. private object
+        // properties). A text column would fail on those -> bytea.
         $payload = "user|O:8:\"stdClass\":1:{s:7:\"\0*\0name\";s:3:\"abc\";}";
         $h = $this->handler();
         $this->assertTrue($h->write($this->sid, $payload));
@@ -70,7 +69,7 @@ class DatabaseSessionTest extends TestCase
 
     public function testGcRemovesExpired(): void
     {
-        $h = (new DatabaseSession(['model' => 'Sessions']))->setTimeout(-10); // sofort abgelaufen
+        $h = (new DatabaseSession(['model' => 'Sessions']))->setTimeout(-10); // expired immediately
         $h->write($this->sid, 'alt');
         $h->gc(0);
         $this->assertSame('', $h->read($this->sid));

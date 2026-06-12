@@ -14,10 +14,10 @@ use Cake\Http\Client\Response;
 use Cake\TestSuite\TestCase;
 
 /**
- * Test der Marketplace-Kommunikation (Kap. 28.4–28.6, Entscheidung 139) gegen
- * einen HTTP-Stub: Nur **signiert verifizierte** CRL-/Anker-Dokumente werden
- * angewendet (manipulierte verworfen), Publisher-Anker nur mit gültiger
- * Root-Signatur (Kette), CRL-Abruf wird datiert (Stale-Erkennung, Kap. 24.9.2).
+ * Tests marketplace communication (ch. 28.4–28.6, Decision 139) against an
+ * HTTP stub: only **signature-verified** CRL/anchor documents are applied
+ * (tampered ones are discarded), publisher anchors only with a valid root
+ * signature (chain), and CRL fetches are timestamped (stale detection, ch. 24.9.2).
  */
 class MarketplaceClientTest extends TestCase
 {
@@ -43,7 +43,7 @@ class MarketplaceClientTest extends TestCase
         $this->rootPublic = $root['public'];
         (new TrustStore())->addAnchor($this->rootId, $root['public'], 'root');
 
-        // Globalen CRL-Zeitstempel sichern (wird vom Test verändert).
+        // Preserve the global CRL timestamp (the test mutates it).
         $row = ConnectionManager::get('default')->execute(
             "SELECT meta_value FROM marketplace_meta WHERE meta_key = 'last_crl_fetch_at'",
         )->fetch('assoc');
@@ -57,7 +57,7 @@ class MarketplaceClientTest extends TestCase
             $conn->execute('DELETE FROM trust_anchors WHERE key_id = :k', ['k' => $kid]);
             $conn->execute('DELETE FROM revoked_keys WHERE key_id = :k', ['k' => $kid]);
         }
-        // CRL-Zeitstempel wiederherstellen (globaler Zustand).
+        // Restore the CRL timestamp (global state).
         if ($this->savedCrlFetch === false) {
             $conn->execute("DELETE FROM marketplace_meta WHERE meta_key = 'last_crl_fetch_at'");
         } else {
@@ -133,7 +133,7 @@ class MarketplaceClientTest extends TestCase
         $this->assertTrue($trust->isRevoked($this->victimId));
         $this->assertNotNull($trust->getAnchor($this->pubId));
 
-        // Erfolgreicher CRL-Abruf datiert -> nicht stale, Alter 0 Tage.
+        // A successful CRL fetch is timestamped -> not stale, age 0 days.
         $state = $client->crlState();
         $this->assertFalse($state['stale']);
         $this->assertSame(0, $state['age_days']);
@@ -141,7 +141,7 @@ class MarketplaceClientTest extends TestCase
 
     public function testSyncRejectsTamperedCrl(): void
     {
-        // Signatur über ANDEREN Payload -> Dokument wird verworfen, nichts angewendet.
+        // Signature over a DIFFERENT payload -> document is discarded, nothing applied.
         $doc = json_decode($this->signedDoc(['revoked' => []]), true);
         $doc['payload'] = ['revoked' => [['key_id' => $this->victimId]]];
 
@@ -154,7 +154,7 @@ class MarketplaceClientTest extends TestCase
     public function testSyncRejectsPublisherAnchorWithoutValidRootSignature(): void
     {
         $pub = Signer::generateKeypair();
-        // Dokument-Signatur stimmt, aber die Publisher-Kette (key_signature) fehlt/falsch.
+        // Document signature is valid, but the publisher chain (key_signature) is missing/wrong.
         $client = $this->client([
             'anchors.json' => $this->signedDoc(['anchors' => [[
                 'key_id' => $this->pubId, 'public_key' => $pub['public'], 'type' => 'publisher',
@@ -175,11 +175,11 @@ class MarketplaceClientTest extends TestCase
         $this->assertNotNull($meta);
         $this->assertSame(['a' => '1.0.0'], $meta['packages']);
 
-        // Unsigniertes Dokument -> null (Entscheidung 139: nur Verifiziertes wirkt).
+        // Unsigned document -> null (Decision 139: only verified content takes effect).
         $unsigned = $this->client(['metadata.json' => (string)json_encode(['packages' => []])]);
         $this->assertNull($unsigned->metadata());
 
-        // 404/nicht erreichbar -> null, kein Fehler.
+        // 404/unreachable -> null, no error.
         $this->assertNull($this->client([])->metadata());
     }
 
@@ -193,7 +193,7 @@ class MarketplaceClientTest extends TestCase
 
         $state = $this->client([])->crlState();
 
-        $this->assertTrue($state['stale']); // 30 Tage > Default-Schwelle 7
+        $this->assertTrue($state['stale']); // 30 days > default threshold 7
         $this->assertSame(30, $state['age_days']);
         $this->assertSame(7, $state['max_age_days']);
     }

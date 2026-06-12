@@ -7,8 +7,8 @@ use App\Service\Deploy\MigrationSafetyChecker;
 use Cake\TestSuite\TestCase;
 
 /**
- * Test des Migrations-Sicherheits-Checks (P15): destruktive up()-Muster werden
- * erkannt, der down()-Rollback wird ignoriert.
+ * Test of the migration safety check (P15): destructive up() patterns are
+ * detected, while the down() rollback is ignored.
  */
 class MigrationSafetyCheckerTest extends TestCase
 {
@@ -44,7 +44,7 @@ class MigrationSafetyCheckerTest extends TestCase
 
         $this->assertContains('DROP COLUMN', $issues);
         $this->assertContains('NOT NULL ohne DEFAULT', $issues);
-        // DROP TABLE steht nur im down() -> nicht gemeldet.
+        // DROP TABLE only appears in down() -> not reported.
         $this->assertNotContains('DROP TABLE', $issues);
     }
 

@@ -8,9 +8,9 @@ use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
 
 /**
- * Integrationstest der Admin-GUI „Integrationen" (zurückgestellter GUI-Ausbau):
- * rendert für einen Admin mit dem Bereich core_config (prüft Controller +
- * Template + i18n + Bereichs-Scoping).
+ * Integration test for the "Integrations" admin GUI (deferred GUI build-out):
+ * renders for an admin with the core_config area (verifies controller +
+ * template + i18n + area scoping).
  */
 class IntegrationsControllerTest extends TestCase
 {
@@ -65,14 +65,14 @@ class IntegrationsControllerTest extends TestCase
         $this->get('/admin/integrations');
 
         $this->assertResponseOk();
-        $this->assertResponseContains('Integrations &'); // i18n-Titel (en_US)
+        $this->assertResponseContains('Integrations &'); // i18n title (en_US)
         $this->assertResponseContains('Outbound webhooks');
         $this->assertResponseContains('Workflows');
     }
 
     public function testActionsFailGracefullyForMalformedId(): void
     {
-        // Fehlgeformte UUID in der URL: UUID-Guard -> Flash + Redirect statt
+        // Malformed UUID in the URL: UUID guard -> flash + redirect instead of
         // 22P02 ("invalid input syntax for type uuid") -> 500.
         $this->session(['Auth' => [
             'id' => $this->userId,
@@ -108,7 +108,7 @@ class IntegrationsControllerTest extends TestCase
         $this->assertSame('https://hook.example/in', $row['url']);
         $this->assertSame('user.*', $row['event_filter']);
 
-        // Ungültige URL (kein http/https) -> Fehler-Flash, kein Datensatz.
+        // Invalid URL (not http/https) -> error flash, no record.
         $bad = 'zztest-wh-bad-' . bin2hex(random_bytes(2));
         $this->post('/admin/integrations/webhookCreate', ['name' => $bad, 'url' => 'ftp://nope']);
         $this->assertRedirect(['action' => 'index']);
@@ -134,7 +134,7 @@ class IntegrationsControllerTest extends TestCase
         $this->assertNotFalse($row);
         $this->assertSame('oidc', $row['type']);
         $this->assertStringContainsString('idp.example', (string)$row['config']);
-        // Client-Secret verschlüsselt abgelegt — nie im Klartext.
+        // Client secret stored encrypted — never in plaintext.
         $this->assertNotNull($row['secret_encrypted']);
         $this->assertStringNotContainsString('topsecret', (string)$row['secret_encrypted']);
     }
@@ -153,7 +153,7 @@ class IntegrationsControllerTest extends TestCase
             "SELECT 1 FROM sso_providers WHERE name = :n AND type = 'saml'", ['n' => $name],
         )->fetch());
 
-        // Fehlende Pflichtfelder (SAML ohne Zertifikat) -> kein Datensatz.
+        // Missing required fields (SAML without certificate) -> no record.
         $bad = 'zztest-saml-bad-' . bin2hex(random_bytes(2));
         $this->post('/admin/integrations/ssoCreate', [
             'type' => 'saml', 'name' => $bad, 'idp_entity_id' => 'x', 'idp_sso_url' => 'y',
@@ -181,7 +181,7 @@ class IntegrationsControllerTest extends TestCase
         $this->assertSame('ticket.created', $row['event']);
         $this->assertStringContainsString('priority', (string)$row['condition']);
 
-        // Aktionen kein JSON-Array (Objekt) -> abgelehnt, kein Datensatz.
+        // Actions not a JSON array (object) -> rejected, no record.
         $bad = 'zztest-rule-bad-' . bin2hex(random_bytes(2));
         $this->post('/admin/integrations/automationCreate', [
             'name' => $bad, 'event' => 'x', 'actions' => '{"not":"a-list"}',
@@ -206,10 +206,10 @@ class IntegrationsControllerTest extends TestCase
         )->fetch('assoc');
         $this->assertNotFalse($row);
         $this->assertSame('ticket', $row['entity_type']);
-        $this->assertSame('entity_id', $row['entity_id_field']); // Default greift
+        $this->assertSame('entity_id', $row['entity_id_field']); // default applies
         $this->assertSame('open', $row['initial_state']);
 
-        // Fehlender Startzustand -> kein Datensatz.
+        // Missing initial state -> no record.
         $bad = 'zztest-wf-bad-' . bin2hex(random_bytes(2));
         $this->post('/admin/integrations/workflowCreate', ['name' => $bad, 'entity_type' => 'ticket']);
         $this->assertFalse(ConnectionManager::get('default')->execute(

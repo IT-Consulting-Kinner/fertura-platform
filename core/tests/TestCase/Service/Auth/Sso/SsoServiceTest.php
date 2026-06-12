@@ -8,7 +8,7 @@ use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\TestCase;
 
 /**
- * Test der SSO-Verwaltung + Just-in-Time-Provisioning/Linking (P06).
+ * Tests SSO management + just-in-time provisioning/linking (P06).
  */
 class SsoServiceTest extends TestCase
 {
@@ -90,8 +90,8 @@ class SsoServiceTest extends TestCase
 
     public function testRefusesMergeIntoLocalPasswordAccount(): void
     {
-        // Account-Takeover-Schutz: ein bestehendes Konto MIT lokalem Passwort
-        // darf nicht per behaupteter E-Mail übernommen werden.
+        // Account-takeover protection: an existing account WITH a local password
+        // must not be taken over via a claimed email address.
         ConnectionManager::get('default')->execute(
             "INSERT INTO users (username, email, status, password_hash) "
             . "VALUES ('zztest_local', 'local@zztest.local', 'active', 'hash')",
@@ -110,7 +110,7 @@ class SsoServiceTest extends TestCase
 
     public function testSamlRequestStoreIsOneTimeUse(): void
     {
-        // Cookie-unabhängiger Replay-Schutz: RelayState ist genau einmal einlösbar.
+        // Cookie-independent replay protection: RelayState is redeemable exactly once.
         $svc = new SsoService();
         $relay = 'zz_' . bin2hex(random_bytes(8));
         $svc->rememberSamlRequest($relay, $this->providerId, '_req-123', 600);
@@ -120,7 +120,7 @@ class SsoServiceTest extends TestCase
         $this->assertSame($this->providerId, $first['provider_id']);
         $this->assertSame('_req-123', $first['request_id']);
 
-        // Zweite Einlösung schlägt fehl (verbraucht -> Replay abgewehrt).
+        // The second redemption fails (consumed -> replay rejected).
         $this->assertNull($svc->consumeSamlRequest($relay));
         $this->assertNull($svc->consumeSamlRequest('zz_unknown'));
         $this->assertNull($svc->consumeSamlRequest(''));
@@ -130,15 +130,15 @@ class SsoServiceTest extends TestCase
     {
         $svc = new SsoService();
         $relay = 'zz_' . bin2hex(random_bytes(8));
-        $svc->rememberSamlRequest($relay, $this->providerId, '_req-x', -1); // bereits abgelaufen
+        $svc->rememberSamlRequest($relay, $this->providerId, '_req-x', -1); // already expired
         $this->assertNull($svc->consumeSamlRequest($relay));
     }
 
     public function testProviderReturnsNullForMalformedId(): void
     {
-        // `id` ist eine uuid-Spalte: ein nicht-UUID-Wert darf keine Postgres-
-        // QueryException (SQLSTATE 22P02 -> 500 + Stacktrace im Log) auslösen,
-        // sondern wird wie ein unbekannter Provider behandelt (null).
+        // `id` is a uuid column: a non-UUID value must not raise a Postgres
+        // QueryException (SQLSTATE 22P02 -> 500 + stack trace in the log), but is
+        // instead treated like an unknown provider (null).
         $svc = new SsoService();
         $this->assertNull($svc->provider('nonexistent'));
         $this->assertNull($svc->provider(str_repeat('0', 36)), '36-stellig, aber kein gültiges UUID');

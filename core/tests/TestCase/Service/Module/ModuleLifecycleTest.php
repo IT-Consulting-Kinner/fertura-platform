@@ -10,11 +10,11 @@ use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\TestCase;
 
 /**
- * Integrationstest des Modul-Lifecycles (Kap. 24) + Row-Level-Security-Pflicht
- * und -Durchsetzung (Kap. 30.3, E47) gegen die Test-DB. Installiert das echte
- * Fixture-Modul, prüft Schema/Contracts/RLS, fährt den Lebenszyklus durch und
- * weist nach, dass die RLS-Policy Zeilen tatsächlich scoped (eigene/öffentliche
- * sichtbar, fremde nicht) — über eine NOBYPASSRLS-Rolle.
+ * Integration test of the module lifecycle (ch. 24) plus the mandatory
+ * Row-Level Security requirement and its enforcement (ch. 30.3, E47) against the
+ * test DB. Installs the real fixture module, checks schema/contracts/RLS, runs
+ * the full lifecycle, and proves that the RLS policy actually scopes rows (own
+ * and public rows visible, others' not) — using a NOBYPASSRLS role.
  */
 class ModuleLifecycleTest extends TestCase
 {
@@ -30,7 +30,7 @@ class ModuleLifecycleTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        // Signaturpflicht für den Test deaktivieren (unsigniertes Fixture).
+        // Disable the signature requirement for this test (unsigned fixture).
         $sm = new SettingsManager();
         $this->prevRequireSig = (bool)$sm->get('core', 'require_module_signature', true);
         $sm->set('core', 'require_module_signature', false);
@@ -58,7 +58,7 @@ class ModuleLifecycleTest extends TestCase
         $this->assertSame(self::KEY, $rec['module_key']);
         $this->assertSame('installed_inactive', $rec['status']);
 
-        // Modul-Schema + RLS-Tabelle mit Policy vorhanden.
+        // Module schema plus RLS-enabled table with policy present.
         $this->assertTrue($this->schemaExists('mod_' . self::KEY));
         $rls = $conn->execute(
             'SELECT (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace '
@@ -68,7 +68,7 @@ class ModuleLifecycleTest extends TestCase
         $this->assertSame(1, (int)$rls['rls'], 'ping_log muss RLS aktiviert haben.');
         $this->assertGreaterThan(0, (int)$rls['pol'], 'Es muss mind. eine Policy geben.');
 
-        // Contract registriert.
+        // Contract registered.
         $c = $conn->execute(
             "SELECT count(*) n FROM contracts WHERE owner_module_key=:k AND name='sample_module.service.echo'",
             ['k' => self::KEY],
@@ -93,18 +93,18 @@ class ModuleLifecycleTest extends TestCase
         $lc->install($this->fixturePath());
         $conn = ConnectionManager::get('default');
 
-        // Drei Zeilen als Superuser (RLS umgangen): A, B, öffentlich (NULL).
+        // Three rows as superuser (RLS bypassed): A, B, public (NULL).
         $conn->execute('INSERT INTO mod_sample_module.ping_log (owner_id) VALUES (:a)', ['a' => self::USER_A]);
         $conn->execute('INSERT INTO mod_sample_module.ping_log (owner_id) VALUES (:b)', ['b' => self::USER_B]);
         $conn->execute('INSERT INTO mod_sample_module.ping_log (owner_id) VALUES (NULL)');
 
         $this->ensureRlsRole();
 
-        // Als NOBYPASSRLS-Rolle mit Kontext A: sichtbar nur A + öffentlich = 2.
+        // As the NOBYPASSRLS role with context A: only A + public visible = 2.
         $this->assertSame(2, $this->countAsRole(self::USER_A, false));
-        // bypass=true -> alle 3 sichtbar.
+        // bypass=true -> all 3 visible.
         $this->assertSame(3, $this->countAsRole(self::USER_A, true));
-        // Kontext B (ohne bypass): B + öffentlich = 2, aber A-Zeile unsichtbar.
+        // Context B (without bypass): B + public = 2, but A's row invisible.
         $this->assertSame(2, $this->countAsRole(self::USER_B, false));
 
         $lc->delete(self::KEY);
@@ -112,21 +112,21 @@ class ModuleLifecycleTest extends TestCase
 
     public function testInstallRejectsScopedResourceWithoutRls(): void
     {
-        // Modul deklariert is_scoped-Ressource, Migration bringt aber KEINE RLS
-        // mit -> Install muss abbrechen (Kap. 30.3, E47) und sauber zurückbauen.
+        // Module declares an is_scoped resource, but the migration ships NO RLS
+        // -> install must abort (ch. 30.3, E47) and roll back cleanly.
         $this->norlsDir = $this->buildNoRlsModule();
         $this->expectException(LifecycleException::class);
         $this->expectExceptionMessageMatches('/RLS|is_scoped/i');
         try {
             (new ModuleLifecycle())->install($this->norlsDir);
         } finally {
-            // Rollback-Nachweis: Schema + Modulzeile dürfen nicht zurückbleiben.
+            // Rollback proof: schema and module row must not remain.
             $this->assertFalse($this->schemaExists('mod_' . self::NORLS_KEY));
             $this->assertNull($this->moduleStatus(self::NORLS_KEY));
         }
     }
 
-    // ---- Helfer -------------------------------------------------------------
+    // ---- Helpers ------------------------------------------------------------
 
     private function fixturePath(): string
     {
@@ -136,7 +136,7 @@ class ModuleLifecycleTest extends TestCase
     private function ensureRlsRole(): void
     {
         $conn = ConnectionManager::get('default');
-        // Rollenname ist eine feste Konstante (keine Bindung im DO-Block möglich).
+        // Role name is a fixed constant (no parameter binding inside a DO block).
         $conn->execute(
             "DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='" . self::RLS_ROLE . "') THEN "
             . 'CREATE ROLE ' . self::RLS_ROLE . ' NOLOGIN NOBYPASSRLS; END IF; END $$;',
@@ -155,7 +155,7 @@ class ModuleLifecycleTest extends TestCase
             $conn->execute('SET LOCAL ROLE ' . self::RLS_ROLE);
             $n = (int)$conn->execute('SELECT count(*) c FROM mod_sample_module.ping_log')->fetch('assoc')['c'];
         } finally {
-            $conn->rollback(); // verwirft SET LOCAL ROLE + set_config
+            $conn->rollback(); // discards SET LOCAL ROLE + set_config
         }
 
         return $n;
@@ -181,7 +181,7 @@ class ModuleLifecycleTest extends TestCase
                 ['resource_type' => 'thing', 'name' => self::NORLS_KEY . '.thing', 'is_scoped' => true],
             ],
         ]));
-        // Tabelle OHNE RLS -> verletzt die Pflicht.
+        // Table WITHOUT RLS -> violates the requirement.
         file_put_contents(
             $dir . '/migrations/001_init.sql',
             "CREATE TABLE noscope (id uuid NOT NULL DEFAULT core.uuid_generate_v7() PRIMARY KEY);\n-- @DOWN\nDROP TABLE noscope;\n",

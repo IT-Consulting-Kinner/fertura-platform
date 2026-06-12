@@ -10,8 +10,8 @@ use League\Flysystem\Filesystem;
 use League\Flysystem\Local\LocalFilesystemAdapter;
 
 /**
- * Test der Objekt-Storage-Abstraktion (P03) gegen den lokalen Adapter (kein Netz):
- * Schreiben/Lesen/Existenz/Größe/Streams/Liste/Löschen + Fehlerübersetzung.
+ * Tests the object-storage abstraction (P03) against the local adapter (no
+ * network): write/read/exists/size/streams/list/delete + error translation.
  */
 class StorageManagerTest extends TestCase
 {

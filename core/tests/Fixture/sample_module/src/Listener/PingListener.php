@@ -7,9 +7,9 @@ use App\Event\EventListenerInterface;
 use Cake\Datasource\ConnectionManager;
 
 /**
- * Beispiel-Listener des Sample-Moduls: protokolliert jedes Ping-Event in der
- * modul-eigenen Tabelle mod_sample_module.ping_log. Demonstriert echtes Laden
- * von Modul-Code (PSR-4) und den Outbox→Registry→Listener-Pfad.
+ * Example listener of the sample module: logs every ping event into the module's
+ * own table mod_sample_module.ping_log. Demonstrates real loading of module code
+ * (PSR-4) and the Outbox->Registry->Listener path.
  */
 class PingListener implements EventListenerInterface
 {

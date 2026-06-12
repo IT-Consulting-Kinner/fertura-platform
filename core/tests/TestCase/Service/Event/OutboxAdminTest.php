@@ -8,9 +8,9 @@ use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\TestCase;
 
 /**
- * Test der Dead-Letter-Verwaltung (Kap. 26.9.2): Zähler, Liste, Retry
- * (→ pending mit zurückgesetzten Zählern/Lock/Fehler), Verwerfen (→ discarded)
- * und Retry-all — jeweils nur auf `dead_letter`-Events wirksam.
+ * Test of dead-letter management (ch. 26.9.2): counts, listing, retry
+ * (→ pending with reset counters/lock/error), discard (→ discarded)
+ * and retry-all — each effective only on `dead_letter` events.
  */
 class OutboxAdminTest extends TestCase
 {
@@ -55,7 +55,7 @@ class OutboxAdminTest extends TestCase
         $list = $admin->deadLetters();
         $names = array_column($list, 'contract_name');
         $this->assertContains('zztest.dla.counts', $names);
-        // Nur Dead-Letter in der Liste, keine pending-Events.
+        // Only dead-letter rows in the list, no pending events.
         foreach ($list as $row) {
             $this->assertArrayHasKey('last_error', $row);
         }
@@ -77,7 +77,7 @@ class OutboxAdminTest extends TestCase
         $this->assertNull($row['last_error']);
         $this->assertNull($row['locked_at']);
 
-        // Auf nicht-dead_letter wirkungslos (kein versehentliches Zurücksetzen).
+        // No effect on non-dead_letter rows (no accidental reset).
         $this->assertFalse($admin->retry($pending));
         $this->assertFalse($admin->retry('00000000-0000-0000-0000-000000000000'));
     }
@@ -95,7 +95,7 @@ class OutboxAdminTest extends TestCase
         $this->assertSame('discarded', $row['status']);
         $this->assertNotNull($row['processed_at']);
 
-        // Bereits verworfen -> zweiter Discard/Retry wirkungslos.
+        // Already discarded -> second discard/retry has no effect.
         $this->assertFalse($admin->discard($dead));
         $this->assertFalse($admin->retry($dead));
     }
@@ -113,6 +113,6 @@ class OutboxAdminTest extends TestCase
             'SELECT status FROM event_outbox WHERE id = :id',
             ['id' => $done],
         )->fetch('assoc')['status'];
-        $this->assertSame('done', $status); // unangetastet
+        $this->assertSame('done', $status); // untouched
     }
 }

@@ -9,9 +9,9 @@ use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\TestCase;
 
 /**
- * Test des Settings-Caches (P02): nicht-geheime Werte werden gecacht und bei
- * set() gezielt invalidiert; Geheimnisse werden NIE gecacht (kein Klartext im
- * Datei-Cache).
+ * Tests the settings cache (P02): non-secret values are cached and selectively
+ * invalidated on set(); secrets are NEVER cached (no plaintext in the file
+ * cache).
  */
 class SettingsManagerCacheTest extends TestCase
 {
@@ -26,15 +26,15 @@ class SettingsManagerCacheTest extends TestCase
     public function testNonSecretIsCachedAndInvalidatedOnSet(): void
     {
         $sm = new SettingsManager();
-        // Cache-Schlüssel trägt den Mandanten-Suffix (.g = global/kein Mandant).
+        // The cache key carries the tenant suffix (.g = global / no tenant).
         $this->cache->delete('zztest.k1.g');
 
         $sm->set('zztest', 'k1', 'alpha');
         $this->assertSame('alpha', $sm->get('zztest', 'k1'));
-        // Nach dem Lesen liegt die (nicht-geheime) Auflösung im Cache.
+        // After reading, the (non-secret) resolved value sits in the cache.
         $this->assertSame(['useDefault' => false, 'value' => 'alpha'], $this->cache->get('zztest.k1.g'));
 
-        // Ändern muss den Cache invalidieren -> frischer Wert.
+        // Changing the value must invalidate the cache -> fresh value.
         $sm->set('zztest', 'k1', 'beta');
         $this->assertSame('beta', $sm->get('zztest', 'k1'));
 
@@ -55,7 +55,7 @@ class SettingsManagerCacheTest extends TestCase
             'Ein Geheimnis darf nicht im Datei-Cache landen.',
         );
 
-        $sm->set('core', 'health_token', $prev); // wiederherstellen
+        $sm->set('core', 'health_token', $prev); // restore
         $this->cache->delete('core.health_token.g');
     }
 
@@ -67,14 +67,14 @@ class SettingsManagerCacheTest extends TestCase
             $tenantB = (new \App\Service\Tenant\TenantService())->create('zztest-cfg', 'CFG')['id'];
             $sm = new SettingsManager();
             $sm->set('core', 'session.timeout_minutes', 120);            // global
-            $sm->set('core', 'session.timeout_minutes', 30, $tenantB);   // pro Mandant
+            $sm->set('core', 'session.timeout_minutes', 30, $tenantB);   // per tenant
 
-            // Im Mandanten B -> mandantenspezifischer Wert.
+            // Within tenant B -> tenant-specific value.
             $conn->execute("SELECT set_config('app.current_tenant_id', :t, true)", ['t' => $tenantB]);
             $this->cache->clear();
             $this->assertSame(30, (new SettingsManager())->get('core', 'session.timeout_minutes'));
 
-            // Ohne Mandantenkontext -> globaler Wert.
+            // Without tenant context -> global value.
             $conn->execute("SELECT set_config('app.current_tenant_id', '', true)");
             $this->cache->clear();
             $this->assertSame(120, (new SettingsManager())->get('core', 'session.timeout_minutes'));

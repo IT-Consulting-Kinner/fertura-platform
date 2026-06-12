@@ -8,11 +8,11 @@ use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
 
 /**
- * Integrationstest der Benutzer-Admin-GUI (Administrationsbereich
- * `user_group_admin`): Liste/Detail/Anlegen/Bearbeiten, Status-Lifecycle mit
- * **Selbst-Aussperr-Schutz** (kein Selbst-Deaktivieren/-Anonymisieren, letzter
- * aktiver user_group_admin geschützt, Aktivierung nur mit Passwort),
- * Admin-Bereichs-Toggle, Einladungs-Token und Admin-Passwort-Setzen.
+ * Integration test for the users admin GUI (admin area `user_group_admin`):
+ * list/detail/create/edit, status lifecycle with **self-lockout protection**
+ * (no self-deactivation/-anonymization, the last active user_group_admin is
+ * protected, activation only with a password), admin area toggle, invitation
+ * tokens, and admin password setting.
  */
 class UsersControllerTest extends TestCase
 {
@@ -30,14 +30,14 @@ class UsersControllerTest extends TestCase
             "INSERT INTO admin_areas (area_key, label, sort_order) VALUES ('user_group_admin', 'Users', 10) "
             . 'ON CONFLICT (area_key) DO NOTHING',
         );
-        // Angemeldeter Admin: aktiv, hält user_group_admin (und ist dessen
-        // einziger aktiver Träger -> Letzter-Admin-Schutz greift auf ihm selbst).
+        // Logged-in admin: active, holds user_group_admin (and is its only
+        // active holder -> last-admin protection applies to themselves).
         $this->adminId = $this->makeUser('uadmin', 'active');
         $conn->execute(
             'INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a)',
             ['u' => $this->adminId, 'a' => 'user_group_admin'],
         );
-        // Zweiter Benutzer ohne Admin-Bereich (Ziel der meisten Aktionen).
+        // Second user without an admin area (target of most actions).
         $this->memberId = $this->makeUser('umember', 'active');
     }
 
@@ -54,8 +54,8 @@ class UsersControllerTest extends TestCase
             'DELETE FROM password_reset_tokens WHERE user_id IN '
             . "(SELECT id FROM users WHERE email LIKE '%@zzusers.local')",
         );
-        // Letzter-aktiver-Admin-Trigger u. ä. greifen nicht auf hartes Löschen;
-        // Test-Benutzer sind über die E-Mail-Domain eindeutig identifizierbar.
+        // The last-active-admin trigger and similar do not apply to hard deletes;
+        // test users are uniquely identifiable via the email domain.
         $conn->execute(
             'DELETE FROM user_admin_areas WHERE user_id IN '
             . "(SELECT id FROM users WHERE email LIKE '%@zzusers.local')",
@@ -99,7 +99,7 @@ class UsersControllerTest extends TestCase
 
         $this->get('/admin/users/view/' . $this->memberId);
         $this->assertResponseOk();
-        $this->assertResponseContains('user_group_admin'); // Bereichs-Liste gerendert
+        $this->assertResponseContains('user_group_admin'); // area list rendered
     }
 
     public function testViewUnknownRedirects(): void
@@ -111,7 +111,7 @@ class UsersControllerTest extends TestCase
 
     public function testMalformedIdRedirectsInsteadOf500(): void
     {
-        // Fehlgeformte UUID in der URL: UUID-Guard -> Redirect statt
+        // Malformed UUID in the URL: UUID guard -> redirect instead of
         // 22P02 ("invalid input syntax for type uuid") -> 500.
         $this->login();
 
@@ -146,7 +146,7 @@ class UsersControllerTest extends TestCase
             ['e' => $email],
         )->fetch('assoc');
         $this->assertNotFalse($row);
-        $this->assertSame('invited', $row['status']); // Einladung statt Direkt-Aktiv
+        $this->assertSame('invited', $row['status']); // invitation instead of directly active
     }
 
     public function testDeactivateMemberWorksAndReactivateNeedsPassword(): void
@@ -158,7 +158,7 @@ class UsersControllerTest extends TestCase
         $this->assertSame('disabled', $this->userCol($this->memberId, 'status'));
         $this->assertNotNull($this->userCol($this->memberId, 'deactivated_at'));
 
-        // Reaktivieren ohne Passwort-Hash -> abgelehnt (Kap. 27.15).
+        // Reactivating without a password hash -> rejected (ch. 27.15).
         $this->post('/admin/users/setStatus/' . $this->memberId . '/active');
         $this->assertSame('disabled', $this->userCol($this->memberId, 'status'));
     }
@@ -167,7 +167,7 @@ class UsersControllerTest extends TestCase
     {
         $this->login();
         $this->post('/admin/users/setStatus/' . $this->adminId . '/disabled');
-        $this->assertSame('active', $this->userCol($this->adminId, 'status')); // Schutz greift
+        $this->assertSame('active', $this->userCol($this->adminId, 'status')); // protection applies
     }
 
     public function testInvalidStatusRejected(): void
@@ -190,19 +190,19 @@ class UsersControllerTest extends TestCase
         $this->assertSame(1, $count());
 
         $this->post('/admin/users/toggleArea/' . $this->memberId . '/user_group_admin');
-        $this->assertSame(0, $count()); // Entzug ok: Admin bleibt als Träger übrig
+        $this->assertSame(0, $count()); // revoke ok: admin remains as a holder
     }
 
     public function testRevokeLastUserGroupAdminBlocked(): void
     {
         $this->login();
-        // Der angemeldete Admin ist der einzige aktive Träger -> Entzug abgelehnt.
+        // The logged-in admin is the only active holder -> revoke rejected.
         $this->post('/admin/users/toggleArea/' . $this->adminId . '/user_group_admin');
         $held = ConnectionManager::get('default')->execute(
             "SELECT 1 FROM user_admin_areas WHERE user_id = :u AND admin_area_key = 'user_group_admin'",
             ['u' => $this->adminId],
         )->fetch();
-        $this->assertNotFalse($held); // weiterhin Träger
+        $this->assertNotFalse($held); // still a holder
     }
 
     public function testEditUpdatesFields(): void
@@ -238,12 +238,12 @@ class UsersControllerTest extends TestCase
         $invited = $this->makeUser('upw', 'invited');
         $this->login();
 
-        // Zu kurz -> abgelehnt, Status bleibt invited.
+        // Too short -> rejected, status stays invited.
         $this->post('/admin/users/setPassword/' . $invited, ['password' => 'short']);
         $this->assertSame('invited', $this->userCol($invited, 'status'));
         $this->assertNull($this->userCol($invited, 'password_hash'));
 
-        // Lang genug -> Hash gesetzt, invited -> active.
+        // Long enough -> hash set, invited -> active.
         $this->post('/admin/users/setPassword/' . $invited, ['password' => 'correct-horse-battery']);
         $this->assertSame('active', $this->userCol($invited, 'status'));
         $this->assertNotNull($this->userCol($invited, 'password_hash'));
@@ -254,7 +254,7 @@ class UsersControllerTest extends TestCase
         $this->login();
 
         $this->post('/admin/users/anonymize/' . $this->adminId);
-        $this->assertSame('active', $this->userCol($this->adminId, 'status')); // Selbst-Schutz
+        $this->assertSame('active', $this->userCol($this->adminId, 'status')); // self-protection
 
         $this->post('/admin/users/anonymize/' . $this->memberId);
         $this->assertRedirect(['action' => 'index']);

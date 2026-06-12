@@ -10,8 +10,8 @@ use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
 
 /**
- * Integrationstest der Audit-Export-Endpunkte (Punkt 3b): Admin-NDJSON-Download
- * und API-Strom mit Scope-Gate (`audit:read`).
+ * Integration test for the audit export endpoints (point 3b): admin NDJSON
+ * download and API stream with scope gate (`audit:read`).
  */
 class AuditExportEndpointTest extends TestCase
 {
@@ -50,7 +50,7 @@ class AuditExportEndpointTest extends TestCase
     private function cleanup(): void
     {
         $conn = ConnectionManager::get('default');
-        // audit_log ist append-only (Trigger) -> Bypass in einer Transaktion.
+        // audit_log is append-only (trigger) -> bypass within a transaction.
         $conn->begin();
         $conn->execute("SET LOCAL app.allow_audit_mutation = 'on'");
         $conn->execute("DELETE FROM audit_log WHERE action LIKE 'zztest.%'");
@@ -59,9 +59,9 @@ class AuditExportEndpointTest extends TestCase
     }
 
     /**
-     * NDJSON-Body eines CallbackStream-Responses lesen: der Callback gibt per
-     * `echo` aus (memory-schonendes Streaming im FPM-Betrieb); im Test fangen
-     * wir die Ausgabe per Output-Buffer.
+     * Read the NDJSON body of a CallbackStream response: the callback writes via
+     * `echo` (memory-friendly streaming under FPM); in the test we capture the
+     * output via an output buffer.
      */
     private function streamBody(): string
     {
@@ -81,19 +81,19 @@ class AuditExportEndpointTest extends TestCase
         $this->assertHeaderContains('Content-Disposition', 'audit-export-');
         $first = json_decode((string)strtok($this->streamBody(), "\n"), true);
         $this->assertSame('zztest.export', $first['action']);
-        // Admin-Export enthält die Wert-Snapshots (autorisiert).
+        // Admin export contains the value snapshots (authorized).
         $this->assertSame(['secret' => 'value-snapshot'], $first['new_value']);
     }
 
     public function testApiRequiresScopeAndStreams(): void
     {
-        // Ohne Scope -> 403.
+        // Without the scope -> 403.
         $weak = (new TokenService())->create($this->adminId, 'weak', ['me:read'], null, null)['token'];
         $this->configRequest(['headers' => ['Authorization' => 'Bearer ' . $weak]]);
         $this->get('/api/v1/audit?action=zztest.export');
         $this->assertResponseCode(403);
 
-        // Mit audit:read -> NDJSON; Standard ohne Wert-Snapshots (PII-arm).
+        // With audit:read -> NDJSON; default without value snapshots (PII-lean).
         $this->_request = [];
         $token = (new TokenService())->create($this->adminId, 'aud', ['audit:read'], null, null)['token'];
         $this->configRequest(['headers' => ['Authorization' => 'Bearer ' . $token]]);
@@ -102,9 +102,9 @@ class AuditExportEndpointTest extends TestCase
         $this->assertHeaderContains('Content-Type', 'application/x-ndjson');
         $row = json_decode((string)strtok($this->streamBody(), "\n"), true);
         $this->assertSame('zztest.export', $row['action']);
-        $this->assertArrayNotHasKey('new_value', $row); // Strom ist lean
+        $this->assertArrayNotHasKey('new_value', $row); // stream is lean
 
-        // with_values=1 schaltet die Snapshots zu.
+        // with_values=1 enables the snapshots.
         $this->_request = [];
         $this->configRequest(['headers' => ['Authorization' => 'Bearer ' . $token]]);
         $this->get('/api/v1/audit?action=zztest.export&with_values=1');

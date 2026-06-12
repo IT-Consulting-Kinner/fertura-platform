@@ -8,8 +8,8 @@ use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
 
 /**
- * Cross-Tenant-Host-Policy (B6): ein angemeldeter Benutzer auf der Domain eines
- * FREMDEN Mandanten wird abgewiesen (403); auf einem nicht zugeordneten Host nicht.
+ * Cross-tenant host policy (B6): a logged-in user on the domain of a FOREIGN
+ * tenant is rejected (403); on an unmapped host they are not.
  */
 class TenantHostPolicyTest extends TestCase
 {
@@ -26,7 +26,7 @@ class TenantHostPolicyTest extends TestCase
             "INSERT INTO admin_areas (area_key, label, sort_order) VALUES ('core_config', 'Core', 60) "
             . 'ON CONFLICT (area_key) DO NOTHING',
         );
-        // Benutzer im DEFAULT-Mandanten.
+        // User in the DEFAULT tenant.
         $this->userId = (string)$conn->execute(
             "INSERT INTO users (username, email, status) VALUES (:u, :e, 'active') RETURNING id",
             ['u' => 'zztest_host_' . bin2hex(random_bytes(3)), 'e' => 'host_' . bin2hex(random_bytes(3)) . '@zzhost.local'],
@@ -35,7 +35,7 @@ class TenantHostPolicyTest extends TestCase
             'INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a)',
             ['u' => $this->userId, 'a' => 'core_config'],
         );
-        // FREMDER Mandant mit eigener Domain.
+        // FOREIGN tenant with its own domain.
         $conn->execute("INSERT INTO tenants (key, name, domain) VALUES ('zztest-foreign', 'Foreign', 'foreign.zztest')");
     }
 
@@ -68,7 +68,7 @@ class TenantHostPolicyTest extends TestCase
     public function testUnmappedHostIsAllowed(): void
     {
         $this->login();
-        // localhost ist keinem Mandanten zugeordnet -> keine Policy, normaler Zugriff.
+        // localhost is not mapped to any tenant -> no policy, normal access.
         $this->configRequest(['environment' => ['HTTP_HOST' => 'localhost']]);
         $this->get('/admin/tenants');
         $this->assertResponseOk();

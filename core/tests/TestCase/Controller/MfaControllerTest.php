@@ -12,10 +12,10 @@ use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
 
 /**
- * Integrationstest der MFA-Selbstverwaltung (`/mfa`): Status, zweistufige
- * TOTP-Einrichtung (Setup → Bestätigung → Recovery-Codes), Deaktivierung sowie
- * die Passkey-Endpunkte (Options-Gate, Registrierung, Löschung). Der angemeldete
- * Benutzer wird per Session gesetzt.
+ * Integration test of MFA self-management (`/mfa`): status, two-step TOTP setup
+ * (setup → confirmation → recovery codes), deactivation, and the passkey
+ * endpoints (options gate, registration, deletion). The logged-in user is set
+ * via the session.
  */
 class MfaControllerTest extends TestCase
 {
@@ -71,7 +71,7 @@ class MfaControllerTest extends TestCase
         $this->auth();
         $this->get('/mfa');
         $this->assertResponseOk();
-        $this->assertResponseContains('Passkey'); // Passkey-Bereich erscheint, wenn 2FA aktiv
+        $this->assertResponseContains('Passkey'); // passkey section appears when 2FA is active
     }
 
     public function testSetupRendersSecret(): void
@@ -79,7 +79,7 @@ class MfaControllerTest extends TestCase
         $this->auth();
         $this->post('/mfa/setup');
         $this->assertResponseOk();
-        $this->assertResponseContains('otpauth://'); // QR-/Manuell-Schlüssel
+        $this->assertResponseContains('otpauth://'); // QR/manual key
         $this->assertNotEmpty($_SESSION['Mfa']['setup_secret'] ?? null);
     }
 
@@ -87,13 +87,13 @@ class MfaControllerTest extends TestCase
     {
         $secret = Totp::generateSecret();
 
-        // Ungültiger Code -> Setup erneut, nicht aktiviert.
+        // Invalid code -> setup again, not activated.
         $this->auth(['Mfa' => ['setup_secret' => $secret]]);
         $this->post('/mfa/confirm', ['code' => '000000']);
         $this->assertResponseOk();
         $this->assertFalse((new MfaService())->enabled($this->userId));
 
-        // Gültiger Code -> Recovery-Codes-Ansicht + aktiv.
+        // Valid code -> recovery codes view + active.
         $this->auth(['Mfa' => ['setup_secret' => $secret]]);
         $this->post('/mfa/confirm', ['code' => Totp::code($secret)]);
         $this->assertResponseOk();
@@ -112,13 +112,13 @@ class MfaControllerTest extends TestCase
     {
         $secret = $this->enrollTotp();
 
-        // Falscher Code -> bleibt aktiv.
+        // Wrong code -> stays active.
         $this->auth();
         $this->post('/mfa/disable', ['code' => '000000']);
         $this->assertRedirect(['action' => 'index']);
         $this->assertTrue((new MfaService())->enabled($this->userId));
 
-        // Gültiger Code -> deaktiviert.
+        // Valid code -> deactivated.
         $this->auth();
         $this->post('/mfa/disable', ['code' => Totp::code($secret)]);
         $this->assertFalse((new MfaService())->enabled($this->userId));
@@ -126,12 +126,12 @@ class MfaControllerTest extends TestCase
 
     public function testPasskeyOptionsGatedOnTotp(): void
     {
-        // Ohne TOTP -> 409 (Passkey nur als bequeme Alternative NACH TOTP).
+        // Without TOTP -> 409 (passkey only as a convenient alternative AFTER TOTP).
         $this->auth();
         $this->get('/mfa/passkeyOptions');
         $this->assertResponseCode(409);
 
-        // Mit TOTP -> JSON-Optionen inkl. Challenge.
+        // With TOTP -> JSON options incl. challenge.
         $this->enrollTotp();
         $this->auth();
         $this->get('/mfa/passkeyOptions');
@@ -169,7 +169,7 @@ class MfaControllerTest extends TestCase
         $creds = (new WebAuthnService())->credentials($this->userId);
         $this->assertCount(1, $creds);
 
-        // Löschen.
+        // Delete.
         $this->auth();
         $this->post('/mfa/passkeyDelete/' . $creds[0]['id']);
         $this->assertRedirect(['action' => 'index']);
@@ -179,7 +179,7 @@ class MfaControllerTest extends TestCase
     public function testPasskeyRegisterWithoutChallengeRedirects(): void
     {
         $this->enrollTotp();
-        $this->auth(); // kein passkey_challenge in der Session
+        $this->auth(); // no passkey_challenge in the session
         $this->post('/mfa/passkeyRegister', ['client_data' => 'x', 'attestation' => 'y']);
         $this->assertRedirect(['action' => 'index']);
         $this->assertFalse((new WebAuthnService())->hasCredentials($this->userId));

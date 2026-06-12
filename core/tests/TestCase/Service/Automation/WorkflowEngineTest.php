@@ -8,8 +8,8 @@ use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\TestCase;
 
 /**
- * Test der Workflow-State-Machine (P12-Ausbau): Zustandsübergänge,
- * from-State-Gating, Bedingungs-Gating, Wildcard-Transition.
+ * Test of the workflow state machine (P12 extension): state transitions,
+ * from-state gating, condition gating, wildcard transition.
  */
 class WorkflowEngineTest extends TestCase
 {
@@ -56,7 +56,7 @@ class WorkflowEngineTest extends TestCase
     public function testFromStateGating(): void
     {
         $wf = new WorkflowEngine();
-        // Neue Order o2 startet 'new' -> 'order.shipped' (from 'paid') greift nicht.
+        // New order o2 starts in 'new' -> 'order.shipped' (from 'paid') does not apply.
         $this->assertSame(0, $wf->onEvent('order.shipped', ['data' => ['order_id' => 'o2', 'carrier' => 'DHL']]));
         $this->assertSame('new', $wf->stateOf($this->defId, 'o2'));
     }
@@ -65,7 +65,7 @@ class WorkflowEngineTest extends TestCase
     {
         $wf = new WorkflowEngine();
         $wf->onEvent('order.paid', ['data' => ['order_id' => 'o3']]);
-        // ohne carrier -> Bedingung exists=false nicht erfüllt -> kein Übergang.
+        // Without carrier -> condition exists=false not met -> no transition.
         $this->assertSame(0, $wf->onEvent('order.shipped', ['data' => ['order_id' => 'o3']]));
         $this->assertSame('paid', $wf->stateOf($this->defId, 'o3'));
     }

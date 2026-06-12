@@ -10,8 +10,8 @@ use Cake\TestSuite\TestCase;
 use InvalidArgumentException;
 
 /**
- * Test des Mandantenfähigkeits-Fundaments (Wettbewerbs-Hebel 1/3): Verwaltung,
- * Benutzerzuordnung und der RLS-Helfer `core.current_tenant()` inkl. Prädikat.
+ * Tests the multi-tenancy foundation (competitive lever 1/3): management, user
+ * assignment, and the RLS helper `core.current_tenant()` including its predicate.
  */
 class TenantServiceTest extends TestCase
 {
@@ -58,14 +58,14 @@ class TenantServiceTest extends TestCase
         $conn = ConnectionManager::get('default');
         $svc = new TenantService();
 
-        // INSERT ohne tenant_id -> Default-Mandant (Single-Org bleibt unverändert).
+        // INSERT without tenant_id -> default tenant (single-org stays unchanged).
         $userId = (string)$conn->execute(
             "INSERT INTO users (username, email, status) "
             . "VALUES ('zztenant_u', 'u@zztenant.local', 'active') RETURNING id",
         )->fetch('assoc')['id'];
         $this->assertSame(TenantService::DEFAULT_TENANT_ID, $svc->tenantIdForUser($userId));
 
-        // Umhängen auf einen neuen Mandanten.
+        // Reassign to a new tenant.
         $acme = $svc->create('zztest-acme2', 'ACME 2');
         $svc->assignUser($userId, $acme['id']);
         $this->assertSame($acme['id'], $svc->tenantIdForUser($userId));
@@ -96,7 +96,7 @@ class TenantServiceTest extends TestCase
         $svc = new TenantService();
         $conn = ConnectionManager::get('default');
 
-        // Default-Mandant ist geschützt.
+        // The default tenant is protected.
         $threwDefault = false;
         try {
             $svc->delete(TenantService::DEFAULT_TENANT_ID);
@@ -111,7 +111,7 @@ class TenantServiceTest extends TestCase
             ['u' => 'zztest_delu_' . bin2hex(random_bytes(3)), 't' => $t['id']],
         );
 
-        // Mandant mit Benutzer wird abgelehnt.
+        // A tenant that still has users is rejected.
         $threwUsers = false;
         try {
             $svc->delete($t['id']);
@@ -121,7 +121,7 @@ class TenantServiceTest extends TestCase
         $this->assertTrue($threwUsers);
         $this->assertNotNull($svc->get($t['id']));
 
-        // Nach Entfernen der Benutzer ist das Löschen erfolgreich.
+        // Once the users are removed, deletion succeeds.
         $conn->execute("DELETE FROM users WHERE email = 'del@zztenant.local'");
         $svc->delete($t['id']);
         $this->assertNull($svc->get($t['id']));
@@ -141,7 +141,7 @@ class TenantServiceTest extends TestCase
         $this->assertSame($t['id'], $r->resolve('zztest-acme3.portal.test:8443'), 'Subdomain == Schlüssel (+Port)');
         $this->assertNull($r->resolve('unbekannt.test'));
 
-        // Suspendiert -> nicht mehr auflösbar.
+        // Suspended -> no longer resolvable.
         $svc->setActive($t['id'], false);
         $this->assertNull($r->resolve('acme3.example.test'));
     }
@@ -152,14 +152,14 @@ class TenantServiceTest extends TestCase
         $tenantA = TenantService::DEFAULT_TENANT_ID;
         $tenantB = '00000000-0000-0000-0000-000000000002';
 
-        // Transaktion-lokaler Kontext -> automatischer Reset beim Rollback (kein Leak).
+        // Transaction-local context -> automatic reset on rollback (no leak).
         $conn->begin();
         try {
             $conn->execute("SELECT set_config('app.current_tenant_id', :t, true)", ['t' => $tenantA]);
             $got = $conn->execute('SELECT core.current_tenant() AS t')->fetch('assoc')['t'];
             $this->assertSame($tenantA, (string)$got);
 
-            // Prädikat `tenant_id = core.current_tenant()` filtert mandantenscharf.
+            // The predicate `tenant_id = core.current_tenant()` filters per tenant.
             $rows = $conn->execute(
                 'SELECT v.id FROM (VALUES (1, :a::uuid), (2, :b::uuid)) AS v(id, tenant_id) '
                 . 'WHERE v.tenant_id = core.current_tenant() ORDER BY v.id',
@@ -167,7 +167,7 @@ class TenantServiceTest extends TestCase
             )->fetchAll('assoc');
             $this->assertSame([1], array_map(static fn ($r) => (int)$r['id'], $rows), 'nur Mandant-A-Zeile sichtbar');
 
-            // Ohne Kontext -> NULL -> kein Treffer (fail-closed).
+            // Without context -> NULL -> no match (fail-closed).
             $conn->execute("SELECT set_config('app.current_tenant_id', '', true)");
             $this->assertNull($conn->execute('SELECT core.current_tenant() AS t')->fetch('assoc')['t']);
             $none = $conn->execute(

@@ -12,8 +12,8 @@ use RuntimeException;
 use function Cake\Core\env;
 
 /**
- * Test der Mandanten-Verbindungsauflösung (#10/4, DB-pro-Mandant): Pool-Default,
- * fail-closed ohne DSN, eigene Connection bei gesetzter Out-of-Band-DSN.
+ * Tests tenant connection resolution (#10/4, DB-per-tenant): default pool,
+ * fail-closed without a DSN, dedicated connection when an out-of-band DSN is set.
  */
 class TenantConnectionResolverTest extends TestCase
 {
@@ -26,16 +26,16 @@ class TenantConnectionResolverTest extends TestCase
 
     public function testTenancyFacadeCentralAndDataDefaultToPool(): void
     {
-        // Ohne DB-isolierten Mandanten im Kontext: zentral UND daten = geteilte DB.
+        // Without a DB-isolated tenant in context: central AND data = shared DB.
         $this->assertSame(ConnectionManager::get('default'), Tenancy::central());
         $this->assertSame(ConnectionManager::get('default'), Tenancy::data());
     }
 
     public function testIsolatedKeyWithUnderscoreRejectedFailClosed(): void
     {
-        // Fail-closed gegen Env-Namens-Kollision ('-' und '_' bilden beide auf '_'
-        // ab): ein isolierter Key mit '_' muss abgewiesen werden, BEVOR er auf eine
-        // fremde TENANT_DB_*-Env (und damit fremde DB) gemappt werden könnte.
+        // Fail-closed against env-name collision (both '-' and '_' map to '_'):
+        // an isolated key containing '_' must be rejected BEFORE it could be
+        // mapped to a foreign TENANT_DB_* env (and thus a foreign DB).
         $this->expectException(RuntimeException::class);
         (new TenantConnectionResolver())->isolatedConnection('acme_eu');
     }
@@ -64,7 +64,7 @@ class TenantConnectionResolverTest extends TestCase
             $conn->execute('UPDATE tenants SET db_isolated = true WHERE id = :id', ['id' => $t]);
 
             $this->expectException(RuntimeException::class);
-            (new TenantConnectionResolver())->for($t); // keine TENANT_DB_ZZTEST_ISO -> wirft
+            (new TenantConnectionResolver())->for($t); // no TENANT_DB_ZZTEST_ISO -> throws
         } finally {
             $conn->rollback();
         }
@@ -77,12 +77,12 @@ class TenantConnectionResolverTest extends TestCase
         try {
             $t = (new TenantService())->create('zztest-iso2', 'Iso2')['id'];
             $conn->execute('UPDATE tenants SET db_isolated = true WHERE id = :id', ['id' => $t]);
-            // DSN out-of-band (hier auf die Test-DB gezeigt, damit die Connection real ist).
+            // Out-of-band DSN (pointed at the test DB here so the connection is real).
             putenv('TENANT_DB_ZZTEST_ISO2=' . (string)env('DATABASE_TEST_URL'));
 
             $resolved = (new TenantConnectionResolver())->for($t);
             $this->assertSame('tenant_zztest-iso2', $resolved->configName());
-            $resolved->execute('SELECT 1'); // verbindet wirklich
+            $resolved->execute('SELECT 1'); // actually connects
         } finally {
             $conn->rollback();
             ConnectionManager::drop('tenant_zztest-iso2');

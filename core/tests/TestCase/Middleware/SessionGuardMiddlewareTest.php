@@ -8,10 +8,10 @@ use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
 
 /**
- * Test der Session-Anomalie-Erkennung (SessionGuardMiddleware): UA-Bindung
- * (Wechsel = gestohlenes Cookie -> Session-Ende), unveränderter UA passiert,
- * neues Gerät erzeugt eine In-App-Benachrichtigung (das ERSTE Gerät — die
- * Einrichtung selbst — bewusst nicht).
+ * Tests session anomaly detection (SessionGuardMiddleware): user-agent binding
+ * (a change means a stolen cookie -> session ends), an unchanged UA passes, and a
+ * new device triggers an in-app notification (the FIRST device — the setup
+ * itself — deliberately does not).
  */
 class SessionGuardMiddlewareTest extends TestCase
 {
@@ -38,8 +38,8 @@ class SessionGuardMiddlewareTest extends TestCase
     private function cleanup(): void
     {
         $conn = ConnectionManager::get('default');
-        // Vom „neues Gerät"-Hinweis erzeugte Outbox-Events räumen, sonst
-        // verfälschen sie die globale Outbox-Fairness (DEFAULT-Mandanten-Partition).
+        // Clean up outbox events produced by the "new device" notice; otherwise
+        // they skew global outbox fairness (DEFAULT tenant partition).
         if (isset($this->userId)) {
             $conn->execute(
                 "DELETE FROM event_outbox WHERE contract_name = 'core.notification.created' "
@@ -60,13 +60,13 @@ class SessionGuardMiddlewareTest extends TestCase
 
     public function testUaMismatchDestroysSession(): void
     {
-        // Session wurde mit UA "Browser-A" gebunden; Request kommt mit "Browser-B".
+        // Session was bound to UA "Browser-A"; the request arrives with "Browser-B".
         $this->loginAs('Browser-B', [
             'Guard' => ['ua' => hash('sha256', 'Browser-A'), 'ip' => ''],
         ]);
         $this->get('/mfa');
 
-        $this->assertRedirectContains('/login'); // Session zerstört, fail-closed
+        $this->assertRedirectContains('/login'); // session destroyed, fail-closed
         $anomalies = (int)ConnectionManager::get('default')->execute(
             "SELECT count(*) AS c FROM audit_log WHERE action = 'session.anomaly' AND entity_id = :u",
             ['u' => $this->userId],
@@ -85,8 +85,8 @@ class SessionGuardMiddlewareTest extends TestCase
 
     public function testFirstDeviceSilentSecondDeviceNotifies(): void
     {
-        // Erster authentifizierter Request (kein Guard in der Session): Gerät A
-        // wird registriert — KEINE Benachrichtigung (Einrichtung selbst).
+        // First authenticated request (no Guard in the session): device A is
+        // registered — NO notification (the setup itself).
         $this->loginAs('Device-A');
         $this->get('/mfa');
         $this->assertResponseOk();
@@ -96,13 +96,13 @@ class SessionGuardMiddlewareTest extends TestCase
         )->fetch('assoc')['c'];
         $this->assertSame(0, $count());
 
-        // Neue Session von Gerät B (frische Session ohne Guard): Hinweis.
+        // New session from device B (fresh session without Guard): notice.
         $this->loginAs('Device-B');
         $this->get('/mfa');
         $this->assertResponseOk();
         $this->assertSame(1, $count());
 
-        // Gerät B erneut (wieder frische Session): bekannt -> kein weiterer Hinweis.
+        // Device B again (another fresh session): known -> no further notice.
         $this->loginAs('Device-B');
         $this->get('/mfa');
         $this->assertSame(1, $count());

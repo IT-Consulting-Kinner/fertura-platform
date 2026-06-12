@@ -11,9 +11,9 @@ use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\TestCase;
 
 /**
- * Test der Mandanten-Fairness im Outbox-Worker (Pool-Modell): Round-Robin-Claiming
- * verhindert, dass ein Mandant den Worker monopolisiert; ein Pro-Mandant-Cap
- * begrenzt zusätzlich die Events je Mandant pro Batch.
+ * Test of tenant fairness in the outbox worker (pool model): round-robin claiming
+ * prevents a single tenant from monopolizing the worker; a per-tenant cap
+ * additionally limits the events per tenant per batch.
  */
 class OutboxWorkerTest extends TestCase
 {
@@ -50,7 +50,7 @@ class OutboxWorkerTest extends TestCase
 
             $n = (new OutboxWorker())->processBatch(10);
             $this->assertSame(10, $n);
-            // Ohne Fairness würden 10x A zuerst geholt; Round-Robin -> je 5.
+            // Without fairness all 10 of A would be claimed first; round-robin -> 5 each.
             $this->assertSame(5, $this->claimed($a), 'Mandant A bekommt seinen fairen Anteil');
             $this->assertSame(5, $this->claimed($b), 'Mandant B wird nicht ausgehungert');
         } finally {

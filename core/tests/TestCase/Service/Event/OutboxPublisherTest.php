@@ -9,8 +9,8 @@ use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\TestCase;
 
 /**
- * Test, dass beim Publizieren der **Mandant** des aufrufenden Kontextes am Event
- * festgehalten wird (B6: „Mandant am Event mitführen"), bzw. NULL ohne Kontext.
+ * Test that on publishing the **tenant** of the calling context is recorded on
+ * the event (B6: "carry the tenant along with the event"), or NULL without a context.
  */
 class OutboxPublisherTest extends TestCase
 {
@@ -24,7 +24,7 @@ class OutboxPublisherTest extends TestCase
             $row = $conn->execute('SELECT tenant_id FROM event_outbox WHERE id = :id', ['id' => $id])->fetch('assoc');
             $this->assertSame(TenantService::DEFAULT_TENANT_ID, (string)$row['tenant_id']);
 
-            // Ohne Mandantenkontext -> NULL (systemweites Event).
+            // Without a tenant context -> NULL (system-wide event).
             $conn->execute("SELECT set_config('app.current_tenant_id', '', true)");
             $id2 = (new OutboxPublisher())->publish('zztest.system.event', []);
             $row2 = $conn->execute('SELECT tenant_id FROM event_outbox WHERE id = :id', ['id' => $id2])->fetch('assoc');

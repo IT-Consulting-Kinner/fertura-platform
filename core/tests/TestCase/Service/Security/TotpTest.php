@@ -7,18 +7,18 @@ use App\Service\Security\Totp;
 use Cake\TestSuite\TestCase;
 
 /**
- * Test des abhängigkeitsfreien TOTP (RFC 6238/4226): offizielle RFC-Testvektoren
- * (SHA1, auf 6 Ziffern gekürzt), Zeitfenster-Toleranz, Format-Ablehnung und
- * otpauth-URI.
+ * Test of the dependency-free TOTP (RFC 6238/4226): official RFC test vectors
+ * (SHA1, truncated to 6 digits), time-window tolerance, format rejection, and
+ * the otpauth URI.
  */
 class TotpTest extends TestCase
 {
-    /** RFC-6238-Secret "12345678901234567890" als Base32. */
+    /** RFC 6238 secret "12345678901234567890" as Base32. */
     private const RFC_SECRET = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ';
 
     public function testRfc6238Vectors(): void
     {
-        // RFC 6238 Anhang B (SHA1, 8-stellig) -> letzte 6 Ziffern.
+        // RFC 6238 Appendix B (SHA1, 8 digits) -> last 6 digits.
         $this->assertSame('287082', Totp::code(self::RFC_SECRET, 59));
         $this->assertSame('081804', Totp::code(self::RFC_SECRET, 1111111109));
         $this->assertSame('050471', Totp::code(self::RFC_SECRET, 1111111111));
@@ -31,14 +31,14 @@ class TotpTest extends TestCase
         $t = 1111111109;
         $code = Totp::code(self::RFC_SECRET, $t);
 
-        // Exakt + ±1 Zeitschritt (30 s Drift) akzeptiert.
+        // Exact + ±1 time step (30 s drift) accepted.
         $this->assertNotNull(Totp::verify(self::RFC_SECRET, $code, 1, $t));
         $this->assertNotNull(Totp::verify(self::RFC_SECRET, $code, 1, $t + 30));
         $this->assertNotNull(Totp::verify(self::RFC_SECRET, $code, 1, $t - 30));
-        // Außerhalb des Fensters abgelehnt.
+        // Outside the window rejected.
         $this->assertNull(Totp::verify(self::RFC_SECRET, $code, 1, $t + 90));
 
-        // Formatfehler abgelehnt (zu kurz, nicht-numerisch, trailing newline).
+        // Malformed input rejected (too short, non-numeric, trailing newline).
         $this->assertNull(Totp::verify(self::RFC_SECRET, '12345', 1, $t));
         $this->assertNull(Totp::verify(self::RFC_SECRET, 'abcdef', 1, $t));
         $this->assertNull(Totp::verify(self::RFC_SECRET, "287082\n1", 1, $t));
@@ -47,7 +47,7 @@ class TotpTest extends TestCase
     public function testGeneratedSecretRoundtrips(): void
     {
         $secret = Totp::generateSecret();
-        $this->assertMatchesRegularExpression('/^[A-Z2-7]{32}$/', $secret); // 20 Byte -> 32 Base32-Zeichen
+        $this->assertMatchesRegularExpression('/^[A-Z2-7]{32}$/', $secret); // 20 bytes -> 32 Base32 chars
 
         $now = time();
         $code = Totp::code($secret, $now);

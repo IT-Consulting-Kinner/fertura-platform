@@ -13,14 +13,14 @@ use Cake\ORM\Locator\LocatorAwareTrait;
 use Cake\TestSuite\TestCase;
 
 /**
- * E2E-Test der Out-of-Process-Isolation Phase 3 (Kap. 23.16.2): Ein isoliertes
- * Modul stellt einen **Collector-Beitrag** (`core.collector.anonymize`) bereit,
- * der bei der Benutzer-Anonymisierung **im isolierten Host über RPC** ausgeführt
- * wird — inkl. eigener DB-Zugriff (Modul-Rolle) und RLS-Kontext (Bypass) über
- * die RPC-Grenze. Zudem läuft eine **periodische Aufgabe** (core.collector.scheduled)
- * des Moduls beim Tick im isolierten Host (Scheduled-over-RPC), und das Modul
- * stellt einen **Daten-Resolver** bereit (out_of_process erlaubt; nur der
- * Auth-Provider-Slot bleibt config-bedingt ausgenommen).
+ * E2E test of out-of-process isolation phase 3 (ch. 23.16.2): an isolated module
+ * provides a **collector contribution** (`core.collector.anonymize`) that runs
+ * **inside the isolated host over RPC** during user anonymization — including its
+ * own DB access (module role) and the RLS context (bypass) across the RPC
+ * boundary. Additionally, a **periodic task** (core.collector.scheduled) of the
+ * module runs on tick inside the isolated host (scheduled-over-RPC), and the
+ * module provides a **data resolver** (out_of_process allowed; only the auth
+ * provider slot remains excluded for config reasons).
  *
  * @group slow
  */
@@ -38,7 +38,7 @@ class OutOfProcessPhase3Test extends TestCase
         $this->prevSig = (bool)$sm->get('core', 'require_module_signature', true);
         $sm->set('core', 'require_module_signature', false);
         $this->cleanup();
-        // Core-Collector-Contracts (per Migration geseedet, vom Test-Migrator truncatet).
+        // Core collector contracts (seeded by migration, truncated by the test migrator).
         $conn = ConnectionManager::get('default');
         foreach (['core.collector.anonymize', 'core.collector.scheduled'] as $name) {
             $conn->execute(
@@ -64,7 +64,7 @@ class OutOfProcessPhase3Test extends TestCase
         $this->assertTrue((new ModuleHostSupervisor())->isRunning(self::KEY), 'Host muss laufen.');
 
         $conn = ConnectionManager::get('default');
-        // Benutzer + zugehörige Modul-PII (in der isolierten Modultabelle).
+        // User plus associated module PII (in the isolated module table).
         $u = $conn->execute(
             "INSERT INTO users (username, email, status) VALUES (:u, :e, 'active') RETURNING id",
             ['u' => 'p3_' . bin2hex(random_bytes(4)), 'e' => 'p3@invalid.local'],
@@ -76,12 +76,12 @@ class OutOfProcessPhase3Test extends TestCase
         );
 
         try {
-            // Anonymisieren -> Core ruft den Collector-Beitrag im isolierten Host auf.
+            // Anonymize -> core invokes the collector contribution in the isolated host.
             $users = $this->fetchTable('Users');
             $this->assertTrue($users->anonymize($users->get($userId)));
 
-            // Beweis: der Beitrag IM HOST hat die Modul-PII bereinigt (über die
-            // Modul-Rolle + RLS-Bypass über die RPC-Grenze).
+            // Proof: the contribution IN THE HOST scrubbed the module PII (via the
+            // module role + RLS bypass across the RPC boundary).
             $row = $conn->execute(
                 'SELECT note FROM mod_isolated_anon_module.user_data WHERE owner_id = :u',
                 ['u' => $userId],
@@ -99,8 +99,8 @@ class OutOfProcessPhase3Test extends TestCase
         $lc->activate(self::KEY);
 
         $conn = ConnectionManager::get('default');
-        // Tick -> die periodische Aufgabe des isolierten Moduls läuft IM HOST
-        // (über RPC + Modul-Rolle) und schreibt einen Marker in die Modultabelle.
+        // Tick -> the isolated module's periodic task runs IN THE HOST
+        // (over RPC + module role) and writes a marker into the module table.
         $ran = (new ScheduledTaskRunner())->tick();
         $this->assertContains('isolated_anon.ping', $ran, 'Die isolierte Aufgabe muss getickt worden sein.');
 
@@ -112,9 +112,9 @@ class OutOfProcessPhase3Test extends TestCase
 
     public function testDataResolverModuleIsIsolatable(): void
     {
-        // Ein Modul, das einen Daten-Resolver bereitstellt, darf out_of_process
-        // installiert werden (Resolver laufen über RPC — nur der config-basierte
-        // Auth-Provider-Slot bleibt ausgenommen, siehe OutOfProcessIsolationTest).
+        // A module that provides a data resolver may be installed out_of_process
+        // (resolvers run over RPC — only the config-based auth provider slot
+        // remains excluded, see OutOfProcessIsolationTest).
         (new ModuleLifecycle())->install(ROOT . '/tests/Fixture/' . self::KEY, 'out_of_process');
         $row = ConnectionManager::get('default')->execute(
             'SELECT isolation FROM modules WHERE module_key = :k',

@@ -7,8 +7,8 @@ use App\Service\Metrics\PrometheusRenderer;
 use Cake\TestSuite\TestCase;
 
 /**
- * Test des Prometheus-Textrenderers (P04): HELP/TYPE-Gruppierung, Labels,
- * Escaping, Zahlformat.
+ * Tests the Prometheus text renderer (P04): HELP/TYPE grouping, labels,
+ * escaping, number formatting.
  */
 class PrometheusRendererTest extends TestCase
 {
@@ -23,7 +23,7 @@ class PrometheusRendererTest extends TestCase
         $this->assertStringContainsString("# HELP fertura_up Liveness.", $out);
         $this->assertStringContainsString("# TYPE fertura_up gauge", $out);
         $this->assertStringContainsString("fertura_up 1", $out);
-        // HELP/TYPE pro Metrik nur einmal.
+        // HELP/TYPE emitted only once per metric.
         $this->assertSame(1, substr_count($out, '# TYPE m gauge'));
         $this->assertStringContainsString('m{a="x",b="y"} 3', $out);
         $this->assertStringContainsString('m{a="z"} 4', $out);

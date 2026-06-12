@@ -7,10 +7,10 @@ use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
 
 /**
- * Test der Security-Antwort-Header (SecurityHeadersMiddleware): jede Antwort —
- * auch die unauthentifizierte Login-Seite — trägt CSP, X-Frame-Options DENY,
- * nosniff, Referrer- und Permissions-Policy; HSTS wird über Klartext-HTTP
- * NICHT gesendet (wirkungslos/segregationsgefährlich ohne TLS).
+ * Tests the security response headers (SecurityHeadersMiddleware): every response —
+ * including the unauthenticated login page — carries CSP, X-Frame-Options DENY,
+ * nosniff, Referrer and Permissions policies; HSTS is NOT sent over plaintext
+ * HTTP (ineffective and a downgrade risk without TLS).
  */
 class SecurityHeadersMiddlewareTest extends TestCase
 {
@@ -29,7 +29,7 @@ class SecurityHeadersMiddlewareTest extends TestCase
         $this->assertSame('nosniff', $this->_response->getHeaderLine('X-Content-Type-Options'));
         $this->assertSame('strict-origin-when-cross-origin', $this->_response->getHeaderLine('Referrer-Policy'));
         $this->assertStringContainsString('camera=()', $this->_response->getHeaderLine('Permissions-Policy'));
-        // Kein HSTS über http (Test-Requests laufen ohne TLS).
+        // No HSTS over http (test requests run without TLS).
         $this->assertFalse($this->_response->hasHeader('Strict-Transport-Security'));
     }
 

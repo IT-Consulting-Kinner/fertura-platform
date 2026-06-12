@@ -8,8 +8,8 @@ use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\TestCase;
 
 /**
- * Test des Anmeldeschutzes (Entscheidung 162) — Schwerpunkt Per-IP-Sperre gegen
- * Password-Spraying über viele Benutzernamen (Peer-Review #2).
+ * Tests the login protection (Decision 162) — focus on the per-IP block against
+ * password spraying across many usernames (Peer-Review #2).
  */
 class LoginThrottleTest extends TestCase
 {
@@ -37,9 +37,9 @@ class LoginThrottleTest extends TestCase
 
     public function testIpBlockTriggersOnSprayingAcrossUsernames(): void
     {
-        // Per-IP-Schwelle 3, Per-Benutzer 10: drei Fehlversuche von EINER IP über
-        // DREI verschiedene Konten sperren die IP, obwohl kein Konto seine eigene
-        // Grenze erreicht — genau die Spraying-Lücke, die geschlossen werden soll.
+        // Per-IP threshold 3, per-user 10: three failed attempts from ONE IP across
+        // THREE different accounts block the IP, even though no account reaches its
+        // own limit — exactly the spraying gap that this is meant to close.
         $t = new LoginThrottle(10, 15, null, 3);
         $this->assertFalse($t->isIpBlocked(self::IP));
 
@@ -51,7 +51,7 @@ class LoginThrottleTest extends TestCase
         $this->assertTrue($t->isIpBlocked(self::IP), '3 >= 3 -> IP gesperrt');
         $this->assertSame(3, $t->recentIpFailures(self::IP));
 
-        // Einzelne Konten bleiben unter ihrer eigenen (höheren) Schwelle.
+        // Individual accounts stay below their own (higher) threshold.
         $this->assertFalse($t->isBlocked('alice'));
     }
 

@@ -8,8 +8,8 @@ use App\Service\Api\OpenApiGenerator;
 use Cake\TestSuite\TestCase;
 
 /**
- * Test der OpenAPI-Generierung (P07): Grundgerüst, Core-Endpunkte und
- * Modul-Routen inkl. Pfad-Parameter.
+ * Tests OpenAPI generation (P07): the skeleton, core endpoints, and module
+ * routes including path parameters.
  */
 class OpenApiGeneratorTest extends TestCase
 {
@@ -39,10 +39,10 @@ class OpenApiGeneratorTest extends TestCase
         $this->assertSame('https://host', $spec['servers'][0]['url']);
         $this->assertArrayHasKey('bearerAuth', $spec['components']['securitySchemes']);
 
-        // Core-Endpunkt vorhanden.
+        // Core endpoint present.
         $this->assertArrayHasKey('get', $spec['paths']['/api/v1/health']);
 
-        // Modul-Endpunkt vorhanden, mit Pfad-Parameter.
+        // Module endpoint present, with path parameter.
         $op = $spec['paths']['/api/v1/m/demo/things/{id}']['get'];
         $this->assertSame('Ein Ding lesen', $op['summary']);
         $this->assertSame(['demo'], $op['tags']);

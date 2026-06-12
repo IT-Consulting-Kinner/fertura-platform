@@ -15,8 +15,8 @@ use App\Service\Settings\SettingsManager;
 use Cake\TestSuite\TestCase;
 
 /**
- * Test der LLM-Provider (P11): Request-Aufbau + Antwort-Parsing je Provider
- * gegen einen Egress-Stub (kein realer API-Verkehr), plus Gateway-Deaktivierung.
+ * Tests the LLM providers (P11): request construction + response parsing per
+ * provider against an egress stub (no real API traffic), plus gateway disabling.
  */
 class AiProviderTest extends TestCase
 {
@@ -114,7 +114,7 @@ class AiProviderTest extends TestCase
     }
 }
 
-/** Settings-Stub: liefert openai-Provider + einen vorgegebenen Endpoint-Override. */
+/** Settings stub: returns the openai provider + a predefined endpoint override. */
 class FakeSettings extends SettingsManager
 {
     public function __construct(private string $endpoint)
@@ -132,7 +132,7 @@ class FakeSettings extends SettingsManager
     }
 }
 
-/** Egress-Stub: zeichnet Aufrufe auf, liefert eine vorgegebene Antwort. */
+/** Egress stub: records calls, returns a predefined response. */
 class FakeEgress extends EgressClient
 {
     /** @var list<array<string,mixed>> */

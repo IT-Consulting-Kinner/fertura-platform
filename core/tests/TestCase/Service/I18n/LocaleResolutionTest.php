@@ -10,10 +10,10 @@ use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\TestCase;
 
 /**
- * Integrationstest des i18n-Versions-Gates (Kap. 31, E39) gegen die Test-DB +
- * Managed Locale Store: Packs werden real abgelegt (Store-Schreiben + Metadaten
- * in core.language_packs), dann die Auflösung exakt / same-major / mismatch
- * geprüft — der echte LocaleResolver-Pfad.
+ * Integration test of the i18n version gate (ch. 31, E39) against the test DB +
+ * managed locale store: packs are persisted for real (store write + metadata
+ * in core.language_packs), then resolution is checked for exact / same-major /
+ * mismatch — the real LocaleResolver path.
  */
 class LocaleResolutionTest extends TestCase
 {
@@ -28,7 +28,7 @@ class LocaleResolutionTest extends TestCase
         $store = new LanguagePackStore($this->storeBase);
         $this->resolver = new LocaleResolver();
 
-        // Drei de_DE-Packs derselben Komponente: 1.0.0, 1.5.0, 2.0.0.
+        // Three de_DE packs of the same component: 1.0.0, 1.5.0, 2.0.0.
         foreach (['1.0.0', '1.5.0', '2.0.0'] as $version) {
             $store->save(self::COMPONENT, $version, 'de_DE', $this->po($version), [
                 'type' => 'module',
@@ -58,14 +58,14 @@ class LocaleResolutionTest extends TestCase
 
     public function testSameMajorPicksHighestWithNotice(): void
     {
-        // Aktiv 1.9.0: kein exaktes Pack -> höchstes Same-Major (1.5.0), Hinweis.
+        // Active 1.9.0: no exact pack -> highest same-major (1.5.0), notice.
         $r = $this->resolver->resolveVersion(self::COMPONENT, '1.9.0', 'de_DE');
         $this->assertSame(['version' => '1.5.0', 'status' => 'notice'], $r);
     }
 
     public function testMajorMismatchFallsBack(): void
     {
-        // Aktiv 3.0.0: kein Major-3-Pack -> null (Aufrufer nutzt Englisch).
+        // Active 3.0.0: no major-3 pack -> null (caller falls back to English).
         $this->assertNull($this->resolver->resolveVersion(self::COMPONENT, '3.0.0', 'de_DE'));
     }
 
@@ -81,9 +81,9 @@ class LocaleResolutionTest extends TestCase
         foreach ($statuses as $s) {
             $map[$s['version']] = $s['status'];
         }
-        $this->assertSame('notice', $map['1.0.0']); // same major, andere Version
-        $this->assertSame('clean', $map['1.5.0']);  // exakt aktiv
-        $this->assertSame('error', $map['2.0.0']);  // andere Major
+        $this->assertSame('notice', $map['1.0.0']); // same major, different version
+        $this->assertSame('clean', $map['1.5.0']);  // exactly active
+        $this->assertSame('error', $map['2.0.0']);  // different major
     }
 
     public function testSelectableAlwaysIncludesEnglishAndFiltersUnavailable(): void

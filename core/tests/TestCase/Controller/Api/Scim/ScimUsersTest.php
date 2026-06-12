@@ -9,10 +9,10 @@ use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
 
 /**
- * Integrationstest des SCIM-2.0-Provisionings (/api/scim/v2/Users): Scope-Gate,
- * Anlage (invited, ohne Passwort), Filter `userName eq`, PATCH active:false →
- * Deaktivierung, **kein hartes Löschen** (DELETE deaktiviert), und der Schutz
- * „invited ohne Passwort bleibt invited" bei active:true.
+ * Integration test for SCIM 2.0 provisioning (/api/scim/v2/Users): scope gate,
+ * creation (invited, without password), `userName eq` filter, PATCH active:false →
+ * deactivation, **no hard delete** (DELETE deactivates), and the protection
+ * "invited without password stays invited" on active:true.
  */
 class ScimUsersTest extends TestCase
 {
@@ -47,8 +47,8 @@ class ScimUsersTest extends TestCase
     /** @param array<string,mixed> $body */
     private function scim(string $method, string $url, array $body = []): void
     {
-        // _request wird vom Trait über Aufrufe hinweg GEMERGED; vor jedem SCIM-
-        // Request zurücksetzen, damit ein vorheriger Body nicht „hängen bleibt".
+        // _request is MERGED by the trait across calls; reset it before each SCIM
+        // request so a previous body does not "stick around".
         $this->_request = [];
         $this->configRequest([
             'headers' => [
@@ -80,7 +80,7 @@ class ScimUsersTest extends TestCase
         $this->get('/api/scim/v2/Users');
         $this->assertResponseCode(403);
 
-        // Ohne Token -> 401 (ApiAuthMiddleware).
+        // Without a token -> 401 (ApiAuthMiddleware).
         $this->configRequest(['headers' => []]);
         $this->get('/api/scim/v2/Users');
         $this->assertResponseCode(401);
@@ -107,9 +107,9 @@ class ScimUsersTest extends TestCase
         $this->assertResponseCode(201);
         $created = $this->body();
         $this->assertSame($userName, $created['userName']);
-        $this->assertTrue($created['active']); // invited zählt als aktiv (provisioniert)
+        $this->assertTrue($created['active']); // invited counts as active (provisioned)
 
-        // Ohne Passwort -> Status invited (Login via SSO/Einladung).
+        // Without a password -> status invited (login via SSO/invitation).
         $status = ConnectionManager::get('default')->execute(
             'SELECT status, password_hash FROM users WHERE id = :id',
             ['id' => $created['id']],
@@ -117,7 +117,7 @@ class ScimUsersTest extends TestCase
         $this->assertSame('invited', $status['status']);
         $this->assertNull($status['password_hash']);
 
-        // Filter userName eq (IdP-Abgleich).
+        // Filter userName eq (IdP reconciliation).
         $this->scim('GET', '/api/scim/v2/Users?filter=' . urlencode('userName eq "' . $userName . '"'));
         $this->assertResponseOk();
         $this->assertSame(1, $this->body()['totalResults']);
@@ -128,7 +128,7 @@ class ScimUsersTest extends TestCase
         $this->assertResponseOk();
         $this->assertSame($userName, $this->body()['userName']);
 
-        // Unbekannte/fehlgeformte ID -> 404 (SCIM-Error, kein 500).
+        // Unknown/malformed ID -> 404 (SCIM error, no 500).
         $this->scim('GET', '/api/scim/v2/Users/garbage');
         $this->assertResponseCode(404);
     }
@@ -142,7 +142,7 @@ class ScimUsersTest extends TestCase
         ]);
         $id = (string)$this->body()['id'];
 
-        // PATCH active:false (Azure-AD-Stil, objektwertiges replace).
+        // PATCH active:false (Azure AD style, object-valued replace).
         $this->scim('PATCH', '/api/scim/v2/Users/' . $id, [
             'schemas' => ['urn:ietf:params:scim:api:messages:2.0:PatchOp'],
             'Operations' => [['op' => 'replace', 'value' => ['active' => false]]],
@@ -153,16 +153,16 @@ class ScimUsersTest extends TestCase
             'SELECT status FROM users WHERE id = :id', ['id' => $id],
         )->fetch('assoc')['status']);
 
-        // PATCH active:true OHNE Passwort: bleibt invited-Schutz -> nicht aktiv...
-        // (war disabled mit password_hash NULL -> active setzt auf active nur,
-        // wenn Anmeldeweg existiert; disabled+kein Hash war vorher invited).
-        // DELETE -> Deaktivierung, KEIN Löschen (Kap. 27.15).
+        // PATCH active:true WITHOUT a password: invited protection holds -> not active...
+        // (was disabled with password_hash NULL -> active only sets to active when
+        // a login path exists; disabled+no hash was previously invited).
+        // DELETE -> deactivation, NO deletion (ch. 27.15).
         $this->scim('DELETE', '/api/scim/v2/Users/' . $id);
         $this->assertResponseCode(204);
         $row = ConnectionManager::get('default')->execute(
             'SELECT status FROM users WHERE id = :id', ['id' => $id],
         )->fetch('assoc');
-        $this->assertNotFalse($row); // Zeile existiert weiterhin
+        $this->assertNotFalse($row); // row still exists
         $this->assertSame('disabled', $row['status']);
     }
 

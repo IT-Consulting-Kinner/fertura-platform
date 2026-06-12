@@ -8,10 +8,10 @@ use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
 
 /**
- * Integrationstest der Modul-Lifecycle-GUI (Administrationsbereich
- * `module_lifecycle`): Modul-Liste mit Abhängigkeits-Zähler, geschichtetes
- * Abhängigkeits-SVG (`graph`, Kap. 23.13.1) und die Fehlerpfade der
- * Lifecycle-Aktionen (Flash statt 500 bei unbekanntem Modul).
+ * Integration test for the module lifecycle GUI (admin area `module_lifecycle`):
+ * module list with dependency counter, layered dependency SVG (`graph`,
+ * ch. 23.13.1), and the error paths of the lifecycle actions (flash instead of
+ * 500 for an unknown module).
  */
 class ModulesControllerTest extends TestCase
 {
@@ -39,7 +39,7 @@ class ModulesControllerTest extends TestCase
             ['u' => $this->userId, 'a' => 'module_lifecycle'],
         );
 
-        // Zwei Module mit einer Abhängigkeit B -> A (für Liste + Graph-Ebenen).
+        // Two modules with a dependency B -> A (for list + graph layers).
         $this->modA = $this->makeModule('zztestmod_a');
         $this->modB = $this->makeModule('zztestmod_b');
         $conn->execute(
@@ -57,7 +57,7 @@ class ModulesControllerTest extends TestCase
     private function cleanup(): void
     {
         $conn = ConnectionManager::get('default');
-        // module_dependencies kaskadiert über FK.
+        // module_dependencies cascades via FK.
         $conn->execute("DELETE FROM modules WHERE module_key LIKE 'zztestmod_%'");
         $conn->execute("DELETE FROM users WHERE email LIKE '%@zzmod.local'");
     }
@@ -97,7 +97,7 @@ class ModulesControllerTest extends TestCase
         $this->assertResponseContains('<svg');
         $this->assertResponseContains('zztestmod_a');
         $this->assertResponseContains('zztestmod_b');
-        // Kante B -> A vorhanden (line/path im SVG, abhängig vom Template).
+        // Edge B -> A present (line/path in the SVG, depending on the template).
         $body = (string)$this->_response->getBody();
         $this->assertMatchesRegularExpression('/<(line|path|polyline)\b/', $body);
     }
@@ -106,7 +106,7 @@ class ModulesControllerTest extends TestCase
     {
         $this->login();
 
-        // Fehlerpfad: ModuleLifecycle wirft, GUI fängt -> Flash + Redirect (kein 500).
+        // Error path: ModuleLifecycle throws, GUI catches -> flash + redirect (no 500).
         $this->post('/admin/modules/activate/zztestmod_missing');
         $this->assertRedirect(['action' => 'index']);
 
@@ -116,7 +116,7 @@ class ModulesControllerTest extends TestCase
         $this->post('/admin/modules/delete/zztestmod_missing');
         $this->assertRedirect(['action' => 'index']);
 
-        // GET auf POST-only-Aktion -> 405.
+        // GET on a POST-only action -> 405.
         $this->get('/admin/modules/activate/zztestmod_a');
         $this->assertResponseCode(405);
     }

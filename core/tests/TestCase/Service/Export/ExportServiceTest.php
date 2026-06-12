@@ -10,8 +10,8 @@ use League\Flysystem\Filesystem;
 use League\Flysystem\Local\LocalFilesystemAdapter;
 
 /**
- * Test des Export-Primitivs (P13): CSV/XLSX/PDF-Erzeugung + Ablage über den
- * Objekt-Storage (P03).
+ * Test of the export primitive (P13): CSV/XLSX/PDF generation + storage via the
+ * object storage (P03).
  */
 class ExportServiceTest extends TestCase
 {
@@ -40,13 +40,13 @@ class ExportServiceTest extends TestCase
     public function testAntiFormulaCatchesLeadingWhitespaceAndNewline(): void
     {
         $e = new ExportService();
-        // Tabellenprogramme trimmen führenden Whitespace/Newline vor dem Parsen —
-        // ein Auslöser dahinter (oder der Whitespace selbst) muss entwertet werden.
+        // Spreadsheet programs trim leading whitespace/newlines before parsing —
+        // a trigger character behind it (or the whitespace itself) must be neutralized.
         $this->assertSame("' =HYPERLINK(\"x\")", $e->antiFormula(' =HYPERLINK("x")'));
         $this->assertSame("'\n=1+1", $e->antiFormula("\n=1+1"));
         $this->assertSame("'\t@cmd", $e->antiFormula("\t@cmd"));
         $this->assertSame("'  -2+3", $e->antiFormula('  -2+3'));
-        // Harmlose Werte bleiben unangetastet.
+        // Harmless values remain untouched.
         $this->assertSame('Müller', $e->antiFormula('Müller'));
         $this->assertSame('100', $e->antiFormula('100'));
     }

@@ -8,8 +8,8 @@ use App\Service\Settings\SettingsManager;
 use Cake\TestSuite\TestCase;
 
 /**
- * Test der Readiness-Probe (P15): bereit, wenn DB erreichbar und kein
- * Wartungsmodus; im Wartungsmodus not-ready (Drain für rolling/blue-green).
+ * Tests the readiness probe (P15): ready when the DB is reachable and not in
+ * maintenance mode; not-ready while in maintenance (drain for rolling/blue-green).
  */
 class HealthReadinessTest extends TestCase
 {

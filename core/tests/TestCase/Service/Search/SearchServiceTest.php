@@ -12,8 +12,8 @@ use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\TestCase;
 
 /**
- * Test der Volltextsuche (P10): Indexierung, Ranking, Sichtbarkeits-Filter
- * (Eigentümer), Entfernen.
+ * Test of full-text search (P10): indexing, ranking, visibility filter
+ * (owner), removal.
  */
 class SearchServiceTest extends TestCase
 {
@@ -55,7 +55,7 @@ class SearchServiceTest extends TestCase
         $this->assertNotEmpty($results);
         $this->assertSame('1', $results[0]['entity_id']);
 
-        // Mehrwort/websearch-Syntax.
+        // Multi-word / websearch syntax.
         $this->assertNotEmpty($s->search('Umsatz Gewinn'));
         $this->assertSame([], $s->search('Nichtvorhandenerbegriff'));
     }
@@ -71,7 +71,7 @@ class SearchServiceTest extends TestCase
         sort($ids);
         $this->assertSame(['mine', 'pub'], $ids, 'nur eigene + öffentliche Dokumente');
 
-        // Ohne Benutzer (System) -> alle.
+        // Without a user (system) -> all.
         $this->assertCount(3, $s->search('Apfel', null));
     }
 
@@ -81,13 +81,13 @@ class SearchServiceTest extends TestCase
         $s->index('zztest', 'doc', '1', 'Quartalsbericht Finanzen', 'Umsatz');
         $s->index('zztest', 'doc', '2', 'Reisekostenrichtlinie', 'Spesen');
 
-        // Kein Embedding-Provider -> Hybrid degradiert auf reine Volltextsuche.
+        // No embedding provider -> hybrid degrades to pure full-text search.
         $ftsOnly = $s->hybrid('Quartalsbericht', null);
         $this->assertSame('1', $ftsOnly[0]['entity_id']);
         $this->assertArrayHasKey('score', $ftsOnly[0]);
 
-        // Mit (gestubbtem) Embedding-Dienst: FTS findet nur doc 1, der Vektor-Teil
-        // bringt doc 2 (verwandt) und doc 3 (nur semantisch, nicht im FTS-Index).
+        // With a (stubbed) embedding service: FTS finds only doc 1, the vector part
+        // brings doc 2 (related) and doc 3 (purely semantic, not in the FTS index).
         $fakeEmbeddings = new class extends EmbeddingService {
             public function __construct()
             {
@@ -116,7 +116,7 @@ class SearchServiceTest extends TestCase
         $this->assertContains('2', $ids, 'Vektor-Treffer enthalten');
         $this->assertContains('3', $ids, 'rein semantischer Treffer (nicht im FTS-Index) enthalten');
 
-        // Rein semantischer Treffer (doc 3) zieht den Titel aus dem Inhalt.
+        // A purely semantic hit (doc 3) derives its title from the content.
         $three = array_values(array_filter($res, static fn ($r) => $r['entity_id'] === '3'))[0];
         $this->assertSame('Nur semantisch relevant', $three['title']);
         $this->assertNull($three['url']);
@@ -124,7 +124,7 @@ class SearchServiceTest extends TestCase
 
     public function testAutoEmbedOnIndexAndRemove(): void
     {
-        // Embedding-Dienst, der Aufrufe mitschreibt (kein echter LLM-Aufruf).
+        // Embedding service that records calls (no real LLM call).
         $emb = new class extends EmbeddingService {
             /** @var list<array{0:string,1:string,2:string}> */
             public array $indexed = [];
@@ -152,15 +152,15 @@ class SearchServiceTest extends TestCase
         };
         $s = new SearchService(null, $emb);
 
-        // explizit embed:true -> FTS + Embedding
+        // explicit embed:true -> FTS + embedding
         $s->index('zztest', 'doc', 'e1', 'Titel', 'Inhalt', null, null, true);
         $this->assertSame([['zztest', 'doc', 'e1']], $emb->indexed);
 
-        // explizit embed:false -> nur FTS, kein Embedding
+        // explicit embed:false -> FTS only, no embedding
         $s->index('zztest', 'doc', 'e2', 'Titel2', '', null, null, false);
         $this->assertCount(1, $emb->indexed, 'embed:false unterdrückt das Embedding');
 
-        // remove räumt beide Indizes auf
+        // remove cleans up both indexes
         $s->remove('zztest', 'doc', 'e1');
         $this->assertSame([['zztest', 'doc', 'e1']], $emb->removed);
     }
@@ -186,7 +186,7 @@ class SearchServiceTest extends TestCase
             }
         };
         $s = new SearchService(null, $emb);
-        // Ohne auto_index -> nur Volltext indexiert, keine Embeddings.
+        // Without auto_index -> only full text indexed, no embeddings.
         $s->index('zztest', 'doc', 'b1', 'Backfill Eins', 'Inhalt eins');
         $s->index('zztest', 'doc', 'b2', 'Backfill Zwei', 'Inhalt zwei');
 
@@ -211,18 +211,18 @@ class SearchServiceTest extends TestCase
             $conn->execute("SELECT set_config('app.current_tenant_id', :t, true)", ['t' => $tenantB]);
             $s->index('zztest', 'doc', 't2', 'Mandantenwortzwei Beta');
 
-            // Mandant B sieht nur den eigenen Treffer.
+            // Tenant B sees only its own hit.
             $idsB = array_column($s->search('Mandantenwortzwei'), 'entity_id');
             $this->assertContains('t2', $idsB);
             $this->assertNotContains('t1', $idsB, 'Mandant B sieht den Default-Mandant NICHT (kein Leck)');
 
-            // Default-Mandant sieht nur den eigenen Treffer.
+            // Default tenant sees only its own hit.
             $conn->execute("SELECT set_config('app.current_tenant_id', :t, true)", ['t' => $default]);
             $idsD = array_column($s->search('Mandantenwortzwei'), 'entity_id');
             $this->assertContains('t1', $idsD);
             $this->assertNotContains('t2', $idsD);
         } finally {
-            $conn->rollback(); // setzt set_config (tx-lokal) zurück und verwirft die Test-Indexe
+            $conn->rollback(); // resets set_config (tx-local) and discards the test indexes
         }
     }
 
@@ -234,7 +234,7 @@ class SearchServiceTest extends TestCase
         $s->index('zztest', 'doc', 'lang1', 'Bücher und Zeitungen');
 
         try {
-            // Mit deutscher Konfiguration findet die Beugung „Büchern" das Dokument „Bücher".
+            // With German config, the inflected form „Büchern" finds the document „Bücher".
             $sm->set('core', 'search.text_config', 'german');
             $this->assertContains(
                 'lang1',
@@ -242,7 +242,7 @@ class SearchServiceTest extends TestCase
                 'Stemming: Büchern findet Bücher',
             );
 
-            // Ohne Stemming (simple) matcht die andere Beugung nicht.
+            // Without stemming (simple), the other inflected form does not match.
             $sm->set('core', 'search.text_config', 'simple');
             $this->assertNotContains(
                 'lang1',
@@ -261,7 +261,7 @@ class SearchServiceTest extends TestCase
         $s->index('zztest', 'doc', 'x', 'Birne', '');
         $this->assertCount(1, $s->search('Birne'));
 
-        // Upsert ersetzt den Inhalt.
+        // Upsert replaces the content.
         $s->index('zztest', 'doc', 'x', 'Kirsche', '');
         $this->assertSame([], $s->search('Birne'));
         $this->assertCount(1, $s->search('Kirsche'));

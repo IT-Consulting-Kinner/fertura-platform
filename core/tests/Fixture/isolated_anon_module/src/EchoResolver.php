@@ -6,9 +6,9 @@ namespace IsolatedAnon;
 use App\Service\Registry\ServiceInterface;
 
 /**
- * Daten-Resolver (input -> output) des isolierten Moduls. Wird wie ein Service
- * über `handle()` aufgerufen und läuft (out_of_process) im isolierten Host
- * über RPC (Kap. 23.16.2 / 26).
+ * Data resolver (input -> output) of the isolated module. Invoked like a service
+ * via `handle()` and runs (out_of_process) in the isolated host over RPC
+ * (ch. 23.16.2 / 26).
  */
 class EchoResolver implements ServiceInterface
 {

@@ -9,8 +9,8 @@ use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
 
 /**
- * Integrationstest der globalen Admin-Suche: rendert die Hybrid-Suche (hier ohne
- * Embedding-Provider → Volltext) für einen Admin und zeigt Treffer (UI-Kit).
+ * Integration test for the global admin search: renders the hybrid search (here
+ * without an embedding provider → full text) for an admin and shows hits (UI kit).
  */
 class SearchControllerTest extends TestCase
 {
@@ -35,7 +35,7 @@ class SearchControllerTest extends TestCase
             'INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a)',
             ['u' => $this->userId, 'a' => 'core_config'],
         );
-        // Öffentliches (owner=null) Dokument mit eindeutigem Begriff.
+        // Public (owner=null) document with a unique term.
         (new SearchService())->index('zzsearch', 'doc', 's1', 'Quartalszauberwort Bericht', 'Inhalt', null);
     }
 
@@ -59,7 +59,7 @@ class SearchControllerTest extends TestCase
         $this->get('/admin/search?q=' . urlencode('Quartalszauberwort'));
 
         $this->assertResponseOk();
-        $this->assertResponseContains('Quartalszauberwort Bericht'); // Treffer-Titel via UI-Kit
+        $this->assertResponseContains('Quartalszauberwort Bericht'); // hit title via UI kit
     }
 
     public function testEmptyQueryRendersForm(): void
@@ -75,12 +75,12 @@ class SearchControllerTest extends TestCase
         $this->enableCsrfToken();
         $this->enableSecurityToken();
         $this->post('/admin/search/reindex');
-        $this->assertRedirect(['action' => 'index']); // angestoßen, kein 500
+        $this->assertRedirect(['action' => 'index']); // triggered, no 500
     }
 
     public function testReindexDeniedWithoutCoreConfig(): void
     {
-        // Benutzer mit einem ANDEREN Admin-Bereich (kein core_config).
+        // User with a DIFFERENT admin area (not core_config).
         $conn = ConnectionManager::get('default');
         $conn->execute(
             "INSERT INTO admin_areas (area_key, label, sort_order) VALUES ('user_group_admin', 'U', 10) "
@@ -96,6 +96,6 @@ class SearchControllerTest extends TestCase
         $this->enableCsrfToken();
         $this->enableSecurityToken();
         $this->post('/admin/search/reindex');
-        $this->assertRedirect(['action' => 'index']); // Flash-Fehler, kein Reindex
+        $this->assertRedirect(['action' => 'index']); // error flash, no reindex
     }
 }

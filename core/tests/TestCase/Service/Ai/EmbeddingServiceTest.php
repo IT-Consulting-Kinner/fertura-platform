@@ -9,8 +9,8 @@ use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\TestCase;
 
 /**
- * Test des Embedding-Stores + semantischer Suche (P11, pgvector). Das AI-Gateway
- * wird durch einen deterministischen Stub ersetzt (kein realer LLM-Aufruf).
+ * Tests the embedding store + semantic search (P11, pgvector). The AI gateway is
+ * replaced by a deterministic stub (no real LLM call).
  */
 class EmbeddingServiceTest extends TestCase
 {
@@ -36,7 +36,7 @@ class EmbeddingServiceTest extends TestCase
         $stub = new class extends AiGateway {
             public function embed(string $text): array
             {
-                // Deterministischer 1536-dim Vektor (zwei Komponenten -> kollisionsarm).
+                // Deterministic 1536-dim vector (two components -> low collision rate).
                 $v = array_fill(0, 1536, 0.0);
                 $v[abs(crc32($text)) % 1536] = 1.0;
                 $v[(abs(crc32($text)) >> 8) % 1536] += 1.0;
@@ -65,7 +65,7 @@ class EmbeddingServiceTest extends TestCase
         $stub = new class extends AiGateway {
             public function embed(string $text): array
             {
-                return array_fill(0, 768, 0.1); // z. B. Google-Modell -> falsche Dimension
+                return array_fill(0, 768, 0.1); // e.g. Google model -> wrong dimension
             }
         };
         $this->expectException(\App\Service\Ai\AiException::class);

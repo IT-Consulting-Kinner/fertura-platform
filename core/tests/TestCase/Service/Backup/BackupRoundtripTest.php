@@ -9,16 +9,16 @@ use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\TestCase;
 
 /**
- * Integrationstest des Backup/Restore-Roundtrips (Kap. 20.1.2, E53/E56) gegen
- * die Test-DB: echtes Erstellen (pg_dump + Stores in ein verifiziertes ZIP),
- * Prüfsummen-Verifikation, nicht-destruktiver Probe-Restore in eine Scratch-DB
- * und die AES-256-Verschlüsselung (richtiges vs. falsches Passwort).
+ * Integration test of the backup/restore roundtrip (ch. 20.1.2, E53/E56) against
+ * the test DB: real creation (pg_dump + writing into a verified ZIP),
+ * checksum verification, non-destructive probe restore into a scratch DB,
+ * and AES-256 encryption (correct vs. wrong password).
  *
  * @group slow
  */
 class BackupRoundtripTest extends TestCase
 {
-    /** Lifecycle-Advisory-Lock-Key (Spiegel von BackupService::LIFECYCLE_LOCK). */
+    /** Lifecycle advisory-lock key (mirror of BackupService::LIFECYCLE_LOCK). */
     private const LIFECYCLE_LOCK = 778899001;
 
     private string $tmpDir = '';
@@ -32,12 +32,12 @@ class BackupRoundtripTest extends TestCase
     {
         parent::setUp();
         $sm = new SettingsManager();
-        // Vorherige Werte sichern.
+        // Save the previous values.
         foreach (['backup.verify_on_create', 'backup.min_free_mb', 'backup.password'] as $k) {
             $this->prev[$k] = $sm->get('core', $k, null);
         }
-        // Probe-Restore beim Create aus (separat getestet); Preflight entschärfen;
-        // unverschlüsselt starten.
+        // Disable probe restore on create (tested separately); relax preflight;
+        // start unencrypted.
         $sm->set('core', 'backup.verify_on_create', false);
         $sm->set('core', 'backup.min_free_mb', 0);
         $sm->set('core', 'backup.password', '');
@@ -75,11 +75,11 @@ class BackupRoundtripTest extends TestCase
         $this->assertSame('complete', $rec['status']);
         $this->assertSame('integration', $rec['note']);
 
-        // Prüfsummen-Verifikation des geschriebenen Archivs.
+        // Checksum verification of the written archive.
         $verify = (new BackupService())->verify($id);
         $this->assertTrue($verify['ok'], 'Verifikation: ' . ($verify['reason'] ?? ''));
 
-        // Nicht-destruktiver Probe-Restore in eine Wegwerf-DB.
+        // Non-destructive probe restore into a throwaway DB.
         $probe = (new BackupService())->testRestore($id);
         $this->assertTrue($probe['ok'], 'Probe-Restore: ' . ($probe['reason'] ?? ''));
         $this->assertGreaterThan(0, $probe['tables'], 'Restaurierte DB muss core-Tabellen haben.');
@@ -98,23 +98,22 @@ class BackupRoundtripTest extends TestCase
         $rec = (new BackupService())->get($id);
         $this->assertTrue((bool)$rec['encrypted'], 'Archiv muss als verschlüsselt markiert sein.');
 
-        // Mit korrektem Passwort: Verifikation ok.
+        // With the correct password: verification succeeds.
         $this->assertTrue((new BackupService())->verify($id)['ok']);
 
-        // Mit falschem Passwort: Verifikation schlägt fehl (nichts entschlüsselbar).
+        // With the wrong password: verification fails (nothing can be decrypted).
         $sm->set('core', 'backup.password', 'falsch');
         $this->assertFalse((new BackupService())->verify($id)['ok']);
 
-        // Für das Aufräumen (delete) wieder das korrekte Passwort setzen.
+        // Restore the correct password again for cleanup (delete).
         $sm->set('core', 'backup.password', 'Geheim!123');
     }
 
     /**
-     * Hält eine andere Operation den Lifecycle-Lock, darf `create()` keinen
-     * (DB↔Storage-inkonsistenten) Snapshot ohne Lock erstellen, sondern muss
-     * laut scheitern (B2). Der Lock wird hier über eine **eigene** DB-Sitzung
-     * gehalten, damit der nicht-blockierende `pg_try_advisory_lock` im Service
-     * tatsächlich `false` liefert.
+     * If another operation holds the lifecycle lock, `create()` must not produce
+     * a (DB-vs-storage inconsistent) snapshot without the lock, but must fail
+     * loudly (B2). The lock is held here via a **separate** DB session so that the
+     * non-blocking `pg_try_advisory_lock` in the service actually returns `false`.
      */
     public function testCreateAbortsWhenLifecycleLockHeld(): void
     {
@@ -136,8 +135,8 @@ class BackupRoundtripTest extends TestCase
         } finally {
             $holder->execute('SELECT pg_advisory_unlock(:k)', ['k' => self::LIFECYCLE_LOCK]);
             $this->dropSeparateConnection();
-            // Der fehlgeschlagene Lauf hinterlässt eine als 'failed' markierte
-            // Zeile (INSERT erfolgt vor dem Lock-Versuch) — aufräumen.
+            // The failed run leaves behind a row marked 'failed'
+            // (the INSERT happens before the lock attempt) — clean it up.
             $rows = ConnectionManager::get('default')
                 ->execute('SELECT id FROM backups WHERE note = :n', ['n' => $note])->fetchAll('assoc');
             foreach ($rows as $r) {
@@ -150,7 +149,7 @@ class BackupRoundtripTest extends TestCase
         }
     }
 
-    /** Eigene DB-Sitzung (zweite Connection) zum Halten des Advisory-Locks. */
+    /** Separate DB session (second connection) for holding the advisory lock. */
     private function separateConnection(): \Cake\Database\Connection
     {
         $this->holderConn = 'bk_lockholder';

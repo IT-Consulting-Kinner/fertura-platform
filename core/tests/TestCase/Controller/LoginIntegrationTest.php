@@ -8,9 +8,9 @@ use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
 
 /**
- * Integrationstest des lokalen Login-Pfads (Kap. 27.2.2) — verifiziert den
- * Form-Authenticator mit direkt konfiguriertem Password-Identifier (nicht mehr
- * das veraltete loadIdentifier()), Finder `active` und Argon2id-Hashing.
+ * Integration test of the local login path (ch. 27.2.2) — verifies the form
+ * authenticator with a directly configured password identifier (no longer the
+ * deprecated loadIdentifier()), the `active` finder, and Argon2id hashing.
  */
 class LoginIntegrationTest extends TestCase
 {
@@ -33,8 +33,8 @@ class LoginIntegrationTest extends TestCase
         $this->userId = (string)$row['id'];
         $this->enableCsrfToken();
         $this->enableRetainFlashMessages();
-        // Client-IP für den Anmeldeschutz (auth_failures.ip_address ist inet);
-        // im realen Betrieb immer durch REMOTE_ADDR gesetzt.
+        // Client IP for the login protection (auth_failures.ip_address is inet);
+        // in real operation always set via REMOTE_ADDR.
         $this->configRequest(['environment' => ['REMOTE_ADDR' => '127.0.0.1']]);
     }
 
@@ -48,8 +48,8 @@ class LoginIntegrationTest extends TestCase
     public function testValidLoginRedirects(): void
     {
         $this->post('/login', ['username' => $this->username, 'password' => self::PASSWORD]);
-        // Der Controller leitet NUR bei gültiger Authentifizierung um (302) ->
-        // beweist, dass Form-Authenticator + Identifier + Hasher greifen.
+        // The controller redirects ONLY on valid authentication (302) ->
+        // proves that form authenticator + identifier + hasher take effect.
         $this->assertResponseCode(302);
         $this->assertResponseNotContains('flash.auth.invalid');
     }
@@ -57,7 +57,7 @@ class LoginIntegrationTest extends TestCase
     public function testWrongPasswordDoesNotAuthenticate(): void
     {
         $this->post('/login', ['username' => $this->username, 'password' => 'falsch']);
-        // Fehlschlag -> Login-Seite wird neu gerendert (kein Redirect).
+        // Failure -> login page is re-rendered (no redirect).
         $this->assertResponseCode(200);
     }
 }

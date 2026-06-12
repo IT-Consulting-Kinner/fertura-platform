@@ -7,8 +7,8 @@ use App\Service\Privacy\AnonymizeContributorInterface;
 use Cake\Datasource\ConnectionManager;
 
 /**
- * Test-Beitrag zur Anonymisierung: bereinigt die Freitextspalte einer
- * Testtabelle (`public.ztest_anon_data`) für den gegebenen Benutzer.
+ * Test anonymization contributor: scrubs the free-text column of a test table
+ * (`public.ztest_anon_data`) for the given user.
  */
 class TestAnonymizeContributor implements AnonymizeContributorInterface
 {

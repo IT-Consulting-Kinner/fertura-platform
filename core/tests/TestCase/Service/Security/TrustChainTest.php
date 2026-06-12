@@ -12,10 +12,10 @@ use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\TestCase;
 
 /**
- * Integrationstest der Vertrauenskette (Kap. 24.9.2) gegen die Test-DB:
- * Root signiert Publisher-Zertifikat, Publisher signiert ein Paket. Geprüft
- * werden gültige Signatur, Manipulation, Widerruf und Gültigkeitsfenster —
- * der komplette echte Pfad über Signer/TrustStore/TrustChain/PackageVerifier.
+ * Integration test of the trust chain (ch. 24.9.2) against the test DB:
+ * the root signs a publisher certificate, the publisher signs a package. Covers
+ * valid signature, tampering, revocation, and validity window — the complete
+ * real path through Signer/TrustStore/TrustChain/PackageVerifier.
  */
 class TrustChainTest extends TestCase
 {
@@ -33,7 +33,7 @@ class TrustChainTest extends TestCase
         $this->rootId = 'ztest-root-' . $suffix;
         $this->pubId = 'ztest-pub-' . $suffix;
 
-        // Echte Ed25519-Schlüsselpaare.
+        // Real Ed25519 key pairs.
         $root = Signer::generateKeypair();
         $pub = Signer::generateKeypair();
         $this->rootSecret = $root['secret'];
@@ -42,10 +42,10 @@ class TrustChainTest extends TestCase
         $signer = new Signer();
         $trust = new TrustStore();
 
-        // Root-Anker (out-of-band vertraut).
+        // Root anchor (trusted out-of-band).
         $trust->addAnchor($this->rootId, $root['public'], 'root');
 
-        // Publisher-Zertifikat: Root signiert die kanonische Schlüsselaussage.
+        // Publisher certificate: the root signs the canonical key statement.
         $statement = TrustChain::keyStatement($this->pubId, $pub['public'], self::PUBLISHER);
         $keySignature = $signer->sign($statement, $this->rootSecret);
         $trust->addAnchor(
@@ -57,7 +57,7 @@ class TrustChainTest extends TestCase
             $keySignature,
         );
 
-        // Minimales Paketverzeichnis + Signatur über den Paket-Digest.
+        // Minimal package directory + signature over the package digest.
         $this->dir = sys_get_temp_dir() . '/fertura_trusttest_' . $suffix;
         mkdir($this->dir . '/src', 0o775, true);
         file_put_contents($this->dir . '/manifest.json', json_encode([
@@ -87,7 +87,7 @@ class TrustChainTest extends TestCase
 
     public function testTamperedContentRejected(): void
     {
-        // Code nach dem Signieren verändern -> Digest weicht ab.
+        // Modify the code after signing -> digest no longer matches.
         file_put_contents($this->dir . '/src/Code.php', "<?php // TAMPERED\n");
         $this->expectException(PackageVerificationException::class);
         $this->expectExceptionMessageMatches('/manipuliert|ungültig/i');
@@ -111,8 +111,8 @@ class TrustChainTest extends TestCase
 
     public function testRevokedRootBreaksChain(): void
     {
-        // Root-Widerruf entzieht nachträglich allen darunter signierten Paketen
-        // das Vertrauen (Defense-in-Depth, Kap. 24.9.2).
+        // Revoking the root retroactively withdraws trust from all packages signed
+        // beneath it (defense-in-depth, ch. 24.9.2).
         (new TrustStore())->revokeKey($this->rootId, 'Root kompromittiert');
         $this->expectException(PackageVerificationException::class);
         $this->expectExceptionMessageMatches('/Vertrauenskette|widerrufen/i');

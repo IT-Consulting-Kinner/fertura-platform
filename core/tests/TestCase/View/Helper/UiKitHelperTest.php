@@ -8,7 +8,7 @@ use Cake\View\View;
 use Cake\TestSuite\TestCase;
 
 /**
- * Test des Modul-UI-Kits (deklarative CRUD-Bausteine): Rendering + HTML-Escaping.
+ * Tests the module UI kit (declarative CRUD building blocks): rendering + HTML escaping.
  */
 class UiKitHelperTest extends TestCase
 {
@@ -34,10 +34,10 @@ class UiKitHelperTest extends TestCase
 
         $this->assertStringContainsString('<th scope="col">Name</th>', $html);
         $this->assertStringContainsString('Alpha', $html);
-        // XSS: Roh-HTML aus Daten muss escapt sein.
+        // XSS: raw HTML from data must be escaped.
         $this->assertStringNotContainsString('<script>x</script>', $html);
         $this->assertStringContainsString('&lt;script&gt;', $html);
-        // bool-Typ -> Badge.
+        // bool type -> badge.
         $this->assertStringContainsString('text-bg-success', $html);
         $this->assertStringContainsString('text-bg-secondary', $html);
     }
@@ -70,13 +70,13 @@ class UiKitHelperTest extends TestCase
 
     public function testSortHeaderTogglesDirection(): void
     {
-        // Aktuell nach 'name' aufsteigend -> Link schaltet auf desc, Pfeil hoch.
+        // Currently ascending by 'name' -> link switches to desc, arrow up.
         $asc = $this->ui->sortHeader('Name', 'name', ['sort' => 'name', 'dir' => 'asc'], '/admin/tenants');
         $this->assertStringContainsString('dir=desc', $asc);
         $this->assertStringContainsString('sort=name', $asc);
         $this->assertStringContainsString('↑', $asc);
 
-        // Andere Spalte -> default asc, kein Pfeil.
+        // Different column -> default asc, no arrow.
         $other = $this->ui->sortHeader('Schlüssel', 'key', ['sort' => 'name', 'dir' => 'asc'], '/admin/tenants');
         $this->assertStringContainsString('sort=key', $other);
         $this->assertStringContainsString('dir=asc', $other);
@@ -87,18 +87,18 @@ class UiKitHelperTest extends TestCase
     {
         $this->assertSame('', $this->ui->paginate(1, 20, 15, '/x'), 'eine Seite -> keine Paginierung');
 
-        $html = $this->ui->paginate(3, 10, 100, '/admin/tenants'); // 10 Seiten, aktuell 3
+        $html = $this->ui->paginate(3, 10, 100, '/admin/tenants'); // 10 pages, currently 3
         $this->assertStringContainsString('pagination', $html);
-        $this->assertStringContainsString('page=4', $html); // nächste
-        $this->assertStringContainsString('page=2', $html); // vorige
-        $this->assertStringContainsString('active', $html);  // aktuelle Seite markiert
+        $this->assertStringContainsString('page=4', $html); // next
+        $this->assertStringContainsString('page=2', $html); // previous
+        $this->assertStringContainsString('active', $html);  // current page marked
     }
 
     public function testSelectColumnAndBulkActions(): void
     {
         $rows = [['id' => 'a1', 'name' => 'Alpha'], ['id' => 'b2', 'name' => 'Beta']];
         $html = $this->ui->index($rows, [['key' => 'name', 'label' => 'Name']], ['select' => true, 'idKey' => 'id']);
-        // Auswahl-Checkboxen je Zeile mit der ID.
+        // Selection checkboxes per row carrying the ID.
         $this->assertStringContainsString('name="ids[]" value="a1"', $html);
         $this->assertStringContainsString('name="ids[]" value="b2"', $html);
 
@@ -108,7 +108,7 @@ class UiKitHelperTest extends TestCase
         ]);
         $this->assertStringContainsString('name="op" value="activate"', $bar);
         $this->assertStringContainsString('value="suspend"', $bar);
-        $this->assertStringContainsString('confirm(', $bar); // Confirm-Dialog
+        $this->assertStringContainsString('confirm(', $bar); // confirm dialog
     }
 
     public function testDetailRendersDefinitionList(): void

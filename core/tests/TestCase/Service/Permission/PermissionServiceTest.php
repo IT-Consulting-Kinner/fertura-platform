@@ -8,8 +8,8 @@ use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\TestCase;
 
 /**
- * Test der BREAD-Rechteprüfung mit **Deny-Regeln** (deny-wins): ein Verbot
- * überschreibt jede Erlaubnis — auch über Gruppen hinweg.
+ * Tests the BREAD permission check with **deny rules** (deny-wins): a denial
+ * overrides any grant — even across groups.
  */
 class PermissionServiceTest extends TestCase
 {

@@ -10,8 +10,8 @@ use Throwable;
 use function Cake\Core\env;
 
 /**
- * Test des Redis-Streams-Treibers (#10): push/reserve/ack über eine Consumer-Group.
- * Überspringt sauber, wenn kein Redis erreichbar ist (lokal ohne `redis`-Dienst).
+ * Test of the Redis Streams driver (#10): push/reserve/ack via a consumer group.
+ * Skips cleanly when no Redis is reachable (locally without the `redis` service).
  */
 class RedisStreamTransportTest extends TestCase
 {
@@ -55,7 +55,7 @@ class RedisStreamTransportTest extends TestCase
         $this->assertSame(42, $res[0]['payload']['n']);
 
         $t->ack($this->queue, $res[0]['id']);
-        // Nach ack liefert reserve keine neuen Einträge mehr.
+        // After ack, reserve no longer returns any new entries.
         $this->assertCount(0, $t->reserve($this->queue, 5));
     }
 

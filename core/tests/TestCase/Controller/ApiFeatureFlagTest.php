@@ -9,9 +9,9 @@ use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
 
 /**
- * Deployment-Feature-Flags (Kap. 23.3): die externe API lässt sich per
- * `FEATURE_API=false` abschalten — dann existieren keine `/api`-Routen mehr.
- * Zusätzlich weist `/health` die aktiven Flags aus.
+ * Deployment feature flags (ch. 23.3): the external API can be switched off via
+ * `FEATURE_API=false` — then no `/api` routes exist anymore. In addition,
+ * `/health` reports the active flags.
  */
 class ApiFeatureFlagTest extends TestCase
 {
@@ -21,14 +21,14 @@ class ApiFeatureFlagTest extends TestCase
     {
         putenv('FEATURE_API');
         unset($_ENV['FEATURE_API'], $_SERVER['FEATURE_API']);
-        Router::reload(); // Standard-Routen für nachfolgende Tests wiederherstellen
+        Router::reload(); // restore default routes for subsequent tests
         parent::tearDown();
     }
 
     public function testApiRouteExistsByDefault(): void
     {
         Router::reload();
-        // Ohne Token -> 401 vom ApiAuthMiddleware (Route existiert).
+        // Without a token -> 401 from ApiAuthMiddleware (route exists).
         $this->configRequest(['headers' => ['Accept' => 'application/json']]);
         $this->get('/api/v1/me');
         $this->assertResponseCode(401);
@@ -37,10 +37,10 @@ class ApiFeatureFlagTest extends TestCase
     public function testApiDisabledYields404(): void
     {
         putenv('FEATURE_API=false');
-        Router::reload(); // Routen mit gesetztem Flag neu aufbauen
+        Router::reload(); // rebuild routes with the flag set
         $this->configRequest(['headers' => ['Accept' => 'application/json']]);
         $this->get('/api/v1/me');
-        // Keine /api-Route mehr -> 404 (nicht 401).
+        // No more /api route -> 404 (not 401).
         $this->assertResponseCode(404);
     }
 

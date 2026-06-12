@@ -11,10 +11,10 @@ use Cake\TestSuite\TestCase;
 use RuntimeException;
 
 /**
- * Test der Sprachverwaltungs-Orchestrierung (i18n-6, E41/E42): Import
- * (Preview + Commit als unsigniertes Upload-Pack), verlustfreies Editieren
- * (edited=reviewed=true), Review, Lösch-Regeln (Englisch-Schutz bei aktiver
- * Komponente) und Übersichts-/Versions-Status (clean/notice/error).
+ * Tests the language-management orchestration (i18n-6, E41/E42): import
+ * (preview + commit as an unsigned upload pack), lossless editing
+ * (edited=reviewed=true), review, deletion rules (English protection while a
+ * component is active) and overview/version status (clean/notice/error).
  */
 class LanguagePackAdminTest extends TestCase
 {
@@ -73,18 +73,18 @@ class LanguagePackAdminTest extends TestCase
 
     public function testImportPreviewValidatesAndDetectsExisting(): void
     {
-        // Ungültig: kein msgid.
+        // Invalid: no msgid.
         $bad = $this->admin->importPreview($this->tmpPo('not a po file'), 'core', '1.0.0', 'xx_AA');
         $this->assertFalse($bad['ok']);
 
-        // Gültig, Ziel existiert noch nicht.
+        // Valid, target does not exist yet.
         $ok = $this->admin->importPreview($this->tmpPo(self::PO), 'core', '1.0.0', 'xx_AA');
         $this->assertTrue($ok['ok']);
         $this->assertSame(2, $ok['count']);
         $this->assertFalse($ok['exists']);
         $this->assertContains('t.greet', $ok['sample']);
 
-        // Nach Commit + Edit: exists + existing_edited.
+        // After commit + edit: exists + existing_edited.
         $this->admin->importCommit($this->tmpPo(self::PO), 'core', 'core', '1.0.0', 'xx_AA', 'default', null);
         $idx = $this->admin->entries('core', '1.0.0', 'xx_AA', 'default')[0]['index'];
         $this->admin->saveEntries('core', '1.0.0', 'xx_AA', 'default', [$idx => ['Servus']], null);
@@ -121,11 +121,11 @@ class LanguagePackAdminTest extends TestCase
 
         $after = $this->admin->entries('core', '1.0.0', 'xx_AC', 'default');
         $this->assertSame('Servus', $after[0]['msgstr'][0]);
-        $this->assertSame('Welt', $after[1]['msgstr'][0]); // unverändert (verlustfrei)
+        $this->assertSame('Welt', $after[1]['msgstr'][0]); // unchanged (lossless)
 
         $meta = $this->admin->meta('core', '1.0.0', 'xx_AC');
         $this->assertTrue((bool)$meta['edited']);
-        $this->assertTrue((bool)$meta['reviewed']); // Admin-Edit = Review (E38)
+        $this->assertTrue((bool)$meta['reviewed']); // admin edit = review (E38)
     }
 
     public function testReviewMarksWithoutContentChange(): void
@@ -135,17 +135,17 @@ class LanguagePackAdminTest extends TestCase
 
         $meta = $this->admin->meta('core', '1.0.0', 'xx_AD');
         $this->assertTrue((bool)$meta['reviewed']);
-        $this->assertFalse((bool)$meta['edited']); // Inhalt unangetastet
+        $this->assertFalse((bool)$meta['edited']); // content untouched
     }
 
     public function testDeleteRules(): void
     {
-        // Direkte Regel-Matrix (E41).
+        // Direct rule matrix (E41).
         $this->assertFalse($this->admin->mayDelete(true, 'en_US'));
         $this->assertTrue($this->admin->mayDelete(true, 'de_DE'));
         $this->assertTrue($this->admin->mayDelete(false, 'en_US'));
 
-        // Core ist immer aktiv -> en_US-Löschung wird abgewiesen (vor jedem I/O).
+        // Core is always active -> en_US deletion is rejected (before any I/O).
         $this->expectException(RuntimeException::class);
         $this->admin->deletePack('core', '1.0.0', 'en_US', 'default');
     }
@@ -162,7 +162,7 @@ class LanguagePackAdminTest extends TestCase
 
     public function testDeleteEnglishAllowedForRemovedComponent(): void
     {
-        // Komponente ohne modules-Zeile = entfernt/inaktiv -> Englisch löschbar.
+        // Component without a modules entry = removed/inactive -> English is deletable.
         $this->admin->importCommit($this->tmpPo(self::PO), 'module', 'zztestlpa_removed', '1.0.0', 'en_US', 'zztestlpa_removed', null);
         $this->admin->deletePack('zztestlpa_removed', '1.0.0', 'en_US', 'zztestlpa_removed');
         $this->assertNull($this->admin->meta('zztestlpa_removed', '1.0.0', 'en_US'));
@@ -170,8 +170,8 @@ class LanguagePackAdminTest extends TestCase
 
     public function testOverviewComputesVersionStatus(): void
     {
-        // Aktive Core-Version ist Application::CORE_VERSION (1.0.0):
-        // gleiche Version -> clean, gleiche Major -> notice, andere Major -> error.
+        // Active core version is Application::CORE_VERSION (1.0.0):
+        // same version -> clean, same major -> notice, different major -> error.
         $this->admin->importCommit($this->tmpPo(self::PO), 'core', 'core', Application::CORE_VERSION, 'xx_AF', 'default', null);
         $this->admin->importCommit($this->tmpPo(self::PO), 'core', 'core', '1.9.9', 'xx_AF', 'default', null);
         $this->admin->importCommit($this->tmpPo(self::PO), 'core', 'core', '3.0.0', 'xx_AF', 'default', null);
@@ -196,7 +196,7 @@ class LanguagePackAdminTest extends TestCase
         $this->assertSame('notice', $statusByVersion['1.9.9']);
         $this->assertSame('error', $statusByVersion['3.0.0']);
 
-        // en_US bei aktiver Komponente nicht löschbar, andere Locale schon.
+        // en_US is not deletable while the component is active, other locales are.
         foreach ($core['packs'] as $pack) {
             if ($pack['locale'] === 'xx_AF') {
                 $this->assertTrue($pack['deletable']);

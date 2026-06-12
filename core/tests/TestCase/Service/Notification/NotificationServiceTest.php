@@ -10,8 +10,8 @@ use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\TestCase;
 
 /**
- * Test des Benachrichtigungs-Frameworks (P09): In-App-Speicherung/-Lesen,
- * Kanal-Präferenzen (Abschalten), E-Mail-Kanal (Stub) und Modul-Kanal (Stub).
+ * Tests the notification framework (P09): in-app storage/reading, channel
+ * preferences (opt-out), the email channel (stub) and the module channel (stub).
  */
 class NotificationServiceTest extends TestCase
 {
@@ -57,8 +57,8 @@ class NotificationServiceTest extends TestCase
 
     public function testMarkReadIgnoresMalformedId(): void
     {
-        // Fehlgeformte ID aus der API-URL (POST /notifications/{id}/read):
-        // UUID-Guard -> no-op statt 22P02 ("invalid input syntax for type uuid").
+        // Malformed ID from the API URL (POST /notifications/{id}/read):
+        // UUID guard -> no-op instead of 22P02 ("invalid input syntax for type uuid").
         $svc = new NotificationService(null, new FakeMail());
         $svc->notify($this->userId, 'sys.test', 'Hallo');
 
@@ -100,7 +100,7 @@ class NotificationServiceTest extends TestCase
     }
 }
 
-/** MailService-Stub: zeichnet Versände auf, sendet nichts. */
+/** MailService stub: records sends, sends nothing. */
 class FakeMail extends MailService
 {
     /** @var list<array{to:string,subject:string,body:string}> */
@@ -114,7 +114,7 @@ class FakeMail extends MailService
     }
 }
 
-/** ContributionRuntime-Stub: ein Modul-Kanal `slack`, der Zustellungen aufzeichnet. */
+/** ContributionRuntime stub: a module channel `slack` that records deliveries. */
 class FakeRuntime extends ContributionRuntime
 {
     /** @var list<array<string,mixed>> */

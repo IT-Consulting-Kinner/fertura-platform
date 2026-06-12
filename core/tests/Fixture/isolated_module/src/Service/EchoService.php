@@ -6,8 +6,8 @@ namespace IsolatedModule\Service;
 use App\Service\Registry\ServiceInterface;
 
 /**
- * Service-only Anbieter für den Out-of-Process-Isolationstest. Läuft im
- * isolierten Modul-Host-Prozess (Kap. 23.16.2).
+ * Service-only provider for the out-of-process isolation test. Runs in the
+ * isolated module host process (ch. 23.16.2).
  */
 class EchoService implements ServiceInterface
 {

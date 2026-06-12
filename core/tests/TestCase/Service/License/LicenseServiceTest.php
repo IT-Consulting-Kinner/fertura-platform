@@ -11,10 +11,10 @@ use Cake\TestSuite\TestCase;
 use RuntimeException;
 
 /**
- * Test der Offline-first-Lizenzierung (Kap. 28.7, Entscheidung 158): Datei-
- * Validierung gegen die echte Vertrauenskette (Ed25519), Installation (Upsert)
- * und die evaluate()-Status-Matrix — valid / grace / expired / needs_online /
- * revoked / missing inkl. Online-Enforcement + recordOnlineCheck.
+ * Tests offline-first licensing (ch. 28.7, Decision 158): file validation
+ * against the real trust chain (Ed25519), installation (upsert) and the
+ * evaluate() status matrix — valid / grace / expired / needs_online /
+ * revoked / missing, including online enforcement + recordOnlineCheck.
  */
 class LicenseServiceTest extends TestCase
 {
@@ -70,22 +70,22 @@ class LicenseServiceTest extends TestCase
     {
         $service = new LicenseService();
 
-        // Gültig.
+        // Valid.
         $ok = $service->validateFile($this->licenseJson($this->payload()));
         $this->assertTrue($ok['ok']);
         $this->assertSame($this->keyId, $ok['key_id']);
 
-        // Strukturell kaputt.
+        // Structurally broken.
         $this->assertFalse($service->validateFile('{"nope":true}')['ok']);
 
-        // Manipulierter Payload -> Signatur ungültig.
+        // Tampered payload -> signature invalid.
         $json = json_decode($this->licenseJson($this->payload()), true);
         $json['payload']['module_ref'] = 'evil_module';
         $bad = $service->validateFile((string)json_encode($json));
         $this->assertFalse($bad['ok']);
         $this->assertStringContainsStringIgnoringCase('signatur', (string)$bad['reason']);
 
-        // Unbekannter Anker.
+        // Unknown anchor.
         $json = json_decode($this->licenseJson($this->payload()), true);
         $json['key_id'] = 'ztest-unknown-anchor';
         $this->assertFalse($service->validateFile((string)json_encode($json))['ok']);
@@ -96,7 +96,7 @@ class LicenseServiceTest extends TestCase
         $service = new LicenseService();
         $json = $this->licenseJson($this->payload());
 
-        // Anker abgelaufen -> abgelehnt (E45-Fenster gilt auch für Lizenzen).
+        // Anchor expired -> rejected (the E45 window applies to licenses too).
         ConnectionManager::get('default')->execute(
             "UPDATE trust_anchors SET valid_to = now() - interval '1 day' WHERE key_id = :k",
             ['k' => $this->keyId],
@@ -104,7 +104,7 @@ class LicenseServiceTest extends TestCase
         $expired = $service->validateFile($json);
         $this->assertFalse($expired['ok']);
 
-        // Widerrufener Schlüssel -> abgelehnt (greift vor allem anderen).
+        // Revoked key -> rejected (takes precedence over everything else).
         ConnectionManager::get('default')->execute(
             'UPDATE trust_anchors SET valid_to = NULL WHERE key_id = :k',
             ['k' => $this->keyId],
@@ -119,19 +119,19 @@ class LicenseServiceTest extends TestCase
     {
         $service = new LicenseService();
 
-        // Ohne module_ref -> Abbruch.
+        // Without module_ref -> abort.
         try {
             $service->install($this->licenseJson(['module_ref' => '', 'issuer' => 'x']));
             $this->fail('Erwartete RuntimeException (module_ref fehlt).');
         } catch (RuntimeException) {
-            // erwartet
+            // expected
         }
 
-        // Installation -> Status valid (unbegrenzte Gültigkeit).
+        // Installation -> status valid (unlimited validity).
         $first = $service->install($this->licenseJson($this->payload()));
         $this->assertSame('valid', $first['status']);
 
-        // Upsert: zweite Installation mit Ablauf in der Zukunft ersetzt die erste.
+        // Upsert: a second install with a future expiry replaces the first.
         $second = $service->install($this->licenseJson($this->payload([
             'valid_to' => date('c', time() + 30 * 86400),
         ])));
@@ -140,7 +140,7 @@ class LicenseServiceTest extends TestCase
             'SELECT count(*) AS c FROM licenses WHERE module_key = :k',
             ['k' => $this->moduleKey],
         )->fetch('assoc')['c'];
-        $this->assertSame(1, $count); // ein Datensatz je Modul (Upsert)
+        $this->assertSame(1, $count); // one record per module (upsert)
     }
 
     public function testEvaluateStatusMatrix(): void
@@ -148,23 +148,23 @@ class LicenseServiceTest extends TestCase
         $service = new LicenseService();
         $conn = ConnectionManager::get('default');
 
-        // missing: keine Lizenz vorhanden.
+        // missing: no license present.
         $this->assertSame('missing', $service->evaluate($this->moduleKey)['status']);
 
         $service->install($this->licenseJson($this->payload()));
         $this->assertSame('valid', $service->evaluate($this->moduleKey)['status']);
         $this->assertTrue($service->isValid($this->moduleKey));
 
-        // Abgelaufen MIT Karenzfenster -> grace (eingeschränkt gültig).
+        // Expired WITH a grace window -> grace (limited validity).
         $conn->execute(
             "UPDATE licenses SET valid_to = now() - interval '2 days', grace_window_days = 10 WHERE module_key = :k",
             ['k' => $this->moduleKey],
         );
         $grace = $service->evaluate($this->moduleKey);
         $this->assertSame('grace', $grace['status']);
-        $this->assertTrue($service->isValid($this->moduleKey)); // Aktivierung bleibt erlaubt
+        $this->assertTrue($service->isValid($this->moduleKey)); // activation remains allowed
 
-        // Abgelaufen JENSEITS des Karenzfensters -> expired.
+        // Expired BEYOND the grace window -> expired.
         $conn->execute(
             "UPDATE licenses SET valid_to = now() - interval '20 days', grace_window_days = 10 WHERE module_key = :k",
             ['k' => $this->moduleKey],
@@ -172,7 +172,7 @@ class LicenseServiceTest extends TestCase
         $this->assertSame('expired', $service->evaluate($this->moduleKey)['status']);
         $this->assertFalse($service->isValid($this->moduleKey));
 
-        // Widerruf des Signaturschlüssels -> revoked (unabhängig vom Zeitfenster).
+        // Revocation of the signing key -> revoked (independent of the time window).
         (new TrustStore())->revokeKey($this->keyId, 'Test');
         $this->assertSame('revoked', $service->evaluate($this->moduleKey)['status']);
     }
@@ -183,21 +183,21 @@ class LicenseServiceTest extends TestCase
         $conn = ConnectionManager::get('default');
         $service->install($this->licenseJson($this->payload(['online_enforcement' => true])));
 
-        // Nie online bestätigt -> needs_online.
+        // Never confirmed online -> needs_online.
         $this->assertSame('needs_online', $service->evaluate($this->moduleKey)['status']);
 
-        // Frische Bestätigung -> valid.
+        // Fresh confirmation -> valid.
         $service->recordOnlineCheck($this->moduleKey);
         $this->assertSame('valid', $service->evaluate($this->moduleKey)['status']);
 
-        // Bestätigung veraltet (älter als license.online_max_age_days=7) -> needs_online.
+        // Confirmation stale (older than license.online_max_age_days=7) -> needs_online.
         $conn->execute(
             "UPDATE licenses SET last_online_check = now() - interval '30 days' WHERE module_key = :k",
             ['k' => $this->moduleKey],
         );
         $this->assertSame('needs_online', $service->evaluate($this->moduleKey)['status']);
 
-        // Überfällige Online-Bestätigung INNERHALB des Karenzfensters -> grace.
+        // Overdue online confirmation WITHIN the grace window -> grace.
         $conn->execute(
             "UPDATE licenses SET valid_to = now() - interval '1 day', grace_window_days = 10 WHERE module_key = :k",
             ['k' => $this->moduleKey],

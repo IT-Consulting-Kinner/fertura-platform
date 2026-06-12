@@ -8,8 +8,9 @@ use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
 
 /**
- * Integrationstest der Trust-GUI (Vertrauensanker & Sperrliste, Kap. 24.9.2):
- * Anzeige, Widerruf (→ Sperrliste) und manuelles Hinzufügen eines Ankers.
+ * Integration test for the trust GUI (trust anchors & revocation list,
+ * ch. 24.9.2): display, revocation (→ revocation list), and manually adding an
+ * anchor.
  */
 class TrustControllerTest extends TestCase
 {
@@ -64,7 +65,7 @@ class TrustControllerTest extends TestCase
 
         $this->assertResponseOk();
         $this->assertResponseContains('zztest-root');
-        $this->assertResponseContains('scope="col"'); // A11y der Tabelle
+        $this->assertResponseContains('scope="col"'); // A11y of the table
     }
 
     public function testRevokeAddsToRevocationList(): void
@@ -94,7 +95,7 @@ class TrustControllerTest extends TestCase
         $this->assertNotFalse($row);
         $this->assertSame('root', $row['key_type']);
 
-        // Pflichtfeld fehlt (kein public_key) -> kein Datensatz.
+        // Required field missing (no public_key) -> no record.
         $this->post('/admin/trust/addAnchor', ['key_id' => 'zztest-incomplete', 'key_type' => 'root']);
         $this->assertFalse(ConnectionManager::get('default')->execute(
             "SELECT 1 FROM trust_anchors WHERE key_id = 'zztest-incomplete'",

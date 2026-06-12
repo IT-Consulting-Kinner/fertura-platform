@@ -21,7 +21,7 @@ class PoDocumentTest extends TestCase
 
     public function testParsesEntriesWithoutBlankLines(): void
     {
-        // Core-Kataloge trennen Einträge teils nicht durch Leerzeilen.
+        // Core catalogs sometimes do not separate entries with blank lines.
         $po = "msgid \"x\"\nmsgstr \"y\"\nmsgid \"p\"\nmsgstr \"q\"\n";
         $this->assertCount(2, PoDocument::parse($po)->editableEntries());
     }

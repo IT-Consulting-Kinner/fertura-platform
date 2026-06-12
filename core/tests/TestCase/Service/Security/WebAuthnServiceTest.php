@@ -10,11 +10,11 @@ use Cake\TestSuite\TestCase;
 use RuntimeException;
 
 /**
- * End-to-End-Test des abhängigkeitsfreien WebAuthn (Registrierung + Assertion)
- * mit einem ECHTEN EC-P-256-Schlüsselpaar (OpenSSL): kompletter Krypto-Pfad
- * (CBOR → COSE → PEM → Signaturprüfung) ohne Browser. Geprüft werden auch die
- * Fail-closed-Pfade: falsche Challenge/Origin/rpIdHash, manipulierte Signatur,
- * rückläufiger Sign-Counter (Klon-Erkennung).
+ * End-to-end test of the dependency-free WebAuthn (registration + assertion)
+ * with a REAL EC P-256 key pair (OpenSSL): the complete crypto path
+ * (CBOR → COSE → PEM → signature verification) without a browser. Also covers
+ * the fail-closed paths: wrong challenge/origin/rpIdHash, tampered signature,
+ * regressing sign counter (clone detection).
  */
 class WebAuthnServiceTest extends TestCase
 {
@@ -51,7 +51,7 @@ class WebAuthnServiceTest extends TestCase
         ConnectionManager::get('default')->execute("DELETE FROM users WHERE email LIKE '%@zzwa.local'");
     }
 
-    // ---- Browser-Simulation -----------------------------------------------------
+    // ---- Browser simulation -----------------------------------------------------
 
     private function clientDataJson(string $type, string $challenge, string $origin = self::ORIGIN): string
     {
@@ -67,8 +67,8 @@ class WebAuthnServiceTest extends TestCase
                 1 => 2, // kty EC2
                 3 => -7, // alg ES256
                 -1 => 1, // crv P-256
-                // EC-Rohkoordinaten links auf 32 Byte padden (openssl lässt eine
-                // führende Null ~1/256 weg → COSE-Key wäre 31 Byte und ungültig).
+                // Left-pad the raw EC coordinates to 32 bytes (openssl drops a
+                // leading zero ~1/256 of the time → the COSE key would be 31 bytes and invalid).
                 -2 => str_pad((string)$details['ec']['x'], 32, "\x00", STR_PAD_LEFT),
                 -3 => str_pad((string)$details['ec']['y'], 32, "\x00", STR_PAD_LEFT),
             ]);
@@ -131,7 +131,7 @@ class WebAuthnServiceTest extends TestCase
             $challenge,
             self::RP_ID,
         ));
-        // Counter persistiert.
+        // Counter persisted.
         $this->assertSame(5, (int)ConnectionManager::get('default')->execute(
             'SELECT sign_count FROM user_webauthn_credentials WHERE user_id = :u',
             ['u' => $this->userId],
@@ -148,7 +148,7 @@ class WebAuthnServiceTest extends TestCase
             $this->userId, WebAuthnService::b64uEncode($this->credentialId), $cd, $ad, $sig, $challenge, self::RP_ID,
         ));
 
-        // Klon-Verdacht: Zähler läuft rückwärts -> abgelehnt.
+        // Clone suspicion: counter runs backwards -> rejected.
         $challenge2 = WebAuthnService::challenge();
         [$cd2, $ad2, $sig2] = $this->assertion($challenge2, 7);
         $this->assertFalse($service->verifyAssertion(
@@ -165,17 +165,17 @@ class WebAuthnServiceTest extends TestCase
         $challenge = WebAuthnService::challenge();
         [$cd, $ad, $sig] = $this->assertion($challenge, 3);
 
-        // Manipulierte Signatur.
+        // Tampered signature.
         $bad = WebAuthnService::b64uEncode(strrev(WebAuthnService::b64uDecode($sig)));
         $this->assertFalse($service->verifyAssertion($this->userId, $credId, $cd, $ad, $bad, $challenge, self::RP_ID));
 
-        // Falsche Challenge.
+        // Wrong challenge.
         $this->assertFalse($service->verifyAssertion($this->userId, $credId, $cd, $ad, $sig, WebAuthnService::challenge(), self::RP_ID));
 
-        // Falsche rpId (rpIdHash passt nicht).
+        // Wrong rpId (rpIdHash does not match).
         $this->assertFalse($service->verifyAssertion($this->userId, $credId, $cd, $ad, $sig, $challenge, 'evil.example'));
 
-        // Unbekannte Credential-ID.
+        // Unknown credential ID.
         $this->assertFalse($service->verifyAssertion($this->userId, WebAuthnService::b64uEncode('nope'), $cd, $ad, $sig, $challenge, self::RP_ID));
     }
 
@@ -187,7 +187,7 @@ class WebAuthnServiceTest extends TestCase
             'fmt' => 'none', 'attStmt' => [], 'authData' => $this->authData(0x41, 0, true),
         ]));
 
-        // Fremde Origin.
+        // Foreign origin.
         try {
             $service->register(
                 $this->userId,
@@ -198,10 +198,10 @@ class WebAuthnServiceTest extends TestCase
             );
             $this->fail('Fremde Origin muss abgewiesen werden.');
         } catch (RuntimeException) {
-            // erwartet
+            // expected
         }
 
-        // Falsche Challenge.
+        // Wrong challenge.
         $this->expectException(RuntimeException::class);
         $service->register(
             $this->userId,

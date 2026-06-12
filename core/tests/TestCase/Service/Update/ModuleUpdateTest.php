@@ -12,12 +12,11 @@ use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\TestCase;
 
 /**
- * Integrationstest des Modul-Update-Pfads (Kap. 24.13/28.14.2, Review-Punkt 3):
- * Migrationsvorschau, Anwenden neuer Migrationen mit Wiederherstellungspunkt
- * (nur bei ausstehenden Migrationen), Downgrade-Schutz und — entscheidend — die
- * **Rollback-Kaskade über Down-Migrationen**, die bei einem fehlgeschlagenen
- * Update auf den alten Stand zurücksetzt, ohne bereits installierte Daten zu
- * zerstören.
+ * Integration test of the module update path (ch. 24.13/28.14.2, review point 3):
+ * migration preview, applying new migrations with a recovery point (only when
+ * migrations are pending), downgrade protection, and — crucially — the
+ * **rollback cascade over down-migrations** that reverts a failed update to the
+ * previous state without destroying already-installed data.
  *
  * @group slow
  */
@@ -52,7 +51,7 @@ class ModuleUpdateTest extends TestCase
             '002_bad.sql' => "THIS IS NOT VALID SQL AT ALL;\n-- @DOWN\n",
         ]);
 
-        // Wiederherstellungspunkt für den Test stubben (kein realer pg_dump).
+        // Stub the recovery point for the test (no real pg_dump).
         $this->recovery = new class extends RecoveryPoint {
             /** @var list<string> */
             public array $calls = [];
@@ -70,7 +69,7 @@ class ModuleUpdateTest extends TestCase
     {
         $this->cleanup();
         (new SettingsManager())->set('core', 'require_module_signature', $this->prevSig);
-        $this->rrmdir(dirname($this->v1)); // base
+        $this->rrmdir(dirname($this->v1)); // base directory
         parent::tearDown();
     }
 
@@ -109,14 +108,14 @@ class ModuleUpdateTest extends TestCase
         $result = $this->manager()->updateModule(self::KEY, $this->v2);
 
         $this->assertSame('1.1.0', $result['version']);
-        // Neue Migration angewendet -> Spalte qty existiert.
+        // New migration applied -> column qty exists.
         $col = ConnectionManager::get('default')->execute(
             "SELECT 1 FROM information_schema.columns WHERE table_schema='mod_ztest_upd' AND table_name='widget' AND column_name='qty'",
         )->fetch();
         $this->assertNotFalse($col, 'Spalte qty muss durch die Update-Migration entstanden sein.');
-        // Wiederherstellungspunkt wurde erstellt (es gab ausstehende Migrationen).
+        // A recovery point was created (there were pending migrations).
         $this->assertContains('update_module_ztest_upd', $this->recovery->calls);
-        // Historie protokolliert den Erfolg.
+        // The history logs the success.
         $hist = ConnectionManager::get('default')->execute(
             "SELECT result FROM update_history WHERE component_key='ztest_upd' ORDER BY executed_at DESC LIMIT 1",
         )->fetch('assoc');
@@ -126,7 +125,7 @@ class ModuleUpdateTest extends TestCase
     public function testUpdateWithoutPendingMigrationsSkipsRecoveryPoint(): void
     {
         (new ModuleLifecycle())->install($this->v1);
-        // Gleiche Migration (001), nur Versionssprung -> nichts auszuführen.
+        // Same migration (001), only a version bump -> nothing to execute.
         $v1patch = $this->buildModule(dirname($this->v1) . '/v1patch', '1.0.1', [
             '001_init.sql' => "CREATE TABLE widget (id uuid NOT NULL DEFAULT core.uuid_generate_v7() PRIMARY KEY, name text);\n-- @DOWN\nDROP TABLE widget;\n",
         ]);
@@ -138,7 +137,7 @@ class ModuleUpdateTest extends TestCase
     public function testFailedUpdateRollsBackVersionAndPreservesInstalledData(): void
     {
         (new ModuleLifecycle())->install($this->v1);
-        // Bestehende Daten vor dem Update.
+        // Existing data before the update.
         ConnectionManager::get('default')->execute("INSERT INTO mod_ztest_upd.widget (name) VALUES ('vorhanden')");
 
         try {
@@ -149,16 +148,16 @@ class ModuleUpdateTest extends TestCase
         }
 
         $conn = ConnectionManager::get('default');
-        // Version zurückgerollt.
+        // Version rolled back.
         $ver = $conn->execute("SELECT version FROM modules WHERE module_key='ztest_upd'")->fetch('assoc');
         $this->assertSame('1.0.0', $ver['version'] ?? null);
-        // Beim Install angewendete Migration (001) wurde NICHT zurückgerollt ->
-        // Tabelle + Daten bleiben erhalten (korrekte, eng begrenzte Rollback-Kaskade).
+        // The migration applied during install (001) was NOT rolled back ->
+        // table + data are preserved (correct, tightly scoped rollback cascade).
         $row = $conn->execute("SELECT name FROM mod_ztest_upd.widget WHERE name='vorhanden'")->fetch('assoc');
         $this->assertSame('vorhanden', $row['name'] ?? null);
     }
 
-    // ---- Helfer -------------------------------------------------------------
+    // ---- Helpers ------------------------------------------------------------
 
     private function buildModule(string $dir, string $version, array $migrations): string
     {

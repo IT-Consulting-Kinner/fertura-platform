@@ -7,9 +7,9 @@ use App\Service\Schedule\ScheduledTaskInterface;
 use Cake\Datasource\ConnectionManager;
 
 /**
- * Periodische Aufgabe des isolierten Moduls (Phase 3): schreibt bei jedem Lauf
- * einen Marker in die eigene Tabelle — läuft im isolierten Host über die
- * Modul-Rolle (Kap. 23.16.2).
+ * Periodic task of the isolated module (phase 3): writes a marker into its own
+ * table on every run — runs in the isolated host under the module role
+ * (ch. 23.16.2).
  */
 class PingTask implements ScheduledTaskInterface
 {
@@ -20,7 +20,7 @@ class PingTask implements ScheduledTaskInterface
 
     public function intervalSeconds(): int
     {
-        return 0; // im Test immer fällig
+        return 0; // always due in the test
     }
 
     public function run(): void

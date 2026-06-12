@@ -57,18 +57,18 @@ ConnectionHelper::addTestAliases();
 // use Cake\TestSuite\Fixture\SchemaLoader;
 // (new SchemaLoader())->loadSqlFiles('./tests/schema.sql', 'test');
 
-// `skip`: Die Default-Partitionen der partitionierten Tabellen (`audit_log` und
-// `event_outbox`) sind Kinder ihres jeweiligen Parents; sie direkt zu droppen
-// scheitert (sie hängen am Parent). Beim Drop des Parents fallen sie ohnehin mit
-// – also beim Rebuild auslassen, damit das Hinzufügen einer Migration kein
-// manuelles `DROP DATABASE` erfordert.
+// `skip`: The default partitions of the partitioned tables (`audit_log` and
+// `event_outbox`) are children of their respective parent; dropping them directly
+// fails (they are attached to the parent). They are dropped along with the parent
+// anyway — so skip them on rebuild, so that adding a migration does not require a
+// manual `DROP DATABASE`.
 (new Migrator())->run(['skip' => ['audit_log_default', 'event_outbox_default']]);
 
-// Der Migrator truncatet nach dem Schema-Aufbau alle Tabellen — der per Migration
-// geseedete **Default-Mandant** (System-Invariante; in Prod vorhanden) fällt dabei
-// weg. Ohne ihn schlägt jeder `users`-INSERT an der `tenant_id`-FK fehl. Hier
-// idempotent wiederherstellen, damit die Testumgebung dem Produktionszustand
-// entspricht (vgl. Migration CoreTenancy).
+// After building the schema the migrator truncates all tables — the
+// migration-seeded **default tenant** (a system invariant; present in prod) is
+// removed in the process. Without it every `users` INSERT fails on the
+// `tenant_id` FK. Restore it idempotently here so the test environment matches the
+// production state (cf. migration CoreTenancy).
 try {
     \Cake\Datasource\ConnectionManager::get('default')->execute(
         "INSERT INTO tenants (id, key, name) "
@@ -78,12 +78,12 @@ try {
 } catch (\Throwable) {
 }
 
-// Settings-/App-Cache (P02) vor dem Lauf leeren: der Migrator truncatet die
-// Seed-Daten, ein evtl. persistenter Datei-Cache aus einem früheren Lauf wäre
-// sonst stale. Innerhalb eines Laufs invalidiert SettingsManager::set() gezielt.
-// `_cake_model_`: ORM-Metadaten-Cache leeren, damit Schema-Änderungen (z. B. neue
-// Spalten aus einer hinzugefügten Migration) über Läufe hinweg sicher greifen —
-// sonst ignoriert die ORM-Schicht neue Spalten bei INSERT/UPDATE (gecachtes Schema).
+// Clear the settings/app cache (P02) before the run: the migrator truncates the
+// seed data, so a possibly persistent file cache from an earlier run would
+// otherwise be stale. Within a run SettingsManager::set() invalidates selectively.
+// `_cake_model_`: clear the ORM metadata cache so that schema changes (e.g. new
+// columns from an added migration) reliably take effect across runs — otherwise
+// the ORM layer ignores new columns on INSERT/UPDATE (cached schema).
 foreach (['_app_settings_', '_app_', '_cake_model_'] as $cacheConfig) {
     try {
         \Cake\Cache\Cache::clear($cacheConfig);

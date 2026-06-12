@@ -81,7 +81,7 @@ class ApplicationTest extends TestCase
             $classes[] = $queue->current()::class;
         }
 
-        // LogContext ist outermost, damit auch ErrorHandler-Logs den Kontext tragen.
+        // LogContext is outermost so that ErrorHandler logs also carry the context.
         $this->assertSame(\App\Middleware\LogContextMiddleware::class, $classes[0]);
         $this->assertContains(ErrorHandlerMiddleware::class, $classes);
         $this->assertContains(RoutingMiddleware::class, $classes);
@@ -91,9 +91,9 @@ class ApplicationTest extends TestCase
         $api = $idx(\App\Middleware\ApiAuthMiddleware::class);
         $rls = $idx(\App\Middleware\TransactionRlsMiddleware::class);
         $this->assertNotFalse($auth);
-        // API-Token-Auth nach der Session-Auth (Token-Identität hat Vorrang).
+        // API token auth after session auth (token identity takes precedence).
         $this->assertGreaterThan($auth, $api);
-        // RLS-Transaktion (SET LOCAL) nach der Authentifizierung.
+        // RLS transaction (SET LOCAL) after authentication.
         $this->assertGreaterThan($auth, $rls);
     }
 }

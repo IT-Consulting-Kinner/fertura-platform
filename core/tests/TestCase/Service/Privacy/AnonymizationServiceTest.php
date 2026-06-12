@@ -9,11 +9,10 @@ use Cake\ORM\Locator\LocatorAwareTrait;
 use Cake\TestSuite\TestCase;
 
 /**
- * Integrationstest des Anonymisierungs-Hooks (Kap. 27.15.3): Module bereinigen
- * über den Core-Collector `core.collector.anonymize` ihre eigenen
- * personenbezogenen Daten zu einem Benutzer — in derselben Transaktion wie die
- * Core-Anonymisierung. Prüft Direktaufruf und den End-to-End-Pfad über
- * UsersTable::anonymize.
+ * Integration test for the anonymization hook (ch. 27.15.3): modules scrub their
+ * own personal data for a user via the core collector `core.collector.anonymize`
+ * — within the same transaction as the core anonymization. Covers the direct
+ * call and the end-to-end path through UsersTable::anonymize.
  */
 class AnonymizationServiceTest extends TestCase
 {
@@ -27,17 +26,17 @@ class AnonymizationServiceTest extends TestCase
     {
         parent::setUp();
         $conn = ConnectionManager::get('default');
-        // Modul-Testtabelle mit PII zweier Benutzer.
+        // Module test table holding PII for two users.
         $conn->execute('DROP TABLE IF EXISTS public.ztest_anon_data');
         $conn->execute('CREATE TABLE public.ztest_anon_data (id serial PRIMARY KEY, owner_id uuid, secret text)');
         $conn->execute("INSERT INTO public.ztest_anon_data (owner_id, secret) VALUES (:a, 'Klarname A'), (:a, 'Notiz A'), (:b, 'Klarname B')", ['a' => self::TARGET, 'b' => self::OTHER]);
-        // Der Core-Contract wird per Migration geseedet, aber der Test-Migrator
-        // truncatet Seed-Daten -> hier sicherstellen.
+        // The core contract is seeded by a migration, but the test migrator
+        // truncates seed data -> ensure it exists here.
         $conn->execute(
             "INSERT INTO contracts (owner_module_key, name, contract_type, version, multi_use, active) "
             . "VALUES ('core', 'core.collector.anonymize', 'collector', '1.0.0', true, true) ON CONFLICT (name) DO NOTHING",
         );
-        // Beitrag für core.collector.anonymize registrieren (module_key ist nur Text).
+        // Register a contribution for core.collector.anonymize (module_key is just text).
         $cid = $conn->execute("SELECT id FROM contracts WHERE name = 'core.collector.anonymize'")->fetch('assoc');
         $conn->execute(
             'INSERT INTO contract_registrations (contract_id, module_key, registration_type, implementation_class, active) '
@@ -60,10 +59,10 @@ class AnonymizationServiceTest extends TestCase
         $scrubbed = $conn->transactional(fn () => (new AnonymizationService())->run(self::TARGET, $conn));
 
         $this->assertSame(2, $scrubbed, 'Beide PII-Zeilen des Zielnutzers müssen bereinigt sein.');
-        // Zielnutzer bereinigt ...
+        // Target user scrubbed ...
         $target = $conn->execute("SELECT count(*) c FROM public.ztest_anon_data WHERE owner_id = :u AND secret = '[anonymisiert]'", ['u' => self::TARGET])->fetch('assoc');
         $this->assertSame(2, (int)$target['c']);
-        // ... anderer Benutzer unberührt.
+        // ... other user untouched.
         $other = $conn->execute("SELECT secret FROM public.ztest_anon_data WHERE owner_id = :u", ['u' => self::OTHER])->fetch('assoc');
         $this->assertSame('Klarname B', $other['secret']);
     }
@@ -82,7 +81,7 @@ class AnonymizationServiceTest extends TestCase
     public function testEndToEndViaUsersTableAnonymize(): void
     {
         $conn = ConnectionManager::get('default');
-        // Echten Benutzer anlegen, dessen UUID auf die PII-Zeilen zeigt.
+        // Create a real user whose UUID points at the PII rows.
         $row = $conn->execute(
             "INSERT INTO users (username, email, status) VALUES (:u, :e, 'active') RETURNING id",
             ['u' => 'anon_e2e_' . bin2hex(random_bytes(4)), 'e' => 'anon_e2e@invalid.local'],
@@ -95,10 +94,10 @@ class AnonymizationServiceTest extends TestCase
             $user = $users->get($userId);
             $this->assertTrue($users->anonymize($user));
 
-            // Core-Benutzer anonymisiert ...
+            // Core user anonymized ...
             $u = $conn->execute('SELECT status, email FROM users WHERE id = :id', ['id' => $userId])->fetch('assoc');
             $this->assertSame('anonymized', $u['status']);
-            // ... und die Modul-PII des Benutzers bereinigt.
+            // ... and the user's module PII scrubbed.
             $m = $conn->execute("SELECT secret FROM public.ztest_anon_data WHERE owner_id = :u", ['u' => $userId])->fetch('assoc');
             $this->assertSame('[anonymisiert]', $m['secret']);
         } finally {

@@ -7,8 +7,8 @@ use App\Service\Update\RecoveryPoint;
 use Cake\TestSuite\TestCase;
 
 /**
- * Wiederherstellungspunkte (Kap. 28.14.2): liegen auf dem persistenten
- * Backup-Volume (überleben Recreate), nicht im flüchtigen tmp/.
+ * Recovery points (ch. 28.14.2): reside on the persistent backup volume
+ * (survive a recreate), not in the ephemeral tmp/.
  */
 class RecoveryPointTest extends TestCase
 {

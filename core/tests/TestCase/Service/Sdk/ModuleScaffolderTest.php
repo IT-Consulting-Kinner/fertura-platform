@@ -8,7 +8,7 @@ use App\Service\Sdk\ModuleScaffolder;
 use Cake\TestSuite\TestCase;
 
 /**
- * Test des Modul-Scaffolders (P16): das Gerüst besteht den Linter sauber.
+ * Test of the module scaffolder (P16): the generated skeleton passes the linter cleanly.
  */
 class ModuleScaffolderTest extends TestCase
 {

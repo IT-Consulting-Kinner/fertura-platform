@@ -8,8 +8,8 @@ use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\TestCase;
 
 /**
- * Test des DB-Treibers für den Job-Queue-Transport (#10): push/reserve/ack/
- * release/size mit `FOR UPDATE SKIP LOCKED`.
+ * Test of the DB driver for the job-queue transport (#10): push/reserve/ack/
+ * release/size using `FOR UPDATE SKIP LOCKED`.
  */
 class DbQueueTransportTest extends TestCase
 {
@@ -30,11 +30,11 @@ class DbQueueTransportTest extends TestCase
             $this->assertSame(1, $res[0]['payload']['n']);
             $this->assertSame(1, $t->size('zzq'), 'einer reserviert -> einer bereit');
 
-            $t->ack('zzq', $res[0]['id']); // endgültig weg
+            $t->ack('zzq', $res[0]['id']); // permanently removed
 
             $res2 = $t->reserve('zzq', 5);
             $this->assertCount(1, $res2);
-            $t->release('zzq', $res2[0]['id']); // zurück auf bereit
+            $t->release('zzq', $res2[0]['id']); // back to ready
             $this->assertSame(1, $t->size('zzq'));
         } finally {
             $conn->rollback();

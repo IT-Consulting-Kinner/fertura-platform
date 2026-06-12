@@ -7,7 +7,7 @@ use App\Service\Api\ApiRouteRegistry;
 use Cake\TestSuite\TestCase;
 
 /**
- * Test des Pfad-Matchings für Modul-API-Routen (P07).
+ * Tests path matching for module API routes (P07).
  */
 class ApiRouteRegistryTest extends TestCase
 {
@@ -34,10 +34,10 @@ class ApiRouteRegistryTest extends TestCase
 
     public function testDuplicatePlaceholderNameIsRejectedCleanly(): void
     {
-        // Doppelter Platzhaltername -> ungültiges PCRE; muss sauber als
-        // Nichttreffer (null) behandelt werden, ohne Fatal/Warnung pro Request.
+        // Duplicate placeholder name -> invalid PCRE; must be handled cleanly as
+        // a non-match (null), without a fatal/warning per request.
         $this->assertNull(ApiRouteRegistry::matchPath('/a/{id}/b/{id}', '/a/1/b/2'));
-        // Eindeutige Namen funktionieren weiterhin.
+        // Unique names still work.
         $this->assertSame(['id' => '1', 'sub' => '2'], ApiRouteRegistry::matchPath('/a/{id}/b/{sub}', '/a/1/b/2'));
     }
 }

@@ -6,8 +6,8 @@ namespace SampleModule\Service;
 use App\Service\Registry\ServiceInterface;
 
 /**
- * Implementierung des öffentlichen Modul-Interfaces sample_module.service.echo
- * (Service-Contract, Kap. 29). Gibt die Eingabe strukturiert zurück.
+ * Implementation of the public module interface sample_module.service.echo
+ * (service contract, ch. 29). Returns the input in structured form.
  */
 class EchoService implements ServiceInterface
 {

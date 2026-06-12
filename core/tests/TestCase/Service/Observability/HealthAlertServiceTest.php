@@ -12,8 +12,8 @@ use App\Service\Settings\SettingsManager;
 use Cake\TestSuite\TestCase;
 
 /**
- * Test des Health-Alert-Hooks (#12): Webhook nur bei **Statuswechsel**, signiert,
- * über den Egress (gestubbt).
+ * Tests the health alert hook (#12): webhook only on a **status transition**,
+ * signed, sent through the egress (stubbed).
  */
 class HealthAlertServiceTest extends TestCase
 {
@@ -72,16 +72,16 @@ class HealthAlertServiceTest extends TestCase
         try {
             $svc = new HealthAlertService($health, $egress, $settings, $cache);
 
-            // up -> degraded: Alarm.
+            // up -> degraded: alert.
             $this->assertTrue($svc->check());
             $this->assertSame(1, $egress->posts);
             $this->assertStringContainsString('"status":"degraded"', $egress->lastBody);
 
-            // weiterhin degraded -> KEIN erneuter Alarm.
+            // still degraded -> NO repeated alert.
             $this->assertFalse($svc->check());
             $this->assertSame(1, $egress->posts);
 
-            // Erholung degraded -> up: Alarm.
+            // Recovery degraded -> up: alert.
             $health->st = 'up';
             $this->assertTrue($svc->check());
             $this->assertSame(2, $egress->posts);

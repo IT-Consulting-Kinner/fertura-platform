@@ -7,8 +7,8 @@ use App\Service\Auth\Sso\SamlProvider;
 use Cake\TestSuite\TestCase;
 
 /**
- * Test der SAML-Glue (P06): Settings-Aufbau aus der Provider-Konfig und
- * Attribut-Auflösung (die signaturbasierte ACS-Prüfung übernimmt onelogin).
+ * Tests the SAML glue (P06): settings construction from the provider config and
+ * attribute resolution (the signature-based ACS check is handled by onelogin).
  */
 class SamlProviderTest extends TestCase
 {
@@ -51,8 +51,8 @@ class SamlProviderTest extends TestCase
 
     public function testRejectsUnsolicitedResponsesWithInResponseTo(): void
     {
-        // Replay-Härtung: unaufgeforderte Antworten mit InResponseTo werden
-        // abgelehnt; SP-initiierte Antworten bindet processAcs() an die Request-ID.
+        // Replay hardening: unsolicited responses carrying InResponseTo are
+        // rejected; processAcs() binds SP-initiated responses to the request ID.
         $s = (new SamlProvider())->settings(['config' => ['idp_entity_id' => 'i']], 'https://sp/acs', 'https://sp/meta');
         $this->assertTrue($s['security']['rejectUnsolicitedResponsesWithInResponseTo']);
     }

@@ -8,9 +8,9 @@ use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
 
 /**
- * Integrationstest der Gruppen-Admin-GUI (Administrationsbereich
- * `user_group_admin`): Liste, Anlegen (inkl. Validierung), Detail, Aktiv-Schalter,
- * Mitgliedschaft und BREAD-Rechtevergabe/-entzug im echten Render + DB-Effekt.
+ * Integration test for the groups admin GUI (admin area `user_group_admin`):
+ * list, create (incl. validation), detail, active toggle, membership, and
+ * granting/revoking BREAD permissions through the real render + DB effect.
  */
 class GroupsControllerTest extends TestCase
 {
@@ -51,7 +51,7 @@ class GroupsControllerTest extends TestCase
     private function cleanup(): void
     {
         $conn = ConnectionManager::get('default');
-        // Rechte/Mitgliedschaften der Test-Gruppen zuerst (FK), dann Gruppen/Benutzer.
+        // Permissions/memberships of the test groups first (FK), then groups/users.
         $conn->execute(
             'DELETE FROM group_resource_permissions WHERE group_id IN '
             . "(SELECT id FROM \"groups\" WHERE name LIKE 'zztest-grp-%')",
@@ -87,7 +87,7 @@ class GroupsControllerTest extends TestCase
 
         $this->assertResponseOk();
         $this->assertResponseContains('zztest-grp-idx-');
-        $this->assertResponseContains('scope="col"'); // A11y der handgebauten Tabelle
+        $this->assertResponseContains('scope="col"'); // A11y of the hand-built table
     }
 
     public function testAddCreatesGroupAndRedirects(): void
@@ -112,7 +112,7 @@ class GroupsControllerTest extends TestCase
         $before = $this->countGroups();
         $this->post('/admin/groups/add', ['name' => '   ', 'description' => 'x']);
 
-        $this->assertResponseOk(); // kein Redirect: Formular mit Fehler
+        $this->assertResponseOk(); // no redirect: form with error
         $this->assertSame($before, $this->countGroups());
     }
 
@@ -125,7 +125,7 @@ class GroupsControllerTest extends TestCase
 
     public function testMalformedIdsRedirectInsteadOf500(): void
     {
-        // Fehlgeformte UUID in URL/Formular: UUID-Guard -> Redirect statt
+        // Malformed UUID in URL/form: UUID guard -> redirect instead of
         // 22P02 ("invalid input syntax for type uuid") -> 500.
         $gid = $this->makeGroup('uuid-');
         $this->login();
@@ -142,7 +142,7 @@ class GroupsControllerTest extends TestCase
         $this->post('/admin/groups/removeMember/' . $gid . '/garbage');
         $this->assertRedirect(['action' => 'index']);
 
-        // Fehlgeformte Benutzer-ID im Formular: kein Insert, kein 500.
+        // Malformed user ID in the form: no insert, no 500.
         $this->post('/admin/groups/addMember/' . $gid, ['user_id' => 'garbage']);
         $this->assertRedirect(['action' => 'view', $gid]);
         $this->assertSame(0, $this->memberCount($gid));
@@ -159,7 +159,7 @@ class GroupsControllerTest extends TestCase
         $this->get('/admin/groups/view/' . $gid);
 
         $this->assertResponseOk();
-        $this->assertResponseContains('zztest_member_'); // Mitglied gelistet
+        $this->assertResponseContains('zztest_member_'); // member listed
     }
 
     public function testSetActiveTogglesFlag(): void
@@ -191,7 +191,7 @@ class GroupsControllerTest extends TestCase
         $gid = $this->makeGroup('perm-');
         $this->login();
 
-        // Grant: BREAD read+browse auf eine Objektklasse.
+        // Grant: BREAD read+browse on an object class.
         $this->post('/admin/groups/setPermission/' . $gid, [
             'resource' => 'core::doc',
             'resource_key' => '',
@@ -200,7 +200,7 @@ class GroupsControllerTest extends TestCase
         ]);
         $this->assertSame(1, $this->permCount($gid));
 
-        // Revoke: alle Häkchen aus -> Eintrag entfernt.
+        // Revoke: all checkboxes off -> entry removed.
         $this->post('/admin/groups/setPermission/' . $gid, [
             'resource' => 'core::doc',
             'resource_key' => '',

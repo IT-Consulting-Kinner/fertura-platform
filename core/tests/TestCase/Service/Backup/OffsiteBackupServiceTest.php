@@ -10,8 +10,8 @@ use League\Flysystem\Filesystem;
 use League\Flysystem\Local\LocalFilesystemAdapter;
 
 /**
- * Test der Off-Site-Backup-Ablage (P14) gegen einen lokalen Storage-Adapter
- * (stellvertretend für S3): Upload, Auflistung, Download.
+ * Test of off-site backup storage (P14) against a local storage adapter
+ * (standing in for S3): upload, listing, download.
  */
 class OffsiteBackupServiceTest extends TestCase
 {

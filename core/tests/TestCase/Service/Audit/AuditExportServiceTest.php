@@ -10,10 +10,10 @@ use Cake\Log\Log;
 use Cake\TestSuite\TestCase;
 
 /**
- * Test des Audit-Export-Streams (Punkt 3b): Keyset-Streaming über den
- * Zeitbereich, korrekte Filter (action/entity_type/from/to) und das Parsen der
- * jsonb-Wertschnappschüsse. Zusätzlich (Punkt 3a): der AuditLogger spiegelt
- * jedes Ereignis auf den `audit`-Log-Kanal mit strukturiertem `audit`-Feld.
+ * Tests the audit export stream (item 3b): keyset streaming across the time
+ * range, correct filters (action/entity_type/from/to) and parsing of the jsonb
+ * value snapshots. Additionally (item 3a): the AuditLogger mirrors every event
+ * to the `audit` log channel with a structured `audit` field.
  */
 class AuditExportServiceTest extends TestCase
 {
@@ -31,8 +31,8 @@ class AuditExportServiceTest extends TestCase
 
     private function cleanup(): void
     {
-        // audit_log ist append-only (Trigger); Test-Bereinigung über den
-        // dokumentierten Bypass (nur in einer Transaktion via SET LOCAL).
+        // audit_log is append-only (trigger); test cleanup goes through the
+        // documented bypass (only within a transaction via SET LOCAL).
         $conn = ConnectionManager::get('default');
         $conn->begin();
         $conn->execute("SET LOCAL app.allow_audit_mutation = 'on'");
@@ -57,14 +57,14 @@ class AuditExportServiceTest extends TestCase
         $svc = new AuditExportService();
         $alpha = iterator_to_array($svc->stream(['action' => 'zztest.alpha']));
         $this->assertCount(2, $alpha);
-        // jsonb wird als geparste Struktur geliefert (NDJSON-fähig).
+        // jsonb is delivered as a parsed structure (NDJSON-capable).
         $this->assertSame(['k' => 'v1'], $alpha[0]['new_value']);
 
-        // entity_type-Filter trifft alle drei Test-Ereignisse.
+        // The entity_type filter matches all three test events.
         $all = iterator_to_array($svc->stream(['entity_type' => 'zztest_entity']));
         $this->assertCount(3, $all);
 
-        // with_values=false lässt die Snapshots weg (SIEM-Pull-Modus).
+        // with_values=false omits the snapshots (SIEM pull mode).
         $lean = iterator_to_array($svc->stream(['action' => 'zztest.alpha', 'with_values' => false]));
         $this->assertArrayNotHasKey('new_value', $lean[0]);
     }
@@ -74,8 +74,8 @@ class AuditExportServiceTest extends TestCase
         for ($i = 0; $i < 5; $i++) {
             $this->seed('zztest.seq');
         }
-        // Batch-Größe via Reflection kurz setzen wäre invasiv; hier prüfen wir die
-        // stabile (created_at,id)-Ordnung über den Generator.
+        // Setting the batch size via reflection would be invasive; here we check
+        // the stable (created_at,id) ordering across the generator.
         $rows = iterator_to_array((new AuditExportService())->stream(['action' => 'zztest.seq']));
         $this->assertCount(5, $rows);
         $prev = null;
@@ -91,7 +91,7 @@ class AuditExportServiceTest extends TestCase
     public function testFromToWindowFilters(): void
     {
         $this->seed('zztest.window');
-        // Zukunfts-„from" -> keine Treffer; Vergangenheits-„to" -> keine Treffer.
+        // Future "from" -> no matches; past "to" -> no matches.
         $future = iterator_to_array((new AuditExportService())->stream([
             'action' => 'zztest.window', 'from' => date('c', time() + 86400),
         ]));
@@ -122,7 +122,7 @@ class AuditExportServiceTest extends TestCase
         $this->assertNotEmpty($captured, 'Audit-Ereignis muss auf den audit-Log-Kanal gespiegelt werden');
         $line = implode("\n", $captured);
         $this->assertStringContainsString('audit.zztest.siem', $line);
-        // Werte-Snapshots stehen NICHT im Strom (PII-arm, E16).
+        // Value snapshots are NOT in the stream (PII-light, E16).
         $this->assertStringNotContainsString('"x"', $line);
     }
 }

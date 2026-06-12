@@ -9,9 +9,9 @@ use Cake\Http\Client\Response;
 use Cake\TestSuite\TestCase;
 
 /**
- * Test des gehärteten Outbound-HTTP-Primitivs (P01): SSRF-Policy (Schema,
- * privat/reserviert, Allowlist, Override) und Antwort-Mapping/-Begrenzung. Die
- * Netzwerk-Schicht wird gestubbt (kein realer Verkehr).
+ * Tests the hardened outbound HTTP primitive (P01): SSRF policy (scheme,
+ * private/reserved, allowlist, override) and response mapping/capping. The
+ * network layer is stubbed (no real traffic).
  */
 class EgressClientTest extends TestCase
 {
@@ -20,7 +20,7 @@ class EgressClientTest extends TestCase
         $c = new EgressClient(null, ['allow_private' => false]);
         $this->assertFalse($c->isUrlAllowed('ftp://example.com/x'));
         $this->assertFalse($c->isUrlAllowed('file:///etc/passwd'));
-        $this->assertTrue($c->isUrlAllowed('https://93.184.216.34/')); // öffentliche IP-Literal
+        $this->assertTrue($c->isUrlAllowed('https://93.184.216.34/')); // public IP literal
     }
 
     public function testBlocksLoopbackAndPrivateAndMetadata(): void
@@ -32,7 +32,7 @@ class EgressClientTest extends TestCase
             'http://10.0.0.1/',
             'http://172.16.5.5/',
             'http://192.168.1.10/',
-            'http://169.254.169.254/latest/meta-data/', // Cloud-Metadaten (SSRF-Klassiker)
+            'http://169.254.169.254/latest/meta-data/', // cloud metadata (classic SSRF)
             'http://0.0.0.0/',
         ] as $url) {
             $this->assertFalse($c->isUrlAllowed($url), "muss blockiert sein: $url");
@@ -54,7 +54,7 @@ class EgressClientTest extends TestCase
 
     public function testPinTargetForHostnameReturnsValidatedIp(): void
     {
-        // Host mit fester (öffentlicher) Auflösung -> CURLOPT_RESOLVE-Pin.
+        // Host with a fixed (public) resolution -> CURLOPT_RESOLVE pin.
         $c = $this->pinClient(['93.184.216.34']);
         $this->assertSame('example.test:443:93.184.216.34', $c->pinTarget('https://example.test/x'));
         $this->assertSame('example.test:80:93.184.216.34', $c->pinTarget('http://example.test/'));
@@ -62,15 +62,15 @@ class EgressClientTest extends TestCase
 
     public function testPinTargetRejectsPrivateResolution(): void
     {
-        $c = $this->pinClient(['10.0.0.5']); // Rebinding-Versuch -> privat
+        $c = $this->pinClient(['10.0.0.5']); // rebinding attempt -> private
         $this->expectException(EgressException::class);
         $c->pinTarget('https://example.test/x');
     }
 
     public function testPinTargetPinsBothFamiliesIncludingIpv6(): void
     {
-        // Dual-Stack: beide geprüften Adressen werden gepinnt (IPv6 in Klammern),
-        // damit curl nicht über eine ungeprüfte Familie ausweichen kann.
+        // Dual-stack: both validated addresses are pinned (IPv6 in brackets),
+        // so curl cannot fall back to an unchecked address family.
         $c = $this->pinClient(['93.184.216.34', '2606:2800:220:1:248:1893:25c8:1946']);
         $this->assertSame(
             'example.test:443:93.184.216.34,[2606:2800:220:1:248:1893:25c8:1946]',
@@ -80,7 +80,7 @@ class EgressClientTest extends TestCase
 
     public function testPinTargetRejectsPrivateIpv6InDualStack(): void
     {
-        // Ein privater AAAA-Record bei sonst öffentlichem A muss blockieren.
+        // A private AAAA record alongside an otherwise public A must block.
         $c = $this->pinClient(['93.184.216.34', 'fd00::1']);
         $this->expectException(EgressException::class);
         $c->pinTarget('https://example.test/x');

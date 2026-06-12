@@ -9,11 +9,11 @@ use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
 
 /**
- * Integrationstest der externen API-Authentifizierung (Kap. 29, E49) gegen die
- * Test-DB: TokenService (Erzeugung/Hash-only/Authentisierung/Ablauf/Widerruf)
- * und der HTTP-Pfad über die ApiAuthMiddleware (Bearer-Token, Scope-Gate,
- * 401/403). Token-Klartext existiert nur bei der Erzeugung; gespeichert wird
- * nur der SHA-256-Hash.
+ * Integration test of external API authentication (ch. 29, E49) against the test
+ * DB: TokenService (creation/hash-only/authentication/expiry/revocation) and the
+ * HTTP path through the ApiAuthMiddleware (bearer token, scope gate, 401/403).
+ * The token plaintext exists only at creation time; only the SHA-256 hash is
+ * stored.
  */
 class TokenAuthTest extends TestCase
 {
@@ -37,7 +37,7 @@ class TokenAuthTest extends TestCase
 
     protected function tearDown(): void
     {
-        // api_tokens.user_id ist ON DELETE CASCADE -> Tokens gehen mit.
+        // api_tokens.user_id is ON DELETE CASCADE -> tokens go with it.
         ConnectionManager::get('default')->execute('DELETE FROM users WHERE id = :id', ['id' => $this->userId]);
         parent::tearDown();
     }
@@ -48,7 +48,7 @@ class TokenAuthTest extends TestCase
         $this->assertArrayHasKey('token', $res);
         $this->assertStringStartsWith('ftra_', $res['token']);
 
-        // In der DB darf NUR der Hash liegen, nie der Klartext.
+        // The DB must hold ONLY the hash, never the plaintext.
         $stored = ConnectionManager::get('default')->execute(
             'SELECT token_hash FROM api_tokens WHERE id = :id',
             ['id' => $res['id']],
@@ -84,7 +84,7 @@ class TokenAuthTest extends TestCase
         $this->assertNotNull($this->tokens->authenticate($res['token']));
         $this->assertTrue($this->tokens->revoke($res['id'], $this->userId));
         $this->assertNull($this->tokens->authenticate($res['token']));
-        // Idempotent: zweiter Widerruf meldet "nichts geändert".
+        // Idempotent: a second revocation reports "nothing changed".
         $this->assertFalse($this->tokens->revoke($res['id'], $this->userId));
     }
 
@@ -111,8 +111,8 @@ class TokenAuthTest extends TestCase
 
     public function testHttpMeWithInsufficientScopeIsForbidden(): void
     {
-        // Token ohne me:read -> Middleware lässt durch (Token gültig), aber der
-        // Controller verweigert wegen fehlendem Scope (403).
+        // Token without me:read -> the middleware lets it through (token valid),
+        // but the controller refuses due to the missing scope (403).
         $res = $this->tokens->create($this->userId, 'NurHealth', ['health:read'], null, null);
         $this->configRequest(['headers' => [
             'Authorization' => 'Bearer ' . $res['token'],

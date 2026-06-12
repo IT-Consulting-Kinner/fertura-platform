@@ -15,8 +15,8 @@ use Jose\Component\Signature\JWSBuilder;
 use Jose\Component\Signature\Serializer\CompactSerializer;
 
 /**
- * Test der OIDC-ID-Token-Validierung (P06) gegen ein echtes, lokal erzeugtes
- * Schlüsselpaar (web-token) — Signatur + iss/aud/exp/nonce, ohne Netzwerk.
+ * Tests OIDC ID-token validation (P06) against a real, locally generated key
+ * pair (web-token) — signature + iss/aud/exp/nonce, without network access.
  */
 class OidcProviderTest extends TestCase
 {
