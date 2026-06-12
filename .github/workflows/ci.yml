@@ -43,6 +43,12 @@ jobs:
       DATABASE_TEST_URL: "postgres://fertura:fertura@127.0.0.1/fertura_test?encoding=utf8"
       # Redis-Service des Runners (für den Job-Queue-Redis-Streams-Test).
       QUEUE_REDIS_URL: "tcp://127.0.0.1:6379"
+      # Krypto-Schlüssel für den Testlauf (Wegwerf-Werte, NICHT produktiv): ohne
+      # diese wirft SecretCipher "Kein Verschlüsselungsschlüssel" → MFA/SSO/Backup/
+      # Settings-Secret-Tests erroren und auth-/session-behaftete Controller liefern
+      # 500. Lokal setzt der Docker-Stack dieselben Variablen.
+      SECURITY_SALT: "ci-salt-not-for-production-0123456789abcdef0123456789abcdef"
+      APP_ENCRYPTION_KEY: "ci-encryption-key-not-for-production-fedcba9876543210"
 
     steps:
       - uses: actions/checkout@v4
