@@ -74,6 +74,9 @@ class ManifestLinter
             } elseif ($ns !== '' && !str_starts_with((string)$route['class'], rtrim($ns, '\\') . '\\')) {
                 $errors[] = "api_routes [$i]: class '{$route['class']}' liegt nicht im php_namespace '$ns'";
             }
+            if (isset($route['auth']) && !in_array($route['auth'], ['user', 'public'], true)) {
+                $errors[] = "api_routes [$i]: 'auth' ungültig (user|public)";
+            }
         }
 
         foreach ((array)($m['web_routes'] ?? []) as $i => $route) {

@@ -24,7 +24,7 @@ class ApiRouteRegistry
     /**
      * All endpoints declared by active modules.
      *
-     * @return list<array{module_key:string,isolation:string,method:string,path:string,class:string,summary:string,scope:?string}>
+     * @return list<array{module_key:string,isolation:string,method:string,path:string,class:string,summary:string,scope:?string,auth:string}>
      */
     public function all(): array
     {
@@ -43,6 +43,7 @@ class ApiRouteRegistry
                 if (empty($r['method']) || empty($r['path']) || empty($r['class'])) {
                     continue;
                 }
+                $auth = (string)($r['auth'] ?? 'user');
                 $out[] = [
                     'module_key' => (string)$m['module_key'],
                     'isolation' => (string)($m['isolation'] ?: 'in_process'),
@@ -51,11 +52,32 @@ class ApiRouteRegistry
                     'class' => (string)$r['class'],
                     'summary' => (string)($r['summary'] ?? ''),
                     'scope' => isset($r['scope']) ? (string)$r['scope'] : null,
+                    // Auth mode (ch. 29.x, Decision D2 = 2 modes): `user` (default)
+                    // requires a Core user Bearer token; `public` requires no Core
+                    // token — the module owns its own auth (e.g. validating a
+                    // queue-bound module token from a header; Decision D1 = pass-through).
+                    'auth' => $auth === 'public' ? 'public' : 'user',
                 ];
             }
         }
 
         return $out;
+    }
+
+    /**
+     * Auth mode (`user`/`public`) of the module API route addressed by a full
+     * external-API request path (`/api/v1/m/<key>[/<sub>]`), or null when the path
+     * is not a module API route. Used by {@see \App\Middleware\ApiAuthMiddleware}
+     * to let `public` endpoints bypass the Core user-token requirement.
+     */
+    public function authModeForRequest(string $method, string $apiPath): ?string
+    {
+        if (!preg_match('#^/api/v1/m/([a-z0-9_]+)(/.*)?$#', $apiPath, $mm)) {
+            return null;
+        }
+        $route = $this->match($mm[1], $method, $mm[2] ?? '/');
+
+        return $route !== null ? (string)$route['auth'] : null;
     }
 
     /**

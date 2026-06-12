@@ -26,7 +26,10 @@ class ModuleController extends ApiController
         if ($route === null) {
             return $this->json(['error' => 'not_found', 'message' => 'Kein passender Modul-Endpunkt.'], 404);
         }
-        if (!empty($route['scope']) && ($denied = $this->requireScope((string)$route['scope'])) !== null) {
+        // `public` routes carry no Core scope check (the module owns its own auth,
+        // Decision D1/D2); `user` routes enforce the declared scope.
+        $isPublic = ($route['auth'] ?? 'user') === 'public';
+        if (!$isPublic && !empty($route['scope']) && ($denied = $this->requireScope((string)$route['scope'])) !== null) {
             return $denied;
         }
 
@@ -38,6 +41,12 @@ class ModuleController extends ApiController
             'body' => $this->request->getParsedBody() ?? [],
             'user_id' => $this->userId(),
             'scopes' => $this->scopes(),
+            // Header lines (name => value) so a `public`-route module can validate
+            // its OWN token (e.g. a queue-bound module token).
+            'headers' => array_map(
+                static fn(array $v): string => implode(', ', $v),
+                $this->request->getHeaders(),
+            ),
         ];
 
         try {

@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Middleware;
 
+use App\Service\Api\ApiRouteRegistry;
 use App\Service\Api\TokenService;
 use Authentication\Identity;
 use Cake\Http\Response;
@@ -26,6 +27,18 @@ class ApiAuthMiddleware implements MiddlewareInterface
     {
         $path = $request->getUri()->getPath();
         if (!str_starts_with($path, '/api/')) {
+            return $handler->handle($request);
+        }
+
+        // A module API endpoint declared `public` requires no Core user token —
+        // the module owns its own authentication (e.g. validating a queue-bound
+        // module token from a header; ch. 29.x). It still passes through rate
+        // limiting (per IP) and runs with no Core identity (anonymous RLS). All
+        // other `/api/` paths require a valid Core Bearer token.
+        if (
+            str_starts_with($path, '/api/v1/m/')
+            && (new ApiRouteRegistry())->authModeForRequest($request->getMethod(), $path) === 'public'
+        ) {
             return $handler->handle($request);
         }
 

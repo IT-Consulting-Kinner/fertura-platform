@@ -35,5 +35,18 @@
             "nav": "zztest.nav.config",
             "title": "Web Test Admin"
         }
+    ],
+    "api_routes": [
+        {
+            "method": "GET",
+            "path": "/status",
+            "class": "ZztestWeb\\Api\\StatusEndpoint",
+            "auth": "public"
+        },
+        {
+            "method": "GET",
+            "path": "/secure",
+            "class": "ZztestWeb\\Api\\SecureEndpoint"
+        }
     ]
 }

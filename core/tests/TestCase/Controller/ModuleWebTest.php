@@ -124,6 +124,28 @@ class ModuleWebTest extends TestCase
         $this->assertResponseCode(403);
     }
 
+    public function testPublicApiEndpointAllowsNoToken(): void
+    {
+        // No Bearer token, no session: a `public` module API endpoint is reached
+        // (the Core passes through; the module owns its own auth, Decision D1/D2).
+        $this->configRequest(['headers' => ['Accept' => 'application/json', 'X-Module-Token' => 'queue-tok-123']]);
+        $this->get('/api/v1/m/zztest_web/status');
+
+        $this->assertResponseOk();
+        $this->assertResponseContains('"ok":true');
+        $this->assertResponseContains('"saw_module_token":true'); // module read its own header
+    }
+
+    public function testUserApiEndpointStillRequiresToken(): void
+    {
+        // A `user`-auth module endpoint (default) still requires a Core token.
+        $this->configRequest(['headers' => ['Accept' => 'application/json']]);
+        $this->get('/api/v1/m/zztest_web/secure');
+
+        $this->assertResponseCode(401);
+        $this->assertResponseContains('missing_token');
+    }
+
     private function cleanupModule(): void
     {
         try {
