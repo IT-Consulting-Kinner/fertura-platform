@@ -139,6 +139,41 @@ class ModuleManifest
     }
 
     /**
+     * Server-rendered web pages (ch. 23.16.3, web-mount). Each entry: path,
+     * class ({@see ModuleWebInterface}), template; optional area/auth/title/
+     * nav/nav_group.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function webRoutes(): array
+    {
+        return array_values($this->data['web_routes'] ?? []);
+    }
+
+    /**
+     * Distinct admin areas declared by the module's web pages (a `web_routes`
+     * entry with an `area`), mapped to their navigation group label (`nav_group`,
+     * defaulting to the area key). These are registered in `core.admin_areas` on
+     * activation so they become grantable.
+     *
+     * @return array<string, string> area key => label
+     */
+    public function adminAreas(): array
+    {
+        $areas = [];
+        foreach ($this->webRoutes() as $r) {
+            $area = isset($r['area']) && is_string($r['area']) ? $r['area'] : '';
+            if ($area === '') {
+                continue;
+            }
+            $navGroup = isset($r['nav_group']) && is_string($r['nav_group']) ? $r['nav_group'] : '';
+            $areas[$area] = $navGroup !== '' ? $navGroup : $area;
+        }
+
+        return $areas;
+    }
+
+    /**
      * Language files of the package (i18n-4). `domain` = translation domain
      * (defaults to the module key); `supported` = bundled locales (at least en_US).
      *

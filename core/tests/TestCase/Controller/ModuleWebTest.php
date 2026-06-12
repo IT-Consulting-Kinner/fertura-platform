@@ -54,7 +54,9 @@ class ModuleWebTest extends TestCase
     {
         $this->cleanupModule();
         if ($this->userId !== '') {
-            ConnectionManager::get('default')->execute('DELETE FROM users WHERE id = :id', ['id' => $this->userId]);
+            $conn = ConnectionManager::get('default');
+            $conn->execute('DELETE FROM user_admin_areas WHERE user_id = :id', ['id' => $this->userId]);
+            $conn->execute('DELETE FROM users WHERE id = :id', ['id' => $this->userId]);
         }
         (new SettingsManager())->set('core', 'require_module_signature', $this->prevRequireSig);
         parent::tearDown();
@@ -66,10 +68,10 @@ class ModuleWebTest extends TestCase
         $this->get('/m/zztest_web/dashboard');
 
         $this->assertResponseOk();
-        $this->assertResponseContains('Hallo aus dem Modul');     // module template content
-        $this->assertResponseContains($this->userId);             // handler received the user id
-        $this->assertResponseContains('/dashboard');              // handler received the path
-        $this->assertResponseContains('Fertura');                 // Core layout wraps the page
+        $this->assertResponseContains('Hallo aus dem Modul'); // module template content
+        $this->assertResponseContains($this->userId); // handler received the user id
+        $this->assertResponseContains('/dashboard'); // handler received the path
+        $this->assertResponseContains('Fertura'); // Core layout wraps the page
     }
 
     public function testGuestPageRendersWithoutLogin(): void
@@ -94,6 +96,32 @@ class ModuleWebTest extends TestCase
         $this->get('/m/zztest_web/does-not-exist');
 
         $this->assertResponseCode(404);
+    }
+
+    public function testAdminPageRendersInAdminShellWithNavEntry(): void
+    {
+        // Grant the user the module-defined admin area.
+        ConnectionManager::get('default')->execute(
+            'INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a)',
+            ['u' => $this->userId, 'a' => 'zztest_web_admin'],
+        );
+        $this->session(['Auth' => ['id' => $this->userId, 'username' => 'zztest_web', 'email' => 'w@zztest.local']]);
+        $this->get('/m/zztest_web/admin');
+
+        $this->assertResponseOk();
+        $this->assertResponseContains('Modul-Admin-Seite'); // module template content
+        $this->assertResponseContains('sidebar'); // rendered in the ADMIN shell
+        $this->assertResponseContains('/m/zztest_web/admin'); // module nav item links to the page
+        $this->assertResponseContains('zztest.nav.config'); // module's sidebar item label
+    }
+
+    public function testAdminPageForbiddenWithoutArea(): void
+    {
+        // Logged in, but the user does NOT hold the module's admin area.
+        $this->session(['Auth' => ['id' => $this->userId, 'username' => 'zztest_web', 'email' => 'w@zztest.local']]);
+        $this->get('/m/zztest_web/admin');
+
+        $this->assertResponseCode(403);
     }
 
     private function cleanupModule(): void

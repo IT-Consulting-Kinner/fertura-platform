@@ -462,6 +462,13 @@ class ModuleLifecycle
             // otherwise extension points would silently run in-process.
             if (($mod['isolation'] ?? 'in_process') === 'out_of_process') {
                 $this->assertIsolatable($manifest);
+                // Web pages render HTML in-process; that cannot cross the
+                // out-of-process RPC boundary (ch. 23.16.3).
+                if ($manifest->webRoutes() !== []) {
+                    throw new LifecycleException(
+                        'Out-of-Process-Module dürfen keine web_routes deklarieren (HTML-Rendering ist nicht RPC-fähig).',
+                    );
+                }
             }
             foreach ($manifest->dependencies() as $dep) {
                 $depKey = (string)($dep['module'] ?? $dep['id'] ?? '');
@@ -526,6 +533,9 @@ class ModuleLifecycle
                         'moduleVersion' => $mod['version'],
                     ]);
                 }
+                // Register the module's admin areas (web-mount) so they are
+                // grantable (FK target of user_admin_areas), ch. 23.16.3.
+                $this->registerAdminAreas($manifest);
             } catch (RegistryException $e) {
                 $this->setStatus($key, 'error_activate');
                 $this->audit->log('module.activate_failed', 'module', $key, [
@@ -562,6 +572,23 @@ class ModuleLifecycle
 
             return $this->findModule($key) ?? [];
         });
+    }
+
+    /**
+     * Registers the module's web-mount admin areas in `core.admin_areas` so they
+     * become grantable (the FK target of `user_admin_areas`). Idempotent; module
+     * areas sort after the Core areas (ch. 23.16.3).
+     */
+    private function registerAdminAreas(ModuleManifest $manifest): void
+    {
+        $i = 0;
+        foreach ($manifest->adminAreas() as $areaKey => $label) {
+            $this->conn()->execute(
+                'INSERT INTO admin_areas (area_key, label, sort_order) VALUES (:k, :l, :s) '
+                . 'ON CONFLICT (area_key) DO NOTHING',
+                ['k' => $areaKey, 'l' => $label, 's' => 1000 + $i++],
+            );
+        }
     }
 
     public function deactivate(string $key): void
@@ -627,6 +654,13 @@ class ModuleLifecycle
             $conn = $this->conn();
             // Remove the registrations made by this module.
             $conn->execute('DELETE FROM contract_registrations WHERE module_key = :k', ['k' => $key]);
+            // Remove the module's web-mount admin areas + any grants to them
+            // (grants first: user_admin_areas FK is ON DELETE RESTRICT).
+            $delManifest = new ModuleManifest(json_decode((string)$mod['manifest'], true) ?: []);
+            foreach (array_keys($delManifest->adminAreas()) as $areaKey) {
+                $conn->execute('DELETE FROM user_admin_areas WHERE admin_area_key = :a', ['a' => $areaKey]);
+                $conn->execute('DELETE FROM admin_areas WHERE area_key = :a', ['a' => $areaKey]);
+            }
             // Remove the contracts defined by this module (CASCADE -> registrations/bindings).
             $conn->execute('DELETE FROM contracts WHERE owner_module_key = :k', ['k' => $key]);
             // This module's capability bindings.

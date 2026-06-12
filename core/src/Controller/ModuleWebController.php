@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Service\Admin\AdminNavBuilder;
 use App\Service\Module\ContributionRuntime;
 use App\Service\Module\WebRouteRegistry;
 use Cake\Core\Configure;
@@ -53,17 +54,26 @@ class ModuleWebController extends AppController
             throw new NotFoundException();
         }
 
+        // A page that declares an `area` is an ADMIN page: it renders in the Core
+        // admin shell (admin layout + scoped sidebar) and requires the user to
+        // hold that area. Otherwise it is a standalone end-user/guest page.
+        $isAdmin = $route['area'] !== null;
+
         // Authentication: guest pages are public; every other page requires a
-        // logged-in user (and, if the route declares an admin area, that area).
+        // logged-in user (and, for admin pages, the declared area).
         $identity = $this->identity();
         $rawId = $identity?->getIdentifier();
         $userId = is_scalar($rawId) ? (string)$rawId : null;
+        $userAreas = [];
         if ($route['auth'] === 'user') {
             if ($userId === null) {
                 return $this->redirect('/login');
             }
-            if ($route['area'] !== null && !$this->userHasArea($userId, (string)$route['area'])) {
-                throw new ForbiddenException();
+            if ($isAdmin) {
+                $userAreas = $this->loadUserAreas($userId);
+                if (!in_array($route['area'], $userAreas, true)) {
+                    throw new ForbiddenException();
+                }
             }
         }
 
@@ -115,8 +125,16 @@ class ModuleWebController extends AppController
         $this->set('moduleKey', $moduleKey);
         $this->set('moduleTitle', $title);
         $this->set('currentUser', $identity);
+
+        // Admin pages render in the admin shell (scoped sidebar incl. this
+        // module's nav entries); standalone pages in the Core module layout.
+        if ($isAdmin) {
+            $this->set('navAreas', (new AdminNavBuilder())->build($userAreas));
+            $this->set('userAreas', $userAreas);
+            $this->set('activeArea', $route['area']);
+        }
         $this->viewBuilder()
-            ->setLayout('module')
+            ->setLayout($isAdmin ? 'admin' : 'module')
             ->setTemplatePath('templates')
             ->setTemplate($template);
         $this->response = $this->response->withStatus($status);
@@ -124,16 +142,20 @@ class ModuleWebController extends AppController
         return null;
     }
 
-    /** Whether the user holds the given admin area (ch. 27.3.1). */
-    private function userHasArea(string $userId, string $area): bool
+    /**
+     * The admin areas the user holds (ch. 27.3.1).
+     *
+     * @return list<string>
+     */
+    private function loadUserAreas(string $userId): array
     {
         /** @var \Cake\Database\Connection $conn */
         $conn = ConnectionManager::get('default');
-        $row = $conn->execute(
-            'SELECT 1 FROM user_admin_areas WHERE user_id = :u AND area = :a LIMIT 1',
-            ['u' => $userId, 'a' => $area],
-        )->fetch('assoc');
+        $rows = $conn->execute(
+            'SELECT admin_area_key FROM user_admin_areas WHERE user_id = :u',
+            ['u' => $userId],
+        )->fetchAll('assoc');
 
-        return $row !== false;
+        return array_values(array_map(static fn($r) => (string)$r['admin_area_key'], $rows));
     }
 }

@@ -16,9 +16,16 @@ use Cake\Datasource\ConnectionManager;
  * - `path`     path template, may contain `{param}` placeholders (e.g. `/tickets/{id}`)
  * - `class`    handler implementing {@see ModuleWebInterface}
  * - `template` template file (relative to the module's `templates/` dir, without `.php`)
- * - `area`     optional admin area key the page belongs to (gates access + nav)
+ * - `area`     optional admin area key. If set, the page is an **admin page**:
+ *              rendered in the Core admin shell (admin layout + sidebar), gated on
+ *              the user holding that area. If unset, the page renders standalone in
+ *              the Core `module` layout (an end-user/guest page).
  * - `auth`     `user` (default — login required) or `guest` (public page)
- * - `title`    optional page title (for layout/nav)
+ * - `title`    optional page title (for the layout)
+ * - `nav`      optional i18n key — when set on an admin page, the page appears as a
+ *              sidebar item in the admin navigation
+ * - `nav_group` optional i18n key — the sidebar group heading for a module-defined
+ *              admin area (defaults to the area key)
  *
  * Unlike API routes, web pages are matched **by path only** (not by HTTP method):
  * the same handler serves GET (render) and POST (form submit). Web pages are
@@ -40,7 +47,8 @@ class WebRouteRegistry
      * All web pages declared by active modules.
      *
      * @return list<array{module_key:string,source_path:string,path:string,
-     *     class:string,template:string,area:?string,auth:string,title:string}>
+     *     class:string,template:string,area:?string,auth:string,title:string,
+     *     nav:string,nav_group:string}>
      */
     public function all(): array
     {
@@ -70,8 +78,35 @@ class WebRouteRegistry
                     'area' => isset($r['area']) && $r['area'] !== '' ? (string)$r['area'] : null,
                     'auth' => $auth === 'guest' ? 'guest' : 'user',
                     'title' => (string)($r['title'] ?? ''),
+                    'nav' => (string)($r['nav'] ?? ''),
+                    'nav_group' => (string)($r['nav_group'] ?? ''),
                 ];
             }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Admin sidebar entries contributed by active modules, grouped by admin area
+     * (only admin pages — `area` set — that declare a `nav` label). The shape
+     * mirrors {@see \App\Controller\Admin\AdminController::NAV} so the two can be
+     * merged: `area => ['label' => i18nKey, 'items' => [[label, url], …]]`.
+     *
+     * @return array<string, array{label:string, items:list<array{0:string,1:string}>}>
+     */
+    public function adminNav(): array
+    {
+        $out = [];
+        foreach ($this->all() as $r) {
+            if ($r['area'] === null || $r['nav'] === '') {
+                continue;
+            }
+            $area = $r['area'];
+            if (!isset($out[$area])) {
+                $out[$area] = ['label' => $r['nav_group'] !== '' ? $r['nav_group'] : $area, 'items' => []];
+            }
+            $out[$area]['items'][] = [$r['nav'], '/m/' . $r['module_key'] . $r['path']];
         }
 
         return $out;
@@ -82,8 +117,8 @@ class WebRouteRegistry
      * parameters. Reuses the (ReDoS-safe) path matcher of the API registry.
      *
      * @return array{module_key:string,source_path:string,path:string,class:string,
-     *     template:string,area:?string,auth:string,title:string,
-     *     params:array<string,string>}|null
+     *     template:string,area:?string,auth:string,title:string,nav:string,
+     *     nav_group:string,params:array<string,string>}|null
      */
     public function match(string $moduleKey, string $path): ?array
     {

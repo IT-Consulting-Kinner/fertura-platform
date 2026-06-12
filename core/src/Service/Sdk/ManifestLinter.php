@@ -76,6 +76,36 @@ class ManifestLinter
             }
         }
 
+        foreach ((array)($m['web_routes'] ?? []) as $i => $route) {
+            $route = (array)$route;
+            $path = (string)($route['path'] ?? '');
+            if ($path === '' || !str_starts_with($path, '/')) {
+                $errors[] = "web_routes [$i]: 'path' muss mit '/' beginnen";
+            } elseif (!preg_match('#^(/([A-Za-z0-9._~-]+|\{[a-z_][a-z0-9_]*\}))+/?$#', $path)) {
+                // Only simple segments + {placeholder} — no regex metacharacters
+                // (ReDoS-safe web router, ch. 23.16.3).
+                $errors[] = "web_routes [$i]: 'path' enthält unzulässige Zeichen (nur Segmente + {platzhalter})";
+            }
+            if (empty($route['class'])) {
+                $errors[] = "web_routes [$i]: 'class' fehlt";
+            } elseif ($ns !== '' && !str_starts_with((string)$route['class'], rtrim($ns, '\\') . '\\')) {
+                $errors[] = "web_routes [$i]: class '{$route['class']}' liegt nicht im php_namespace '$ns'";
+            }
+            if (empty($route['template'])) {
+                $errors[] = "web_routes [$i]: 'template' fehlt";
+            } elseif (!preg_match('#^[a-z0-9_]+(/[a-z0-9_]+)*$#', (string)$route['template'])) {
+                // snake_case template name (CakePHP inflects via underscore();
+                // mixed case breaks on case-sensitive filesystems).
+                $warnings[] = "web_routes [$i]: 'template' sollte snake_case sein: {$route['template']}";
+            }
+            if (isset($route['auth']) && !in_array($route['auth'], ['user', 'guest'], true)) {
+                $errors[] = "web_routes [$i]: 'auth' ungültig (user|guest)";
+            }
+            if (!empty($route['nav']) && empty($route['area'])) {
+                $warnings[] = "web_routes [$i]: 'nav' ohne 'area' erscheint nicht in der Admin-Navigation";
+            }
+        }
+
         foreach ((array)($m['contracts_provided'] ?? []) as $i => $contract) {
             $contract = (array)$contract;
             if (empty($contract['name'])) {

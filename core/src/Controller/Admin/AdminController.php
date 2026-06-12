@@ -5,6 +5,7 @@ namespace App\Controller\Admin;
 
 use App\Controller\AppController;
 use App\Infrastructure\Uuid;
+use App\Service\Admin\AdminNavBuilder;
 use Cake\Datasource\ConnectionManager;
 use Cake\Event\EventInterface;
 use Cake\Http\Exception\ForbiddenException;
@@ -84,16 +85,9 @@ class AdminController extends AppController
             throw new ForbiddenException('Kein Zugriff auf diesen Administrationsbereich.');
         }
 
-        $nav = [];
-        foreach (self::NAV as $key => $def) {
-            if (in_array($key, $this->userAreaKeys, true)) {
-                $nav[$key] = $def;
-            }
-        }
-
         $this->set('currentUser', $identity);
         $this->set('userAreas', $this->userAreaKeys);
-        $this->set('navAreas', $nav);
+        $this->set('navAreas', (new AdminNavBuilder())->build($this->userAreaKeys));
         $this->set('activeArea', $this->requiredArea);
 
         return null;

@@ -24,6 +24,16 @@
             "template": "public_page",
             "auth": "guest",
             "title": "Web Test"
+        },
+        {
+            "path": "/admin",
+            "class": "ZztestWeb\\Web\\AdminPage",
+            "template": "admin_index",
+            "auth": "user",
+            "area": "zztest_web_admin",
+            "nav_group": "zztest.nav.group",
+            "nav": "zztest.nav.config",
+            "title": "Web Test Admin"
         }
     ]
 }
