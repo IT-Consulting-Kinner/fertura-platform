@@ -51,7 +51,7 @@ jobs:
       APP_ENCRYPTION_KEY: "ci-encryption-key-not-for-production-fedcba9876543210"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: PHP einrichten
         uses: shivammathur/setup-php@v2
