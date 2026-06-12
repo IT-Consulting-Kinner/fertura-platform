@@ -1,0 +1,29 @@
+{
+    "id": "zztest_web",
+    "name": "Web Test Module",
+    "version": "1.0.0",
+    "type": "main",
+    "edition": "free",
+    "description": "Fixture fuer den Core-Web-Mount-Dispatcher-Test (Kap. 23.16.3).",
+    "publisher": "Fertura",
+    "php_namespace": "ZztestWeb",
+    "core_compatibility": ">=1.0.0 <2.0.0",
+    "requires_license": false,
+    "dependencies": [],
+    "web_routes": [
+        {
+            "path": "/dashboard",
+            "class": "ZztestWeb\\Web\\DashboardPage",
+            "template": "dashboard",
+            "auth": "user",
+            "title": "Web Test"
+        },
+        {
+            "path": "/public",
+            "class": "ZztestWeb\\Web\\PublicPage",
+            "template": "public_page",
+            "auth": "guest",
+            "title": "Web Test"
+        }
+    ]
+}

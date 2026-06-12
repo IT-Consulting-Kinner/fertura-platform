@@ -141,6 +141,17 @@ return function (RouteBuilder $routes): void {
             });
         }
 
+        // Modul-Web-Seiten (Kap. 23.16.3, web-mount): /m/<key>[/<pfad>] →
+        // server-gerenderte Modul-GUI über den Core-kontrollierten Dispatcher
+        // (Session-Auth, CSRF, RLS — NICHT die JSON-API /api/v1/m/<key>).
+        // In-Process-Rendering; ein Handler bedient GET (Anzeige) + POST (Formular).
+        $builder->connect('/m/{moduleKey}', ['controller' => 'ModuleWeb', 'action' => 'dispatch'])
+            ->setPass(['moduleKey'])
+            ->setPatterns(['moduleKey' => '[a-z0-9_]+']);
+        $builder->connect('/m/{moduleKey}/{path}', ['controller' => 'ModuleWeb', 'action' => 'dispatch'])
+            ->setPass(['moduleKey', 'path'])
+            ->setPatterns(['moduleKey' => '[a-z0-9_]+', 'path' => '.*']);
+
         $builder->connect('/pages/*', 'Pages::display');
 
         /*
