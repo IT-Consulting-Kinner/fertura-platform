@@ -3,8 +3,10 @@ declare(strict_types=1);
 
 namespace App\Controller\Admin;
 
+use App\Application;
 use App\Service\Update\UpdateManager;
 use Cake\Datasource\ConnectionManager;
+use Throwable;
 
 /**
  * Update manager (admin area "Update Manager").
@@ -23,7 +25,7 @@ class UpdatesController extends AdminController
         $modules = ConnectionManager::get('default')->execute(
             'SELECT module_key, version FROM modules ORDER BY module_key',
         )->fetchAll('assoc');
-        $coreVersion = \App\Application::CORE_VERSION;
+        $coreVersion = Application::CORE_VERSION;
         $this->set(compact('history', 'modules', 'coreVersion'));
     }
 
@@ -34,7 +36,7 @@ class UpdatesController extends AdminController
         $path = trim((string)$this->request->getData('source_path'));
         try {
             $preview = (new UpdateManager())->previewModule($key, $path);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $this->Flash->error(__('flash.update.preview_failed', $e->getMessage()));
 
             return $this->redirect(['action' => 'index']);
@@ -52,7 +54,7 @@ class UpdatesController extends AdminController
         $force = (bool)$this->request->getData('force');
         try {
             $preview = (new UpdateManager())->previewCore($target);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $this->Flash->error(__('flash.update.preview_failed', $e->getMessage()));
 
             return $this->redirect(['action' => 'index']);
@@ -70,7 +72,7 @@ class UpdatesController extends AdminController
         try {
             $result = (new UpdateManager())->updateModule($key, $path);
             $this->Flash->success(__('flash.update.module_updated', $key, $result['new_version'] ?? '–'));
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $this->Flash->error(__('flash.update.module_failed', $e->getMessage()));
         }
 
@@ -85,7 +87,7 @@ class UpdatesController extends AdminController
         try {
             (new UpdateManager())->updateCore($target, $force);
             $this->Flash->success(__('flash.update.core_updated', $target));
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $this->Flash->error(__('flash.update.core_failed', $e->getMessage()));
         }
 

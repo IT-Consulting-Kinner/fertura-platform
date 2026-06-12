@@ -18,10 +18,14 @@ use Cake\Http\Exception\ForbiddenException;
  */
 class AdminController extends AppController
 {
-    /** Required administration area (null = any admin). */
+    /**
+     * Required administration area (null = any admin).
+     */
     protected ?string $requiredArea = null;
 
-    /** @var list<string> */
+    /**
+     * @var list<string>
+     */
     protected array $userAreaKeys = [];
 
     /** Area navigation (area key => label + menu items). */
@@ -119,6 +123,6 @@ class AdminController extends AppController
             ['u' => $userId],
         )->fetchAll('assoc');
 
-        return array_map(static fn ($r) => (string)$r['admin_area_key'], $rows);
+        return array_map(static fn($r) => (string)$r['admin_area_key'], $rows);
     }
 }

@@ -11,6 +11,7 @@ use App\Service\Settings\SettingsManager;
 use Cake\Datasource\ConnectionManager;
 use Cake\ORM\Locator\LocatorAwareTrait;
 use Cake\TestSuite\TestCase;
+use Throwable;
 
 /**
  * E2E test of out-of-process isolation phase 3 (ch. 23.16.2): an isolated module
@@ -42,7 +43,7 @@ class OutOfProcessPhase3Test extends TestCase
         $conn = ConnectionManager::get('default');
         foreach (['core.collector.anonymize', 'core.collector.scheduled'] as $name) {
             $conn->execute(
-                "INSERT INTO contracts (owner_module_key, name, contract_type, version, multi_use, active) "
+                'INSERT INTO contracts (owner_module_key, name, contract_type, version, multi_use, active) '
                 . "VALUES ('core', :n, 'collector', '1.0.0', true, true) ON CONFLICT (name) DO NOTHING",
                 ['n' => $name],
             );
@@ -128,27 +129,29 @@ class OutOfProcessPhase3Test extends TestCase
         $conn = ConnectionManager::get('default');
         try {
             (new ModuleHostSupervisor())->stop(self::KEY);
-        } catch (\Throwable) {
+        } catch (Throwable) {
         }
         try {
             (new ModuleLifecycle())->delete(self::KEY);
-        } catch (\Throwable) {
+        } catch (Throwable) {
         }
         try {
             (new ModuleDbRole())->drop(self::KEY);
-        } catch (\Throwable) {
+        } catch (Throwable) {
         }
-        foreach ([
+        foreach (
+            [
             'DROP SCHEMA IF EXISTS mod_isolated_anon_module CASCADE',
             'DELETE FROM contract_registrations WHERE module_key = :k',
             'DELETE FROM contracts WHERE owner_module_key = :k',
             'DELETE FROM resources WHERE module_key = :k',
             'DELETE FROM modules WHERE module_key = :k',
             "DELETE FROM worker_heartbeats WHERE worker_key = 'sched:isolated_anon.ping'",
-        ] as $sql) {
+            ] as $sql
+        ) {
             try {
                 $conn->execute($sql, str_contains($sql, ':k') ? ['k' => self::KEY] : []);
-            } catch (\Throwable) {
+            } catch (Throwable) {
             }
         }
         $this->rrmdir(ROOT . '/modules/' . self::KEY);

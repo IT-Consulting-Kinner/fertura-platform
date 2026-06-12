@@ -117,7 +117,7 @@ class SearchServiceTest extends TestCase
         $this->assertContains('3', $ids, 'rein semantischer Treffer (nicht im FTS-Index) enthalten');
 
         // A purely semantic hit (doc 3) derives its title from the content.
-        $three = array_values(array_filter($res, static fn ($r) => $r['entity_id'] === '3'))[0];
+        $three = array_values(array_filter($res, static fn($r) => $r['entity_id'] === '3'))[0];
         $this->assertSame('Nur semantisch relevant', $three['title']);
         $this->assertNull($three['url']);
     }
@@ -126,9 +126,13 @@ class SearchServiceTest extends TestCase
     {
         // Embedding service that records calls (no real LLM call).
         $emb = new class extends EmbeddingService {
-            /** @var list<array{0:string,1:string,2:string}> */
+            /**
+             * @var list<array{0:string,1:string,2:string}>
+             */
             public array $indexed = [];
-            /** @var list<array{0:string,1:string,2:string}> */
+            /**
+             * @var list<array{0:string,1:string,2:string}>
+             */
             public array $removed = [];
 
             public function __construct()
@@ -168,7 +172,9 @@ class SearchServiceTest extends TestCase
     public function testBackfillEmbeddings(): void
     {
         $emb = new class extends EmbeddingService {
-            /** @var list<string> */
+            /**
+             * @var list<string>
+             */
             public array $indexed = [];
 
             public function __construct()

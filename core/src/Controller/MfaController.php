@@ -3,9 +3,13 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Infrastructure\Uuid;
 use App\Service\Security\MfaService;
 use App\Service\Security\Totp;
 use App\Service\Security\WebAuthnService;
+use Cake\Datasource\ConnectionManager;
+use Cake\Http\Response;
+use Throwable;
 
 /**
  * Self-service MFA management (TOTP) for the AUTHENTICATED user:
@@ -33,7 +37,7 @@ class MfaController extends AppController
      * more convenient alternative, not the only second factor (no lockout if the
      * device is lost).
      */
-    public function passkeyOptions(): \Cake\Http\Response
+    public function passkeyOptions(): Response
     {
         if (!(new MfaService())->enabled($this->userId())) {
             return $this->response->withStatus(409)->withType('application/json')
@@ -48,7 +52,7 @@ class MfaController extends AppController
     }
 
     /** Completes the passkey registration (form POST with JS-populated fields). */
-    public function passkeyRegister(): ?\Cake\Http\Response
+    public function passkeyRegister(): ?Response
     {
         $this->request->allowMethod('post');
         $session = $this->request->getSession();
@@ -69,14 +73,14 @@ class MfaController extends AppController
                 (string)$this->request->getData('label'),
             );
             $this->Flash->success(__('flash.mfa.passkey_added'));
-        } catch (\Throwable) {
+        } catch (Throwable) {
             $this->Flash->error(__('flash.mfa.passkey_failed'));
         }
 
         return $this->redirect(['action' => 'index']);
     }
 
-    public function passkeyDelete(string $id): ?\Cake\Http\Response
+    public function passkeyDelete(string $id): ?Response
     {
         $this->request->allowMethod('post');
         if ((new WebAuthnService())->delete($this->userId(), $id)) {
@@ -103,7 +107,7 @@ class MfaController extends AppController
     }
 
     /** Step 1: generate the secret and display it for confirmation (otpauth + manual). */
-    public function setup(): \Cake\Http\Response
+    public function setup(): Response
     {
         $this->request->allowMethod('post');
         $secret = Totp::generateSecret();
@@ -116,7 +120,7 @@ class MfaController extends AppController
     }
 
     /** Step 2: confirm the code against the pending secret -> activate. */
-    public function confirm(): ?\Cake\Http\Response
+    public function confirm(): ?Response
     {
         $this->request->allowMethod('post');
         $session = $this->request->getSession();
@@ -145,7 +149,7 @@ class MfaController extends AppController
     }
 
     /** Deactivate — re-authenticated via a valid TOTP/recovery code. */
-    public function disable(): ?\Cake\Http\Response
+    public function disable(): ?Response
     {
         $this->request->allowMethod('post');
         $userId = $this->userId();
@@ -166,11 +170,11 @@ class MfaController extends AppController
     {
         $identifier = $this->identity()?->getIdentifier();
         $userId = is_string($identifier) ? $identifier : '';
-        if (!\App\Infrastructure\Uuid::isValid($userId)) {
+        if (!Uuid::isValid($userId)) {
             return 'user';
         }
         /** @var \Cake\Database\Connection $conn */
-        $conn = \Cake\Datasource\ConnectionManager::get('default');
+        $conn = ConnectionManager::get('default');
         $row = $conn->execute(
             'SELECT username FROM users WHERE id = :id',
             ['id' => $userId],

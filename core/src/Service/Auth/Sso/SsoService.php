@@ -275,10 +275,12 @@ class SsoService
         $base = strtolower((string)preg_replace('/[^a-z0-9._-]/i', '', explode('@', $email)[0])) ?: 'user';
         $candidate = $base;
         $i = 1;
-        while ($this->conn()->execute(
-            'SELECT 1 FROM users WHERE lower(username) = lower(:u)',
-            ['u' => $candidate],
-        )->fetch() !== false) {
+        while (
+            $this->conn()->execute(
+                'SELECT 1 FROM users WHERE lower(username) = lower(:u)',
+                ['u' => $candidate],
+            )->fetch() !== false
+        ) {
             $candidate = $base . ++$i;
         }
 

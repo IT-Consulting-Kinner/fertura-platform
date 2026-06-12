@@ -8,6 +8,7 @@ use App\Service\Storage\StorageManager;
 use Cake\TestSuite\TestCase;
 use League\Flysystem\Filesystem;
 use League\Flysystem\Local\LocalFilesystemAdapter;
+use RuntimeException;
 
 /**
  * Test of off-site backup storage (P14) against a local storage adapter
@@ -59,7 +60,7 @@ class OffsiteBackupServiceTest extends TestCase
 
     public function testUploadMissingFileThrows(): void
     {
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(RuntimeException::class);
         $this->service()->upload($this->work . '/nope.zip');
     }
 

@@ -60,7 +60,7 @@ class TenantServiceTest extends TestCase
 
         // INSERT without tenant_id -> default tenant (single-org stays unchanged).
         $userId = (string)$conn->execute(
-            "INSERT INTO users (username, email, status) "
+            'INSERT INTO users (username, email, status) '
             . "VALUES ('zztenant_u', 'u@zztenant.local', 'active') RETURNING id",
         )->fetch('assoc')['id'];
         $this->assertSame(TenantService::DEFAULT_TENANT_ID, $svc->tenantIdForUser($userId));
@@ -165,7 +165,7 @@ class TenantServiceTest extends TestCase
                 . 'WHERE v.tenant_id = core.current_tenant() ORDER BY v.id',
                 ['a' => $tenantA, 'b' => $tenantB],
             )->fetchAll('assoc');
-            $this->assertSame([1], array_map(static fn ($r) => (int)$r['id'], $rows), 'nur Mandant-A-Zeile sichtbar');
+            $this->assertSame([1], array_map(static fn($r) => (int)$r['id'], $rows), 'nur Mandant-A-Zeile sichtbar');
 
             // Without context -> NULL -> no match (fail-closed).
             $conn->execute("SELECT set_config('app.current_tenant_id', '', true)");

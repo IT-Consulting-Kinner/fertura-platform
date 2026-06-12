@@ -5,17 +5,17 @@ namespace App\Service\Module;
 
 use App\Application;
 use App\Audit\AuditLogger;
+use App\Infrastructure\Db;
 use App\Model\Entity\ContractRegistration;
 use App\Service\I18n\LanguagePackStore;
+use App\Service\License\LicenseService;
 use App\Service\Registry\ContractRegistry;
 use App\Service\Registry\RegistryException;
 use App\Service\Registry\SemVer;
-use App\Service\License\LicenseService;
 use App\Service\Registry\VersionConstraint;
 use App\Service\Security\PackageVerificationException;
 use App\Service\Security\PackageVerifier;
 use App\Service\Settings\SettingsManager;
-use Cake\Datasource\ConnectionManager;
 use Throwable;
 
 /**
@@ -65,7 +65,7 @@ class ModuleLifecycle
     {
         // The module lifecycle performs DDL (CREATE/DROP SCHEMA) -> privileged
         // (superuser) connection that bypasses RLS (E26).
-        return \App\Infrastructure\Db::privileged();
+        return Db::privileged();
     }
 
     /**
@@ -73,6 +73,7 @@ class ModuleLifecycle
      * schema, so the request path (app role) can access it. No-op if no separate
      * app role is configured.
      */
+
     /**
      * Enforces the RLS requirement for is_scoped resources (ch. 30.3, E47). If
      * the module declares at least one scoped resource, its schema must contain
@@ -82,7 +83,7 @@ class ModuleLifecycle
      */
     private function assertScopedRls(string $schema, ModuleManifest $manifest): void
     {
-        $scoped = array_filter($manifest->permissions(), static fn ($p) => !empty($p['is_scoped']));
+        $scoped = array_filter($manifest->permissions(), static fn($p) => !empty($p['is_scoped']));
         if ($scoped === []) {
             return;
         }
@@ -263,10 +264,12 @@ class ModuleLifecycle
                 if ($depMod === null) {
                     throw new LifecycleException("Abhängigkeit nicht installiert: $depKey");
                 }
-                if ($depVer !== null
-                    && !VersionConstraint::parse($depVer)->isSatisfiedBy(SemVer::parse($depMod['version']))) {
+                if (
+                    $depVer !== null
+                    && !VersionConstraint::parse($depVer)->isSatisfiedBy(SemVer::parse($depMod['version']))
+                ) {
                     throw new LifecycleException(
-                        "Abhängigkeit $depKey inkompatibel (gefordert $depVer, vorhanden {$depMod['version']})."
+                        "Abhängigkeit $depKey inkompatibel (gefordert $depVer, vorhanden {$depMod['version']}).",
                     );
                 }
             }
@@ -424,7 +427,7 @@ class ModuleLifecycle
                     'd' => $p['description'] ?? null,
                     's' => !empty($p['is_scoped']) ? 'true' : 'false',
                     // Group-capable by default; a module can disable it via the manifest (ch. 25.11).
-                    'gc' => (!array_key_exists('group_capable', $p) || !empty($p['group_capable'])) ? 'true' : 'false',
+                    'gc' => !array_key_exists('group_capable', $p) || !empty($p['group_capable']) ? 'true' : 'false',
                     'e' => isset($p['extra_actions']) ? json_encode($p['extra_actions']) : null,
                 ],
             );
@@ -548,7 +551,7 @@ class ModuleLifecycle
             if (($mod['isolation'] ?? 'in_process') === 'out_of_process') {
                 try {
                     (new ModuleHostSupervisor())->ensureRunning($key);
-                } catch (\Throwable $e) {
+                } catch (Throwable $e) {
                     $this->audit->log('module.host_start_failed', 'module', $key, [
                         'newValue' => ['error' => $e->getMessage()],
                         'moduleKey' => $key,
@@ -576,7 +579,7 @@ class ModuleLifecycle
             if (($mod['isolation'] ?? 'in_process') === 'out_of_process') {
                 try {
                     (new ModuleHostSupervisor())->stop($key);
-                } catch (\Throwable) {
+                } catch (Throwable) {
                     // best effort
                 }
             }
@@ -610,7 +613,7 @@ class ModuleLifecycle
             if (($mod['isolation'] ?? 'in_process') === 'out_of_process') {
                 try {
                     (new ModuleHostSupervisor())->stop($key);
-                } catch (\Throwable) {
+                } catch (Throwable) {
                     // best effort
                 }
                 (new ModuleDbRole())->drop($key);
@@ -689,14 +692,14 @@ class ModuleLifecycle
                 if ($mod['status'] === 'active') {
                     try {
                         (new ModuleHostSupervisor())->ensureRunning($key);
-                    } catch (\Throwable) {
+                    } catch (Throwable) {
                         // the worker heals it later
                     }
                 }
             } else {
                 try {
                     (new ModuleHostSupervisor())->stop($key);
-                } catch (\Throwable) {
+                } catch (Throwable) {
                     // best effort
                 }
                 (new ModuleDbRole())->drop($key);

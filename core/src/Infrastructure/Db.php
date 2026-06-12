@@ -6,7 +6,6 @@ namespace App\Infrastructure;
 use Cake\Database\Connection;
 use Cake\Datasource\ConnectionManager;
 use Throwable;
-
 use function Cake\Core\env;
 
 /**
@@ -29,14 +28,14 @@ class Db
         // keys on registration, hence env() here instead of getConfig()['url'].
         if (env('DATABASE_URL') && ConnectionManager::getConfig('privileged') !== null) {
             try {
-                /** @var Connection */
+                /** @var \Cake\Database\Connection */
                 return ConnectionManager::get('privileged');
             } catch (Throwable) {
                 // falls through to default below
             }
         }
 
-        /** @var Connection */
+        /** @var \Cake\Database\Connection */
         return ConnectionManager::get('default');
     }
 

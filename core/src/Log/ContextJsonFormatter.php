@@ -20,7 +20,7 @@ class ContextJsonFormatter extends JsonFormatter
      * @param mixed $level
      * @param array<string, mixed> $context
      */
-    public function format($level, string $message, array $context = []): string
+    public function format(mixed $level, string $message, array $context = []): string
     {
         $merged = $context + LogContext::all();
 

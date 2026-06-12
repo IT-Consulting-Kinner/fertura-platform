@@ -6,6 +6,8 @@ namespace App\Controller\Admin;
 use App\Service\Backup\BackupService;
 use App\Service\Backup\OffsiteBackupService;
 use App\Service\Settings\SettingsManager;
+use Cake\Http\Response;
+use Throwable;
 
 /**
  * Core backup management (ch. 20.1.2 / E53/E55/E56) within the
@@ -43,7 +45,7 @@ class BackupController extends AdminController
         if ($offsiteEnabled) {
             try {
                 $offsiteBackups = (new OffsiteBackupService())->list();
-            } catch (\Throwable) {
+            } catch (Throwable) {
                 $offsiteBackups = [];
             }
         }
@@ -58,7 +60,7 @@ class BackupController extends AdminController
             $actor = $this->identity() !== null ? (string)$this->identity()->getIdentifier() : null;
             $id = $this->service()->create((string)$this->request->getData('note') ?: null, $actor, $path);
             $this->Flash->success(__('flash.backup.created', $id));
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $this->Flash->error(__('flash.backup.failed', $e->getMessage()));
         }
 
@@ -109,7 +111,7 @@ class BackupController extends AdminController
     }
 
     /** Uploads a local backup to the off-site object storage (P14). */
-    public function offsiteUpload(string $id): ?\Cake\Http\Response
+    public function offsiteUpload(string $id): ?Response
     {
         $this->request->allowMethod('post');
         if (!$this->offsiteEnabled()) {
@@ -126,7 +128,7 @@ class BackupController extends AdminController
         try {
             (new OffsiteBackupService())->upload((string)$row['path']);
             $this->Flash->success(__('flash.backup.offsite_uploaded'));
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $this->Flash->error(__('flash.backup.offsite_failed', $e->getMessage()));
         }
 
@@ -134,7 +136,7 @@ class BackupController extends AdminController
     }
 
     /** Deletes an off-site backup (name = file name, no path traversal). */
-    public function offsiteDelete(string $name): ?\Cake\Http\Response
+    public function offsiteDelete(string $name): ?Response
     {
         $this->request->allowMethod('post');
         if (!$this->offsiteEnabled() || !preg_match('/^[A-Za-z0-9._-]+\z/', $name)) {
@@ -145,7 +147,7 @@ class BackupController extends AdminController
         try {
             (new OffsiteBackupService())->delete($name);
             $this->Flash->success(__('flash.backup.offsite_deleted'));
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $this->Flash->error(__('flash.backup.offsite_failed', $e->getMessage()));
         }
 

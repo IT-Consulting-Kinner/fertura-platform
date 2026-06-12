@@ -10,6 +10,7 @@ use App\Service\Update\RecoveryPoint;
 use App\Service\Update\UpdateManager;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\TestCase;
+use Throwable;
 
 /**
  * Integration test of the module update path (ch. 24.13/28.14.2, review point 3):
@@ -27,7 +28,9 @@ class ModuleUpdateTest extends TestCase
     private string $v2 = '';
     private string $v2bad = '';
     private bool $prevSig = true;
-    /** @var array<string,mixed> */
+    /**
+     * @var array<string,mixed>
+     */
     private $recovery;
 
     protected function setUp(): void
@@ -53,7 +56,9 @@ class ModuleUpdateTest extends TestCase
 
         // Stub the recovery point for the test (no real pg_dump).
         $this->recovery = new class extends RecoveryPoint {
-            /** @var list<string> */
+            /**
+             * @var list<string>
+             */
             public array $calls = [];
 
             public function create(string $label): string
@@ -190,18 +195,20 @@ class ModuleUpdateTest extends TestCase
         $conn = ConnectionManager::get('default');
         try {
             (new ModuleLifecycle())->delete(self::KEY);
-        } catch (\Throwable) {
+        } catch (Throwable) {
         }
-        foreach ([
+        foreach (
+            [
             'DROP SCHEMA IF EXISTS mod_ztest_upd CASCADE',
             'DELETE FROM contracts WHERE owner_module_key = :k',
             'DELETE FROM resources WHERE module_key = :k',
             'DELETE FROM update_history WHERE component_key = :k',
             'DELETE FROM modules WHERE module_key = :k',
-        ] as $sql) {
+            ] as $sql
+        ) {
             try {
                 $conn->execute($sql, str_contains($sql, ':k') ? ['k' => self::KEY] : []);
-            } catch (\Throwable) {
+            } catch (Throwable) {
             }
         }
         $this->rrmdir(ROOT . '/modules/' . self::KEY);

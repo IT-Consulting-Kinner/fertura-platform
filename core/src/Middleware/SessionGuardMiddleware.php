@@ -14,6 +14,7 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
+use Throwable;
 
 /**
  * Session anomaly detection (stretch goal of E129) for **session-based** identities:
@@ -105,7 +106,7 @@ class SessionGuardMiddleware implements MiddlewareInterface
             if ($notify && $count > 1) {
                 (new NotificationService())->notify($userId, 'security.new_device', __('security.new_device_notice'));
             }
-        } catch (\Throwable) {
+        } catch (Throwable) {
             // The device heuristic must never break the request.
         }
     }
@@ -115,7 +116,7 @@ class SessionGuardMiddleware implements MiddlewareInterface
     {
         try {
             (new AuditLogger())->log($action, 'user', $userId, ['newValue' => $detail, 'component' => 'core']);
-        } catch (\Throwable) {
+        } catch (Throwable) {
             // error-isolated
         }
     }
@@ -131,7 +132,7 @@ class SessionGuardMiddleware implements MiddlewareInterface
                 (bool)$s->get('core', 'security.session.ip_strict', false),
                 (bool)$s->get('core', 'security.session.notify_new_device', true),
             ];
-        } catch (\Throwable) {
+        } catch (Throwable) {
             return [true, false, true];
         }
     }

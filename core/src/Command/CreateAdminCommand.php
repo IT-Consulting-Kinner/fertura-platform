@@ -85,7 +85,12 @@ class CreateAdminCommand extends Command
         // Save, assign areas and write audit entries in ONE transaction
         // (transactional audit linkage, ch. 1.8).
         $count = $connection->transactional(function () use (
-            $users, $user, $connection, $audit, $correlationId, $isNew
+            $users,
+            $user,
+            $connection,
+            $audit,
+            $correlationId,
+            $isNew,
         ) {
             if (!$users->save($user, ['checkRules' => true])) {
                 return false;

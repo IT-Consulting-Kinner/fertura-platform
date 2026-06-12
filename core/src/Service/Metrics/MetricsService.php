@@ -57,13 +57,13 @@ class MetricsService
             return $out;
         });
 
-        $this->safe($samples, fn (): array => $this->grouped(
+        $this->safe($samples, fn(): array => $this->grouped(
             $conn,
             'event_outbox',
             'fertura_outbox_events',
             'Ereignisse in der Outbox nach Status.',
         ));
-        $this->safe($samples, fn (): array => $this->grouped(
+        $this->safe($samples, fn(): array => $this->grouped(
             $conn,
             'modules',
             'fertura_modules',

@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Service\Schedule;
 
+use App\Service\Backup\BackupScheduledTask;
 use App\Service\Health\WorkerHeartbeat;
 use App\Service\Module\ContributionRuntime;
 use App\Service\Registry\ContractRegistry;
@@ -30,7 +31,7 @@ class ScheduledTaskRunner
 
     /** @var list<class-string> Periodic tasks shipped with the core. */
     private const CORE_TASKS = [
-        \App\Service\Backup\BackupScheduledTask::class,
+        BackupScheduledTask::class,
     ];
 
     public function __construct(private ?ContractRegistry $registry = null)
@@ -47,7 +48,7 @@ class ScheduledTaskRunner
     {
         // Always include the core's own tasks (in-process).
         $tasks = array_map(
-            static fn ($c) => ['class' => $c, 'module_key' => 'core', 'isolation' => 'in_process'],
+            static fn($c) => ['class' => $c, 'module_key' => 'core', 'isolation' => 'in_process'],
             self::CORE_TASKS,
         );
         // Module tasks WITH isolation mode (out_of_process -> via RPC in the host).
@@ -69,7 +70,7 @@ class ScheduledTaskRunner
     public function tickClasses(array $classes): array
     {
         return $this->tickContributions(array_map(
-            static fn ($c) => ['class' => $c, 'module_key' => 'core', 'isolation' => 'in_process'],
+            static fn($c) => ['class' => $c, 'module_key' => 'core', 'isolation' => 'in_process'],
             array_values(array_filter($classes, 'is_string')),
         ));
     }

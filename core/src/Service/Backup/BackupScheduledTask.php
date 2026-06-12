@@ -5,6 +5,7 @@ namespace App\Service\Backup;
 
 use App\Service\Schedule\ScheduledTaskInterface;
 use App\Service\Settings\SettingsManager;
+use App\Service\System\FeatureFlags;
 use Cake\Datasource\ConnectionManager;
 use Throwable;
 
@@ -33,7 +34,7 @@ class BackupScheduledTask implements ScheduledTaskInterface
     {
         // Hard deployment switch: disables automatic backups entirely
         // (manual backups remain available via CLI/GUI).
-        if (!\App\Service\System\FeatureFlags::enabled('backup_scheduler')) {
+        if (!FeatureFlags::enabled('backup_scheduler')) {
             return;
         }
         $settings = new SettingsManager();

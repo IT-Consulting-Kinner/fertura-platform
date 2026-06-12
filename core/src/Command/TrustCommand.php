@@ -65,7 +65,7 @@ class TrustCommand extends Command
                 )->fetchAll('assoc');
                 foreach ($rows as $r) {
                     $chain = $r['key_type'] === 'publisher' ? ' <- ' . ($r['signed_by'] ?? '?') : '';
-                    $window = ($r['valid_from'] || $r['valid_to'])
+                    $window = $r['valid_from'] || $r['valid_to']
                         ? ' [' . ($r['valid_from'] ?? '…') . ' … ' . ($r['valid_to'] ?? '…') . ']'
                         : '';
                     $expired = !TrustStore::validity($r)['ok'] ? ' <warning>UNGUELTIG</warning>' : '';

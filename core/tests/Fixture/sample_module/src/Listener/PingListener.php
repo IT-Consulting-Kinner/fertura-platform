@@ -5,6 +5,7 @@ namespace SampleModule\Listener;
 
 use App\Event\EventListenerInterface;
 use Cake\Datasource\ConnectionManager;
+use stdClass;
 
 /**
  * Example listener of the sample module: logs every ping event into the module's
@@ -17,7 +18,7 @@ class PingListener implements EventListenerInterface
     {
         ConnectionManager::get('default')->execute(
             'INSERT INTO mod_sample_module.ping_log (payload) VALUES (CAST(:p AS jsonb))',
-            ['p' => json_encode($payload === [] ? new \stdClass() : $payload)],
+            ['p' => json_encode($payload === [] ? new stdClass() : $payload)],
         );
     }
 }

@@ -5,6 +5,7 @@ namespace App\Service\Security;
 
 use App\Audit\AuditLogger;
 use App\Infrastructure\Uuid;
+use Cake\Database\Connection;
 use Cake\Datasource\ConnectionManager;
 use RuntimeException;
 
@@ -40,7 +41,7 @@ class WebAuthnService
         $this->audit = $audit ?? new AuditLogger();
     }
 
-    private function conn(): \Cake\Database\Connection
+    private function conn(): Connection
     {
         /** @var \Cake\Database\Connection $conn */
         $conn = ConnectionManager::get('default');
@@ -73,7 +74,7 @@ class WebAuthnService
             'attestation' => 'none',
             'authenticatorSelection' => ['userVerification' => 'preferred', 'residentKey' => 'discouraged'],
             'excludeCredentials' => array_map(
-                static fn (array $c) => ['type' => 'public-key', 'id' => $c['credential_id']],
+                static fn(array $c) => ['type' => 'public-key', 'id' => $c['credential_id']],
                 $this->credentials($userId),
             ),
         ];
@@ -92,7 +93,7 @@ class WebAuthnService
             'timeout' => 60000,
             'userVerification' => 'preferred',
             'allowCredentials' => array_map(
-                static fn (array $c) => ['type' => 'public-key', 'id' => $c['credential_id']],
+                static fn(array $c) => ['type' => 'public-key', 'id' => $c['credential_id']],
                 $this->credentials($userId),
             ),
         ];

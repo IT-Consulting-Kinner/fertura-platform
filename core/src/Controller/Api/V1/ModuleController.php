@@ -6,6 +6,7 @@ namespace App\Controller\Api\V1;
 use App\Service\Api\ApiRouteRegistry;
 use App\Service\Module\ContributionRuntime;
 use Cake\Http\Response;
+use Cake\Log\Log;
 use Throwable;
 
 /**
@@ -47,7 +48,7 @@ class ModuleController extends ApiController
             );
         } catch (Throwable $e) {
             // Do not leak internal details (paths/SQL/classes) to the client.
-            \Cake\Log\Log::error('Modul-Endpunkt-Fehler: ' . $e->getMessage(), [
+            Log::error('Modul-Endpunkt-Fehler: ' . $e->getMessage(), [
                 'module' => $moduleKey,
                 'path' => '/' . $path,
             ]);

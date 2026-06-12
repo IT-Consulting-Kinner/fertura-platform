@@ -80,7 +80,7 @@ class ExportService
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->fromArray([array_map([$this, 'antiFormula'], $columns)], null, 'A1');
         $sheet->fromArray(
-            array_map(fn ($r): array => array_map([$this, 'antiFormula'], array_values($r)), $rows),
+            array_map(fn($r): array => array_map([$this, 'antiFormula'], array_values($r)), $rows),
             null,
             'A2',
         );
@@ -152,7 +152,7 @@ class ExportService
      */
     private function html(string $title, array $columns, array $rows): string
     {
-        $h = static fn (mixed $v): string => htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
+        $h = static fn(mixed $v): string => htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
         $head = '';
         foreach ($columns as $c) {
             $head .= '<th>' . $h($c) . '</th>';

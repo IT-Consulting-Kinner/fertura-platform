@@ -24,7 +24,7 @@ class RemoteInvoker
 
     public function __construct(?string $socketDir = null)
     {
-        $this->socketDir = rtrim($socketDir ?? (sys_get_temp_dir() . '/fertura-mod'), '/');
+        $this->socketDir = rtrim($socketDir ?? sys_get_temp_dir() . '/fertura-mod', '/');
         // The token directory sits alongside the socket directory (see the supervisor).
         $this->tokenDir = dirname($this->socketDir) . '/fertura-mod-tokens';
     }

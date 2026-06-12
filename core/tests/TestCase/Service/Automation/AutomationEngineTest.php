@@ -86,7 +86,9 @@ class AutomationEngineTest extends TestCase
 /** NotificationService stub: records notify() calls. */
 class StubNotifier extends NotificationService
 {
-    /** @var list<array<string,mixed>> */
+    /**
+     * @var list<array<string,mixed>>
+     */
     public array $calls = [];
 
     public function notify(string $userId, string $type, string $title, string $body = '', array $data = [], ?array $channels = null): string

@@ -22,7 +22,9 @@ class WebAuthnServiceTest extends TestCase
     private const ORIGIN = 'https://fertura.test';
 
     private string $userId;
-    /** @var \OpenSSLAsymmetricKey */
+    /**
+     * @var \OpenSSLAsymmetricKey
+     */
     private $key;
     private string $credentialId;
 
@@ -145,14 +147,26 @@ class WebAuthnServiceTest extends TestCase
         $challenge = WebAuthnService::challenge();
         [$cd, $ad, $sig] = $this->assertion($challenge, 10);
         $this->assertTrue($service->verifyAssertion(
-            $this->userId, WebAuthnService::b64uEncode($this->credentialId), $cd, $ad, $sig, $challenge, self::RP_ID,
+            $this->userId,
+            WebAuthnService::b64uEncode($this->credentialId),
+            $cd,
+            $ad,
+            $sig,
+            $challenge,
+            self::RP_ID,
         ));
 
         // Clone suspicion: counter runs backwards -> rejected.
         $challenge2 = WebAuthnService::challenge();
         [$cd2, $ad2, $sig2] = $this->assertion($challenge2, 7);
         $this->assertFalse($service->verifyAssertion(
-            $this->userId, WebAuthnService::b64uEncode($this->credentialId), $cd2, $ad2, $sig2, $challenge2, self::RP_ID,
+            $this->userId,
+            WebAuthnService::b64uEncode($this->credentialId),
+            $cd2,
+            $ad2,
+            $sig2,
+            $challenge2,
+            self::RP_ID,
         ));
     }
 

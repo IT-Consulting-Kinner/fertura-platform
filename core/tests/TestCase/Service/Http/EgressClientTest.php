@@ -26,7 +26,8 @@ class EgressClientTest extends TestCase
     public function testBlocksLoopbackAndPrivateAndMetadata(): void
     {
         $c = new EgressClient(null, ['allow_private' => false, 'allowlist' => []]);
-        foreach ([
+        foreach (
+            [
             'http://127.0.0.1/',
             'http://[::1]/',
             'http://10.0.0.1/',
@@ -34,7 +35,8 @@ class EgressClientTest extends TestCase
             'http://192.168.1.10/',
             'http://169.254.169.254/latest/meta-data/', // cloud metadata (classic SSRF)
             'http://0.0.0.0/',
-        ] as $url) {
+            ] as $url
+        ) {
             $this->assertFalse($c->isUrlAllowed($url), "muss blockiert sein: $url");
         }
     }

@@ -5,6 +5,7 @@ namespace App\Command;
 
 use App\Infrastructure\Db;
 use App\Service\Update\RecoveryPoint;
+use Cake\Cache\Cache;
 use Cake\Command\Command;
 use Cake\Console\Arguments;
 use Cake\Console\ConsoleIo;
@@ -78,7 +79,7 @@ class CoreMigrateCommand extends Command
             // until the cache expires. So invalidate it after migrations.
             foreach (['_cake_model_', '_cake_translations_'] as $cfg) {
                 try {
-                    \Cake\Cache\Cache::clear($cfg);
+                    Cache::clear($cfg);
                 } catch (Throwable) {
                 }
             }

@@ -6,7 +6,6 @@ namespace App\Command;
 use App\Model\Entity\Contract;
 use App\Model\Entity\ContractRegistration;
 use App\Service\Registry\ContractRegistry;
-use App\Service\Registry\RegistryException;
 use Cake\Command\Command;
 use Cake\Console\Arguments;
 use Cake\Console\ConsoleIo;
@@ -36,7 +35,7 @@ class RegistrySelftestCommand extends Command
                 'requiredVersion' => '>=2.0.0 <3.0.0',
             ]);
             $this->assert($io, $registry->resolveProviderClass('selftest.resolver.demo') === 'ModA\\Resolver', 'aktiver Provider = ModA');
-            $this->assertThrows($io, fn () => $registry->register('modB', 'selftest.resolver.demo', ContractRegistration::TYPE_PROVIDER, [
+            $this->assertThrows($io, fn() => $registry->register('modB', 'selftest.resolver.demo', ContractRegistration::TYPE_PROVIDER, [
                 'implementationClass' => 'ModB\\Resolver',
             ]), 'zweiter Provider -> Slot-Konflikt');
 
@@ -48,8 +47,8 @@ class RegistrySelftestCommand extends Command
             $registry->registerContract('selftest', 'selftest.service.api', Contract::TYPE_SERVICE, '2.3.0');
             $registry->register('modC', 'selftest.service.api', ContractRegistration::TYPE_CONSUMER, ['requiredVersion' => '>=2.1.0 <3.0.0']);
             $this->assert($io, true, 'kompatibler Consumer (>=2.1.0 <3.0.0 vs 2.3.0) ok');
-            $this->assertThrows($io, fn () => $registry->register('modD', 'selftest.service.api', ContractRegistration::TYPE_CONSUMER, ['requiredVersion' => '3.0.0']), 'inkompatible Version (3.0.0 vs 2.3.0) -> Fehler');
-            $this->assertThrows($io, fn () => $registry->register('modE', 'selftest.service.api', ContractRegistration::TYPE_CONSUMER, ['requiredVersion' => '^2.0.0']), 'Caret-Kurzform -> unzulaessig');
+            $this->assertThrows($io, fn() => $registry->register('modD', 'selftest.service.api', ContractRegistration::TYPE_CONSUMER, ['requiredVersion' => '3.0.0']), 'inkompatible Version (3.0.0 vs 2.3.0) -> Fehler');
+            $this->assertThrows($io, fn() => $registry->register('modE', 'selftest.service.api', ContractRegistration::TYPE_CONSUMER, ['requiredVersion' => '^2.0.0']), 'Caret-Kurzform -> unzulaessig');
 
             // 4. Collector with priority.
             $registry->registerContract('selftest', 'selftest.collector.widgets', Contract::TYPE_COLLECTOR, '1.0.0');
@@ -58,7 +57,7 @@ class RegistrySelftestCommand extends Command
             $this->assert($io, $registry->collectContributionClasses('selftest.collector.widgets') === ['ModG\\Widget', 'ModF\\Widget'], 'Collector-Beitraege nach Prioritaet sortiert');
 
             // 5. Unknown contract -> error.
-            $this->assertThrows($io, fn () => $registry->register('modH', 'selftest.does.not.exist', ContractRegistration::TYPE_LISTENER), 'unbekannter Contract -> Fehler');
+            $this->assertThrows($io, fn() => $registry->register('modH', 'selftest.does.not.exist', ContractRegistration::TYPE_LISTENER), 'unbekannter Contract -> Fehler');
         } catch (Throwable $e) {
             $this->assert($io, false, 'unerwarteter Fehler: ' . $e->getMessage());
         }

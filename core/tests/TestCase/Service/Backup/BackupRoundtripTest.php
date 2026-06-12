@@ -5,8 +5,11 @@ namespace App\Test\TestCase\Service\Backup;
 
 use App\Service\Backup\BackupService;
 use App\Service\Settings\SettingsManager;
+use Cake\Database\Connection;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\TestCase;
+use RuntimeException;
+use Throwable;
 
 /**
  * Integration test of the backup/restore roundtrip (ch. 20.1.2, E53/E56) against
@@ -22,9 +25,13 @@ class BackupRoundtripTest extends TestCase
     private const LIFECYCLE_LOCK = 778899001;
 
     private string $tmpDir = '';
-    /** @var list<string> */
+    /**
+     * @var list<string>
+     */
     private array $created = [];
-    /** @var array<string,mixed> */
+    /**
+     * @var array<string,mixed>
+     */
     private array $prev = [];
     private string $holderConn = '';
 
@@ -52,7 +59,7 @@ class BackupRoundtripTest extends TestCase
         foreach ($this->created as $id) {
             try {
                 $svc->delete($id);
-            } catch (\Throwable) {
+            } catch (Throwable) {
                 // best effort
             }
         }
@@ -127,7 +134,7 @@ class BackupRoundtripTest extends TestCase
             $threw = false;
             try {
                 (new BackupService())->context('cli')->create($note, null, $this->tmpDir);
-            } catch (\RuntimeException $e) {
+            } catch (RuntimeException $e) {
                 $threw = true;
                 $this->assertStringContainsStringIgnoringCase('lock', $e->getMessage());
             }
@@ -142,7 +149,7 @@ class BackupRoundtripTest extends TestCase
             foreach ($rows as $r) {
                 try {
                     (new BackupService())->delete((string)$r['id']);
-                } catch (\Throwable) {
+                } catch (Throwable) {
                     // best effort
                 }
             }
@@ -150,13 +157,13 @@ class BackupRoundtripTest extends TestCase
     }
 
     /** Separate DB session (second connection) for holding the advisory lock. */
-    private function separateConnection(): \Cake\Database\Connection
+    private function separateConnection(): Connection
     {
         $this->holderConn = 'bk_lockholder';
         if (ConnectionManager::getConfig($this->holderConn) === null) {
             $cfg = ConnectionManager::get('default')->config();
             unset($cfg['name']);
-            $cfg['className'] = \Cake\Database\Connection::class;
+            $cfg['className'] = Connection::class;
             ConnectionManager::setConfig($this->holderConn, $cfg);
         }
         /** @var \Cake\Database\Connection $conn */
@@ -174,7 +181,7 @@ class BackupRoundtripTest extends TestCase
         try {
             ConnectionManager::get($this->holderConn)->getDriver()->disconnect();
             ConnectionManager::drop($this->holderConn);
-        } catch (\Throwable) {
+        } catch (Throwable) {
             // best effort
         }
         $this->holderConn = '';

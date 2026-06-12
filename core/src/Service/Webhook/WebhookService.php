@@ -8,6 +8,7 @@ use App\Infrastructure\Uuid;
 use App\Service\Http\EgressClient;
 use Cake\Datasource\ConnectionInterface;
 use Cake\Datasource\ConnectionManager;
+use InvalidArgumentException;
 use Throwable;
 
 /**
@@ -190,7 +191,7 @@ class WebhookService
     {
         $scheme = strtolower((string)parse_url($url, PHP_URL_SCHEME));
         if (!in_array($scheme, ['http', 'https'], true)) {
-            throw new \InvalidArgumentException('Webhook-URL muss http/https sein.');
+            throw new InvalidArgumentException('Webhook-URL muss http/https sein.');
         }
         $filter = (string)preg_replace('/\s+/', '', $eventFilter) ?: '*';
         $row = $this->conn()->execute(

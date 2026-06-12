@@ -103,7 +103,9 @@ class NotificationServiceTest extends TestCase
 /** MailService stub: records sends, sends nothing. */
 class FakeMail extends MailService
 {
-    /** @var list<array{to:string,subject:string,body:string}> */
+    /**
+     * @var list<array{to:string,subject:string,body:string}>
+     */
     public array $sent = [];
 
     public function notify(string $to, string $subject, string $body): bool
@@ -117,7 +119,9 @@ class FakeMail extends MailService
 /** ContributionRuntime stub: a module channel `slack` that records deliveries. */
 class FakeRuntime extends ContributionRuntime
 {
-    /** @var list<array<string,mixed>> */
+    /**
+     * @var list<array<string,mixed>>
+     */
     public array $delivered = [];
 
     public function collectors(string $contract): array

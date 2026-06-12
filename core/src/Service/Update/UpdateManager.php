@@ -5,6 +5,7 @@ namespace App\Service\Update;
 
 use App\Application;
 use App\Audit\AuditLogger;
+use App\Infrastructure\Db;
 use App\Model\Entity\ContractRegistration;
 use App\Service\Module\LifecycleException;
 use App\Service\Module\ModuleDbRole;
@@ -16,7 +17,6 @@ use App\Service\Registry\VersionConstraint;
 use App\Service\Security\PackageVerificationException;
 use App\Service\Security\PackageVerifier;
 use App\Service\Settings\SettingsManager;
-use Cake\Datasource\ConnectionManager;
 use Migrations\Migrations;
 use Throwable;
 
@@ -59,12 +59,13 @@ class UpdateManager
 
     private function conn()
     {
-        return \App\Infrastructure\Db::privileged();
+        return Db::privileged();
     }
 
     // ---- Module update -------------------------------------------------------
 
     /** @return array<string, mixed> */
+
     /**
      * Migration/compatibility preview for a module update WITHOUT executing it
      * (ch. 24.13 step 8). Returns the version delta, pending migrations and
@@ -151,7 +152,7 @@ class UpdateManager
 
         $pending = [];
         try {
-            $status = (new Migrations(['connection' => \App\Infrastructure\Db::privilegedName()]))->status();
+            $status = (new Migrations(['connection' => Db::privilegedName()]))->status();
             foreach ($status as $row) {
                 if (($row['status'] ?? '') === 'down') {
                     $pending[] = trim(($row['id'] ?? '') . ' ' . ($row['name'] ?? ''));
@@ -199,7 +200,7 @@ class UpdateManager
             $wasActive = $mod['status'] === 'active';
             // Isolated modules: run migrations via the login role (no superuser
             // code, ch. 23.16.2) — otherwise an update would run privileged.
-            $roleDsn = ((string)($mod['isolation'] ?? 'in_process')) === 'out_of_process'
+            $roleDsn = (string)($mod['isolation'] ?? 'in_process') === 'out_of_process'
                 ? (new ModuleDbRole())->dsn($key)
                 : null;
 
@@ -344,7 +345,7 @@ class UpdateManager
             }
             if ($incompatible !== [] && !$force) {
                 throw new LifecycleException(
-                    'Core-Update blockiert, inkompatible Module: ' . implode(', ', $incompatible)
+                    'Core-Update blockiert, inkompatible Module: ' . implode(', ', $incompatible),
                 );
             }
 
@@ -354,7 +355,7 @@ class UpdateManager
             try {
                 // Run pending core migrations (privileged connection because of
                 // DDL; the default runs as a NOBYPASSRLS role, E26).
-                $migrations = new Migrations(['connection' => \App\Infrastructure\Db::privilegedName()]);
+                $migrations = new Migrations(['connection' => Db::privilegedName()]);
                 $migrations->migrate();
 
                 $this->recordHistory('core', 'core', $oldVersion, $targetVersion, 'success', null, $recoveryPath);

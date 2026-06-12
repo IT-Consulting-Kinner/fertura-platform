@@ -6,12 +6,17 @@ namespace App\Service\Backup;
 use App\Application;
 use App\Audit\AuditLogger;
 use App\Infrastructure\Db;
+use App\Service\Mail\MailService;
 use App\Service\Settings\SettingsManager;
 use App\Service\System\MaintenanceMode;
+use Cake\Database\Connection;
+use Cake\Database\Driver\Postgres;
 use Cake\Datasource\ConnectionManager;
 use RuntimeException;
 use Symfony\Component\Uid\Uuid;
+use Throwable;
 use ZipArchive;
+use function Cake\Core\env;
 
 /**
  * Consistent data backup & restore (ch. 20.1.2, E53/E55/E56).
@@ -43,7 +48,7 @@ class BackupService
         if ($base === null) {
             try {
                 $base = (string)(new SettingsManager())->get('core', 'backup.path', ROOT . '/backups');
-            } catch (\Throwable) {
+            } catch (Throwable) {
                 $base = ROOT . '/backups';
             }
             if (trim($base) === '') {
@@ -92,17 +97,17 @@ class BackupService
      */
     private function password(): string
     {
-        $file = (string)\Cake\Core\env('BACKUP_PASSWORD_FILE');
+        $file = (string)env('BACKUP_PASSWORD_FILE');
         if ($file !== '' && is_file($file)) {
             return trim((string)file_get_contents($file));
         }
-        $env = (string)\Cake\Core\env('BACKUP_PASSWORD');
+        $env = (string)env('BACKUP_PASSWORD');
         if ($env !== '') {
             return $env;
         }
         try {
             return (string)(new SettingsManager())->get('core', 'backup.password', '');
-        } catch (\Throwable) {
+        } catch (Throwable) {
             return '';
         }
     }
@@ -148,8 +153,10 @@ class BackupService
             if ($this->isIgnorableRestoreLine($line)) {
                 continue;
             }
-            if (stripos($line, 'pg_restore: error:') !== false
-                || preg_match('/(?<![A-Za-z])ERROR:\s/', $line) === 1) {
+            if (
+                stripos($line, 'pg_restore: error:') !== false
+                || preg_match('/(?<![A-Za-z])ERROR:\s/', $line) === 1
+            ) {
                 $errors[] = trim($line);
             }
         }
@@ -165,7 +172,7 @@ class BackupService
         // (pg_restore not found, connection dropped) — is a structural problem
         // and must not silently count as success.
         if ($rc !== 0) {
-            $unexpected = array_values(array_filter($out, fn ($l) => !$this->isIgnorableRestoreLine($l)));
+            $unexpected = array_values(array_filter($out, fn($l) => !$this->isIgnorableRestoreLine($l)));
             if ($unexpected !== [] || $out === []) {
                 throw new RuntimeException(
                     $context . ' fehlgeschlagen (rc=' . $rc . '): '
@@ -197,7 +204,7 @@ class BackupService
     public function create(?string $note, ?string $actorId, ?string $targetDir = null): string
     {
         $this->actor ??= $actorId;
-        $dir = ($targetDir !== null && trim($targetDir) !== '')
+        $dir = $targetDir !== null && trim($targetDir) !== ''
             ? BackupPath::assertUsable($targetDir)
             : $this->base;
         if (!is_dir($dir) && !@mkdir($dir, 0o775, true) && !is_dir($dir)) {
@@ -206,7 +213,7 @@ class BackupService
         // Pre-flight BEFORE anything else; a failure is logged and alerted.
         try {
             $this->preflightSpace($dir);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $this->log('create', null, 'error', $e->getMessage());
             $this->alertFailure($e->getMessage());
             throw $e;
@@ -250,7 +257,7 @@ class BackupService
                 $this->run($env . 'pg_dump -h ' . escapeshellarg($pg['host']) . ' -p ' . escapeshellarg($pg['port'])
                     . ' -U ' . escapeshellarg($pg['user']) . ' -d ' . escapeshellarg($pg['db'])
                     . ' -Fc -f ' . escapeshellarg($dumpFile));
-                $present = array_values(array_filter(self::STORES, fn ($s) => is_dir(ROOT . '/' . $s)));
+                $present = array_values(array_filter(self::STORES, fn($s) => is_dir(ROOT . '/' . $s)));
                 if ($present !== []) {
                     $this->run('tar czf ' . escapeshellarg($filesTar) . ' -C ' . escapeshellarg(ROOT)
                         . ' ' . implode(' ', array_map('escapeshellarg', $present)));
@@ -284,7 +291,7 @@ class BackupService
                     throw new RuntimeException('Probe-Restore fehlgeschlagen: ' . ($probe['reason'] ?? ''));
                 }
             }
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             @exec('rm -rf ' . escapeshellarg($work));
             @unlink($zip);
             $this->conn()->execute("UPDATE backups SET status = 'failed' WHERE id = :id", ['id' => $id]);
@@ -393,7 +400,7 @@ class BackupService
         $engaged = MaintenanceMode::engage('restore');
         try {
             $this->restoreArchive((string)$row['path'], $pw);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $this->log('restore', $id, 'error', $e->getMessage());
             throw $e;
         } finally {
@@ -415,7 +422,7 @@ class BackupService
         $engaged = MaintenanceMode::engage('restore');
         try {
             $this->restoreArchive(BackupPath::normalize($zipPath), $pw);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $this->log('restore_from', null, 'error', $e->getMessage() . ' (' . $zipPath . ')');
             throw $e;
         } finally {
@@ -577,14 +584,14 @@ class BackupService
             )->fetch('assoc')['n'];
 
             return ['ok' => $tables > 0, 'tables' => $tables, 'reason' => $tables > 0 ? null : 'Keine core-Tabellen im Restore.'];
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             return ['ok' => false, 'tables' => 0, 'reason' => $e->getMessage()];
         } finally {
             if ($connName !== null) {
                 try {
                     ConnectionManager::get($connName)->getDriver()->disconnect();
                     ConnectionManager::drop($connName);
-                } catch (\Throwable) {
+                } catch (Throwable) {
                 }
             }
             @exec($env . 'dropdb --force --if-exists ' . $base . ' ' . escapeshellarg($scratch) . ' 2>&1');
@@ -694,7 +701,7 @@ class BackupService
                 . 'VALUES (:op, :bid, :src, :actor, :res, :msg)',
                 ['op' => $operation, 'bid' => $backupId, 'src' => $this->source, 'actor' => $this->actor, 'res' => $result, 'msg' => $message],
             );
-        } catch (\Throwable) {
+        } catch (Throwable) {
             // Logging must not make the business action fail.
         }
     }
@@ -710,8 +717,8 @@ class BackupService
         $name = 'scratch_' . substr(md5($scratch), 0, 8);
         if (ConnectionManager::getConfig($name) === null) {
             ConnectionManager::setConfig($name, [
-                'className' => \Cake\Database\Connection::class,
-                'driver' => \Cake\Database\Driver\Postgres::class,
+                'className' => Connection::class,
+                'driver' => Postgres::class,
                 'host' => $pg['host'], 'port' => $pg['port'], 'username' => $pg['user'],
                 'password' => $pg['pass'], 'database' => $scratch, 'encoding' => 'utf8',
                 'timezone' => 'UTC', 'cacheMetadata' => false,
@@ -748,7 +755,7 @@ class BackupService
         $size = 0;
         try {
             $size += (int)$this->conn()->execute('SELECT pg_database_size(current_database()) AS s')->fetch('assoc')['s'];
-        } catch (\Throwable) {
+        } catch (Throwable) {
         }
         foreach (self::STORES as $s) {
             $p = ROOT . '/' . $s;
@@ -773,12 +780,12 @@ class BackupService
             if ($to === '') {
                 return;
             }
-            (new \App\Service\Mail\MailService())->notify(
+            (new MailService())->notify(
                 $to,
                 __('mail.backup_failed.subject'),
                 __('mail.backup_failed.body', gmdate('c'), $this->source, $message),
             );
-        } catch (\Throwable) {
+        } catch (Throwable) {
             // The alert itself must not trigger anything further.
         }
     }

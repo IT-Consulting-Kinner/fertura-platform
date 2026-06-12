@@ -4,6 +4,8 @@ declare(strict_types=1);
 namespace App\Service\Queue;
 
 use Predis\Client;
+use stdClass;
+use Throwable;
 use function Cake\Core\env;
 
 /**
@@ -43,7 +45,7 @@ class RedisStreamTransport implements QueueTransportInterface
     public function push(string $queue, array $payload): string
     {
         return (string)$this->redis->executeRaw([
-            'XADD', $this->key($queue), '*', 'data', json_encode($payload === [] ? new \stdClass() : $payload),
+            'XADD', $this->key($queue), '*', 'data', json_encode($payload === [] ? new stdClass() : $payload),
         ]);
     }
 
@@ -130,7 +132,7 @@ class RedisStreamTransport implements QueueTransportInterface
             // From `0` (stream start) so that entries enqueued BEFORE the (lazy)
             // group creation are also delivered — otherwise they would be lost.
             $this->redis->executeRaw(['XGROUP', 'CREATE', $key, self::GROUP, '0', 'MKSTREAM']);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             // BUSYGROUP = group already exists -> ok.
             if (!str_contains($e->getMessage(), 'BUSYGROUP')) {
                 throw $e;

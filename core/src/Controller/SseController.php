@@ -3,7 +3,9 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Service\Cache\CacheStore;
 use App\Service\Realtime\RealtimeService;
+use App\Service\Settings\SettingsManager;
 use Cake\Event\EventInterface;
 use Cake\Http\CallbackStream;
 use Cake\Http\Response;
@@ -40,8 +42,8 @@ class SseController extends AppController
         // Cap on concurrent streams per user (against FPM/DB slot exhaustion).
         // Counter in the cache; on a crash it expires via the TTL (self-healing),
         // otherwise it is decremented at the end of the stream.
-        $cap = (int)(new \App\Service\Settings\SettingsManager())->get('core', 'sse.max_streams_per_user', 3);
-        $cache = new \App\Service\Cache\CacheStore('_app_ratelimit_');
+        $cap = (int)(new SettingsManager())->get('core', 'sse.max_streams_per_user', 3);
+        $cache = new CacheStore('_app_ratelimit_');
         $counterKey = 'sse:' . $userId;
         if ($cache->increment($counterKey) > $cap) {
             $cache->decrement($counterKey);
@@ -57,36 +59,36 @@ class SseController extends AppController
         $body = new CallbackStream(static function () use ($channel, $maxSeconds, $cache, $counterKey): void {
             @set_time_limit($maxSeconds + 5);
             try {
-            while (ob_get_level() > 0) {
-                @ob_end_flush();
-            }
-            $emit = static function (string $text): void {
-                echo $text;
-                @flush();
-            };
-
-            $pdo = RealtimeService::listenPdo();
-            if ($pdo === null) {
-                $emit(": no-listen\n\n");
-
-                return;
-            }
-            $pdo->exec('LISTEN ' . $channel);
-            $emit(": connected\n\n");
-
-            $start = time();
-            while (time() - $start < $maxSeconds) {
-                if (connection_aborted()) {
-                    break;
+                while (ob_get_level() > 0) {
+                    @ob_end_flush();
                 }
-                /** @var array{message:string,payload:string}|false $note */
-                $note = $pdo->pgsqlGetNotify(PDO::FETCH_ASSOC, 5000);
-                if (is_array($note) && ($note['message'] ?? '') === $channel) {
-                    $emit('data: ' . $note['payload'] . "\n\n");
-                } else {
-                    $emit(": ping\n\n"); // Heartbeat (keeps the connection + detects abort)
+                $emit = static function (string $text): void {
+                    echo $text;
+                    @flush();
+                };
+
+                $pdo = RealtimeService::listenPdo();
+                if ($pdo === null) {
+                    $emit(": no-listen\n\n");
+
+                    return;
                 }
-            }
+                $pdo->exec('LISTEN ' . $channel);
+                $emit(": connected\n\n");
+
+                $start = time();
+                while (time() - $start < $maxSeconds) {
+                    if (connection_aborted()) {
+                        break;
+                    }
+                    /** @var array{message:string,payload:string}|false $note */
+                    $note = $pdo->pgsqlGetNotify(PDO::FETCH_ASSOC, 5000);
+                    if (is_array($note) && ($note['message'] ?? '') === $channel) {
+                        $emit('data: ' . $note['payload'] . "\n\n");
+                    } else {
+                        $emit(": ping\n\n"); // Heartbeat (keeps the connection + detects abort)
+                    }
+                }
             } finally {
                 $cache->decrement($counterKey);
             }

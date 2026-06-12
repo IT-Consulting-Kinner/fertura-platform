@@ -45,7 +45,7 @@ class RecoveryPoint
             return 0;
         }
         // By modification time, descending (newest first).
-        usort($files, static fn ($a, $b) => filemtime($b) <=> filemtime($a));
+        usort($files, static fn($a, $b) => filemtime($b) <=> filemtime($a));
         $stale = array_slice($files, $this->keep());
         foreach ($stale as $f) {
             @unlink($f);
@@ -95,7 +95,7 @@ class RecoveryPoint
 
         if ($code !== 0 || !is_file($file) || filesize($file) === 0) {
             throw new RuntimeException(
-                'Wiederherstellungspunkt fehlgeschlagen (Update abgebrochen): ' . implode(' ', $out)
+                'Wiederherstellungspunkt fehlgeschlagen (Update abgebrochen): ' . implode(' ', $out),
             );
         }
 

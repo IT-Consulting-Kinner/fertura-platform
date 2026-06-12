@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Controller\Admin;
 
 use App\Service\I18n\LanguagePackAdmin;
+use Throwable;
 
 /**
  * Language management (administration area "Language Management", 7., E41).
@@ -31,7 +32,7 @@ class LocalizationController extends AdminController
         try {
             $entries = $admin->entries($component, $version, $locale, $domain);
             $meta = $admin->meta($component, $version, $locale);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $this->Flash->error(__('flash.lang.not_found'));
 
             return $this->redirect(['action' => 'index']);
@@ -58,7 +59,7 @@ class LocalizationController extends AdminController
             $admin = new LanguagePackAdmin();
             $admin->saveEntries($component, $version, $locale, $domain, $byIndex, $actor);
             $this->Flash->success(__('flash.lang.saved'));
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $this->Flash->error(__('flash.lang.save_failed', $e->getMessage()));
         }
 
@@ -72,7 +73,7 @@ class LocalizationController extends AdminController
         try {
             (new LanguagePackAdmin())->deletePack($component, $version, $locale, $domain);
             $this->Flash->success(__('flash.lang.deleted'));
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $this->Flash->error(__('flash.lang.delete_failed', $e->getMessage()));
         }
 
@@ -86,7 +87,7 @@ class LocalizationController extends AdminController
         try {
             (new LanguagePackAdmin())->review($component, $version, $locale, $domain);
             $this->Flash->success(__('flash.lang.reviewed'));
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $this->Flash->error(__('flash.lang.save_failed', $e->getMessage()));
         }
 
@@ -131,7 +132,7 @@ class LocalizationController extends AdminController
                 $admin->importCommit($path, $type ?: 'module', $component, $version, $locale, $domain ?: $component, $actor);
                 @unlink($path);
                 $this->Flash->success(__('flash.lang.imported'));
-            } catch (\Throwable $e) {
+            } catch (Throwable $e) {
                 $this->Flash->error(__('flash.lang.import_failed', $e->getMessage()));
             }
 
@@ -165,7 +166,7 @@ class LocalizationController extends AdminController
     /** @return array{0:string,1:string,2:string,3:string} */
     private function target(): array
     {
-        $get = fn (string $k): string => (string)($this->request->getData($k) ?? $this->request->getQuery($k) ?? '');
+        $get = fn(string $k): string => (string)($this->request->getData($k) ?? $this->request->getQuery($k) ?? '');
 
         return [$get('component'), $get('version'), $get('locale'), $get('domain')];
     }

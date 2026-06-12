@@ -8,6 +8,7 @@ use App\Service\Auth\Sso\SamlProvider;
 use App\Service\Auth\Sso\SsoService;
 use Cake\Event\EventInterface;
 use Cake\Routing\Router;
+use RuntimeException;
 use Throwable;
 
 /**
@@ -122,7 +123,7 @@ class SsoController extends AppController
         try {
             $provider = $sso->provider($providerId);
             if ($provider === null) {
-                throw new \RuntimeException('Unbekannter SSO-Provider.');
+                throw new RuntimeException('Unbekannter SSO-Provider.');
             }
             $identity = (new SamlProvider())->processAcs($provider, $this->samlAcsUrl(), $this->spEntityId(), $expectedId);
 

@@ -20,7 +20,7 @@ class HealthController extends ApiController
         return $this->json([
             'status' => $report['status'],
             'subsystems' => array_map(
-                static fn ($s) => ['status' => $s['status'] ?? 'unknown'],
+                static fn($s) => ['status' => $s['status'] ?? 'unknown'],
                 $report['subsystems'],
             ),
         ]);

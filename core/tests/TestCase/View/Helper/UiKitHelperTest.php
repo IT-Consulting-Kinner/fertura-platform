@@ -4,8 +4,8 @@ declare(strict_types=1);
 namespace App\Test\TestCase\View\Helper;
 
 use App\View\Helper\UiKitHelper;
-use Cake\View\View;
 use Cake\TestSuite\TestCase;
+use Cake\View\View;
 
 /**
  * Tests the module UI kit (declarative CRUD building blocks): rendering + HTML escaping.
@@ -52,8 +52,8 @@ class UiKitHelperTest extends TestCase
     public function testIndexCellLinkAndActions(): void
     {
         $rows = [['id' => 7, 'name' => 'Sieben']];
-        $columns = [['key' => 'name', 'label' => 'Name', 'link' => static fn ($r) => '/things/' . $r['id']]];
-        $actions = [['label' => 'Öffnen', 'url' => static fn ($r) => '/things/' . $r['id'], 'class' => 'btn btn-sm']];
+        $columns = [['key' => 'name', 'label' => 'Name', 'link' => static fn($r) => '/things/' . $r['id']]];
+        $actions = [['label' => 'Öffnen', 'url' => static fn($r) => '/things/' . $r['id'], 'class' => 'btn btn-sm']];
         $html = $this->ui->index($rows, $columns, ['actions' => $actions]);
 
         $this->assertStringContainsString('href="/things/7"', $html);

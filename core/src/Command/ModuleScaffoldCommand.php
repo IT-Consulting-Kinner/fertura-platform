@@ -8,6 +8,7 @@ use Cake\Command\Command;
 use Cake\Console\Arguments;
 use Cake\Console\ConsoleIo;
 use Cake\Console\ConsoleOptionParser;
+use Throwable;
 
 /**
  * Generates a runnable module skeleton (Programme Tier-3, P16).
@@ -35,7 +36,7 @@ class ModuleScaffoldCommand extends Command
         }
         try {
             $files = (new ModuleScaffolder())->scaffold($key, $namespace, (string)$args->getOption('into'));
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $io->error($e->getMessage());
 
             return self::CODE_ERROR;

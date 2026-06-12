@@ -46,7 +46,7 @@ class WorkflowEngine
         foreach ($defs as $def) {
             try {
                 $transitions = (array)(json_decode((string)$def['transitions'], true) ?: []);
-                $forEvent = array_values(array_filter($transitions, static fn ($t) => (string)($t['on_event'] ?? '') === $event));
+                $forEvent = array_values(array_filter($transitions, static fn($t) => (string)($t['on_event'] ?? '') === $event));
                 if ($forEvent === []) {
                     continue;
                 }
@@ -57,8 +57,10 @@ class WorkflowEngine
                 $instance = $this->getOrCreate((string)$def['id'], $entityId, (string)$def['initial_state']);
                 foreach ($forEvent as $t) {
                     $from = (string)($t['from'] ?? '*');
-                    if (($from !== '*' && $from !== $instance['state'])
-                        || !$this->evaluator->evaluate((array)($t['condition'] ?? []), $payload)) {
+                    if (
+                        ($from !== '*' && $from !== $instance['state'])
+                        || !$this->evaluator->evaluate((array)($t['condition'] ?? []), $payload)
+                    ) {
                         continue;
                     }
                     $to = (string)($t['to'] ?? $instance['state']);

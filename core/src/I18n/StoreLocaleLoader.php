@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\I18n;
 
 use App\Service\I18n\LanguagePackStore;
+use App\Service\I18n\LocaleResolver;
 use Cake\Datasource\ConnectionManager;
 use Cake\I18n\I18n;
 use Cake\I18n\Package;
@@ -26,7 +27,7 @@ class StoreLocaleLoader
     {
         I18n::config($domain, static function (string $name, string $locale) use ($componentKey, $activeVersion, $domain): Package {
             $store = new LanguagePackStore();
-            $resolver = new \App\Service\I18n\LocaleResolver();
+            $resolver = new LocaleResolver();
 
             // English base (version gate: exact > same-major > none).
             $en = $resolver->resolveVersion($componentKey, $activeVersion, self::BASE_LOCALE);

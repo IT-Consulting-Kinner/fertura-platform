@@ -6,6 +6,7 @@ namespace App\Test\TestCase\Service\Sdk;
 use App\Service\Sdk\ManifestLinter;
 use App\Service\Sdk\ModuleScaffolder;
 use Cake\TestSuite\TestCase;
+use RuntimeException;
 
 /**
  * Test of the module scaffolder (P16): the generated skeleton passes the linter cleanly.
@@ -43,7 +44,7 @@ class ModuleScaffolderTest extends TestCase
 
     public function testScaffoldRejectsBadKey(): void
     {
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(RuntimeException::class);
         (new ModuleScaffolder())->scaffold('Bad-Key', 'Acme\\X', $this->dir);
     }
 

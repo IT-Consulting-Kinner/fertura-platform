@@ -5,6 +5,8 @@ namespace App\Model\Table;
 
 use App\Audit\AuditLogger;
 use App\Model\Entity\User;
+use App\Service\Privacy\AnonymizationService;
+use Cake\I18n\DateTime;
 use Cake\ORM\Query\SelectQuery;
 use Cake\Validation\Validator;
 
@@ -95,7 +97,7 @@ class UsersTable extends AppTable
             $user->timezone = null;
             $user->password_hash = null;
             $user->status = User::STATUS_ANONYMIZED;
-            $user->anonymized_at = new \Cake\I18n\DateTime();
+            $user->anonymized_at = new DateTime();
 
             if (!$this->save($user, ['checkRules' => false])) {
                 return false;
@@ -111,7 +113,7 @@ class UsersTable extends AppTable
             // (ch. 27.15.3, collector core.collector.anonymize) — in the same
             // transaction (atomic). If any contribution fails, the whole
             // anonymization fails.
-            $scrubbed = (new \App\Service\Privacy\AnonymizationService())->run((string)$id, $this->getConnection());
+            $scrubbed = (new AnonymizationService())->run((string)$id, $this->getConnection());
 
             // Audit (ch. 27.18): log the anonymization. No PII in the
             // payload (E16); user referenced by UUID.

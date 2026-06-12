@@ -7,6 +7,7 @@ use App\Model\ActorContext;
 use Cake\Datasource\ConnectionManager;
 use Cake\Log\Log;
 use Symfony\Component\Uid\Uuid;
+use Throwable;
 
 /**
  * Central write service for the audit log (ch. 1.6 / 24.16 / 27.18).
@@ -100,7 +101,7 @@ class AuditLogger
                     'actor_user_id' => $actor,
                 ],
             ]);
-        } catch (\Throwable) {
+        } catch (Throwable) {
             // The stream is a mirror for detection; the DB remains the source of truth.
         }
     }

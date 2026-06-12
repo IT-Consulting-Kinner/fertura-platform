@@ -3,10 +3,12 @@ declare(strict_types=1);
 
 namespace App\Controller\Admin;
 
+use App\Audit\AuditLogger;
 use App\Model\Entity\User;
 use App\Service\Identity\PasswordResetService;
 use App\Service\Mail\MailService;
 use Cake\Datasource\ConnectionManager;
+use Cake\Http\Response;
 
 /**
  * User management (admin area "User and Group Management").
@@ -17,7 +19,7 @@ class UsersController extends AdminController
 
     private function audit()
     {
-        return new \App\Audit\AuditLogger();
+        return new AuditLogger();
     }
 
     public function index(): void
@@ -259,7 +261,7 @@ class UsersController extends AdminController
     }
 
     /** Malformed ID (UUID guard): treat like an unknown user. */
-    private function notFound(): ?\Cake\Http\Response
+    private function notFound(): ?Response
     {
         $this->Flash->error(__('flash.user.not_found'));
 
@@ -298,7 +300,7 @@ class UsersController extends AdminController
             return false;
         }
         $others = (int)$conn->execute(
-            "SELECT count(DISTINCT ua.user_id) FROM user_admin_areas ua JOIN users u ON u.id = ua.user_id "
+            'SELECT count(DISTINCT ua.user_id) FROM user_admin_areas ua JOIN users u ON u.id = ua.user_id '
             . "WHERE ua.admin_area_key = 'user_group_admin' AND u.status = 'active' AND ua.user_id <> :id",
             ['id' => $id],
         )->fetch()[0];

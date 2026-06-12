@@ -5,6 +5,7 @@ namespace App\Controller\Admin;
 
 use App\Service\Module\ModuleLifecycle;
 use Cake\Datasource\ConnectionManager;
+use Throwable;
 
 /**
  * Module lifecycle (admin area "Module Lifecycle").
@@ -125,7 +126,7 @@ class ModulesController extends AdminController
     {
         $this->request->allowMethod('post');
 
-        return $this->run(fn (ModuleLifecycle $l) => $l->activate($key), __('flash.module.activated'));
+        return $this->run(fn(ModuleLifecycle $l) => $l->activate($key), __('flash.module.activated'));
     }
 
     public function deactivate(string $key)
@@ -151,7 +152,7 @@ class ModulesController extends AdminController
         try {
             $fn(new ModuleLifecycle());
             $this->Flash->success($okMessage);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $this->Flash->error(__('flash.module.failed', $e->getMessage()));
         }
 

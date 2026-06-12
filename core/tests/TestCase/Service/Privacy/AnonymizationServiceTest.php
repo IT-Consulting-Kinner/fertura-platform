@@ -33,7 +33,7 @@ class AnonymizationServiceTest extends TestCase
         // The core contract is seeded by a migration, but the test migrator
         // truncates seed data -> ensure it exists here.
         $conn->execute(
-            "INSERT INTO contracts (owner_module_key, name, contract_type, version, multi_use, active) "
+            'INSERT INTO contracts (owner_module_key, name, contract_type, version, multi_use, active) '
             . "VALUES ('core', 'core.collector.anonymize', 'collector', '1.0.0', true, true) ON CONFLICT (name) DO NOTHING",
         );
         // Register a contribution for core.collector.anonymize (module_key is just text).
@@ -56,14 +56,14 @@ class AnonymizationServiceTest extends TestCase
     public function testRunInvokesContributorsScopedToUser(): void
     {
         $conn = ConnectionManager::get('default');
-        $scrubbed = $conn->transactional(fn () => (new AnonymizationService())->run(self::TARGET, $conn));
+        $scrubbed = $conn->transactional(fn() => (new AnonymizationService())->run(self::TARGET, $conn));
 
         $this->assertSame(2, $scrubbed, 'Beide PII-Zeilen des Zielnutzers müssen bereinigt sein.');
         // Target user scrubbed ...
         $target = $conn->execute("SELECT count(*) c FROM public.ztest_anon_data WHERE owner_id = :u AND secret = '[anonymisiert]'", ['u' => self::TARGET])->fetch('assoc');
         $this->assertSame(2, (int)$target['c']);
         // ... other user untouched.
-        $other = $conn->execute("SELECT secret FROM public.ztest_anon_data WHERE owner_id = :u", ['u' => self::OTHER])->fetch('assoc');
+        $other = $conn->execute('SELECT secret FROM public.ztest_anon_data WHERE owner_id = :u', ['u' => self::OTHER])->fetch('assoc');
         $this->assertSame('Klarname B', $other['secret']);
     }
 
@@ -98,7 +98,7 @@ class AnonymizationServiceTest extends TestCase
             $u = $conn->execute('SELECT status, email FROM users WHERE id = :id', ['id' => $userId])->fetch('assoc');
             $this->assertSame('anonymized', $u['status']);
             // ... and the user's module PII scrubbed.
-            $m = $conn->execute("SELECT secret FROM public.ztest_anon_data WHERE owner_id = :u", ['u' => $userId])->fetch('assoc');
+            $m = $conn->execute('SELECT secret FROM public.ztest_anon_data WHERE owner_id = :u', ['u' => $userId])->fetch('assoc');
             $this->assertSame('[anonymisiert]', $m['secret']);
         } finally {
             $conn->execute('DELETE FROM users WHERE id = :id', ['id' => $userId]);

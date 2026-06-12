@@ -22,7 +22,7 @@ class MetricsServiceTest extends TestCase
         $this->assertContains('fertura_up', $names);
 
         $text = (new PrometheusRenderer())->render($samples);
-        $this->assertStringContainsString("fertura_up 1", $text);
+        $this->assertStringContainsString('fertura_up 1', $text);
         $this->assertStringStartsWith('#', $text);
     }
 
@@ -40,7 +40,7 @@ class MetricsServiceTest extends TestCase
             $samples = (new MetricsService())->collect();
             $match = array_filter(
                 $samples,
-                fn ($s) => $s['name'] === 'fertura_worker_heartbeat_age_seconds'
+                fn($s) => $s['name'] === 'fertura_worker_heartbeat_age_seconds'
                     && ($s['labels']['worker'] ?? null) === 'test:metric',
             );
             $this->assertCount(1, $match, 'Heartbeat muss als Gauge erscheinen.');

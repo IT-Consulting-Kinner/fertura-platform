@@ -88,12 +88,12 @@ final class Totp
             $value = ($value << 8) | ord($byte);
             $bits += 8;
             while ($bits >= 5) {
-                $out .= self::B32_ALPHABET[($value >> ($bits - 5)) & 31];
+                $out .= self::B32_ALPHABET[($value >> $bits - 5) & 31];
                 $bits -= 5;
             }
         }
         if ($bits > 0) {
-            $out .= self::B32_ALPHABET[($value << (5 - $bits)) & 31];
+            $out .= self::B32_ALPHABET[($value << 5 - $bits) & 31];
         }
 
         return $out;
@@ -113,7 +113,7 @@ final class Totp
             $value = ($value << 5) | $pos;
             $bits += 5;
             if ($bits >= 8) {
-                $out .= chr(($value >> ($bits - 8)) & 0xFF);
+                $out .= chr(($value >> $bits - 8) & 0xFF);
                 $bits -= 8;
             }
         }

@@ -65,7 +65,7 @@ class TenantService
             'SELECT id, key, name, active FROM tenants ORDER BY name',
         )->fetchAll('assoc');
 
-        return array_map(static fn (array $r): array => [
+        return array_map(static fn(array $r): array => [
             'id' => (string)$r['id'],
             'key' => (string)$r['key'],
             'name' => (string)$r['name'],

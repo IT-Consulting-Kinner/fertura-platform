@@ -34,7 +34,9 @@ class OtlpMetricsExporterTest extends TestCase
         putenv('OTEL_EXPORTER_OTLP_ENDPOINT=http://collector:4318');
         try {
             $egress = new class extends EgressClient {
-                /** @var list<array<string,mixed>> */
+                /**
+                 * @var list<array<string,mixed>>
+                 */
                 public array $calls = [];
 
                 public function __construct()

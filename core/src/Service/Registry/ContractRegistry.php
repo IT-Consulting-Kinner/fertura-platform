@@ -7,6 +7,9 @@ use App\Audit\AuditLogger;
 use App\Model\Entity\CapabilityBinding;
 use App\Model\Entity\Contract;
 use App\Model\Entity\ContractRegistration;
+use App\Model\Table\CapabilityBindingsTable;
+use App\Model\Table\ContractRegistrationsTable;
+use App\Model\Table\ContractsTable;
 use Cake\I18n\DateTime;
 use Cake\ORM\Locator\LocatorAwareTrait;
 
@@ -32,17 +35,17 @@ class ContractRegistry
         $this->audit = $audit ?? new AuditLogger();
     }
 
-    private function contracts(): \App\Model\Table\ContractsTable
+    private function contracts(): ContractsTable
     {
         return $this->fetchTable('Contracts');
     }
 
-    private function registrations(): \App\Model\Table\ContractRegistrationsTable
+    private function registrations(): ContractRegistrationsTable
     {
         return $this->fetchTable('ContractRegistrations');
     }
 
-    private function bindings(): \App\Model\Table\CapabilityBindingsTable
+    private function bindings(): CapabilityBindingsTable
     {
         return $this->fetchTable('CapabilityBindings');
     }
@@ -134,7 +137,7 @@ class ContractRegistry
                     'moduleKey' => $moduleKey,
                 ]);
                 throw new RegistryException(
-                    "Inkompatible Version für $contractName: gefordert $requiredVersion, angeboten {$contract->version}."
+                    "Inkompatible Version für $contractName: gefordert $requiredVersion, angeboten {$contract->version}.",
                 );
             }
         }
@@ -155,7 +158,7 @@ class ContractRegistry
                     'moduleKey' => $moduleKey,
                 ]);
                 throw new RegistryException(
-                    "Resolver-Slot belegt: $contractName (aktiver Provider: {$existing->module_key})."
+                    "Resolver-Slot belegt: $contractName (aktiver Provider: {$existing->module_key}).",
                 );
             }
         }
@@ -177,7 +180,7 @@ class ContractRegistry
                     'moduleKey' => $moduleKey,
                 ]);
                 throw new RegistryException(
-                    "Mehrfachnutzung untersagt: $contractName (aktiver Nutzer: {$existing->module_key})."
+                    "Mehrfachnutzung untersagt: $contractName (aktiver Nutzer: {$existing->module_key}).",
                 );
             }
         }
@@ -185,7 +188,13 @@ class ContractRegistry
         $registrations = $this->registrations();
 
         return $registrations->getConnection()->transactional(function () use (
-            $registrations, $contract, $moduleKey, $registrationType, $opts, $requiredVersion, $contractName
+            $registrations,
+            $contract,
+            $moduleKey,
+            $registrationType,
+            $opts,
+            $requiredVersion,
+            $contractName,
         ) {
             $r = $registrations->newEmptyEntity();
             $r->set('contract_id', $contract->id);
@@ -232,7 +241,7 @@ class ContractRegistry
         };
         if (!in_array($registrationType, $allowed, true)) {
             throw new RegistryException(
-                "Registrierungsart '$registrationType' passt nicht zu Contract-Typ '$contractType'."
+                "Registrierungsart '$registrationType' passt nicht zu Contract-Typ '$contractType'.",
             );
         }
     }
@@ -245,7 +254,7 @@ class ContractRegistry
         $r = $registrations->get($registrationId);
         $contract = $this->contracts()->get($r->contract_id);
 
-        $registrations->getConnection()->transactional(function () use ($registrations, $r, $contract) {
+        $registrations->getConnection()->transactional(function () use ($registrations, $r, $contract): void {
             $r->set('active', false);
             $r->set('deactivated_at', new DateTime());
             $registrations->save($r);

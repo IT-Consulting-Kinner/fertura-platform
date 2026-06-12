@@ -4,6 +4,8 @@ declare(strict_types=1);
 namespace App\Controller\Admin;
 
 use App\Service\Search\SearchService;
+use Cake\Http\Response;
+use Throwable;
 
 /**
  * Global admin search: queries the central index (hybrid = full-text +
@@ -31,7 +33,7 @@ class SearchController extends AdminController
      * Triggers the full-text reindex and backfills missing embeddings (GUI
      * counterpart to `bin/cake search_reindex`). Maintenance action → core_config only.
      */
-    public function reindex(): ?\Cake\Http\Response
+    public function reindex(): ?Response
     {
         $this->request->allowMethod('post');
         if (!in_array('core_config', $this->userAreaKeys, true)) {
@@ -44,7 +46,7 @@ class SearchController extends AdminController
             $indexers = $svc->reindexAll();
             $embeddings = $svc->backfillEmbeddings(500);
             $this->Flash->success(__('flash.search.reindexed', $indexers, $embeddings));
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $this->Flash->error(__('flash.search.reindex_failed', $e->getMessage()));
         }
 

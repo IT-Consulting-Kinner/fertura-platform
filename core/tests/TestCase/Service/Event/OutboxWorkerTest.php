@@ -22,7 +22,7 @@ class OutboxWorkerTest extends TestCase
         $conn = ConnectionManager::get('default');
         for ($i = 0; $i < $count; $i++) {
             $conn->execute(
-                "INSERT INTO event_outbox (contract_name, payload, max_attempts, tenant_id) "
+                'INSERT INTO event_outbox (contract_name, payload, max_attempts, tenant_id) '
                 . "VALUES ('zztest.fair', '{}'::jsonb, 5, :t)",
                 ['t' => $tenant],
             );

@@ -8,6 +8,9 @@ use App\Service\I18n\LanguagePackAdmin;
 use App\Service\I18n\LanguagePackStore;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\TestCase;
+use FilesystemIterator;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
 use RuntimeException;
 
 /**
@@ -53,9 +56,9 @@ class LanguagePackAdminTest extends TestCase
         if (!is_dir($dir)) {
             return;
         }
-        $it = new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS),
-            \RecursiveIteratorIterator::CHILD_FIRST,
+        $it = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::CHILD_FIRST,
         );
         foreach ($it as $f) {
             $f->isDir() ? @rmdir((string)$f) : @unlink((string)$f);

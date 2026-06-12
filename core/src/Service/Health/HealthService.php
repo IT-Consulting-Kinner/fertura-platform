@@ -3,10 +3,19 @@ declare(strict_types=1);
 
 namespace App\Service\Health;
 
+use App\Application;
+use App\Service\I18n\LanguagePackStore;
+use App\Service\I18n\LocaleResolver;
 use App\Service\License\LicenseService;
+use App\Service\Marketplace\MarketplaceClient;
+use App\Service\Module\ContributionRuntime;
 use App\Service\Registry\ContractRegistry;
 use App\Service\Settings\SettingsManager;
+use App\Service\System\FeatureFlags;
 use Cake\Datasource\ConnectionManager;
+use FilesystemIterator;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
 use Throwable;
 
 /**
@@ -58,7 +67,7 @@ class HealthService
         $db = $this->liveness();
         $maintenance = false;
         try {
-            $maintenance = (bool)(new \App\Service\Settings\SettingsManager())->get('core', 'maintenance_mode', false);
+            $maintenance = (bool)(new SettingsManager())->get('core', 'maintenance_mode', false);
         } catch (Throwable) {
             // Settings not readable -> treat as if not in maintenance mode.
         }
@@ -73,7 +82,7 @@ class HealthService
      */
     public function report(): array
     {
-        $features = \App\Service\System\FeatureFlags::all();
+        $features = FeatureFlags::all();
         $subsystems = [
             'database' => $this->checkDatabase(),
             'storage' => $this->checkStorage(),
@@ -192,8 +201,8 @@ class HealthService
             $conn = ConnectionManager::get('default');
             $contracts = (int)$conn->execute('SELECT count(*) FROM contracts WHERE active')->fetch()[0];
             $orphanBindings = (int)$conn->execute(
-                "SELECT count(*) FROM capability_bindings cb "
-                . "LEFT JOIN contracts c ON c.id = cb.contract_id "
+                'SELECT count(*) FROM capability_bindings cb '
+                . 'LEFT JOIN contracts c ON c.id = cb.contract_id '
                 . "WHERE cb.status = 'active' AND (c.id IS NULL OR NOT c.active)",
             )->fetch()[0];
 
@@ -225,7 +234,7 @@ class HealthService
             )->fetch()[0];
 
             return [
-                'status' => ($errors > 0 || $revoked > 0) ? 'degraded' : 'up',
+                'status' => $errors > 0 || $revoked > 0 ? 'degraded' : 'up',
                 'detail' => ['by_status' => $byStatus, 'error_modules' => $errors, 'revoked_signature' => $revoked],
             ];
         } catch (Throwable $e) {
@@ -240,7 +249,7 @@ class HealthService
             if ($baseUrl === '') {
                 return ['status' => 'up', 'detail' => 'nicht konfiguriert'];
             }
-            $crl = (new \App\Service\Marketplace\MarketplaceClient())->crlState();
+            $crl = (new MarketplaceClient())->crlState();
 
             return [
                 'status' => $crl['stale'] ? 'degraded' : 'up',
@@ -309,8 +318,8 @@ class HealthService
     {
         try {
             $conn = ConnectionManager::get('default');
-            $resolver = new \App\Service\I18n\LocaleResolver();
-            $coreVersion = \App\Application::CORE_VERSION;
+            $resolver = new LocaleResolver();
+            $coreVersion = Application::CORE_VERSION;
 
             $rows = $conn->execute(
                 'SELECT lp.component_key, lp.locale, lp.version, '
@@ -420,13 +429,13 @@ class HealthService
 
     private function countStoreTmp(): int
     {
-        $base = (new \App\Service\I18n\LanguagePackStore())->base();
+        $base = (new LanguagePackStore())->base();
         if (!is_dir($base)) {
             return 0;
         }
         $n = 0;
-        $it = new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator($base, \FilesystemIterator::SKIP_DOTS),
+        $it = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($base, FilesystemIterator::SKIP_DOTS),
         );
         foreach ($it as $f) {
             if (substr((string)$f, -7) === '.po.tmp') {
@@ -446,14 +455,14 @@ class HealthService
         $contributions = [];
         $status = 'up';
         try {
-            $contribs = (new \App\Service\Module\ContributionRuntime($this->registry))->collectors(self::HEALTH_COLLECTOR);
+            $contribs = (new ContributionRuntime($this->registry))->collectors(self::HEALTH_COLLECTOR);
         } catch (Throwable) {
             $contribs = [];
         }
         foreach ($contribs as $contrib) {
             try {
                 // In-process locally, out_of_process via the isolated host (RPC).
-                $result = (array)(new \App\Service\Module\ContributionRuntime($this->registry))->call($contrib, 'check', []);
+                $result = (array)(new ContributionRuntime($this->registry))->call($contrib, 'check', []);
                 $contributions[] = $result;
                 if (($result['status'] ?? 'up') !== 'up') {
                     $status = 'degraded';

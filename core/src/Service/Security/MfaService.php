@@ -8,7 +8,9 @@ use App\Infrastructure\Uuid;
 use App\Service\Cache\CacheStore;
 use App\Service\Settings\SecretCipher;
 use App\Service\Settings\SettingsManager;
+use Cake\Database\Connection;
 use Cake\Datasource\ConnectionManager;
+use Throwable;
 
 /**
  * MFA management (TOTP) for local accounts (ch. 27.16.3 addendum):
@@ -40,7 +42,7 @@ class MfaService
         $this->replay = $replay ?? new CacheStore('_app_');
     }
 
-    private function conn(): \Cake\Database\Connection
+    private function conn(): Connection
     {
         /** @var \Cake\Database\Connection $conn */
         $conn = ConnectionManager::get('default');
@@ -67,7 +69,7 @@ class MfaService
     {
         try {
             return (bool)(new SettingsManager())->get('core', 'security.mfa.required', false);
-        } catch (\Throwable) {
+        } catch (Throwable) {
             return false;
         }
     }
@@ -132,7 +134,7 @@ class MfaService
         }
         try {
             $secret = $this->cipher->decrypt((string)$row['totp_secret']);
-        } catch (\Throwable) {
+        } catch (Throwable) {
             return false; // wrong key/tampering -> fail-closed
         }
 
@@ -173,6 +175,7 @@ class MfaService
         if (!Uuid::isValid($userId)) {
             return 0;
         }
+
         return (int)$this->conn()->execute(
             'SELECT count(*) AS c FROM user_mfa_recovery_codes WHERE user_id = :u AND used_at IS NULL',
             ['u' => $userId],

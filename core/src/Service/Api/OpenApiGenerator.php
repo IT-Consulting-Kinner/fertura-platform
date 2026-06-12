@@ -45,7 +45,7 @@ class OpenApiGenerator
                 $paths,
                 $r['method'],
                 '/api/v1/m/' . $r['module_key'] . $r['path'],
-                $r['summary'] !== '' ? $r['summary'] : ($r['module_key'] . ' endpoint'),
+                $r['summary'] !== '' ? $r['summary'] : $r['module_key'] . ' endpoint',
                 $r['scope'],
                 $r['module_key'],
             );
@@ -88,7 +88,7 @@ class OpenApiGenerator
         }
         if (preg_match_all('#\{([a-zA-Z_][a-zA-Z0-9_]*)\}#', $path, $mm)) {
             $op['parameters'] = array_map(
-                static fn (string $n): array => [
+                static fn(string $n): array => [
                     'name' => $n,
                     'in' => 'path',
                     'required' => true,

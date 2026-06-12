@@ -5,7 +5,10 @@ namespace App\Controller\Admin;
 
 use App\Service\Marketplace\MarketplaceClient;
 use App\Service\Security\TrustStore;
+use Cake\Database\Connection;
 use Cake\Datasource\ConnectionManager;
+use Cake\Http\Response;
+use Throwable;
 
 /**
  * Management of **trust anchors & revocation list** (ch. 24.9.2) — GUI counterpart to
@@ -21,7 +24,7 @@ class TrustController extends AdminController
 {
     protected ?string $requiredArea = 'core_config';
 
-    private function conn(): \Cake\Database\Connection
+    private function conn(): Connection
     {
         /** @var \Cake\Database\Connection $conn */
         $conn = ConnectionManager::get('default');
@@ -50,7 +53,7 @@ class TrustController extends AdminController
         $crl = ['stale' => false, 'age_days' => null, 'last_fetch_at' => null, 'max_age_days' => 0];
         try {
             $crl = (new MarketplaceClient())->crlState();
-        } catch (\Throwable) {
+        } catch (Throwable) {
             // The CRL status is informational; empty without marketplace config.
         }
 
@@ -58,7 +61,7 @@ class TrustController extends AdminController
     }
 
     /** Revokes a key and flags affected modules (deny-side). */
-    public function revoke(string $keyId): ?\Cake\Http\Response
+    public function revoke(string $keyId): ?Response
     {
         $this->request->allowMethod('post');
         if (trim($keyId) === '' || strlen($keyId) > 256) {
@@ -76,7 +79,7 @@ class TrustController extends AdminController
     }
 
     /** Adds a trust anchor (manual, out-of-band trust decision). */
-    public function addAnchor(): ?\Cake\Http\Response
+    public function addAnchor(): ?Response
     {
         $this->request->allowMethod('post');
         $keyId = trim((string)$this->request->getData('key_id'));
@@ -91,7 +94,7 @@ class TrustController extends AdminController
         try {
             (new TrustStore())->addAnchor($keyId, $publicKey, $type, $publisher);
             $this->Flash->success(__('flash.trust.added'));
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $this->Flash->error(__('flash.trust.add_failed', $e->getMessage()));
         }
 

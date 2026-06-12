@@ -51,10 +51,10 @@ class ServiceCommand extends Command
     private function list(ConsoleIo $io): int
     {
         $rows = ConnectionManager::get('default')->execute(
-            "SELECT c.name, c.version, c.owner_module_key, c.multi_use, c.active, "
-            . "(SELECT module_key FROM contract_registrations r WHERE r.contract_id = c.id "
+            'SELECT c.name, c.version, c.owner_module_key, c.multi_use, c.active, '
+            . '(SELECT module_key FROM contract_registrations r WHERE r.contract_id = c.id '
             . "AND r.registration_type = 'provider' AND r.active LIMIT 1) AS provider, "
-            . "(SELECT count(*) FROM contract_registrations r WHERE r.contract_id = c.id "
+            . '(SELECT count(*) FROM contract_registrations r WHERE r.contract_id = c.id '
             . "AND r.registration_type = 'service_consumer' AND r.active) AS consumers "
             . "FROM contracts c WHERE c.contract_type = 'service' ORDER BY c.name",
         )->fetchAll('assoc');

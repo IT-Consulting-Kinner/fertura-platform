@@ -6,6 +6,7 @@ namespace App\Test\TestCase\Service\Auth\Sso;
 use App\Service\Auth\Sso\SsoService;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\TestCase;
+use RuntimeException;
 
 /**
  * Tests SSO management + just-in-time provisioning/linking (P06).
@@ -93,17 +94,17 @@ class SsoServiceTest extends TestCase
         // Account-takeover protection: an existing account WITH a local password
         // must not be taken over via a claimed email address.
         ConnectionManager::get('default')->execute(
-            "INSERT INTO users (username, email, status, password_hash) "
+            'INSERT INTO users (username, email, status, password_hash) '
             . "VALUES ('zztest_local', 'local@zztest.local', 'active', 'hash')",
         );
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(RuntimeException::class);
         $this->expectExceptionMessageMatches('/lokal/');
         (new SsoService())->loginExternalUser($this->providerId, 'ext-4', 'local@zztest.local', null, null);
     }
 
     public function testRefusesUnverifiedEmail(): void
     {
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(RuntimeException::class);
         $this->expectExceptionMessageMatches('/unverifiziert/');
         (new SsoService())->loginExternalUser($this->providerId, 'ext-5', 'new@zztest.local', null, null, false);
     }

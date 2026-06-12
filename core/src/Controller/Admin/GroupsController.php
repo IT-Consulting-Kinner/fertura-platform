@@ -6,6 +6,7 @@ namespace App\Controller\Admin;
 use App\Audit\AuditLogger;
 use App\Service\Permission\PermissionService;
 use Cake\Datasource\ConnectionManager;
+use Cake\Http\Response;
 
 /**
  * Group management including membership and BREAD resource permissions
@@ -182,7 +183,7 @@ class GroupsController extends AdminController
     }
 
     /** Malformed ID (UUID guard): treat like an unknown group. */
-    private function notFound(): ?\Cake\Http\Response
+    private function notFound(): ?Response
     {
         $this->Flash->error(__('flash.group.not_found'));
 

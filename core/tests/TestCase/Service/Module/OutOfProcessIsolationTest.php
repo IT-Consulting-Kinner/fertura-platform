@@ -15,6 +15,7 @@ use App\Service\Registry\RegistryException;
 use App\Service\Settings\SettingsManager;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\TestCase;
+use Throwable;
 
 /**
  * E2E integration test of out-of-process isolation, phase 2 (ch. 23.16.2):
@@ -212,7 +213,7 @@ class OutOfProcessIsolationTest extends TestCase
         try {
             (new ModuleLifecycle())->install($dir, 'out_of_process');
             $this->fail('Die Eskalations-Migration hätte fehlschlagen müssen.');
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $this->assertMatchesRegularExpression('/fehlgeschlagen|permission|denied|recht/i', $e->getMessage());
         }
         // Proof: the core table was NOT created (no escalation).
@@ -354,26 +355,28 @@ class OutOfProcessIsolationTest extends TestCase
         $conn = ConnectionManager::get('default');
         try {
             (new ModuleHostSupervisor())->stop($key);
-        } catch (\Throwable) {
+        } catch (Throwable) {
         }
         try {
             (new ModuleLifecycle())->delete($key);
-        } catch (\Throwable) {
+        } catch (Throwable) {
         }
         try {
             (new ModuleDbRole())->drop($key);
-        } catch (\Throwable) {
+        } catch (Throwable) {
         }
-        foreach ([
+        foreach (
+            [
             "DROP SCHEMA IF EXISTS mod_$key CASCADE",
             'DELETE FROM contracts WHERE owner_module_key = :k',
             'DELETE FROM resources WHERE module_key = :k',
             'DELETE FROM modules WHERE module_key = :k',
             'DELETE FROM language_packs WHERE component_key = :k',
-        ] as $sql) {
+            ] as $sql
+        ) {
             try {
                 $conn->execute($sql, str_contains($sql, ':k') ? ['k' => $key] : []);
-            } catch (\Throwable) {
+            } catch (Throwable) {
             }
         }
         $this->rrmdir(ROOT . '/modules/' . $key);

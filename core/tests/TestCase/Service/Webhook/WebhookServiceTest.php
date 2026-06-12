@@ -114,7 +114,9 @@ class WebhookServiceTest extends TestCase
  */
 class FakeEgress extends EgressClient
 {
-    /** @var list<array<string, mixed>> */
+    /**
+     * @var list<array<string, mixed>>
+     */
     public array $calls = [];
 
     public function __construct(private int $status = 200)

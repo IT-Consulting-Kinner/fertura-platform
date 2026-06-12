@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Service\Registry;
 
 use InvalidArgumentException;
+use LogicException;
 
 /**
  * Version requirement per ch. 26.6.4: either an **exact** version (`2.3.1`) or an
@@ -16,11 +17,13 @@ use InvalidArgumentException;
  */
 final class VersionConstraint
 {
-    /** @var list<array{op: string, version: SemVer}> */
+    /**
+     * @var list<array{op: string, version: \App\Service\Registry\SemVer}>
+     */
     private array $clauses;
 
     /**
-     * @param list<array{op: string, version: SemVer}> $clauses
+     * @param list<array{op: string, version: \App\Service\Registry\SemVer}> $clauses
      */
     private function __construct(array $clauses)
     {
@@ -35,7 +38,7 @@ final class VersionConstraint
         }
         if (str_contains($spec, '^') || str_contains($spec, '~')) {
             throw new InvalidArgumentException(
-                'Caret/Tilde sind unzulässig (Kap. 26.6.4): exakte Version oder expliziter Bereich.'
+                'Caret/Tilde sind unzulässig (Kap. 26.6.4): exakte Version oder expliziter Bereich.',
             );
         }
 
@@ -73,7 +76,7 @@ final class VersionConstraint
                 '=' => $cmp === 0,
                 // Operators are parsed from a fixed regex set; a value outside it
                 // is a programming error, not a recoverable input.
-                default => throw new \LogicException('Unknown version operator: ' . $clause['op']),
+                default => throw new LogicException('Unknown version operator: ' . $clause['op']),
             };
             if (!$ok) {
                 return false;

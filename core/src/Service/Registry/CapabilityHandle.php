@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Service\Registry;
 
+use App\Service\Module\ContributionRuntime;
 use Cake\Datasource\ConnectionManager;
 
 /**
@@ -42,14 +43,14 @@ final class CapabilityHandle
      *
      * @param array<string, mixed> $input
      * @return array<string, mixed>
-     * @throws CapabilityRejectedException
+     * @throws \App\Service\Registry\CapabilityRejectedException
      */
     public function invoke(array $input): array
     {
         if (!$this->isValid()) {
             throw new CapabilityRejectedException(
-                "Interface-Aufruf abgewiesen: keine gültige Bindung für Modul "
-                . "'{$this->moduleKey}' an '{$this->contractName}'."
+                'Interface-Aufruf abgewiesen: keine gültige Bindung für Modul '
+                . "'{$this->moduleKey}' an '{$this->contractName}'.",
             );
         }
 
@@ -58,7 +59,7 @@ final class CapabilityHandle
         // through the provider method handle(input):array (ch. 26/29).
         if ($contract === null || !in_array($contract->contract_type, ['service', 'resolver'], true)) {
             throw new CapabilityRejectedException(
-                "Kein aufrufbares Interface (Service/Resolver): '{$this->contractName}'."
+                "Kein aufrufbares Interface (Service/Resolver): '{$this->contractName}'.",
             );
         }
 
@@ -66,7 +67,7 @@ final class CapabilityHandle
         if ($provider === null) {
             // Provider deactivated/removed -> interface unavailable (ch. 29.14).
             throw new CapabilityRejectedException(
-                "Interface-Aufruf abgewiesen: kein aktiver Anbieter für '{$this->contractName}'."
+                "Interface-Aufruf abgewiesen: kein aktiver Anbieter für '{$this->contractName}'.",
             );
         }
 
@@ -75,7 +76,7 @@ final class CapabilityHandle
         // is the **provider** module (not the contract owner).
         $contrib = $provider + ['isolation' => $this->providerIsolation($provider['module_key'])];
 
-        return (array)(new \App\Service\Module\ContributionRuntime($this->registry))->call($contrib, 'handle', [$input]);
+        return (array)(new ContributionRuntime($this->registry))->call($contrib, 'handle', [$input]);
     }
 
     /** Isolation mode of the provider module (core/unknown -> in_process). */

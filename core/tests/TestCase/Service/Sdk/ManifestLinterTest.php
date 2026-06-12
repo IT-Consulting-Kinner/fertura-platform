@@ -39,7 +39,7 @@ class ManifestLinterTest extends TestCase
         unset($m['publisher'], $m['php_namespace']);
         $r = (new ManifestLinter())->lint($m);
         $this->assertNotEmpty($r['errors']);
-        $this->assertTrue((bool)array_filter($r['errors'], fn ($e) => str_contains($e, 'publisher')));
+        $this->assertTrue((bool)array_filter($r['errors'], fn($e) => str_contains($e, 'publisher')));
     }
 
     public function testInvalidIdAndApiRoute(): void
@@ -48,9 +48,9 @@ class ManifestLinterTest extends TestCase
         $m['id'] = 'Bad-Id';
         $m['api_routes'] = [['method' => 'FETCH', 'path' => 'ping', 'class' => 'X']];
         $r = (new ManifestLinter())->lint($m);
-        $this->assertTrue((bool)array_filter($r['errors'], fn ($e) => str_contains($e, 'id ungültig')));
-        $this->assertTrue((bool)array_filter($r['errors'], fn ($e) => str_contains($e, 'method')));
-        $this->assertTrue((bool)array_filter($r['errors'], fn ($e) => str_contains($e, "mit '/' beginnen")));
+        $this->assertTrue((bool)array_filter($r['errors'], fn($e) => str_contains($e, 'id ungültig')));
+        $this->assertTrue((bool)array_filter($r['errors'], fn($e) => str_contains($e, 'method')));
+        $this->assertTrue((bool)array_filter($r['errors'], fn($e) => str_contains($e, "mit '/' beginnen")));
     }
 
     public function testClassOutsideNamespaceIsWarning(): void

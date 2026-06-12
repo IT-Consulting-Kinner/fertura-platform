@@ -8,6 +8,7 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
+use Throwable;
 
 /**
  * Sets security-relevant response headers on EVERY response (including error
@@ -70,7 +71,7 @@ class SecurityHeadersMiddleware implements MiddlewareInterface
             $enabled = (bool)$settings->get('core', 'security.headers.enabled', true);
             $csp = trim((string)($settings->get('core', 'security.csp', '') ?? ''));
             $hsts = (int)$settings->get('core', 'security.hsts_max_age', 31536000);
-        } catch (\Throwable) {
+        } catch (Throwable) {
             // Fail-safe: without reachable settings (bootstrap/migration) the
             // secure defaults apply — better to set the headers than to omit them.
             [$enabled, $csp, $hsts] = [true, '', 31536000];

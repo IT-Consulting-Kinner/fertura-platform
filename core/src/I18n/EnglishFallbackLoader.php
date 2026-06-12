@@ -3,9 +3,14 @@ declare(strict_types=1);
 
 namespace App\I18n;
 
+use App\Application;
+use App\Service\I18n\LanguagePackStore;
+use App\Service\I18n\LocaleResolver;
 use Cake\I18n\I18n;
 use Cake\I18n\MessagesFileLoader;
 use Cake\I18n\Package;
+use Cake\I18n\Parser\PoFileParser;
+use Throwable;
 
 /**
  * Registers, for a translation domain, a loader that loads **English as the
@@ -58,18 +63,18 @@ class EnglishFallbackLoader
     private static function coreStorePack(string $domain, string $locale): array
     {
         try {
-            $resolver = new \App\Service\I18n\LocaleResolver();
-            $res = $resolver->resolveVersion('core', \App\Application::CORE_VERSION, $locale);
+            $resolver = new LocaleResolver();
+            $res = $resolver->resolveVersion('core', Application::CORE_VERSION, $locale);
             if ($res === null) {
                 return [];
             }
-            $file = (new \App\Service\I18n\LanguagePackStore())->filePath('core', $res['version'], $locale, $domain);
+            $file = (new LanguagePackStore())->filePath('core', $res['version'], $locale, $domain);
             if (!is_file($file)) {
                 return [];
             }
 
-            return (new \Cake\I18n\Parser\PoFileParser())->parse($file);
-        } catch (\Throwable) {
+            return (new PoFileParser())->parse($file);
+        } catch (Throwable) {
             return [];
         }
     }

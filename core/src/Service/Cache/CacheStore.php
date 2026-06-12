@@ -94,7 +94,7 @@ class CacheStore
             // Engine without atomic increment -> locked fallback below.
         }
         try {
-            return $this->lockedRmw($k, static fn (int $cur): int => $cur + $offset);
+            return $this->lockedRmw($k, static fn(int $cur): int => $cur + $offset);
         } catch (Throwable) {
             return 0; // cache off -> fail-open
         }
@@ -112,7 +112,7 @@ class CacheStore
         } catch (Throwable) {
         }
         try {
-            return $this->lockedRmw($k, static fn (int $cur): int => max(0, $cur - $offset));
+            return $this->lockedRmw($k, static fn(int $cur): int => max(0, $cur - $offset));
         } catch (Throwable) {
             return 0;
         }

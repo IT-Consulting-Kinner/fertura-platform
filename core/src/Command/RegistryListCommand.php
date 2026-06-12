@@ -32,7 +32,7 @@ class RegistryListCommand extends Command
         foreach ($contracts as $c) {
             $flag = $c['active'] ? '' : ' (inaktiv)';
             $io->out(sprintf(
-                "<info>%s</info>  [%s v%s, owner=%s]%s",
+                '<info>%s</info>  [%s v%s, owner=%s]%s',
                 $c['name'],
                 $c['contract_type'],
                 $c['version'],

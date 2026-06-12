@@ -3,10 +3,13 @@ declare(strict_types=1);
 
 namespace App\Controller\Api\Scim;
 
+use App\Audit\AuditLogger;
 use App\Controller\Api\V1\ApiController;
 use App\Infrastructure\Uuid;
+use Cake\Database\Connection;
 use Cake\Datasource\ConnectionManager;
 use Cake\Http\Response;
+use Throwable;
 
 /**
  * SCIM 2.0 Users resource (RFC 7643/7644, optional extra to E129) for IdP
@@ -29,7 +32,7 @@ class ScimUsersController extends ApiController
     private const SCHEMA_ERROR = 'urn:ietf:params:scim:api:messages:2.0:Error';
     private const SCHEMA_PATCH = 'urn:ietf:params:scim:api:messages:2.0:PatchOp';
 
-    private function conn(): \Cake\Database\Connection
+    private function conn(): Connection
     {
         /** @var \Cake\Database\Connection $conn */
         $conn = ConnectionManager::get('default');
@@ -73,7 +76,7 @@ class ScimUsersController extends ApiController
             'totalResults' => $total,
             'startIndex' => $startIndex,
             'itemsPerPage' => count($rows),
-            'Resources' => array_map(fn (array $r) => $this->toScim($r), $rows),
+            'Resources' => array_map(fn(array $r) => $this->toScim($r), $rows),
         ]);
     }
 
@@ -318,8 +321,8 @@ class ScimUsersController extends ApiController
     private function audit(string $action, string $userId): void
     {
         try {
-            (new \App\Audit\AuditLogger())->log($action, 'user', $userId, ['component' => 'core']);
-        } catch (\Throwable) {
+            (new AuditLogger())->log($action, 'user', $userId, ['component' => 'core']);
+        } catch (Throwable) {
             // error-isolated
         }
     }

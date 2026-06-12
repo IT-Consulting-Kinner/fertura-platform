@@ -91,9 +91,11 @@ class PackageVerifier
         }
         // Publisher binding (ch. 24.9.2): publisher keys must match the
         // manifest publisher.
-        if ($anchor['key_type'] === 'publisher'
+        if (
+            $anchor['key_type'] === 'publisher'
             && $manifestPublisher !== null
-            && $anchor['publisher'] !== $manifestPublisher) {
+            && $anchor['publisher'] !== $manifestPublisher
+        ) {
             throw new PackageVerificationException('Publisher des Schlüssels passt nicht zum Manifest.');
         }
 

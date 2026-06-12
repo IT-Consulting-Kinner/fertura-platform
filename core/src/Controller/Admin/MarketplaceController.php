@@ -6,7 +6,9 @@ namespace App\Controller\Admin;
 use App\Service\License\LicenseService;
 use App\Service\Marketplace\MarketplaceClient;
 use App\Service\Settings\SettingsManager;
+use App\Service\System\FeatureFlags;
 use Cake\Datasource\ConnectionManager;
+use Throwable;
 
 /**
  * Marketplace connection and license management
@@ -24,11 +26,11 @@ class MarketplaceController extends AdminController
         $error = null;
         // Marketplace client can be disabled per deployment (FEATURE_MARKETPLACE);
         // this area's license management remains unaffected by that.
-        $marketplaceEnabled = \App\Service\System\FeatureFlags::enabled('marketplace');
+        $marketplaceEnabled = FeatureFlags::enabled('marketplace');
         if ($marketplaceEnabled && $baseUrl !== '') {
             try {
                 $metadata = (new MarketplaceClient())->metadata();
-            } catch (\Throwable $e) {
+            } catch (Throwable $e) {
                 $error = $e->getMessage();
             }
         }
@@ -38,7 +40,7 @@ class MarketplaceController extends AdminController
     public function sync()
     {
         $this->request->allowMethod('post');
-        if (!\App\Service\System\FeatureFlags::enabled('marketplace')) {
+        if (!FeatureFlags::enabled('marketplace')) {
             $this->Flash->error(__('flash.marketplace.disabled'));
 
             return $this->redirect(['action' => 'index']);
@@ -50,7 +52,7 @@ class MarketplaceController extends AdminController
                 $result['anchors'] ?? 0,
                 $result['revoked'] ?? 0,
             ));
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $this->Flash->error(__('flash.marketplace.sync_failed', $e->getMessage()));
         }
 
@@ -90,7 +92,7 @@ class MarketplaceController extends AdminController
         try {
             $result = (new LicenseService())->install($json);
             $this->Flash->success(__('flash.marketplace.license_installed', $result['status'] ?? '–'));
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $this->Flash->error(__('flash.marketplace.license_failed', $e->getMessage()));
         }
 

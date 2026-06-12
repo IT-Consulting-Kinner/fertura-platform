@@ -17,11 +17,13 @@ declare(strict_types=1);
 namespace App\Test\TestCase;
 
 use App\Application;
-use App\Middleware\HostHeaderMiddleware;
+use App\Middleware\ApiAuthMiddleware;
+use App\Middleware\LogContextMiddleware;
+use App\Middleware\TransactionRlsMiddleware;
+use Authentication\Middleware\AuthenticationMiddleware;
 use Cake\Core\Configure;
 use Cake\Error\Middleware\ErrorHandlerMiddleware;
 use Cake\Http\MiddlewareQueue;
-use Cake\Routing\Middleware\AssetMiddleware;
 use Cake\Routing\Middleware\RoutingMiddleware;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
@@ -82,14 +84,14 @@ class ApplicationTest extends TestCase
         }
 
         // LogContext is outermost so that ErrorHandler logs also carry the context.
-        $this->assertSame(\App\Middleware\LogContextMiddleware::class, $classes[0]);
+        $this->assertSame(LogContextMiddleware::class, $classes[0]);
         $this->assertContains(ErrorHandlerMiddleware::class, $classes);
         $this->assertContains(RoutingMiddleware::class, $classes);
 
-        $idx = static fn (string $c): int|false => array_search($c, $classes, true);
-        $auth = $idx(\Authentication\Middleware\AuthenticationMiddleware::class);
-        $api = $idx(\App\Middleware\ApiAuthMiddleware::class);
-        $rls = $idx(\App\Middleware\TransactionRlsMiddleware::class);
+        $idx = static fn(string $c): int|false => array_search($c, $classes, true);
+        $auth = $idx(AuthenticationMiddleware::class);
+        $api = $idx(ApiAuthMiddleware::class);
+        $rls = $idx(TransactionRlsMiddleware::class);
         $this->assertNotFalse($auth);
         // API token auth after session auth (token identity takes precedence).
         $this->assertGreaterThan($auth, $api);

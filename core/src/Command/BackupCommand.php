@@ -8,6 +8,7 @@ use Cake\Command\Command;
 use Cake\Console\Arguments;
 use Cake\Console\ConsoleIo;
 use Cake\Console\ConsoleOptionParser;
+use Throwable;
 
 /**
  * Core backup (ch. 20.1 / E53).
@@ -49,7 +50,7 @@ class BackupCommand extends Command
                 $io->out('Erstelle Sicherung (unter Lifecycle-Lock) …');
                 try {
                     $newId = $svc->create($args->getOption('note'), null, $args->getOption('path'));
-                } catch (\Throwable $e) {
+                } catch (Throwable $e) {
                     $io->error('Fehlgeschlagen: ' . $e->getMessage());
 
                     return static::CODE_ERROR;
@@ -107,7 +108,7 @@ class BackupCommand extends Command
                     } else {
                         $svc->restore($id);
                     }
-                } catch (\Throwable $e) {
+                } catch (Throwable $e) {
                     $io->error('Restore fehlgeschlagen: ' . $e->getMessage());
 
                     return static::CODE_ERROR;

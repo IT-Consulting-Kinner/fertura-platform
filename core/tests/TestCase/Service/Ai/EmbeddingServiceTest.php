@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Test\TestCase\Service\Ai;
 
+use App\Service\Ai\AiException;
 use App\Service\Ai\AiGateway;
 use App\Service\Ai\EmbeddingService;
 use Cake\Datasource\ConnectionManager;
@@ -68,9 +69,9 @@ class EmbeddingServiceTest extends TestCase
                 return array_fill(0, 768, 0.1); // e.g. Google model -> wrong dimension
             }
         };
-        $this->expectException(\App\Service\Ai\AiException::class);
+        $this->expectException(AiException::class);
         $this->expectExceptionMessageMatches('/Dimension/');
-        (new \App\Service\Ai\EmbeddingService($stub))->index('zztest', 'doc', 'x', 'Inhalt');
+        (new EmbeddingService($stub))->index('zztest', 'doc', 'x', 'Inhalt');
     }
 
     public function testOwnerScoping(): void

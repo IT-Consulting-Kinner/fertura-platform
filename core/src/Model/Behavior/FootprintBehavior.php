@@ -3,8 +3,8 @@ declare(strict_types=1);
 
 namespace App\Model\Behavior;
 
-use ArrayObject;
 use App\Model\ActorContext;
+use ArrayObject;
 use Cake\Datasource\EntityInterface;
 use Cake\Event\EventInterface;
 use Cake\ORM\Behavior;

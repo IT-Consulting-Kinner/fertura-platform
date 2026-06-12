@@ -11,7 +11,9 @@ namespace App\Log;
  */
 class LogContext
 {
-    /** @var array<string, scalar> */
+    /**
+     * @var array<string, scalar>
+     */
     private static array $ctx = [];
 
     /** @param array<string, scalar> $fields */

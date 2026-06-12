@@ -135,7 +135,9 @@ class FakeSettings extends SettingsManager
 /** Egress stub: records calls, returns a predefined response. */
 class FakeEgress extends EgressClient
 {
-    /** @var list<array<string,mixed>> */
+    /**
+     * @var list<array<string,mixed>>
+     */
     public array $calls = [];
 
     public function __construct(private int $status = 200, private string $body = '{}')

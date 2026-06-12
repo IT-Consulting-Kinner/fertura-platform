@@ -16,11 +16,23 @@ declare(strict_types=1);
  */
 namespace App;
 
+use App\I18n\EnglishFallbackLoader;
+use App\I18n\StoreLocaleLoader;
+use App\Middleware\ApiAuthMiddleware;
+use App\Middleware\ApiRateLimitMiddleware;
 use App\Middleware\FootprintMiddleware;
 use App\Middleware\HostHeaderMiddleware;
+use App\Middleware\LocaleMiddleware;
+use App\Middleware\LogContextMiddleware;
+use App\Middleware\LoginThrottleMiddleware;
 use App\Middleware\MaintenanceMiddleware;
+use App\Middleware\SecurityHeadersMiddleware;
+use App\Middleware\SessionGuardMiddleware;
 use App\Middleware\TransactionRlsMiddleware;
+use App\Service\Auth\AuthProviderResolver;
 use App\Service\Module\ModuleAutoloader;
+use App\Service\Settings\SettingsManager;
+use App\Service\System\FeatureFlags;
 use Authentication\AuthenticationService;
 use Authentication\AuthenticationServiceInterface;
 use Authentication\AuthenticationServiceProviderInterface;
@@ -34,10 +46,12 @@ use Cake\Http\BaseApplication;
 use Cake\Http\Middleware\BodyParserMiddleware;
 use Cake\Http\Middleware\CsrfProtectionMiddleware;
 use Cake\Http\MiddlewareQueue;
+use Cake\I18n\I18n;
 use Cake\ORM\Locator\TableLocator;
 use Cake\Routing\Middleware\AssetMiddleware;
 use Cake\Routing\Middleware\RoutingMiddleware;
 use Psr\Http\Message\ServerRequestInterface;
+use Throwable;
 
 /**
  * Application setup class.
@@ -75,22 +89,22 @@ class Application extends BaseApplication implements AuthenticationServiceProvid
         // fallback is domain-only, not locale-fallback -> our own merge loader
         // (English as the base) for the core `default` domain.
         // Module domains are registered analogously in i18n-4.
-        \Cake\I18n\I18n::useFallback(true);
-        \App\I18n\EnglishFallbackLoader::register('default');
+        I18n::useFallback(true);
+        EnglishFallbackLoader::register('default');
         // Module/extension domains from the Managed Locale Store (i18n-4),
         // fault-tolerant.
-        \App\I18n\StoreLocaleLoader::registerActiveModules();
+        StoreLocaleLoader::registerActiveModules();
 
         // Apply the session timeout from the DB configuration (ch. 27.16 /
         // setting core.session.timeout_minutes). Fault-tolerant: only takes
         // effect once the DB is available (otherwise the CakePHP default).
         try {
-            $minutes = (int)(new \App\Service\Settings\SettingsManager())
+            $minutes = (int)(new SettingsManager())
                 ->get('core', 'session.timeout_minutes', 120);
             if ($minutes > 0) {
-                \Cake\Core\Configure::write('Session.timeout', $minutes);
+                Configure::write('Session.timeout', $minutes);
             }
-        } catch (\Throwable) {
+        } catch (Throwable) {
             // DB not (yet) available -> keep the framework default.
         }
     }
@@ -106,13 +120,13 @@ class Application extends BaseApplication implements AuthenticationServiceProvid
         $middlewareQueue
             // Log context (ch. 20.2.3): correlation_id/request_id/component for
             // every log line. Outermost, so ErrorHandler logs carry it too.
-            ->add(new \App\Middleware\LogContextMiddleware())
+            ->add(new LogContextMiddleware())
 
             // Security headers (CSP/nosniff/Frame/Referrer/HSTS) on EVERY
             // response — ABOVE the ErrorHandler: an exception travels up through
             // this middleware, and only the returning (error) response gets the
             // headers. If it sat below, error pages would be left bare.
-            ->add(new \App\Middleware\SecurityHeadersMiddleware())
+            ->add(new SecurityHeadersMiddleware())
 
             // Catch any exceptions in the lower layers,
             // and make an error page/response
@@ -164,7 +178,7 @@ class Application extends BaseApplication implements AuthenticationServiceProvid
             // IP with too many failed attempts (password spraying) is rejected
             // with 429 before any password is hashed. After BodyParser/CSRF,
             // before the AuthenticationMiddleware.
-            ->add(new \App\Middleware\LoginThrottleMiddleware())
+            ->add(new LoginThrottleMiddleware())
 
             // Authentication: provides the identity per request.
             // Does not enforce a login itself; controllers/admin area decide.
@@ -172,26 +186,26 @@ class Application extends BaseApplication implements AuthenticationServiceProvid
 
             // Session anomaly detection (UA binding, IP change, new device) —
             // immediately after authentication (needs the identity).
-            ->add(new \App\Middleware\SessionGuardMiddleware())
+            ->add(new SessionGuardMiddleware())
 
             // External API: Bearer-token authentication (only /api/ paths);
             // sets identity + scopes, otherwise JSON 401. After the session auth,
             // so the token identity takes precedence for API requests. Only
             // loaded when the external API is active (FEATURE_API); otherwise a
             // no-op (an empty array is not enqueued).
-            ->add(\App\Service\System\FeatureFlags::enabled('api')
-                ? new \App\Middleware\ApiAuthMiddleware()
+            ->add(FeatureFlags::enabled('api')
+                ? new ApiAuthMiddleware()
                 : [])
 
             // API rate limiting (P07): after the token auth, so limiting can be
             // per token (otherwise per IP). Only when the API is active.
-            ->add(\App\Service\System\FeatureFlags::enabled('api')
-                ? new \App\Middleware\ApiRateLimitMiddleware()
+            ->add(FeatureFlags::enabled('api')
+                ? new ApiRateLimitMiddleware()
                 : [])
 
             // Set the display language per request (i18n, E37) – after the
             // AuthenticationMiddleware, so user.locale is available.
-            ->add(new \App\Middleware\LocaleMiddleware())
+            ->add(new LocaleMiddleware())
 
             // Footprint: carries the identity into the ActorContext for
             // created_by/updated_by (must run AFTER the AuthenticationMiddleware).
@@ -223,7 +237,7 @@ class Application extends BaseApplication implements AuthenticationServiceProvid
             'queryParam' => 'redirect',
         ]);
 
-        (new \App\Service\Auth\AuthProviderResolver())->provider()->configure($service);
+        (new AuthProviderResolver())->provider()->configure($service);
 
         return $service;
     }

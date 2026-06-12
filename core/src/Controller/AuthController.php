@@ -4,10 +4,16 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Auth\LoginThrottle;
+use App\Service\Auth\Sso\SsoService;
 use App\Service\Identity\PasswordResetService;
 use App\Service\Mail\MailService;
+use App\Service\Security\MfaService;
+use App\Service\Security\WebAuthnService;
+use App\Service\Tenant\TenantService;
 use Cake\Datasource\ConnectionManager;
 use Cake\Event\EventInterface;
+use Cake\Http\Response;
+use Throwable;
 
 /**
  * Login/logout (Step 10). Wires local authentication (Step 2) together with
@@ -34,14 +40,14 @@ class AuthController extends AppController
         // Active SSO providers for the login selection (P06); fault-tolerant so
         // that an SSO problem never blocks the local login (break-glass).
         try {
-            $this->set('ssoProviders', (new \App\Service\Auth\Sso\SsoService())->activeProviders());
-        } catch (\Throwable) {
+            $this->set('ssoProviders', (new SsoService())->activeProviders());
+        } catch (Throwable) {
             $this->set('ssoProviders', []);
         }
         // Tenant-specific branding (from the pre-auth host-resolved tenant).
         try {
-            $this->set('tenantBranding', (new \App\Service\Tenant\TenantService())->currentBranding());
-        } catch (\Throwable) {
+            $this->set('tenantBranding', (new TenantService())->currentBranding());
+        } catch (Throwable) {
             $this->set('tenantBranding', null);
         }
 
@@ -67,7 +73,7 @@ class AuthController extends AppController
             // logins run separately (IdP MFA).
             $identity = $result->getData();
             $userId = (string)($identity['id'] ?? '');
-            $mfa = new \App\Service\Security\MfaService();
+            $mfa = new MfaService();
             if ($userId !== '' && $mfa->enabled($userId)) {
                 $target = $this->Authentication->getLoginRedirect() ?? '/admin';
                 $this->Authentication->logout();
@@ -130,7 +136,7 @@ class AuthController extends AppController
             return $this->redirect('/login');
         }
 
-        $this->set('hasPasskeys', (new \App\Service\Security\WebAuthnService())->hasCredentials((string)$pending['id']));
+        $this->set('hasPasskeys', (new WebAuthnService())->hasCredentials((string)$pending['id']));
 
         if (!$this->request->is('post')) {
             return null;
@@ -149,7 +155,7 @@ class AuthController extends AppController
         if ((string)$this->request->getData('credential_id') !== '') {
             $challenge = (string)($session->read('Mfa.passkey_challenge') ?? '');
             $session->delete('Mfa.passkey_challenge');
-            $verified = $challenge !== '' && (new \App\Service\Security\WebAuthnService())->verifyAssertion(
+            $verified = $challenge !== '' && (new WebAuthnService())->verifyAssertion(
                 (string)$pending['id'],
                 (string)$this->request->getData('credential_id'),
                 (string)$this->request->getData('client_data'),
@@ -160,7 +166,7 @@ class AuthController extends AppController
             );
         } else {
             $code = (string)$this->request->getData('code');
-            $verified = (new \App\Service\Security\MfaService())->verify((string)$pending['id'], $code);
+            $verified = (new MfaService())->verify((string)$pending['id'], $code);
         }
         if (!$verified) {
             $throttle->recordFailure($username, $this->request->clientIp() ?: null);
@@ -188,7 +194,7 @@ class AuthController extends AppController
      * JSON options for `navigator.credentials.get()` in the challenge step
      * (only with a valid pending state from the password step).
      */
-    public function mfaPasskeys(): \Cake\Http\Response
+    public function mfaPasskeys(): Response
     {
         $session = $this->request->getSession();
         /** @var array{id:string,expires:int}|null $pending */
@@ -197,9 +203,9 @@ class AuthController extends AppController
             return $this->response->withStatus(410)->withType('application/json')
                 ->withStringBody((string)json_encode(['error' => 'expired']));
         }
-        $challenge = \App\Service\Security\WebAuthnService::challenge();
+        $challenge = WebAuthnService::challenge();
         $session->write('Mfa.passkey_challenge', $challenge);
-        $options = (new \App\Service\Security\WebAuthnService())->assertionOptions(
+        $options = (new WebAuthnService())->assertionOptions(
             (string)$pending['id'],
             (string)$this->request->getUri()->getHost(),
             $challenge,

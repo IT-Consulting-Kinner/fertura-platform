@@ -6,6 +6,7 @@ namespace App\Controller\Admin;
 use App\Service\Audit\AuditExportService;
 use Cake\Datasource\ConnectionManager;
 use Cake\Http\CallbackStream;
+use Cake\Http\Response;
 
 /**
  * Audit log inspection (available to any administrator, no specific area).
@@ -60,7 +61,7 @@ class AuditController extends AdminController
      * Query filters: from/to (ISO date), action, entity_type, entity_id,
      * module_key, actor_user_id. Keyset-streamed (memory-efficient).
      */
-    public function export(): \Cake\Http\Response
+    public function export(): Response
     {
         $filters = [
             'from' => (string)$this->request->getQuery('from', ''),

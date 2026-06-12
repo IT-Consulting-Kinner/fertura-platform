@@ -3,7 +3,8 @@ declare(strict_types=1);
 
 namespace App\Service\Module;
 
-use Cake\Datasource\ConnectionManager;
+use App\Infrastructure\Db;
+use PDO;
 use RuntimeException;
 use Throwable;
 
@@ -37,7 +38,7 @@ class ModuleMigrationRunner
         $files = glob($migrationsDir . '/*.sql') ?: [];
         sort($files);
 
-        $connection = \App\Infrastructure\Db::privileged();
+        $connection = Db::privileged();
         $rolePdo = $roleDsn !== null ? $this->roleConnection($roleDsn) : null;
         $executed = [];
 
@@ -113,7 +114,7 @@ class ModuleMigrationRunner
             throw new RuntimeException("Migration $name hat keine @DOWN-Sektion – Rückbau nicht möglich.");
         }
 
-        $connection = \App\Infrastructure\Db::privileged();
+        $connection = Db::privileged();
         $rolePdo = $roleDsn !== null ? $this->roleConnection($roleDsn) : null;
         try {
             if ($rolePdo !== null) {
@@ -150,17 +151,17 @@ class ModuleMigrationRunner
     }
 
     /** Connection as the restricted module login role (for migrations-as-role). */
-    private function roleConnection(string $dsn): \PDO
+    private function roleConnection(string $dsn): PDO
     {
-        $pdo = new \PDO($dsn);
-        $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+        $pdo = new PDO($dsn);
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
         return $pdo;
     }
 
     public function isApplied(string $moduleId, string $name): bool
     {
-        return \App\Infrastructure\Db::privileged()->execute(
+        return Db::privileged()->execute(
             'SELECT 1 FROM core.module_migrations_log WHERE module_id = :m AND migration_name = :n',
             ['m' => $moduleId, 'n' => $name],
         )->fetch() !== false;

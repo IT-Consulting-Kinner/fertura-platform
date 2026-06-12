@@ -8,6 +8,7 @@ use App\Service\I18n\LocaleResolver;
 use App\Service\Settings\SettingsManager;
 use Cake\I18n\I18n;
 use Cake\View\Cell;
+use Throwable;
 
 /**
  * Language switcher (i18n-7, E37/E44).
@@ -28,7 +29,7 @@ class LocaleSwitcherCell extends Cell
                 array_map('strval', $enabled),
                 Application::CORE_VERSION,
             );
-        } catch (\Throwable) {
+        } catch (Throwable) {
             $locales = ['en_US'];
         }
 

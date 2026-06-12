@@ -5,7 +5,10 @@ namespace App\Controller\Admin;
 
 use App\Service\Auth\Sso\SsoService;
 use App\Service\Webhook\WebhookService;
+use Cake\Database\Connection;
 use Cake\Datasource\ConnectionManager;
+use Cake\Http\Response;
+use Throwable;
 
 /**
  * Admin GUI "Integrations & Automation" within the core configuration area:
@@ -34,7 +37,7 @@ class IntegrationsController extends AdminController
     }
 
     /** Creates a webhook subscription (name, URL, event filter, optional HMAC secret). */
-    public function webhookCreate(): ?\Cake\Http\Response
+    public function webhookCreate(): ?Response
     {
         $this->request->allowMethod('post');
         $name = trim((string)$this->request->getData('name'));
@@ -49,7 +52,7 @@ class IntegrationsController extends AdminController
         try {
             (new WebhookService())->createSubscription($name, $url, $filter, $secret);
             $this->Flash->success(__('flash.integrations.webhook_created'));
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $this->Flash->error(__('flash.integrations.webhook_failed', $e->getMessage()));
         }
 
@@ -57,7 +60,7 @@ class IntegrationsController extends AdminController
     }
 
     /** Creates an SSO provider (OIDC or SAML); the secret is stored encrypted. */
-    public function ssoCreate(): ?\Cake\Http\Response
+    public function ssoCreate(): ?Response
     {
         $this->request->allowMethod('post');
         $type = (string)$this->request->getData('type');
@@ -98,7 +101,7 @@ class IntegrationsController extends AdminController
             }
             (new SsoService())->createProvider($type, $name, $config, $secret, $label);
             $this->Flash->success(__('flash.integrations.sso_created'));
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $this->Flash->error(__('flash.integrations.sso_failed', $e->getMessage()));
         }
 
@@ -106,7 +109,7 @@ class IntegrationsController extends AdminController
     }
 
     /** Creates an automation rule (name/event + JSON condition/actions, as in the CLI). */
-    public function automationCreate(): ?\Cake\Http\Response
+    public function automationCreate(): ?Response
     {
         $this->request->allowMethod('post');
         $name = trim((string)$this->request->getData('name'));
@@ -140,7 +143,7 @@ class IntegrationsController extends AdminController
     }
 
     /** Creates a workflow definition (name/entity/initial state + JSON transitions, as in the CLI). */
-    public function workflowCreate(): ?\Cake\Http\Response
+    public function workflowCreate(): ?Response
     {
         $this->request->allowMethod('post');
         $name = trim((string)$this->request->getData('name'));
@@ -263,7 +266,7 @@ class IntegrationsController extends AdminController
      * IDs (UUID guard) like unknown entries. Returns the redirect response
      * or null (the action may proceed).
      */
-    private function guardId(string $id): ?\Cake\Http\Response
+    private function guardId(string $id): ?Response
     {
         $this->request->allowMethod('post');
         if ($this->isUuid($id)) {
@@ -274,7 +277,7 @@ class IntegrationsController extends AdminController
         return $this->redirect(['action' => 'index']);
     }
 
-    private function conn(): \Cake\Database\Connection
+    private function conn(): Connection
     {
         /** @var \Cake\Database\Connection $conn */
         $conn = ConnectionManager::get('default');

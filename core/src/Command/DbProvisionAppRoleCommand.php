@@ -9,6 +9,7 @@ use Cake\Console\Arguments;
 use Cake\Console\ConsoleIo;
 use Cake\Console\ConsoleOptionParser;
 use Cake\Core\Configure;
+use Cake\Database\Connection;
 
 /**
  * Provisions the NOBYPASSRLS application role and its privileges (Decision
@@ -50,10 +51,10 @@ class DbProvisionAppRoleCommand extends Command
 
         // 1. Create/update the role (NOBYPASSRLS, login only).
         $conn->execute(
-            "DO \$do\$ BEGIN "
+            'DO $do$ BEGIN '
             . "IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '$role') THEN "
             . "CREATE ROLE $role LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS PASSWORD $pwLiteral; "
-            . "END IF; END \$do\$;",
+            . 'END IF; END $do$;',
         );
         $conn->execute("ALTER ROLE $role WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS PASSWORD $pwLiteral");
 
@@ -74,7 +75,7 @@ class DbProvisionAppRoleCommand extends Command
         return static::CODE_SUCCESS;
     }
 
-    private function grantSchema(\Cake\Database\Connection $conn, string $schema, string $role): void
+    private function grantSchema(Connection $conn, string $schema, string $role): void
     {
         $conn->execute("GRANT USAGE ON SCHEMA $schema TO $role");
         $conn->execute("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA $schema TO $role");

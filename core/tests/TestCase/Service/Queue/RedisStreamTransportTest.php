@@ -65,7 +65,7 @@ class RedisStreamTransportTest extends TestCase
         $t->push($this->queue, ['k' => 'a']);
         $t->push($this->queue, ['k' => 'b']);
         $res = $t->reserve($this->queue, 10);
-        $keys = array_map(static fn ($r) => $r['payload']['k'], $res);
+        $keys = array_map(static fn($r) => $r['payload']['k'], $res);
         $this->assertSame(['a', 'b'], $keys, 'FIFO-Reihenfolge der Streams');
         foreach ($res as $r) {
             $t->ack($this->queue, $r['id']);

@@ -4,6 +4,8 @@ declare(strict_types=1);
 namespace App\Service\Module;
 
 use App\Infrastructure\Db;
+use App\Service\Settings\SettingsManager;
+use RuntimeException;
 use Throwable;
 
 /**
@@ -64,7 +66,7 @@ class ModuleHostSupervisor
     private function launcherPrefix(): string
     {
         try {
-            return (string)(new \App\Service\Settings\SettingsManager())
+            return (string)(new SettingsManager())
                 ->get('core', 'module.host.launcher', '');
         } catch (Throwable) {
             return ''; // settings unavailable (e.g. early boot) -> no prefix
@@ -105,14 +107,14 @@ class ModuleHostSupervisor
                 ['k' => $key],
             )->fetch('assoc');
             if ($mod === false) {
-                throw new \RuntimeException("Kein aktives out_of_process-Modul: $key");
+                throw new RuntimeException("Kein aktives out_of_process-Modul: $key");
             }
             // CakePHP connection URL of the module role for the ConnectionManager
             // configuration in the host (phase 3: contribution classes use the
             // ORM connection, not just raw PDO).
             $dsn = (new ModuleDbRole())->cakeUrl($key);
             if ($dsn === null) {
-                throw new \RuntimeException("Keine DB-Rolle provisioniert für: $key");
+                throw new RuntimeException("Keine DB-Rolle provisioniert für: $key");
             }
 
             // RPC secret (the HMAC key for the per-call tokens): written only to
@@ -163,7 +165,7 @@ class ModuleHostSupervisor
             // Fail loudly if the host did not come up (e.g. php/shell_exec
             // unavailable) — otherwise the caller would assume all is well.
             if (!$this->isRunning($key)) {
-                throw new \RuntimeException("Modul-Host für $key nicht gestartet (siehe $log).");
+                throw new RuntimeException("Modul-Host für $key nicht gestartet (siehe $log).");
             }
         } finally {
             if ($lock !== false) {
@@ -289,9 +291,11 @@ class ModuleHostSupervisor
     public function reapStale(): array
     {
         $active = [];
-        foreach (Db::privileged()->execute(
-            "SELECT module_key FROM modules WHERE status = 'active' AND isolation = 'out_of_process'",
-        )->fetchAll('assoc') as $r) {
+        foreach (
+            Db::privileged()->execute(
+                "SELECT module_key FROM modules WHERE status = 'active' AND isolation = 'out_of_process'",
+            )->fetchAll('assoc') as $r
+        ) {
             $active[(string)$r['module_key']] = true;
         }
         $stopped = [];

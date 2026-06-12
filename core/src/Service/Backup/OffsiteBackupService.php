@@ -6,6 +6,7 @@ namespace App\Service\Backup;
 use App\Audit\AuditLogger;
 use App\Service\Storage\StorageManager;
 use RuntimeException;
+use Throwable;
 
 /**
  * Off-site storage of backups (program tier-2, P14): uploads the locally created
@@ -70,7 +71,7 @@ class OffsiteBackupService
         }
         try {
             stream_copy_to_stream($in, $out);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             fclose($out);
             @unlink($localPath); // do not leave a half-written restore file behind
             if (is_resource($in)) {

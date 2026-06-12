@@ -47,7 +47,7 @@ class LocaleResolver
         } catch (Throwable) {
             return null;
         }
-        $versions = array_map(static fn ($r) => (string)$r['version'], $rows);
+        $versions = array_map(static fn($r) => (string)$r['version'], $rows);
         if ($versions === []) {
             return null;
         }
@@ -55,9 +55,9 @@ class LocaleResolver
             return ['version' => $activeVersion, 'status' => 'clean'];
         }
         $activeMajor = self::major($activeVersion);
-        $sameMajor = array_values(array_filter($versions, static fn ($v) => self::major($v) === $activeMajor));
+        $sameMajor = array_values(array_filter($versions, static fn($v) => self::major($v) === $activeMajor));
         if ($sameMajor !== []) {
-            usort($sameMajor, static fn ($a, $b) => version_compare($b, $a));
+            usort($sameMajor, static fn($a, $b) => version_compare($b, $a));
 
             return ['version' => $sameMajor[0], 'status' => 'notice'];
         }
@@ -137,7 +137,7 @@ class LocaleResolver
     public function selectableLocales(array $enabled, string $coreVersion): array
     {
         $available = $this->availableLocales($coreVersion);
-        $sel = array_values(array_filter($enabled, static fn ($l) => in_array($l, $available, true)));
+        $sel = array_values(array_filter($enabled, static fn($l) => in_array($l, $available, true)));
         if (!in_array('en_US', $sel, true)) {
             array_unshift($sel, 'en_US');
         }

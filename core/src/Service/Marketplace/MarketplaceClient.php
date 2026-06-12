@@ -5,6 +5,7 @@ namespace App\Service\Marketplace;
 
 use App\Audit\AuditLogger;
 use App\Service\Security\Signer;
+use App\Service\Security\TrustChain;
 use App\Service\Security\TrustStore;
 use App\Service\Settings\SettingsManager;
 use Cake\Datasource\ConnectionManager;
@@ -93,7 +94,7 @@ class MarketplaceClient
         // Enforce the anchor's validity window (as on the other verification
         // paths, ch. 24.9.2): an expired/not-yet-valid anchor must no longer be
         // able to sign CRL/anchor documents either.
-        if (!\App\Service\Security\TrustStore::validity($anchor)['ok']) {
+        if (!TrustStore::validity($anchor)['ok']) {
             return null;
         }
         if (!$this->signer->verify(self::canonical($doc['payload']), (string)$doc['signature'], (string)$anchor['public_key'])) {
@@ -125,7 +126,7 @@ class MarketplaceClient
 
         $anchorDoc = $this->verifySigned($this->fetch('anchors.json'));
         if ($anchorDoc !== null) {
-            $chain = new \App\Service\Security\TrustChain($this->signer, $this->trust);
+            $chain = new TrustChain($this->signer, $this->trust);
             foreach ($anchorDoc['anchors'] ?? [] as $a) {
                 $type = (string)($a['type'] ?? 'publisher');
                 // Only accept publisher anchors with a valid root signature

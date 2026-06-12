@@ -5,6 +5,7 @@ namespace App\Command;
 
 use App\Service\Marketplace\MarketplaceClient;
 use App\Service\Security\Signer;
+use App\Service\System\FeatureFlags;
 use Cake\Command\Command;
 use Cake\Console\Arguments;
 use Cake\Console\ConsoleIo;
@@ -34,7 +35,7 @@ class MarketplaceCommand extends Command
     public function execute(Arguments $args, ConsoleIo $io): int
     {
         if ($args->getArgument('operation') === 'sync') {
-            if (!\App\Service\System\FeatureFlags::enabled('marketplace')) {
+            if (!FeatureFlags::enabled('marketplace')) {
                 $io->error('Marketplace-Client ist in diesem Deployment deaktiviert (FEATURE_MARKETPLACE).');
 
                 return static::CODE_ERROR;

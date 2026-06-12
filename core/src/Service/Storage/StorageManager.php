@@ -4,6 +4,8 @@ declare(strict_types=1);
 namespace App\Service\Storage;
 
 use App\Service\Settings\SettingsManager;
+use AsyncAws\S3\S3Client;
+use League\Flysystem\AsyncAwsS3\AsyncAwsS3Adapter;
 use League\Flysystem\Filesystem;
 use League\Flysystem\FilesystemException;
 use League\Flysystem\FilesystemOperator;
@@ -30,7 +32,7 @@ class StorageManager
 
     public function write(string $path, string $contents): void
     {
-        $this->guard(fn () => $this->fs->write($path, $contents), $path);
+        $this->guard(fn() => $this->fs->write($path, $contents), $path);
     }
 
     /**
@@ -38,12 +40,12 @@ class StorageManager
      */
     public function writeStream(string $path, $resource): void
     {
-        $this->guard(fn () => $this->fs->writeStream($path, $resource), $path);
+        $this->guard(fn() => $this->fs->writeStream($path, $resource), $path);
     }
 
     public function read(string $path): string
     {
-        return $this->guard(fn () => $this->fs->read($path), $path);
+        return $this->guard(fn() => $this->fs->read($path), $path);
     }
 
     /**
@@ -51,37 +53,37 @@ class StorageManager
      */
     public function readStream(string $path)
     {
-        return $this->guard(fn () => $this->fs->readStream($path), $path);
+        return $this->guard(fn() => $this->fs->readStream($path), $path);
     }
 
     public function delete(string $path): void
     {
-        $this->guard(fn () => $this->fs->delete($path), $path);
+        $this->guard(fn() => $this->fs->delete($path), $path);
     }
 
     public function deleteDirectory(string $path): void
     {
-        $this->guard(fn () => $this->fs->deleteDirectory($path), $path);
+        $this->guard(fn() => $this->fs->deleteDirectory($path), $path);
     }
 
     public function exists(string $path): bool
     {
-        return $this->guard(fn () => $this->fs->fileExists($path), $path);
+        return $this->guard(fn() => $this->fs->fileExists($path), $path);
     }
 
     public function fileSize(string $path): int
     {
-        return $this->guard(fn () => $this->fs->fileSize($path), $path);
+        return $this->guard(fn() => $this->fs->fileSize($path), $path);
     }
 
     public function lastModified(string $path): int
     {
-        return $this->guard(fn () => $this->fs->lastModified($path), $path);
+        return $this->guard(fn() => $this->fs->lastModified($path), $path);
     }
 
     public function mimeType(string $path): string
     {
-        return $this->guard(fn () => $this->fs->mimeType($path), $path);
+        return $this->guard(fn() => $this->fs->mimeType($path), $path);
     }
 
     /**
@@ -133,8 +135,10 @@ class StorageManager
 
     private function buildS3(): FilesystemOperator
     {
-        if (!class_exists(\AsyncAws\S3\S3Client::class)
-            || !class_exists(\League\Flysystem\AsyncAwsS3\AsyncAwsS3Adapter::class)) {
+        if (
+            !class_exists(S3Client::class)
+            || !class_exists(AsyncAwsS3Adapter::class)
+        ) {
             throw new StorageException('S3-Treiber nicht verfügbar (league/flysystem-async-aws-s3 fehlt).');
         }
         $bucket = (string)getenv('STORAGE_S3_BUCKET');
@@ -148,13 +152,13 @@ class StorageManager
             'accessKeySecret' => getenv('STORAGE_S3_SECRET') ?: null,
             // Force path-style for S3-compatible services (MinIO etc.).
             'pathStyleEndpoint' => (bool)(getenv('STORAGE_S3_PATH_STYLE') ?: false),
-        ], static fn ($v) => $v !== null);
+        ], static fn($v) => $v !== null);
 
         try {
-            $client = new \AsyncAws\S3\S3Client($config);
+            $client = new S3Client($config);
             $prefix = (string)(getenv('STORAGE_S3_PREFIX') ?: '');
 
-            return new Filesystem(new \League\Flysystem\AsyncAwsS3\AsyncAwsS3Adapter($client, $bucket, $prefix));
+            return new Filesystem(new AsyncAwsS3Adapter($client, $bucket, $prefix));
         } catch (Throwable $e) {
             throw new StorageException('S3-Storage-Initialisierung fehlgeschlagen: ' . $e->getMessage(), 0, $e);
         }

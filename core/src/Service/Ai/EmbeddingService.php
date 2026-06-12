@@ -3,8 +3,10 @@ declare(strict_types=1);
 
 namespace App\Service\Ai;
 
+use App\Service\Tenant\TenantService;
 use Cake\Datasource\ConnectionInterface;
 use Cake\Datasource\ConnectionManager;
+use Throwable;
 
 /**
  * Semantic index (program Tier-2, P11): embeds content via the
@@ -29,7 +31,7 @@ class EmbeddingService
     {
         try {
             return $this->ai->embedEnabled();
-        } catch (\Throwable) {
+        } catch (Throwable) {
             return false;
         }
     }
@@ -68,12 +70,12 @@ class EmbeddingService
         try {
             $row = $this->conn()->execute(
                 "SELECT coalesce(nullif(current_setting('app.current_tenant_id', true), ''), :d) AS t",
-                ['d' => \App\Service\Tenant\TenantService::DEFAULT_TENANT_ID],
+                ['d' => TenantService::DEFAULT_TENANT_ID],
             )->fetch('assoc');
 
-            return (string)($row['t'] ?? \App\Service\Tenant\TenantService::DEFAULT_TENANT_ID);
-        } catch (\Throwable) {
-            return \App\Service\Tenant\TenantService::DEFAULT_TENANT_ID;
+            return (string)($row['t'] ?? TenantService::DEFAULT_TENANT_ID);
+        } catch (Throwable) {
+            return TenantService::DEFAULT_TENANT_ID;
         }
     }
 
@@ -101,7 +103,7 @@ class EmbeddingService
             $params,
         )->fetchAll('assoc');
 
-        return array_map(static fn (array $r): array => [
+        return array_map(static fn(array $r): array => [
             'source' => (string)$r['source'],
             'entity_type' => (string)$r['entity_type'],
             'entity_id' => (string)$r['entity_id'],

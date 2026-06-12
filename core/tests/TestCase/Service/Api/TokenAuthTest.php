@@ -27,7 +27,7 @@ class TokenAuthTest extends TestCase
         parent::setUp();
         $suffix = bin2hex(random_bytes(5));
         $row = ConnectionManager::get('default')->execute(
-            "INSERT INTO users (username, email, status, locale) "
+            'INSERT INTO users (username, email, status, locale) '
             . "VALUES (:u, :e, 'active', 'en_US') RETURNING id",
             ['u' => 'apitest_' . $suffix, 'e' => 'apitest_' . $suffix . '@invalid.local'],
         )->fetch('assoc');

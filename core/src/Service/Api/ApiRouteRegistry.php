@@ -87,7 +87,9 @@ class ApiRouteRegistry
      *
      * @return array<string,string>|null
      */
-    /** @var array<string,bool> Malformed templates already reported (log debouncing). */
+    /**
+     * @var array<string,bool> Malformed templates already reported (log debouncing).
+     */
     private static array $warnedTemplates = [];
 
     public static function matchPath(string $template, string $path): ?array

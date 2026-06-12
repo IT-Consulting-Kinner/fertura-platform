@@ -63,7 +63,7 @@ class PermissionService
             ['id' => $userId],
         )->fetchAll('assoc');
 
-        return array_map(static fn ($r) => (string)$r['id'], $rows);
+        return array_map(static fn($r) => (string)$r['id'], $rows);
     }
 
     /**

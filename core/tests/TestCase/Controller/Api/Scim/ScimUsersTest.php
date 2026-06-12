@@ -7,6 +7,7 @@ use App\Service\Api\TokenService;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
+use stdClass;
 
 /**
  * Integration test for SCIM 2.0 provisioning (/api/scim/v2/Users): scope gate,
@@ -56,7 +57,7 @@ class ScimUsersTest extends TestCase
                 'Content-Type' => 'application/json',
                 'Accept' => 'application/scim+json',
             ],
-            'input' => (string)json_encode($body === [] ? new \stdClass() : $body),
+            'input' => (string)json_encode($body === [] ? new stdClass() : $body),
         ]);
         match ($method) {
             'GET' => $this->get($url),
@@ -150,7 +151,8 @@ class ScimUsersTest extends TestCase
         $this->assertResponseOk();
         $this->assertFalse($this->body()['active']);
         $this->assertSame('disabled', ConnectionManager::get('default')->execute(
-            'SELECT status FROM users WHERE id = :id', ['id' => $id],
+            'SELECT status FROM users WHERE id = :id',
+            ['id' => $id],
         )->fetch('assoc')['status']);
 
         // PATCH active:true WITHOUT a password: invited protection holds -> not active...
@@ -160,7 +162,8 @@ class ScimUsersTest extends TestCase
         $this->scim('DELETE', '/api/scim/v2/Users/' . $id);
         $this->assertResponseCode(204);
         $row = ConnectionManager::get('default')->execute(
-            'SELECT status FROM users WHERE id = :id', ['id' => $id],
+            'SELECT status FROM users WHERE id = :id',
+            ['id' => $id],
         )->fetch('assoc');
         $this->assertNotFalse($row); // row still exists
         $this->assertSame('disabled', $row['status']);

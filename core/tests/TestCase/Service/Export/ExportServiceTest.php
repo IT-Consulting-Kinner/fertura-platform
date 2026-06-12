@@ -6,6 +6,7 @@ namespace App\Test\TestCase\Service\Export;
 use App\Service\Export\ExportService;
 use App\Service\Storage\StorageManager;
 use Cake\TestSuite\TestCase;
+use InvalidArgumentException;
 use League\Flysystem\Filesystem;
 use League\Flysystem\Local\LocalFilesystemAdapter;
 
@@ -66,7 +67,7 @@ class ExportServiceTest extends TestCase
 
     public function testGenerateUnknownFormatThrows(): void
     {
-        $this->expectException(\InvalidArgumentException::class);
+        $this->expectException(InvalidArgumentException::class);
         (new ExportService())->generate('docx', 'X', self::COLUMNS, self::ROWS);
     }
 

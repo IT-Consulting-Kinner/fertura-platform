@@ -4,6 +4,9 @@ declare(strict_types=1);
 namespace App\Service\I18n;
 
 use Cake\Datasource\ConnectionManager;
+use FilesystemIterator;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
 use RuntimeException;
 use Throwable;
 
@@ -116,8 +119,8 @@ class LanguagePackStore
             return compact('promoted', 'cleaned', 'skipped');
         }
 
-        $it = new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator($this->base, \FilesystemIterator::SKIP_DOTS),
+        $it = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($this->base, FilesystemIterator::SKIP_DOTS),
         );
         foreach ($it as $f) {
             $tmp = (string)$f;

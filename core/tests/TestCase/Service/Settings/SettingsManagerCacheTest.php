@@ -5,6 +5,7 @@ namespace App\Test\TestCase\Service\Settings;
 
 use App\Service\Cache\CacheStore;
 use App\Service\Settings\SettingsManager;
+use App\Service\Tenant\TenantService;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\TestCase;
 
@@ -64,7 +65,7 @@ class SettingsManagerCacheTest extends TestCase
         $conn = ConnectionManager::get('default');
         $conn->begin();
         try {
-            $tenantB = (new \App\Service\Tenant\TenantService())->create('zztest-cfg', 'CFG')['id'];
+            $tenantB = (new TenantService())->create('zztest-cfg', 'CFG')['id'];
             $sm = new SettingsManager();
             $sm->set('core', 'session.timeout_minutes', 120);            // global
             $sm->set('core', 'session.timeout_minutes', 30, $tenantB);   // per tenant

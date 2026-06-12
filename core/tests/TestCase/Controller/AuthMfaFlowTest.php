@@ -3,8 +3,10 @@ declare(strict_types=1);
 
 namespace App\Test\TestCase\Controller;
 
+use App\Service\Security\Cbor;
 use App\Service\Security\MfaService;
 use App\Service\Security\Totp;
+use App\Service\Security\WebAuthnService;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
@@ -156,20 +158,20 @@ class AuthMfaFlowTest extends TestCase
         $credentialId = random_bytes(16);
         $rpId = 'localhost'; // host of the test requests
         $details = openssl_pkey_get_details($key);
-        $coseKey = \App\Service\Security\Cbor::encode([
+        $coseKey = Cbor::encode([
             1 => 2, 3 => -7, -1 => 1,
             -2 => str_pad((string)$details['ec']['x'], 32, "\x00", STR_PAD_LEFT),
             -3 => str_pad((string)$details['ec']['y'], 32, "\x00", STR_PAD_LEFT),
         ]);
-        $regChallenge = \App\Service\Security\WebAuthnService::challenge();
+        $regChallenge = WebAuthnService::challenge();
         $authData = hash('sha256', $rpId, true) . chr(0x41) . pack('N', 0)
             . str_repeat("\x00", 16) . pack('n', strlen($credentialId)) . $credentialId . $coseKey;
-        (new \App\Service\Security\WebAuthnService())->register(
+        (new WebAuthnService())->register(
             $this->userId,
-            \App\Service\Security\WebAuthnService::b64uEncode((string)json_encode(
+            WebAuthnService::b64uEncode((string)json_encode(
                 ['type' => 'webauthn.create', 'challenge' => $regChallenge, 'origin' => 'http://' . $rpId],
             )),
-            \App\Service\Security\WebAuthnService::b64uEncode(\App\Service\Security\Cbor::encode(
+            WebAuthnService::b64uEncode(Cbor::encode(
                 ['fmt' => 'none', 'attStmt' => [], 'authData' => $authData],
             )),
             $regChallenge,
@@ -192,10 +194,10 @@ class AuthMfaFlowTest extends TestCase
 
         $this->carrySession(['Mfa']); // carry pending + passkey_challenge
         $this->post('/login/mfa', [
-            'credential_id' => \App\Service\Security\WebAuthnService::b64uEncode($credentialId),
-            'client_data' => \App\Service\Security\WebAuthnService::b64uEncode($clientData),
-            'auth_data' => \App\Service\Security\WebAuthnService::b64uEncode($assertAuthData),
-            'signature' => \App\Service\Security\WebAuthnService::b64uEncode($signature),
+            'credential_id' => WebAuthnService::b64uEncode($credentialId),
+            'client_data' => WebAuthnService::b64uEncode($clientData),
+            'auth_data' => WebAuthnService::b64uEncode($assertAuthData),
+            'signature' => WebAuthnService::b64uEncode($signature),
         ]);
 
         $this->assertRedirect('/admin');

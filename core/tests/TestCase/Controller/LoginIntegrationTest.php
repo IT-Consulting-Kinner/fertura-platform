@@ -26,7 +26,7 @@ class LoginIntegrationTest extends TestCase
         $this->username = 'logintest_' . bin2hex(random_bytes(5));
         $hash = password_hash(self::PASSWORD, PASSWORD_ARGON2ID);
         $row = ConnectionManager::get('default')->execute(
-            "INSERT INTO users (username, email, status, password_hash) "
+            'INSERT INTO users (username, email, status, password_hash) '
             . "VALUES (:u, :e, 'active', :h) RETURNING id",
             ['u' => $this->username, 'e' => $this->username . '@invalid.local', 'h' => $hash],
         )->fetch('assoc');

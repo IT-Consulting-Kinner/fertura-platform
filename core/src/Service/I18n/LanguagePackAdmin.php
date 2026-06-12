@@ -7,6 +7,7 @@ use App\Application;
 use App\Audit\AuditLogger;
 use Cake\Datasource\ConnectionManager;
 use RuntimeException;
+use Throwable;
 
 /**
  * Orchestrates the language-management GUI (i18n-6, E41/E42).
@@ -42,7 +43,7 @@ class LanguagePackAdmin
                 'component' => 'core',
                 'newValue' => $detail,
             ]);
-        } catch (\Throwable) {
+        } catch (Throwable) {
             // Auditing must not cause the business action to fail.
         }
     }
@@ -283,7 +284,7 @@ class LanguagePackAdmin
             'count' => count($editable),
             'exists' => $existing !== null,
             'existing_edited' => $existing !== null && $this->bool($existing['edited']),
-            'sample' => array_slice(array_map(static fn ($e) => $e['id'], $editable), 0, 8),
+            'sample' => array_slice(array_map(static fn($e) => $e['id'], $editable), 0, 8),
         ];
     }
 

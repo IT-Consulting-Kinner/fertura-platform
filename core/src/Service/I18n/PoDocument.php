@@ -13,7 +13,9 @@ namespace App\Service\I18n;
  */
 class PoDocument
 {
-    /** @var list<array{comments:list<string>,msgctxt:?string,msgid:string,msgid_plural:?string,msgstr:list<string>}> */
+    /**
+     * @var list<array{comments:list<string>,msgctxt:?string,msgid:string,msgid_plural:?string,msgstr:list<string>}>
+     */
     public array $entries = [];
 
     public static function parse(string $content): self

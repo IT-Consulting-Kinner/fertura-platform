@@ -16,8 +16,10 @@ declare(strict_types=1);
  */
 namespace App\Controller;
 
+use App\Service\Security\MfaService;
 use Cake\Controller\Controller;
 use Cake\Event\EventInterface;
+use Throwable;
 
 /**
  * Application Controller
@@ -67,12 +69,12 @@ class AppController extends Controller
             return;
         }
         try {
-            $mfa = new \App\Service\Security\MfaService();
+            $mfa = new MfaService();
             if ($mfa->required() && !$mfa->enabled($identifier)) {
                 $this->Flash->error(__('flash.mfa.setup_required'));
                 $event->setResult($this->redirect('/mfa'));
             }
-        } catch (\Throwable) {
+        } catch (Throwable) {
             // Fail-open here is deliberately NOT about the login itself (that
             // has already happened), only about the setup redirect: a settings
             // or DB problem must not lock the entire UI.

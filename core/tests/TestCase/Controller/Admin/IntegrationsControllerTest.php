@@ -113,7 +113,8 @@ class IntegrationsControllerTest extends TestCase
         $this->post('/admin/integrations/webhookCreate', ['name' => $bad, 'url' => 'ftp://nope']);
         $this->assertRedirect(['action' => 'index']);
         $this->assertFalse(ConnectionManager::get('default')->execute(
-            'SELECT 1 FROM webhook_subscriptions WHERE name = :n', ['n' => $bad],
+            'SELECT 1 FROM webhook_subscriptions WHERE name = :n',
+            ['n' => $bad],
         )->fetch());
     }
 
@@ -150,7 +151,8 @@ class IntegrationsControllerTest extends TestCase
         ]);
         $this->assertRedirect(['action' => 'index']);
         $this->assertNotFalse(ConnectionManager::get('default')->execute(
-            "SELECT 1 FROM sso_providers WHERE name = :n AND type = 'saml'", ['n' => $name],
+            "SELECT 1 FROM sso_providers WHERE name = :n AND type = 'saml'",
+            ['n' => $name],
         )->fetch());
 
         // Missing required fields (SAML without certificate) -> no record.
@@ -159,7 +161,8 @@ class IntegrationsControllerTest extends TestCase
             'type' => 'saml', 'name' => $bad, 'idp_entity_id' => 'x', 'idp_sso_url' => 'y',
         ]);
         $this->assertFalse(ConnectionManager::get('default')->execute(
-            'SELECT 1 FROM sso_providers WHERE name = :n', ['n' => $bad],
+            'SELECT 1 FROM sso_providers WHERE name = :n',
+            ['n' => $bad],
         )->fetch());
     }
 
@@ -187,7 +190,8 @@ class IntegrationsControllerTest extends TestCase
             'name' => $bad, 'event' => 'x', 'actions' => '{"not":"a-list"}',
         ]);
         $this->assertFalse(ConnectionManager::get('default')->execute(
-            'SELECT 1 FROM automation_rules WHERE name = :n', ['n' => $bad],
+            'SELECT 1 FROM automation_rules WHERE name = :n',
+            ['n' => $bad],
         )->fetch());
     }
 
@@ -213,7 +217,8 @@ class IntegrationsControllerTest extends TestCase
         $bad = 'zztest-wf-bad-' . bin2hex(random_bytes(2));
         $this->post('/admin/integrations/workflowCreate', ['name' => $bad, 'entity_type' => 'ticket']);
         $this->assertFalse(ConnectionManager::get('default')->execute(
-            'SELECT 1 FROM workflow_definitions WHERE name = :n', ['n' => $bad],
+            'SELECT 1 FROM workflow_definitions WHERE name = :n',
+            ['n' => $bad],
         )->fetch());
     }
 }

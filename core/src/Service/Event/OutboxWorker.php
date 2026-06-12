@@ -3,9 +3,19 @@ declare(strict_types=1);
 
 namespace App\Service\Event;
 
-use App\Event\EventListenerInterface;
+use App\Log\LogContext;
+use App\Service\Automation\AutomationEngine;
+use App\Service\Automation\WorkflowEngine;
+use App\Service\Health\WorkerHeartbeat;
+use App\Service\Module\ContributionRuntime;
 use App\Service\Module\ModuleAutoloader;
+use App\Service\Module\ModuleHostSupervisor;
+use App\Service\Observability\HealthAlertService;
+use App\Service\Observability\OtlpMetricsExporter;
 use App\Service\Registry\ContractRegistry;
+use App\Service\Schedule\ScheduledTaskRunner;
+use App\Service\Settings\SettingsManager;
+use App\Service\Webhook\WebhookService;
 use Cake\Database\Connection;
 use Cake\Datasource\ConnectionManager;
 use Closure;
@@ -134,7 +144,7 @@ class OutboxWorker
     private function maxPerTenantPerBatch(): int
     {
         try {
-            return max(1, (int)(new \App\Service\Settings\SettingsManager())
+            return max(1, (int)(new SettingsManager())
                 ->get('core', 'outbox.max_per_tenant_per_batch', 10000));
         } catch (Throwable) {
             return 10000;
@@ -180,7 +190,7 @@ class OutboxWorker
         // (UNIQUE(subscription_id,event_id)); a failure here lets the event be
         // retried (at-least-once, enqueuing is idempotent).
         try {
-            (new \App\Service\Webhook\WebhookService())
+            (new WebhookService())
                 ->enqueueForEvent((string)$event['contract_name'], $payload, (string)$event['id']);
         } catch (Throwable $e) {
             $errors[] = 'webhook-enqueue: ' . $e->getMessage();
@@ -194,13 +204,13 @@ class OutboxWorker
         if (!(bool)$event['derived_done']) {
             $this->connection()->transactional(function () use ($event, $payload): void {
                 try {
-                    (new \App\Service\Automation\AutomationEngine())
+                    (new AutomationEngine())
                         ->onEvent((string)$event['contract_name'], $payload);
                 } catch (Throwable $e) {
                     $this->log('Automation-Fehler: ' . $e->getMessage());
                 }
                 try {
-                    (new \App\Service\Automation\WorkflowEngine())
+                    (new WorkflowEngine())
                         ->onEvent((string)$event['contract_name'], $payload);
                 } catch (Throwable $e) {
                     $this->log('Workflow-Fehler: ' . $e->getMessage());
@@ -211,7 +221,7 @@ class OutboxWorker
                 );
             });
         }
-        $runtime = new \App\Service\Module\ContributionRuntime($this->registry);
+        $runtime = new ContributionRuntime($this->registry);
         foreach ($runtime->listeners((string)$event['contract_name']) as $listener) {
             try {
                 // In-process locally, out_of_process via the isolated host (RPC).
@@ -286,7 +296,7 @@ class OutboxWorker
             $this->log('Kein LISTEN möglich -> reiner Poll-Modus.');
         }
 
-        \App\Log\LogContext::put('component', 'worker');
+        LogContext::put('component', 'worker');
 
         // Module-host supervision not on every poll cycle but throttled
         // (DB query + socket checks per isolated module are otherwise expensive).
@@ -308,7 +318,7 @@ class OutboxWorker
                 // Tick periodic module tasks (extension point, ch. 20.4) –
                 // error-isolated, so a module job does not stop the worker.
                 try {
-                    $ran = (new \App\Service\Schedule\ScheduledTaskRunner())->tick();
+                    $ran = (new ScheduledTaskRunner())->tick();
                     if ($ran !== []) {
                         $this->log('Scheduled tasks: ' . implode(', ', $ran));
                     }
@@ -320,7 +330,7 @@ class OutboxWorker
                 if ($cycleStart - $lastSupervision >= $supervisionEverySec) {
                     $lastSupervision = $cycleStart;
                     try {
-                        $sup = new \App\Service\Module\ModuleHostSupervisor();
+                        $sup = new ModuleHostSupervisor();
                         $started = $sup->ensureAll();
                         $sup->reapStale();
                         if ($started !== []) {
@@ -333,11 +343,11 @@ class OutboxWorker
                     // OTEL_EXPORTER_OTLP_ENDPOINT is set) + health alert on a
                     // status change. Error-isolated.
                     try {
-                        $otlp = new \App\Service\Observability\OtlpMetricsExporter();
+                        $otlp = new OtlpMetricsExporter();
                         if ($otlp->available()) {
                             $otlp->export();
                         }
-                        if ((new \App\Service\Observability\HealthAlertService())->check()) {
+                        if ((new HealthAlertService())->check()) {
                             $this->log('Health-Alarm gesendet (Statuswechsel).');
                         }
                     } catch (Throwable $e) {
@@ -353,11 +363,11 @@ class OutboxWorker
                 // (external HTTP calls), the rest follows in the next cycle.
                 $deliveredWebhooks = 0;
                 try {
-                    $deliveredWebhooks = (new \App\Service\Webhook\WebhookService())->deliverPending(25);
+                    $deliveredWebhooks = (new WebhookService())->deliverPending(25);
                 } catch (Throwable $e) {
                     $this->log('Webhook-Zustellung-Fehler: ' . $e->getMessage());
                 }
-                \App\Service\Health\WorkerHeartbeat::beat('outbox', 'ok', [
+                WorkerHeartbeat::beat('outbox', 'ok', [
                     'duration_ms' => (int)round((microtime(true) - $cycleStart) * 1000),
                     'interval_seconds' => (int)round($this->pollMs / 1000),
                     'processed' => $processed,

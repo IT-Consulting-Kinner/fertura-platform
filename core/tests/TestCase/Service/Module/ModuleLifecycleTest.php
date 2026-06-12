@@ -8,6 +8,7 @@ use App\Service\Module\ModuleLifecycle;
 use App\Service\Settings\SettingsManager;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\TestCase;
+use Throwable;
 
 /**
  * Integration test of the module lifecycle (ch. 24) plus the mandatory
@@ -215,19 +216,21 @@ class ModuleLifecycleTest extends TestCase
         $conn = ConnectionManager::get('default');
         try {
             (new ModuleLifecycle())->delete($key);
-        } catch (\Throwable) {
+        } catch (Throwable) {
             // best effort
         }
-        foreach ([
+        foreach (
+            [
             "DROP SCHEMA IF EXISTS mod_$key CASCADE",
             'DELETE FROM contracts WHERE owner_module_key = :k',
             'DELETE FROM resources WHERE module_key = :k',
             'DELETE FROM modules WHERE module_key = :k',
             'DELETE FROM language_packs WHERE component_key = :k',
-        ] as $sql) {
+            ] as $sql
+        ) {
             try {
                 $conn->execute($sql, str_contains($sql, ':k') ? ['k' => $key] : []);
-            } catch (\Throwable) {
+            } catch (Throwable) {
                 // best effort
             }
         }

@@ -20,9 +20,9 @@ class PrometheusRendererTest extends TestCase
             ['name' => 'm', 'type' => 'gauge', 'help' => 'H', 'labels' => ['a' => 'z'], 'value' => 4],
         ]);
 
-        $this->assertStringContainsString("# HELP fertura_up Liveness.", $out);
-        $this->assertStringContainsString("# TYPE fertura_up gauge", $out);
-        $this->assertStringContainsString("fertura_up 1", $out);
+        $this->assertStringContainsString('# HELP fertura_up Liveness.', $out);
+        $this->assertStringContainsString('# TYPE fertura_up gauge', $out);
+        $this->assertStringContainsString('fertura_up 1', $out);
         // HELP/TYPE emitted only once per metric.
         $this->assertSame(1, substr_count($out, '# TYPE m gauge'));
         $this->assertStringContainsString('m{a="x",b="y"} 3', $out);
@@ -40,6 +40,6 @@ class PrometheusRendererTest extends TestCase
     public function testFloatFormatting(): void
     {
         $out = (new PrometheusRenderer())->render([['name' => 'm', 'labels' => [], 'value' => 1.5]]);
-        $this->assertStringContainsString("m 1.5", $out);
+        $this->assertStringContainsString('m 1.5', $out);
     }
 }

@@ -4,10 +4,12 @@ declare(strict_types=1);
 namespace App\Service\Settings;
 
 use App\Audit\AuditLogger;
+use App\Model\Table\SettingsTable;
 use App\Service\Cache\CacheStore;
 use Cake\ORM\Locator\LocatorAwareTrait;
 use InvalidArgumentException;
 use RuntimeException;
+use Throwable;
 
 /**
  * Central read/write service for the configuration store (ch. 1.4 / 23.3).
@@ -35,7 +37,7 @@ class SettingsManager
         $this->cache = $cache ?? new CacheStore('_app_settings_');
     }
 
-    private function table(): \App\Model\Table\SettingsTable
+    private function table(): SettingsTable
     {
         /** @var \App\Model\Table\SettingsTable $table */
         $table = $this->fetchTable('Settings');
@@ -135,8 +137,8 @@ class SettingsManager
             $row = $this->table()->getConnection()->execute(
                 "SELECT nullif(current_setting('app.current_tenant_id', true), '') AS t",
             )->fetch('assoc');
-            $this->tenantMemo = ($row !== false && $row['t'] !== null && $row['t'] !== '') ? (string)$row['t'] : null;
-        } catch (\Throwable) {
+            $this->tenantMemo = $row !== false && $row['t'] !== null && $row['t'] !== '' ? (string)$row['t'] : null;
+        } catch (Throwable) {
             $this->tenantMemo = null;
         }
 
@@ -163,7 +165,7 @@ class SettingsManager
             $row = $find->first();
 
             // Old value for the audit (never log secrets in plaintext).
-            $old = ($row === null || $row->is_secret) ? null : $row->value;
+            $old = $row === null || $row->is_secret ? null : $row->value;
 
             if ($row === null) {
                 $row = $table->newEmptyEntity();

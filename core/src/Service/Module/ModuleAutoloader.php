@@ -16,7 +16,9 @@ use Throwable;
  */
 class ModuleAutoloader
 {
-    /** @var array<string, string> namespace prefix => src path */
+    /**
+     * @var array<string, string> namespace prefix => src path
+     */
     private static array $prefixes = [];
 
     private static bool $registered = false;
@@ -56,7 +58,7 @@ class ModuleAutoloader
     {
         try {
             $rows = ConnectionManager::get('default')->execute(
-                "SELECT php_namespace, source_path FROM modules "
+                'SELECT php_namespace, source_path FROM modules '
                 . "WHERE status = 'active' AND php_namespace IS NOT NULL AND source_path IS NOT NULL",
             )->fetchAll('assoc');
         } catch (Throwable) {

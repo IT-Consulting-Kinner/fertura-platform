@@ -5,6 +5,7 @@ namespace App\Service\Queue;
 
 use Cake\Datasource\ConnectionInterface;
 use Cake\Datasource\ConnectionManager;
+use stdClass;
 
 /**
  * Default driver of the job-queue transport: Postgres table `job_queue`,
@@ -23,7 +24,7 @@ class DbQueueTransport implements QueueTransportInterface
     {
         return (string)$this->conn()->execute(
             'INSERT INTO job_queue (queue, payload) VALUES (:q, CAST(:p AS jsonb)) RETURNING id',
-            ['q' => $queue, 'p' => json_encode($payload === [] ? new \stdClass() : $payload)],
+            ['q' => $queue, 'p' => json_encode($payload === [] ? new stdClass() : $payload)],
         )->fetch('assoc')['id'];
     }
 

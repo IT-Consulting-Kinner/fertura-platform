@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Service\Http;
 
+use App\Log\Trace;
 use App\Service\Settings\SettingsManager;
 use Cake\Http\Client;
 use Cake\Http\Client\Response;
@@ -27,7 +28,9 @@ class EgressClient
 {
     private Client $client;
 
-    /** @var array<string, mixed> */
+    /**
+     * @var array<string, mixed>
+     */
     private array $config;
 
     /**
@@ -69,7 +72,7 @@ class EgressClient
             (array)($options['headers'] ?? []),
         );
         // Continue the trace (P04) if a context is set and not overridden.
-        $traceparent = \App\Log\Trace::traceparent();
+        $traceparent = Trace::traceparent();
         if ($traceparent !== null && !isset($headers['traceparent'])) {
             $headers['traceparent'] = $traceparent;
         }
@@ -262,7 +265,7 @@ class EgressClient
         $port = (int)($parts['port'] ?? (strtolower((string)($parts['scheme'] ?? '')) === 'http' ? 80 : 443));
         // IPv6 in CURLOPT_RESOLVE goes in square brackets.
         $formatted = array_map(
-            static fn (string $ip): string => str_contains($ip, ':') ? '[' . $ip . ']' : $ip,
+            static fn(string $ip): string => str_contains($ip, ':') ? '[' . $ip . ']' : $ip,
             $ips,
         );
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Middleware;
 
 use App\Service\Settings\SettingsManager;
+use ArrayAccess;
 use Cake\I18n\I18n;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -59,7 +60,7 @@ class LocaleMiddleware implements MiddlewareInterface
                 $userLocale = null;
                 if (is_object($data) && method_exists($data, 'get')) {
                     $userLocale = $data->get('locale');
-                } elseif (is_array($data) || $data instanceof \ArrayAccess) {
+                } elseif (is_array($data) || $data instanceof ArrayAccess) {
                     $userLocale = $data['locale'] ?? null;
                 }
                 if (is_string($userLocale) && in_array($userLocale, $enabled, true)) {
@@ -110,7 +111,7 @@ class LocaleMiddleware implements MiddlewareInterface
             }
             $candidates[] = [str_replace('-', '_', $tag), $q];
         }
-        usort($candidates, static fn ($a, $b) => $b[1] <=> $a[1]);
+        usort($candidates, static fn($a, $b) => $b[1] <=> $a[1]);
 
         foreach ($candidates as [$tag, $q]) {
             if (in_array($tag, $enabled, true)) {

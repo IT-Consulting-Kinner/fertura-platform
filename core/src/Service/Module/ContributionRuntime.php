@@ -69,7 +69,7 @@ class ContributionRuntime
         if ($contribs === []) {
             return [];
         }
-        $keys = array_values(array_unique(array_map(static fn ($c) => $c['module_key'], $contribs)));
+        $keys = array_values(array_unique(array_map(static fn($c) => $c['module_key'], $contribs)));
         $names = [];
         $params = [];
         foreach ($keys as $i => $k) {

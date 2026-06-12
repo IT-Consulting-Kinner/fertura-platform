@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Service\Event;
 
 use Cake\Datasource\ConnectionManager;
+use stdClass;
 
 /**
  * Writes events into the transactional outbox (ch. 26.9.2, Decision 168).
@@ -30,12 +31,12 @@ class OutboxPublisher
             'INSERT INTO event_outbox (contract_name, payload, correlation_id, max_attempts, tenant_id) '
             // Record the tenant of the publishing context (NULL = system-wide),
             // so the worker later processes the event in the correct tenant.
-            . "VALUES (:contract, CAST(:payload AS jsonb), :corr, :max, "
+            . 'VALUES (:contract, CAST(:payload AS jsonb), :corr, :max, '
             . "nullif(current_setting('app.current_tenant_id', true), '')::uuid) "
             . 'RETURNING id',
             [
                 'contract' => $contractName,
-                'payload' => json_encode($payload === [] ? new \stdClass() : $payload),
+                'payload' => json_encode($payload === [] ? new stdClass() : $payload),
                 'corr' => $opts['correlationId'] ?? null,
                 'max' => $opts['maxAttempts'] ?? 5,
             ],
@@ -44,7 +45,7 @@ class OutboxPublisher
         $id = (string)$row['id'];
 
         // NOTIFY within the same transaction -> delivered on COMMIT.
-        $connection->execute("SELECT pg_notify(:channel, :id)", ['channel' => self::CHANNEL, 'id' => $id]);
+        $connection->execute('SELECT pg_notify(:channel, :id)', ['channel' => self::CHANNEL, 'id' => $id]);
 
         return $id;
     }

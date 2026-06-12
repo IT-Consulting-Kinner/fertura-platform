@@ -27,7 +27,9 @@ use Cake\View\Helper;
  */
 class UiKitHelper extends Helper
 {
-    /** @var list<string> */
+    /**
+     * @var list<string>
+     */
     protected array $helpers = ['Html', 'Form', 'Url'];
 
     /**
@@ -178,7 +180,7 @@ class UiKitHelper extends Helper
     {
         $curSort = (string)($query['sort'] ?? '');
         $curDir = strtolower((string)($query['dir'] ?? 'asc')) === 'desc' ? 'desc' : 'asc';
-        $nextDir = ($curSort === $sortKey && $curDir === 'asc') ? 'desc' : 'asc';
+        $nextDir = $curSort === $sortKey && $curDir === 'asc' ? 'desc' : 'asc';
         $arrow = $curSort === $sortKey ? ($curDir === 'asc' ? ' ↑' : ' ↓') : '';
         $href = $this->withQuery($url, array_merge($query, ['sort' => $sortKey, 'dir' => $nextDir]));
         $ariaSort = $curSort === $sortKey ? ' aria-sort="' . ($curDir === 'asc' ? 'ascending' : 'descending') . '"' : '';

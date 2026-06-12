@@ -15,8 +15,10 @@ declare(strict_types=1);
  * @license   https://opensource.org/licenses/mit-license.php MIT License
  */
 
+use Cake\Cache\Cache;
 use Cake\Chronos\Chronos;
 use Cake\Core\Configure;
+use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\ConnectionHelper;
 use Migrations\TestSuite\Migrator;
 
@@ -70,12 +72,12 @@ ConnectionHelper::addTestAliases();
 // `tenant_id` FK. Restore it idempotently here so the test environment matches the
 // production state (cf. migration CoreTenancy).
 try {
-    \Cake\Datasource\ConnectionManager::get('default')->execute(
-        "INSERT INTO tenants (id, key, name) "
+    ConnectionManager::get('default')->execute(
+        'INSERT INTO tenants (id, key, name) '
         . "VALUES ('00000000-0000-0000-0000-000000000001', 'default', 'Default') "
         . 'ON CONFLICT (id) DO NOTHING',
     );
-} catch (\Throwable) {
+} catch (Throwable) {
 }
 
 // Clear the settings/app cache (P02) before the run: the migrator truncates the
@@ -86,7 +88,7 @@ try {
 // the ORM layer ignores new columns on INSERT/UPDATE (cached schema).
 foreach (['_app_settings_', '_app_', '_cake_model_'] as $cacheConfig) {
     try {
-        \Cake\Cache\Cache::clear($cacheConfig);
-    } catch (\Throwable) {
+        Cache::clear($cacheConfig);
+    } catch (Throwable) {
     }
 }

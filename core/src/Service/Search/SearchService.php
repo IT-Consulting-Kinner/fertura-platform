@@ -57,7 +57,7 @@ class SearchService
             )->fetch('assoc');
 
             return (string)($row['t'] ?? TenantService::DEFAULT_TENANT_ID);
-        } catch (\Throwable) {
+        } catch (Throwable) {
             return TenantService::DEFAULT_TENANT_ID;
         }
     }
@@ -187,7 +187,7 @@ class SearchService
             $params,
         )->fetchAll('assoc');
 
-        return array_map(static fn (array $r): array => [
+        return array_map(static fn(array $r): array => [
             'source' => (string)$r['source'],
             'entity_type' => (string)$r['entity_type'],
             'entity_id' => (string)$r['entity_id'],

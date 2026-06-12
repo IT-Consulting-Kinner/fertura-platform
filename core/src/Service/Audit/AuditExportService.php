@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Service\Audit;
 
 use App\Infrastructure\Uuid;
+use Cake\Database\Connection;
 use Cake\Datasource\ConnectionManager;
 use Generator;
 
@@ -23,7 +24,7 @@ class AuditExportService
     public const MAX_ROWS = 500000;
     private const BATCH = 2000;
 
-    private function conn(): \Cake\Database\Connection
+    private function conn(): Connection
     {
         /** @var \Cake\Database\Connection $conn */
         $conn = ConnectionManager::get('default');
@@ -34,7 +35,7 @@ class AuditExportService
     /**
      * @param array{from?:?string,to?:?string,action?:?string,entity_type?:?string,
      *     entity_id?:?string,module_key?:?string,actor_user_id?:?string,with_values?:bool} $filters
-     * @return Generator<int, array<string,mixed>>
+     * @return \Generator<int, array<string,mixed>>
      */
     public function stream(array $filters): Generator
     {
