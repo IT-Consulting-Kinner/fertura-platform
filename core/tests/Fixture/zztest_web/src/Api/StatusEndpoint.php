@@ -11,7 +11,7 @@ final class StatusEndpoint
 {
     /**
      * @param array<string, mixed> $request
-     * @return array{status:int, body:array<string,mixed>}
+     * @return array{status:int, body:array<string,mixed>, headers:array<string,string>}
      */
     public function handle(array $request): array
     {
@@ -25,6 +25,13 @@ final class StatusEndpoint
                 // Demonstrates that the module can read its own token header for
                 // self-managed auth (Decision D1 = pass-through).
                 'saw_module_token' => isset($headers['X-Module-Token']),
+            ],
+            // A `public` route may make its content cacheable (E160). Only
+            // allowlisted caching headers pass through; `Set-Cookie` must NOT.
+            'headers' => [
+                'Cache-Control' => 'public, max-age=300',
+                'ETag' => '"v1"',
+                'Set-Cookie' => 'evil=1',
             ],
         ];
     }

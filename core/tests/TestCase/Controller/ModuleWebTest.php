@@ -5,9 +5,11 @@ namespace App\Test\TestCase\Controller;
 
 use App\Service\Module\ModuleLifecycle;
 use App\Service\Settings\SettingsManager;
+use Cake\Core\Configure;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
+use Psr\Http\Message\ResponseInterface;
 use Throwable;
 
 /**
@@ -52,6 +54,7 @@ class ModuleWebTest extends TestCase
 
     protected function tearDown(): void
     {
+        Configure::delete('Cors.allowedOrigins');
         $this->cleanupModule();
         if ($this->userId !== '') {
             $conn = ConnectionManager::get('default');
@@ -144,6 +147,85 @@ class ModuleWebTest extends TestCase
 
         $this->assertResponseCode(401);
         $this->assertResponseContains('missing_token');
+    }
+
+    public function testPublicApiCacheHeadersPassThroughButNotSetCookie(): void
+    {
+        // E160: a `public` route may make its content cacheable; only allowlisted
+        // headers pass through (Set-Cookie must not).
+        $this->configRequest(['headers' => ['Accept' => 'application/json']]);
+        $this->get('/api/v1/m/zztest_web/status');
+
+        $this->assertResponseOk();
+        $this->assertHeader('Cache-Control', 'public, max-age=300');
+        $this->assertHeader('ETag', '"v1"');
+        // Set-Cookie is not allowlisted -> the module cannot smuggle it through
+        // ('' when absent, never the module's value).
+        $this->assertStringNotContainsString('evil', $this->response()->getHeaderLine('Set-Cookie'));
+    }
+
+    /** The integration response, guaranteed non-null (PHPStan-safe). */
+    private function response(): ResponseInterface
+    {
+        $response = $this->_response;
+        if ($response === null) {
+            $this->fail('No response set.');
+        }
+
+        return $response;
+    }
+
+    public function testCorsHeaderForAllowedOriginOnPublicRoute(): void
+    {
+        Configure::write('Cors.allowedOrigins', 'https://help.kunde.test');
+        $this->configRequest(['headers' => [
+            'Accept' => 'application/json',
+            'Origin' => 'https://help.kunde.test',
+        ]]);
+        $this->get('/api/v1/m/zztest_web/status');
+
+        $this->assertResponseOk();
+        $this->assertHeader('Access-Control-Allow-Origin', 'https://help.kunde.test');
+    }
+
+    public function testNoCorsHeaderForDisallowedOrigin(): void
+    {
+        Configure::write('Cors.allowedOrigins', 'https://help.kunde.test');
+        $this->configRequest(['headers' => [
+            'Accept' => 'application/json',
+            'Origin' => 'https://evil.test',
+        ]]);
+        $this->get('/api/v1/m/zztest_web/status');
+
+        $this->assertResponseOk();
+        $this->assertFalse($this->response()->hasHeader('Access-Control-Allow-Origin'));
+    }
+
+    public function testCorsPreflightAnsweredForPublicRoute(): void
+    {
+        Configure::write('Cors.allowedOrigins', 'https://help.kunde.test');
+        $this->configRequest(['headers' => [
+            'Origin' => 'https://help.kunde.test',
+            'Access-Control-Request-Method' => 'GET',
+        ]]);
+        $this->options('/api/v1/m/zztest_web/status');
+
+        $this->assertResponseCode(204);
+        $this->assertHeader('Access-Control-Allow-Origin', 'https://help.kunde.test');
+    }
+
+    public function testNoCorsOnUserRoute(): void
+    {
+        // A `user` route never gets CORS, even with a wildcard allow-list.
+        Configure::write('Cors.allowedOrigins', '*');
+        $this->configRequest(['headers' => [
+            'Accept' => 'application/json',
+            'Origin' => 'https://help.kunde.test',
+        ]]);
+        $this->get('/api/v1/m/zztest_web/secure');
+
+        $this->assertResponseCode(401);
+        $this->assertFalse($this->response()->hasHeader('Access-Control-Allow-Origin'));
     }
 
     private function cleanupModule(): void

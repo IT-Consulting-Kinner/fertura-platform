@@ -20,6 +20,7 @@ use App\I18n\EnglishFallbackLoader;
 use App\I18n\StoreLocaleLoader;
 use App\Middleware\ApiAuthMiddleware;
 use App\Middleware\ApiRateLimitMiddleware;
+use App\Middleware\CorsMiddleware;
 use App\Middleware\FootprintMiddleware;
 use App\Middleware\HostHeaderMiddleware;
 use App\Middleware\LocaleMiddleware;
@@ -139,6 +140,11 @@ class Application extends BaseApplication implements AuthenticationServiceProvid
 
             // Maintenance mode (Step 8): 503 when core.maintenance_mode is active.
             ->add(new MaintenanceMiddleware())
+
+            // CORS for the headless content API (E160): adds CORS headers to
+            // PUBLIC module API routes and answers preflight OPTIONS directly.
+            // BEFORE routing so a preflight (which matches no route) is not 404'd.
+            ->add(new CorsMiddleware())
 
             // Handle plugin/theme assets like CakePHP normally does.
             ->add(new AssetMiddleware([
