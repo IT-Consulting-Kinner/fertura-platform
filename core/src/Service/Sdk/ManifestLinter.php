@@ -117,6 +117,15 @@ class ManifestLinter
             if (empty($contract['type']) || !in_array($contract['type'], ['resolver', 'collector', 'service', 'event'], true)) {
                 $errors[] = "contracts_provided [$i]: 'type' ungültig (resolver|collector|service|event)";
             }
+            // Enhancing-not-gating (ch. 26.19, Decision 184): a provided resolver/
+            // service contract must declare its absence semantics (error_behavior ->
+            // the contract's default_behavior) so consumers have a defined neutral
+            // state when no provider is active. collector/event types are additive by
+            // nature (empty set / no-op) and need no declaration.
+            if (in_array($contract['type'] ?? '', ['resolver', 'service'], true) && empty($contract['error_behavior'])) {
+                $errors[] = "contracts_provided [$i]: 'error_behavior' fehlt "
+                    . '(Resolver-/Service-Contract muss die Abwesenheits-/Default-Semantik deklarieren, Kap. 26.19)';
+            }
         }
 
         // $errors/$warnings are append-only lists already — no array_values needed.

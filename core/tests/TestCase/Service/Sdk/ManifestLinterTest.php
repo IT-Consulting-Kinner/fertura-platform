@@ -61,4 +61,25 @@ class ManifestLinterTest extends TestCase
         $this->assertSame([], $r['errors']);
         $this->assertNotEmpty($r['warnings']);
     }
+
+    /**
+     * Enhancing-not-gating (ch. 26.19, Decision 184): a provided resolver/service
+     * contract without error_behavior is an error; collector/event are exempt
+     * (additive by nature); a declared error_behavior clears the error.
+     */
+    public function testProvidedResolverServiceContractRequiresErrorBehavior(): void
+    {
+        $m = $this->valid();
+        $m['contracts_provided'] = [
+            ['name' => 'demo_modul.resolver.x', 'type' => 'resolver', 'version' => '1.0.0'],
+            ['name' => 'demo_modul.service.y', 'type' => 'service', 'version' => '1.0.0', 'error_behavior' => 'Default greift.'],
+            ['name' => 'demo_modul.event.z', 'type' => 'event', 'version' => '1.0.0'],
+        ];
+        $errs = (new ManifestLinter())->lint($m)['errors'];
+
+        $behaviorErrors = array_values(array_filter($errs, fn($e) => str_contains($e, 'error_behavior')));
+        // Only the resolver (index 0) is flagged: the service declares it, the event is exempt.
+        $this->assertCount(1, $behaviorErrors);
+        $this->assertStringContainsString('contracts_provided [0]', $behaviorErrors[0]);
+    }
 }

@@ -16,7 +16,8 @@
             "name": "isolated_anon_module.resolver.echo",
             "type": "resolver",
             "version": "1.0.0",
-            "description": "Daten-Resolver: gibt die Eingabe zurück."
+            "description": "Daten-Resolver: gibt die Eingabe zurück.",
+            "error_behavior": "Ohne registrierten Anbieter greift der Resolver-Default (Eingabe unverändert)."
         }
     ],
     "collectors_registered": [

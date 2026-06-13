@@ -35,6 +35,22 @@ Alle Erweiterungen werden **im Manifest deklariert** und beim Install registrier
 | `permissions` | BREAD-Ressourcen (+ `is_scoped`, s. §4) | resources-Tabelle |
 | `locales` | Sprachpakete (Domain = `id`) | Managed Locale Store |
 
+> **Regel „enhancing, nicht gating" (Plattform 26.19.1, Entscheidung 184).**
+> Optionale Capabilities erweitern einen Ablauf, bedingen ihn nie — die
+> Abwesenheit eines Providers muss ein definierter neutraler Zustand sein.
+> Daraus zwei konkrete Pflichten für Modul-Entwickler:
+> - **Bereitgestellte Resolver-/Service-Contracts** (`contracts_provided` mit
+>   `type` `resolver`|`service`) **müssen** das Feld **`error_behavior`**
+>   setzen (die Abwesenheits-/Default-Semantik). Fehlt es, **scheitern
+>   Manifest-Linter und Aktivierung** (Collector/Event sind ausgenommen —
+>   additiv: leere Menge / No-op).
+> - **Genutzte Contracts** (`contracts_used`): die Abweisung eines Aufrufs
+>   (kein aktiver Anbieter, Kap. 26.13.3) **muss** im Modulcode neutral
+>   behandelt werden — Default, leeres Ergebnis oder Ausblenden, nie ein
+>   blockierter Pflicht-Flow. Das ist **Review- und Abnahmekriterium**
+>   („Funktion bleibt mit abwesendem Provider voll nutzbar"), nicht statisch
+>   prüfbar.
+
 ### 2.1 Periodische Aufgaben — z. B. Ticketing `fetch_mails` / `check_escalations`
 
 Der Core-Worker tickt registrierte **`ScheduledTaskInterface`**-Implementierungen

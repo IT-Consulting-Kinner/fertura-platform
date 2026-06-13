@@ -18,7 +18,8 @@
             "multi_use": true,
             "description": "Oeffentliches Interface: gibt die Eingabe zurueck.",
             "input_spec": {"msg": "string"},
-            "output_spec": {"echo": "string", "length": "int"}
+            "output_spec": {"echo": "string", "length": "int"},
+            "error_behavior": "Ohne aktiven Anbieter behandelt der Aufrufer die Abweisung (Kap. 26.13.3); neutral: leeres echo."
         }
     ],
     "contracts_used": [],

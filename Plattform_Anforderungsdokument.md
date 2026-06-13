@@ -1,6 +1,6 @@
 # Plattform-Anforderungsdokument: Modulare Anwendungsplattform
 
-Version 6.113
+Version 6.114
 
 Stand: 12. Juni 2026
 
@@ -2532,6 +2532,40 @@ verbindliche Leitregeln:
     (Capability-Bindung, Kapitel 26.13.2).
 -   Alle relevanten Vorgänge sind auditierbar.
 
+### 26.19.1 Enhancing, nicht gating (optionale Capabilities)
+
+**Grundsatz (Entscheidung 184):** Optionale Capabilities – bereitgestellte
+oder konsumierte Contracts bzw. öffentliche Interfaces (Resolver, Collector,
+Event, Service) – dürfen einen fachlichen Ablauf ausschließlich **erweitern**
+(*enhancing*), nie **bedingen** (*gating*). Die Abwesenheit eines aktiven
+Providers muss ein **definierter neutraler Zustand** sein:
+
+-   **Resolver/Service:** verpflichtende Default-Implementierung bzw.
+    -Semantik (das bereitgestellte Verhalten ohne aktiven Anbieter).
+-   **Collector/Event:** leere Beitragsmenge bzw. No-op (additiv von Natur
+    aus).
+-   **Konsumentenseite:** kontrollierte Degradation gemäß Kapitel 26.13.3
+    (Rückfall auf Default, leeres Ergebnis oder Ausblenden der Funktion).
+
+Kein Pflicht-Flow eines Moduls, einer Extension oder eines Konnektors darf von
+der Anwesenheit eines optionalen Providers abhängen. Diese Regel konkretisiert
+die Leitsätze „jeder Resolver besitzt ein verpflichtendes Default-Verhalten"
+und „ein Prozess darf niemals von einem aktiven Provider abhängig sein" zu einer
+im Review durchsetzbaren Norm.
+
+**Durchsetzung.** Die Regel zerfällt in einen statisch prüfbaren und einen
+review-/testpflichtigen Teil:
+
+-   **Statisch (hart):** Jeder bereitgestellte Resolver-/Service-Contract muss
+    seine Abwesenheits-/Default-Semantik deklarieren (Manifestfeld
+    `error_behavior` in `contracts_provided`). Fehlt sie, weisen
+    Manifest-Linter (Kapitel P16) und Aktivierungsvalidierung das Modul ab.
+    Collector und Events sind ausgenommen (additiv: leere Menge / No-op).
+-   **Review/Test:** Ob die Konsumentenseite eine Abweisung tatsächlich neutral
+    behandelt, ist eine Verhaltenseigenschaft des Modulcodes und nicht statisch
+    erkennbar. Sie ist Gegenstand des Modul-Reviews und ein Abnahmekriterium
+    („Funktion bleibt mit abwesendem Provider vollständig nutzbar").
+
 # 27. Benutzer, Gruppen, Rollen und Berechtigungsmodell der Plattform
 
 ## 27.1 Zielsetzung
@@ -4592,6 +4626,7 @@ Komponente neu auszuliefern.
 | 6.30 | 07.06.2026 | Doku-Software-Abgleich nach Umsetzung: (a) **7. Administrationsbereich „Sprachverwaltung"** in 27.3.1 + Entscheidung 170 ergänzt (zuvor 6); (b) **API-Token tragen Scopes** (zusätzliche Einschränkung, nie erweiternd) in 27.16.3 + Entscheidung 162 korrigiert (zuvor „keine eigenen Scopes"); (c) **20.1.2 um den realen Backup-Funktionsumfang erweitert** (ZIP+Zeitstempel, Verifikation-vor-Abschluss, optionale AES-256-Verschlüsselung, Zeitplan/Retention nach Anzahl+Alter, append-only-Protokoll, Pre-Flight, Mail-Alarm, Download, Health-Subsystem); (d) **30.3.1**: Core **erzwingt** RLS für `is_scoped`-Module bei der Installation (Abbruch sonst). Hinweis: Mehrsprachigkeit/Locale-Verwaltung ist als eigener Subsystem implementiert, im Anforderungsdokument bislang nur als Technologie-Zeile geführt (eigene Kapitel-Ausarbeitung offen). |
 | 6.31 | 07.06.2026 | Doku-Software-Abgleich (Fortsetzung): (a) **Neues Kapitel 31 „Mehrsprachigkeit und Lokalisierung"** ausgearbeitet (Grundsatz/symbolische Schlüssel, Mitlieferung, Managed Locale Store mit ausfallsicherem Schreiben, Versions-Gate, Sprachverwaltungs-Admin-Bereich mit Status-Trio + verlustfreiem Editor, Laufzeit-Sprachwahl, Audit/Health). (b) Bestehende Kapitel um umgesetzte Mechanismen ergänzt: **20.2.1** Health-Subsysteme `localization` + `backup`; **20.3** Andock-Punkt für periodische Modul-Aufgaben (`core.collector.scheduled`); **24.9.2** Durchsetzung des Anker-Gültigkeitsfensters + gleitende Rotation; **26.9.2** Dead-Letter-Retry/Verwerfen-GUI; **28.14.2** automatischer Wiederherstellungspunkt auch bei Boot-Migrationen. |
 | 6.32 | 08.06.2026 | (a) **Mehrere Worker-Instanzen** explizit unterstützt (20.3): periodische Aufgaben werden je Aufgabe über einen PostgreSQL-Advisory-Lock serialisiert (kein Doppellauf bei >1 Worker); Outbox bleibt über SKIP LOCKED kollisionsfrei. Einzelinstanz = Standard. (b) **Backup-Verschlüsselung DR-tauglich** (20.1.2): Passwort aus Env/Secret (`BACKUP_PASSWORD_FILE`/`BACKUP_PASSWORD`) mit Vorrang vor dem DB-Setting — out-of-band, damit ein verschlüsseltes Backup nicht über das im Dump enthaltene Passwort entschlüsselt werden müsste (Henne-Ei). |
+| 6.114 | 13.06.2026 | **Architekturprinzip „enhancing, nicht gating" (26.19.1 neu, Entscheidung 184)**: Die bislang nur gelebte Disziplin – optionale Capabilities (Resolver/Collector/Event/Service, bereitgestellt oder konsumiert) erweitern einen Ablauf nur, bedingen ihn nie; die Abwesenheit eines Providers ist ein definierter neutraler Zustand (Default-Implementierung, leere Menge, Ausblendung) – als verbindliche, im Review durchsetzbare Norm festgeschrieben. Durchsetzung zweigeteilt: **statisch hart** – jeder bereitgestellte Resolver-/Service-Contract muss seine Abwesenheits-/Default-Semantik deklarieren (Manifestfeld `error_behavior`), sonst weisen Manifest-Linter (P16) und Aktivierungsvalidierung ab (Collector/Event ausgenommen, additiv); **review-/testpflichtig** – die konsumentenseitig tatsächlich neutrale Behandlung einer Abweisung (26.13.3) ist nicht statisch erkennbar und bleibt Review-/Abnahmekriterium. Verifiziert: Linter-Test belegt Pflicht für Resolver/Service und Ausnahme für Collector/Event; volle Testsuite grün, statische Analyse grün. |
 | 6.113 | 12.06.2026 | Kardinalitäts- und Andockregeln (23.5.5 neu): Modul hat N Extensions und N Konnektoren; Extension ist Andockziel von N Konnektoren (mit Abhängigkeitsdeklaration und Deaktivierungskaskade); Konnektor ist Blattknoten ohne eigene Extensions, Konnektoren, Contracts oder Interfaces. 26.4.2/26.4.3 entsprechend revidiert (Contract-Anbieter nur Main + reguläre Extensions; Andockziele präzisiert; Connector-Slot-Beispiel ersetzt — der KI-Add-on-Fall ist durch KI-im-Core obsolet), 23.5.3 und 24.5.2 angepasst. Entscheidungen 181/182 präzisiert, 183 neu |
 | 6.112 | 12.06.2026 | Extension-bereitgestellte Contracts und Andocktiefe: (1) Kapitel 26.4.2 neu — Contracts dürfen auch von Extension-Modulen (inkl. Integrations-Extensions/Connectoren) bereitgestellt werden, mit identischen Regeln (Versionierung, Manifest contracts_provided, Registry, Laufzeit-Guard, Default-Semantik); Deaktivierungsverhalten analog Entscheidung 149. Typischer Fall: Connector-eigener Resolver-Slot mit Default, auf den Add-ons (z.B. KI) andocken. (2) Kapitel 26.4.3 neu — Empfehlung Andocktiefe max. eine Ebene; Verankerungsregel 23.5.1 unverändert (Extensions verankern nie auf Extensions, Andocken nur lose über Contracts). (3) 23.5.3 und 24.5.2 entsprechend ergänzt. Entscheidungen 181/182 |
 | 6.98 | 11.06.2026 | **Tot-Code-Bereinigung und Code-Hygiene (Reifegrad, keine Spezifikationsänderung)**: Systematischer Durchgang gegen toten Code — fünf echte Fundstellen entfernt bzw. gehärtet (eine ungenutzte Abhängigkeit, eine wirkungslose Funktionsanwendung, eine überflüssige Doppelprüfung, ein `match` ohne Auffangzweig, ein ungeschützter Feldzugriff → beide nun „fail-loud"). Sorgfältig abgegrenzt: fünf weitere von der statischen Analyse markierte Stellen sind nachweislich **Fehlinferenzen** (Closure-Referenzvariablen bzw. Socket-Prüfung) und bleiben bewusst unverändert, statt korrekten Code zu „bereinigen". Verifiziert per Code-Review vor jeder Änderung; volle Suite **380 grün**, statische Analyse grün (Baseline geschrumpft). |
@@ -4758,3 +4793,4 @@ getroffen.
 | 181 | Extension-bereitgestellte Contracts | Reguläre Extension-Module dürfen Contracts bereitstellen — mit denselben Regeln wie Main-Modul-Contracts (Versionierung, Registry, Laufzeit-Guard, Default-Semantik, Manifest-Deklaration). Konnektoren stellen keine Contracts bereit (Entscheidung 183) |
 | 182 | Andocktiefe maximal eine Ebene | Andockziele sind Main-Module und reguläre Extensions; Andockungen höchstens eine Ebene tief. Verankerung bleibt strikt: reguläre Extensions erweitern genau ein Main-Modul, nie ein Extension-Modul |
 | 183 | Kardinalitäten und Konnektor als Blattknoten | Ein Modul kann N Extensions und N Konnektoren haben; eine Extension kann Andockziel von N Konnektoren sein; ein Konnektor hat weder Extensions noch Konnektoren und stellt keine Contracts/Interfaces bereit. Abhängigkeitsgraph bleibt flache Hierarchie Core → Tower → (Extension | Konnektor) |
+| 184 | Enhancing, nicht gating (optionale Capabilities) | Optionale Capabilities (Resolver, Collector, Event, Service – bereitgestellt oder konsumiert) dürfen einen Ablauf nur erweitern, nie bedingen; die Abwesenheit eines aktiven Providers muss ein definierter neutraler Zustand sein (Default-Implementierung bei Resolver/Service, leere Menge/No-op bei Collector/Event, Ausblenden/leeres Ergebnis konsumentenseitig). Kein Pflicht-Flow darf von einem optionalen Provider abhängen (Kap. 26.19.1). Durchsetzung zweigeteilt: **statisch hart** – jeder bereitgestellte Resolver-/Service-Contract muss seine Abwesenheits-/Default-Semantik deklarieren (Manifestfeld `error_behavior`), sonst weisen Manifest-Linter (P16) und Aktivierungsvalidierung ab; **review-/testpflichtig** – die tatsächlich neutrale Behandlung einer Abweisung konsumentenseitig (Kap. 26.13.3) ist nicht statisch erkennbar und Gegenstand von Review und Abnahmekriterium |

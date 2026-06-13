@@ -255,6 +255,19 @@ class ModuleManifest
             }
         }
 
+        // Enhancing-not-gating (ch. 26.19, Decision 184): a provided resolver/service
+        // contract must declare its absence semantics (error_behavior), so a missing
+        // provider degrades to a defined neutral state (default behavior) instead of
+        // breaking a mandatory flow. Enforced at activation, not only in the linter.
+        foreach ($this->contractsProvided() as $i => $c) {
+            $type = isset($c['type']) ? (string)$c['type'] : '';
+            if (in_array($type, ['resolver', 'service'], true) && empty($c['error_behavior'])) {
+                $name = !empty($c['name']) ? (string)$c['name'] : "#$i";
+                $errors[] = "Contract $name: error_behavior fehlt "
+                    . '(Resolver-/Service-Contract muss die Abwesenheits-/Default-Semantik deklarieren, Kap. 26.19).';
+            }
+        }
+
         return $errors;
     }
 }
