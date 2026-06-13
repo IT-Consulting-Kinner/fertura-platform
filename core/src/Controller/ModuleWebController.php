@@ -6,6 +6,7 @@ namespace App\Controller;
 use App\Service\Admin\AdminNavBuilder;
 use App\Service\Module\ContributionRuntime;
 use App\Service\Module\WebRouteRegistry;
+use App\Service\Storage\StorageManager;
 use Cake\Core\Configure;
 use Cake\Datasource\ConnectionManager;
 use Cake\Event\EventInterface;
@@ -14,6 +15,7 @@ use Cake\Http\Exception\InternalErrorException;
 use Cake\Http\Exception\NotFoundException;
 use Cake\Http\Response;
 use Cake\Log\Log;
+use Laminas\Diactoros\Stream;
 use Throwable;
 
 /**
@@ -103,6 +105,12 @@ class ModuleWebController extends AppController
         if (isset($result['redirect']) && is_string($result['redirect']) && $result['redirect'] !== '') {
             return $this->redirect($result['redirect']);
         }
+        // File download (E161): a handler may return a `download` instead of a
+        // template — either in-memory bytes (`content`) or a streamed object-
+        // storage report (`storage_path`, for large exports without memory load).
+        if (isset($result['download']) && is_array($result['download'])) {
+            return $this->moduleDownload($result['download']);
+        }
         $vars = isset($result['vars']) && is_array($result['vars']) ? $result['vars'] : [];
         $template = isset($result['template']) && is_string($result['template']) && $result['template'] !== ''
             ? $result['template'] : $route['template'];
@@ -157,5 +165,75 @@ class ModuleWebController extends AppController
         )->fetchAll('assoc');
 
         return array_values(array_map(static fn($r) => (string)$r['admin_area_key'], $rows));
+    }
+
+    /**
+     * Builds a file-download response from a handler's `download` result
+     * (E161). The shape is module-provided (untrusted) and coerced defensively:
+     * the filename and content type are sanitized to prevent header injection.
+     *
+     * Two variants: in-memory `content` (string bytes) for normal exports, or
+     * `storage_path` streamed from object storage (StorageManager) for large
+     * reports without holding the whole file in memory.
+     *
+     * @param array<string, mixed> $dl
+     */
+    private function moduleDownload(array $dl): Response
+    {
+        $filename = $this->safeFilename(is_string($dl['filename'] ?? null) ? $dl['filename'] : 'download');
+        $contentType = $this->safeContentType(is_string($dl['content_type'] ?? null) ? $dl['content_type'] : '');
+
+        // Variant (a): in-memory bytes.
+        if (is_string($dl['content'] ?? null)) {
+            return $this->response
+                ->withType($contentType)
+                ->withStringBody($dl['content'])
+                ->withDownload($filename);
+        }
+
+        // Variant (b): streamed from object storage.
+        if (is_string($dl['storage_path'] ?? null) && $dl['storage_path'] !== '') {
+            $path = $dl['storage_path'];
+            // The module addresses its own report path; reject traversal defensively.
+            if (str_contains($path, '..')) {
+                throw new ForbiddenException();
+            }
+            $storage = new StorageManager();
+            if (!$storage->exists($path)) {
+                throw new NotFoundException();
+            }
+            $resource = $storage->readStream($path);
+            if (!is_resource($resource)) {
+                throw new InternalErrorException();
+            }
+            $response = $this->response
+                ->withType($contentType)
+                ->withBody(new Stream($resource))
+                ->withDownload($filename);
+            try {
+                return $response->withHeader('Content-Length', (string)$storage->fileSize($path));
+            } catch (Throwable) {
+                return $response; // size unknown -> let the transport handle it
+            }
+        }
+
+        // Neither variant supplied: a download with no payload is a module bug.
+        throw new InternalErrorException();
+    }
+
+    /** Sanitizes a download filename (basename + safe charset) against header injection. */
+    private function safeFilename(string $name): string
+    {
+        $name = preg_replace('/[^A-Za-z0-9._-]/', '_', basename($name)) ?? '';
+
+        return $name !== '' ? $name : 'download';
+    }
+
+    /** Validates a Content-Type (type/subtype, no CR/LF) or falls back to octet-stream. */
+    private function safeContentType(string $contentType): string
+    {
+        $contentType = trim(str_replace(["\r", "\n"], '', $contentType));
+
+        return $contentType !== '' && str_contains($contentType, '/') ? $contentType : 'application/octet-stream';
     }
 }

@@ -37,10 +37,18 @@ interface ModuleWebInterface
      * - `template`  optional template name override (defaults to the route's
      *               declared `template`)
      * - `redirect`  optional URL/path to redirect to instead of rendering
+     * - `download`  optional file download instead of rendering (E161):
+     *               `['filename' => string, 'content_type' => string,
+     *               'content' => string]` for in-memory bytes, OR
+     *               `['filename' => string, 'content_type' => string,
+     *               'storage_path' => string]` to stream a stored report from
+     *               object storage (large exports). filename + content_type are
+     *               sanitized by the Core.
      *
      * @param array{method:string,path:string,params:array<string,string>,
      *     query:array<string,mixed>,body:mixed,user_id:?string} $request
-     * @return array{vars?:array<string,mixed>,status?:int,template?:string,redirect?:string}
+     * @return array{vars?:array<string,mixed>,status?:int,template?:string,
+     *     redirect?:string,download?:array<string,mixed>}
      */
     public function handle(array $request): array;
 }

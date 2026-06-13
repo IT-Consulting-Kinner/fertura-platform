@@ -34,6 +34,13 @@
             "nav_group": "zztest.nav.group",
             "nav": "zztest.nav.config",
             "title": "Web Test Admin"
+        },
+        {
+            "path": "/download",
+            "class": "ZztestWeb\\Web\\DownloadPage",
+            "template": "dashboard",
+            "auth": "guest",
+            "title": "Web Test Download"
         }
     ],
     "api_routes": [

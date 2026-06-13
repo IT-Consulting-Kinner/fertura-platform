@@ -5,6 +5,7 @@ namespace App\Test\TestCase\Controller;
 
 use App\Service\Module\ModuleLifecycle;
 use App\Service\Settings\SettingsManager;
+use App\Service\Storage\StorageManager;
 use Cake\Core\Configure;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\IntegrationTestTrait;
@@ -55,6 +56,11 @@ class ModuleWebTest extends TestCase
     protected function tearDown(): void
     {
         Configure::delete('Cors.allowedOrigins');
+        try {
+            (new StorageManager())->delete('reports/zztest_dl.txt');
+        } catch (Throwable) {
+            // Not written in this test — ignore.
+        }
         $this->cleanupModule();
         if ($this->userId !== '') {
             $conn = ConnectionManager::get('default');
@@ -226,6 +232,28 @@ class ModuleWebTest extends TestCase
 
         $this->assertResponseCode(401);
         $this->assertFalse($this->response()->hasHeader('Access-Control-Allow-Origin'));
+    }
+
+    public function testWebMountDownloadsInMemoryContent(): void
+    {
+        // E161 (a): a web-mount handler returns in-memory bytes as a file download.
+        $this->get('/m/zztest_web/download');
+
+        $this->assertResponseOk();
+        $this->assertHeaderContains('Content-Disposition', 'inline.csv');
+        $this->assertHeaderContains('Content-Type', 'text/csv');
+        $this->assertResponseEquals("a,b\n1,2\n");
+    }
+
+    public function testWebMountStreamsDownloadFromStorage(): void
+    {
+        // E161 (b): a stored report is streamed from object storage (no memory load).
+        $this->get('/m/zztest_web/download?mode=stream');
+
+        $this->assertResponseOk();
+        $this->assertHeaderContains('Content-Disposition', 'report.txt');
+        $this->assertHeader('Content-Length', '20');
+        $this->assertResponseEquals('streamed-content-xyz');
     }
 
     private function cleanupModule(): void
