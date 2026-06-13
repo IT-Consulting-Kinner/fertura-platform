@@ -1,8 +1,8 @@
 # Plattform-Anforderungsdokument: Modulare Anwendungsplattform
 
-Version 6.28
+Version 6.113
 
-Stand: 03. Juni 2026
+Stand: 12. Juni 2026
 
 Status: In Überarbeitung
 
@@ -425,6 +425,9 @@ Beide Arten von Extension-Modulen können mitbringen:
 -   Eigene Tabellen
 -   Eigene Migrationslogik
 -   Registrierungen für Resolver, Collector oder Events
+-   Eigene Contracts bereitstellen (nur reguläre Extension-Module,
+    Kapitel 23.5.5/26.4.2), z.B. einen Resolver-Slot mit
+    Default-Verhalten; Konnektoren stellen keine Contracts bereit
 -   Optionale gruppenbezogene Berechtigungen auf eigene Ressourcen
 
 ### 23.5.4 Grundregel für Extension-Module
@@ -444,6 +447,27 @@ Ein Extension-Modul darf nicht:
 -   Eigene globale Rollenlogik einführen
 -   Eine alternative Policy-Engine im Core etablieren
 
+
+### 23.5.5 Kardinalitäts- und Andockregeln
+
+-   Ein Main-Modul kann von beliebig vielen regulären
+    Extension-Modulen erweitert werden und Ziel beliebig vieler
+    Integrations-Extension-Module (Konnektoren) sein.
+-   Ein reguläres Extension-Modul kann Andockziel beliebig vieler
+    Konnektoren sein: Konnektoren dürfen Contracts und Schnittstellen
+    einer Extension nutzen, da diese fachlich Teil der erweiterten
+    Tower-Domäne ist. Der Konnektor deklariert die Extension als
+    Abhängigkeit; wird die Extension deaktiviert, wird die betroffene
+    Integration inaktiv markiert (analog Entscheidung 149).
+-   Ein Konnektor ist ein Blattknoten: Er kann weder durch
+    Extension-Module erweitert noch von anderen Konnektoren genutzt
+    werden und stellt keine eigenen Contracts oder öffentlichen
+    Interfaces für Dritte bereit. Konnektoren konsumieren und
+    registrieren ausschließlich.
+
+Grundregel: Der Abhängigkeitsgraph bleibt eine flache Hierarchie –
+Core → Main-Modul → (Extension | Konnektor). Konnektoren hängen an
+Towern und deren Extensions, nie aneinander.
 ## 23.6 Erweiterungsmechanismen
 
 Der Begriff "Hook" wird in der Architektur nicht als unscharfer
@@ -1086,6 +1110,11 @@ Ein Integrations-Extension-Modul (Kapitel 23.5.2):
 -   Muss genutzte öffentliche Interfaces (Service-Contracts) im Manifest
     deklarieren (contracts_used)
 -   Speichert Integrationsbeziehungen in eigenen Tabellen
+-   Ist Blattknoten (Kapitel 23.5.5): stellt keine eigenen Contracts
+    oder öffentlichen Interfaces bereit, wird nicht erweitert und
+    nicht von anderen Konnektoren genutzt
+-   Darf zusätzlich Contracts regulärer Extension-Module der
+    verbundenen Tower nutzen (Andockziel-Regel, Kapitel 26.4.3)
 
 ## 24.6 Deklaration von Contracts im Manifest
 
@@ -2005,6 +2034,49 @@ Contract ist keine lose Konvention, sondern ein technischer Vertrag.
 
 Ein Contract ist nur dann gültig, wenn Input, Output und
 Default-Verhalten eindeutig und maschinenlesbar beschrieben sind.
+
+### 26.4.2 Contract-Anbieter (Main- und Extension-Module)
+
+Contracts dürfen von Main-Modulen und von regulären
+Extension-Modulen bereitgestellt werden.
+Integrations-Extension-Module (Konnektoren) stellen keine eigenen
+Contracts bereit – sie sind Blattknoten (Kapitel 23.5.5). Für
+Extension-bereitgestellte Contracts gelten dieselben Regeln wie für
+Main-Modul-Contracts, ohne Abweichung:
+
+-   Formale Beschreibung und Versionierung (26.4, 26.6)
+-   Deklaration im Manifest unter contracts_provided (24.6)
+-   Eintrag in der Contract-Registry (26.12)
+-   Registrierte Nutzung und Laufzeit-Guard (26.13.2, 26.13.3)
+-   Default-Semantik: Der Prozess des anbietenden Moduls ist ohne
+    registrierten Provider lauffähig (Entscheidung 111)
+
+Typischer Anwendungsfall: Eine reguläre Extension stellt einen
+Contract bereit, den ein Konnektor nutzt – z.B. liest ein Konnektor
+Kalenderdaten über einen Contract der SLA-Kalender-Extension, um sie
+in ein verbundenes System zu spiegeln.
+
+Wird das anbietende Extension-Modul deaktiviert, werden die
+Registrierungen andockender Module inaktiv markiert; deren
+Aktivierung bleibt blockiert, bis der Anbieter wieder aktiv ist.
+Die Grundlauffähigkeit der beteiligten Main-Module bleibt unberührt
+(analog Entscheidung 149).
+
+### 26.4.3 Andocktiefe (Empfehlung)
+
+Zulässige Andockziele für Contracts sind Main-Module und reguläre
+Extension-Module; Konnektoren sind niemals Andockziel (23.5.5).
+Andockungen sind höchstens eine Ebene tief: Wer an einen
+Extension-Contract andockt, stellt selbst keine Contracts für
+weitere Module bereit. Tiefere Ketten vergrößern die
+Kompatibilitätsmatrix (28.12) und die Deaktivierungskaskaden
+unverhältnismäßig.
+
+Die Verankerungsregel bleibt davon unberührt: Ein reguläres
+Extension-Modul erweitert genau ein Main-Modul (23.5.1);
+Extension-Module verankern sich nie auf anderen Extension-Modulen.
+Das Andocken erfolgt ausschließlich lose über Contracts mit
+Laufzeit-Guard und Default – nie über eine Verankerungsbeziehung.
 
 ## 26.5 Interface-Spezifikation
 
@@ -4520,6 +4592,8 @@ Komponente neu auszuliefern.
 | 6.30 | 07.06.2026 | Doku-Software-Abgleich nach Umsetzung: (a) **7. Administrationsbereich „Sprachverwaltung"** in 27.3.1 + Entscheidung 170 ergänzt (zuvor 6); (b) **API-Token tragen Scopes** (zusätzliche Einschränkung, nie erweiternd) in 27.16.3 + Entscheidung 162 korrigiert (zuvor „keine eigenen Scopes"); (c) **20.1.2 um den realen Backup-Funktionsumfang erweitert** (ZIP+Zeitstempel, Verifikation-vor-Abschluss, optionale AES-256-Verschlüsselung, Zeitplan/Retention nach Anzahl+Alter, append-only-Protokoll, Pre-Flight, Mail-Alarm, Download, Health-Subsystem); (d) **30.3.1**: Core **erzwingt** RLS für `is_scoped`-Module bei der Installation (Abbruch sonst). Hinweis: Mehrsprachigkeit/Locale-Verwaltung ist als eigener Subsystem implementiert, im Anforderungsdokument bislang nur als Technologie-Zeile geführt (eigene Kapitel-Ausarbeitung offen). |
 | 6.31 | 07.06.2026 | Doku-Software-Abgleich (Fortsetzung): (a) **Neues Kapitel 31 „Mehrsprachigkeit und Lokalisierung"** ausgearbeitet (Grundsatz/symbolische Schlüssel, Mitlieferung, Managed Locale Store mit ausfallsicherem Schreiben, Versions-Gate, Sprachverwaltungs-Admin-Bereich mit Status-Trio + verlustfreiem Editor, Laufzeit-Sprachwahl, Audit/Health). (b) Bestehende Kapitel um umgesetzte Mechanismen ergänzt: **20.2.1** Health-Subsysteme `localization` + `backup`; **20.3** Andock-Punkt für periodische Modul-Aufgaben (`core.collector.scheduled`); **24.9.2** Durchsetzung des Anker-Gültigkeitsfensters + gleitende Rotation; **26.9.2** Dead-Letter-Retry/Verwerfen-GUI; **28.14.2** automatischer Wiederherstellungspunkt auch bei Boot-Migrationen. |
 | 6.32 | 08.06.2026 | (a) **Mehrere Worker-Instanzen** explizit unterstützt (20.3): periodische Aufgaben werden je Aufgabe über einen PostgreSQL-Advisory-Lock serialisiert (kein Doppellauf bei >1 Worker); Outbox bleibt über SKIP LOCKED kollisionsfrei. Einzelinstanz = Standard. (b) **Backup-Verschlüsselung DR-tauglich** (20.1.2): Passwort aus Env/Secret (`BACKUP_PASSWORD_FILE`/`BACKUP_PASSWORD`) mit Vorrang vor dem DB-Setting — out-of-band, damit ein verschlüsseltes Backup nicht über das im Dump enthaltene Passwort entschlüsselt werden müsste (Henne-Ei). |
+| 6.113 | 12.06.2026 | Kardinalitäts- und Andockregeln (23.5.5 neu): Modul hat N Extensions und N Konnektoren; Extension ist Andockziel von N Konnektoren (mit Abhängigkeitsdeklaration und Deaktivierungskaskade); Konnektor ist Blattknoten ohne eigene Extensions, Konnektoren, Contracts oder Interfaces. 26.4.2/26.4.3 entsprechend revidiert (Contract-Anbieter nur Main + reguläre Extensions; Andockziele präzisiert; Connector-Slot-Beispiel ersetzt — der KI-Add-on-Fall ist durch KI-im-Core obsolet), 23.5.3 und 24.5.2 angepasst. Entscheidungen 181/182 präzisiert, 183 neu |
+| 6.112 | 12.06.2026 | Extension-bereitgestellte Contracts und Andocktiefe: (1) Kapitel 26.4.2 neu — Contracts dürfen auch von Extension-Modulen (inkl. Integrations-Extensions/Connectoren) bereitgestellt werden, mit identischen Regeln (Versionierung, Manifest contracts_provided, Registry, Laufzeit-Guard, Default-Semantik); Deaktivierungsverhalten analog Entscheidung 149. Typischer Fall: Connector-eigener Resolver-Slot mit Default, auf den Add-ons (z.B. KI) andocken. (2) Kapitel 26.4.3 neu — Empfehlung Andocktiefe max. eine Ebene; Verankerungsregel 23.5.1 unverändert (Extensions verankern nie auf Extensions, Andocken nur lose über Contracts). (3) 23.5.3 und 24.5.2 entsprechend ergänzt. Entscheidungen 181/182 |
 | 6.98 | 11.06.2026 | **Tot-Code-Bereinigung und Code-Hygiene (Reifegrad, keine Spezifikationsänderung)**: Systematischer Durchgang gegen toten Code — fünf echte Fundstellen entfernt bzw. gehärtet (eine ungenutzte Abhängigkeit, eine wirkungslose Funktionsanwendung, eine überflüssige Doppelprüfung, ein `match` ohne Auffangzweig, ein ungeschützter Feldzugriff → beide nun „fail-loud"). Sorgfältig abgegrenzt: fünf weitere von der statischen Analyse markierte Stellen sind nachweislich **Fehlinferenzen** (Closure-Referenzvariablen bzw. Socket-Prüfung) und bleiben bewusst unverändert, statt korrekten Code zu „bereinigen". Verifiziert per Code-Review vor jeder Änderung; volle Suite **380 grün**, statische Analyse grün (Baseline geschrumpft). |
 | 6.111 | 12.06.2026 | **Lesender Benutzer-/Gruppen-Zugriff für Module (Kap. 27, neue Core-Capability)**: Module müssen für eigene Zuordnungen (z. B. Warteschlange ↔ Benutzergruppe, Anzeige des Bearbeiters) Plattform-Benutzer und -Gruppen auflösen, dürfen aber nicht direkt auf die Identitätstabellen des Core zugreifen. Neu: ein sanktionierter, **nur lesender** Core-Dienst, den Module direkt nutzen (wie den zentralen Mail-Dienst). Bewusst **datensparsam**: ausgegeben werden ausschließlich Kennungen, ein Anzeigename und Gruppen-Kennungen/-Namen — **keine** E-Mail-Adressen oder sonstige personenbezogenen Zusatzdaten; die Abfragen laufen im Sicherheitskontext des Aufrufers (kein Umgehen der Zeilensicherheit). Verifiziert: Tests belegen die minimale Ausgabe und dass keine personenbezogenen Daten durchsickern; volle Testsuite grün, statische Analyse grün. **Damit sind alle drei für GUI-tragende Module nötigen Core-Erweiterungen umgesetzt** (Web-Oberflächen-Mounting, gast-/modul-authentifizierte externe API, lesender Identitäts-Zugriff); offen bleibt allein die Entwicklerdokumentation der neuen Verträge. |
 | 6.110 | 12.06.2026 | **Externe Modul-API: öffentlicher/gast-Authentifizierungsmodus (Kap. 29)**: Die externe API verlangte bisher für alle Pfade ein an einen Plattform-Benutzer gebundenes Token; Gastportale und externe Integrationen brauchen aber benutzerlose, modul-eigene (z. B. queue-gebundene) Tokens. Modul-API-Endpunkte können jetzt einen Authentifizierungsmodus deklarieren: „user" (Standard, Plattform-Token erforderlich) oder „public" (kein Plattform-Token; das Modul verantwortet die Authentifizierung selbst). Öffentliche Modul-Endpunkte laufen ohne Plattform-Identität (anonymer Datenbank-Sicherheitskontext, kein Umgehen der Zeilensicherheit — gast-sichtbare Daten sind eine ausdrückliche Freigabe des Moduls), bleiben aber ratenbegrenzt (pro IP). Der Core reicht die Anfrage samt Kopfzeilen an das Modul durch, damit dieses sein eigenes Token prüfen kann; der Manifest-Linter validiert den Modus. Bewusste Entscheidungen: der Core stellt kein eigenes Modul-Token-System bereit (das Modul bleibt souverän), zwei statt drei Modi, kein Sicherheitskontext-Bypass. Verifiziert: öffentlicher Endpunkt ohne Token liefert 200 (und liest seinen eigenen Token-Header), benutzer-Endpunkt ohne Token liefert 401; volle Testsuite grün, statische Analyse grün. Weiterhin offen: lesender Benutzer-/Gruppen-Contract für Module. |
@@ -4681,3 +4755,6 @@ getroffen.
 | 178 | Lifecycle-Lock via Advisory Lock | Der exklusive Lifecycle-Lock (24.18) wird als PostgreSQL-Advisory-Lock realisiert und wirkt knotenübergreifend (mehrknotenfähig), nicht nur prozesslokal (siehe Kapitel 30.7) |
 | 179 | Partitionierung großer Tabellen | Kontinuierlich wachsende Tabellen (Audit-Log 20.6, Event-Outbox) werden über deklarative Zeitbereichs-Partitionierung beherrscht; alte Partitionen archivierbar/abtrennbar (siehe Kapitel 30.8) |
 | 180 | Deployment-/Distributionsmodell | Der Core wird als eigenständiges Container-Image (PHP-FPM + Core) ausgeliefert; PostgreSQL ist kein Bestandteil des Images, sondern eigener Dienst (Container/Managed). Sofort-Start über Compose (Core/Web/DB/Worker/Mail, "clone & up"). All-in-One-Image nur für Demo/Eval, nicht produktionstauglich. Konsistent mit Update-Scope (28.2), Backup/PITR (20.1) und HA/Advisory-Lock (30.7) (siehe Kapitel 20.8) |
+| 181 | Extension-bereitgestellte Contracts | Reguläre Extension-Module dürfen Contracts bereitstellen — mit denselben Regeln wie Main-Modul-Contracts (Versionierung, Registry, Laufzeit-Guard, Default-Semantik, Manifest-Deklaration). Konnektoren stellen keine Contracts bereit (Entscheidung 183) |
+| 182 | Andocktiefe maximal eine Ebene | Andockziele sind Main-Module und reguläre Extensions; Andockungen höchstens eine Ebene tief. Verankerung bleibt strikt: reguläre Extensions erweitern genau ein Main-Modul, nie ein Extension-Modul |
+| 183 | Kardinalitäten und Konnektor als Blattknoten | Ein Modul kann N Extensions und N Konnektoren haben; eine Extension kann Andockziel von N Konnektoren sein; ein Konnektor hat weder Extensions noch Konnektoren und stellt keine Contracts/Interfaces bereit. Abhängigkeitsgraph bleibt flache Hierarchie Core → Tower → (Extension | Konnektor) |
