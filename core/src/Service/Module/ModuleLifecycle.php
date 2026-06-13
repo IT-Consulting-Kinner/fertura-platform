@@ -783,12 +783,82 @@ class ModuleLifecycle
 
     private function deactivateRegistrations(string $key): void
     {
+        // Deactivate the module's own active registrations, remembering which
+        // contracts it provided so the cascade can check whether each one just
+        // lost its last provider.
         $rows = $this->conn()->execute(
-            'SELECT id FROM contract_registrations WHERE module_key = :k AND active',
+            'SELECT id, contract_id, registration_type FROM contract_registrations WHERE module_key = :k AND active',
             ['k' => $key],
         )->fetchAll('assoc');
+        $providedContractIds = [];
         foreach ($rows as $row) {
+            if ((string)$row['registration_type'] === ContractRegistration::TYPE_PROVIDER) {
+                $providedContractIds[(string)$row['contract_id']] = true;
+            }
             $this->registry->deactivateRegistration((string)$row['id']);
+        }
+
+        $this->cascadeDeactivateIntegrations($key, array_keys($providedContractIds));
+    }
+
+    /**
+     * Deactivation cascade (Decision 149 / ch. 23.5.5): when a module that
+     * provided a contract is deactivated and no other active provider remains,
+     * the integrations docking onto that contract — other modules' CONSUMER
+     * registrations, e.g. a connector docked onto an extension's contract —
+     * become non-functional. They are marked inactive so the registry matches
+     * the runtime, where {@see \App\Service\Registry\CapabilityHandle::invoke()}
+     * would already reject the call and the contract's default behavior applies.
+     *
+     * The consuming modules themselves stay active — their base operability must
+     * not be destroyed (Decision 149); only their docking registration is
+     * severed. Connectors are leaf nodes (they never provide contracts), so the
+     * cascade never recurses past this one level (ch. 23.5.5).
+     *
+     * @param list<string> $providedContractIds Contracts the deactivated module provided.
+     */
+    private function cascadeDeactivateIntegrations(string $triggerKey, array $providedContractIds): void
+    {
+        foreach ($providedContractIds as $contractId) {
+            // Another active provider still serves the contract -> the docking
+            // integrations remain functional and must be left untouched.
+            $stillProvided = $this->conn()->execute(
+                'SELECT 1 FROM contract_registrations '
+                . 'WHERE contract_id = :c AND registration_type = :t AND active LIMIT 1',
+                ['c' => $contractId, 't' => ContractRegistration::TYPE_PROVIDER],
+            )->fetch('assoc');
+            if ($stillProvided !== false) {
+                continue;
+            }
+
+            $consumers = $this->conn()->execute(
+                'SELECT cr.id, cr.module_key, c.name AS contract_name '
+                . 'FROM contract_registrations cr JOIN contracts c ON c.id = cr.contract_id '
+                . 'WHERE cr.contract_id = :c AND cr.registration_type = :t AND cr.active',
+                ['c' => $contractId, 't' => ContractRegistration::TYPE_CONSUMER],
+            )->fetchAll('assoc');
+
+            foreach ($consumers as $consumer) {
+                // deactivateRegistration() also revokes the consumer's capability
+                // binding, so handleFor() returns null afterwards (the consumer
+                // cleanly falls back to the default instead of holding a handle
+                // that throws on invoke()).
+                $this->registry->deactivateRegistration((string)$consumer['id']);
+                $this->audit->log(
+                    'module.integration_deactivated',
+                    'contract_registration',
+                    (string)$consumer['contract_name'],
+                    [
+                        'oldValue' => ['active' => true],
+                        'newValue' => [
+                            'active' => false,
+                            'reason' => 'provider_deactivated',
+                            'triggerModule' => $triggerKey,
+                        ],
+                        'moduleKey' => (string)$consumer['module_key'],
+                    ],
+                );
+            }
         }
     }
 
