@@ -10,9 +10,9 @@ Main-Modulen und Extension-Modulen.
 
 | Datei | Inhalt |
 | --- | --- |
-| `Plattform_Anforderungsdokument_v6_25.md` | Plattform-Anforderungen (Core, Module, Contracts, BREAD, Lifecycle, Updates) – v6.25, mit fortlaufendem Änderungsprotokoll |
+| `Plattform_Anforderungsdokument.md` | Plattform-Anforderungen (Core, Module, Contracts, BREAD, Lifecycle, Updates) — mit fortlaufendem Änderungsprotokoll (Version im Titel) |
 | `IMPLEMENTATION_PLAN.md` | Umsetzungstagebuch (E-Nummern): jede Entscheidung mit Begründung |
-| `Modul_Ticketing_Anforderungsdokument_v6_2.md` | Ticketing-Main-Modul – v6.2 (auf Plattform v6.25 ausgerichtet) |
+| `Modul_Ticketing_Anforderungsdokument.md` | Ticketing-Main-Modul (auf die Plattform-Spec ausgerichtet) |
 | `Alignment_Ticketing_v6.1_zu_Plattform_v6.25.md` | Alignment-Delta Modul → Plattform |
 | `PROGRAM_TIER123.md` | Programm-Tier-Einteilung (P-Nummern) der Ausbaustufen |
 | `NOTES.md` | Projektnotizen / Nachverfolgung |

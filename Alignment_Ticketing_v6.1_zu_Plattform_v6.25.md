@@ -9,7 +9,7 @@ Freigabe Punkt für Punkt (analog zum Plattform-Review).
 
 Quellen:
 - Ticketing-Modul: `Modul_Ticketing_Anforderungsdokument_v6_1.md`
-- Plattform: `Plattform_Anforderungsdokument_v6_25.md`
+- Plattform: `Plattform_Anforderungsdokument.md`
 
 Priorität:
 - **P1 — Muss:** Modul widerspricht der Plattform oder dupliziert sie; ohne Fix inkonsistent.
