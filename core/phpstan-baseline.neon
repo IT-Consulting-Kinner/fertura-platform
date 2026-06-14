@@ -19,12 +19,6 @@ parameters:
 			path: src/Command/AnonymizeUserCommand.php
 
 		-
-			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
-			identifier: method.notFound
-			count: 4
-			path: src/Command/AutomationCommand.php
-
-		-
 			message: '#^Parameter \#1 \$note of method App\\Service\\Backup\\BackupService\:\:create\(\) expects string\|null, bool\|string\|null given\.$#'
 			identifier: argument.type
 			count: 1
@@ -173,12 +167,6 @@ parameters:
 			identifier: argument.type
 			count: 1
 			path: src/Command/TrustCommand.php
-
-		-
-			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
-			identifier: method.notFound
-			count: 3
-			path: src/Command/WorkflowCommand.php
 
 		-
 			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
