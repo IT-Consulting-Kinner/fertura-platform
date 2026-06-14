@@ -22,6 +22,9 @@ use Symfony\Component\Uid\Uuid;
  */
 class SsoService
 {
+    /** Stable id of the default tenant (single-org), mirrors `CoreTenancy`. */
+    private const DEFAULT_TENANT_ID = '00000000-0000-0000-0000-000000000001';
+
     private ?SecretCipher $cipher = null;
 
     public function __construct(private ?AuditLogger $audit = null)
@@ -50,8 +53,15 @@ class SsoService
      */
     public function activeProviders(): array
     {
+        // SSO config is tenant-owned, but sso_providers is a PRE-AUTH table (the
+        // login page reads it before any user context) -> no blocking RLS policy;
+        // tenant isolation is an application filter instead. The login page resolves
+        // its tenant from the host (TransactionRlsMiddleware, pre-auth path); in
+        // single-org the host maps to no tenant -> fall back to the default tenant.
         return $this->conn()->execute(
-            'SELECT id, type, name, button_label FROM sso_providers WHERE active ORDER BY name',
+            'SELECT id, type, name, button_label FROM sso_providers '
+            . "WHERE active AND tenant_id = coalesce(core.current_tenant(), '"
+            . self::DEFAULT_TENANT_ID . "'::uuid) ORDER BY name",
         )->fetchAll('assoc');
     }
 
@@ -60,8 +70,12 @@ class SsoService
      */
     public function listProviders(): array
     {
+        // Admin listing -> scoped to the current tenant (same pre-auth-safe app
+        // filter as activeProviders(); an authenticated admin always has a tenant).
         return $this->conn()->execute(
-            'SELECT id, type, name, button_label, active, config, created_at FROM sso_providers ORDER BY created_at',
+            'SELECT id, type, name, button_label, active, config, created_at FROM sso_providers '
+            . "WHERE tenant_id = coalesce(core.current_tenant(), '"
+            . self::DEFAULT_TENANT_ID . "'::uuid) ORDER BY created_at",
         )->fetchAll('assoc');
     }
 
