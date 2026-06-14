@@ -31,7 +31,6 @@ class TransactionRlsMiddleware implements MiddlewareInterface
         try {
             $identity = $request->getAttribute('identity');
             $userId = $identity !== null ? (string)$identity->getIdentifier() : null;
-            $groupIds = $userId !== null ? (new PermissionService())->activeGroupIds($userId) : [];
             // Derive the tenant context from the authenticated user (single-org:
             // default tenant). Pre-auth (no user): resolve from the request host
             // (tenant-specific login/SSO frontend), otherwise null →
@@ -49,6 +48,16 @@ class TransactionRlsMiddleware implements MiddlewareInterface
             } else {
                 $tenantId = $hostTenant;
             }
+            // Set the tenant context BEFORE resolving the user's groups: groups /
+            // groups_users are tenant-scoped under fail-closed RLS (E170), so the
+            // group resolution must run inside the tenant (otherwise it would
+            // return nothing and lock the user out). The tenant comes from the
+            // policy-free `users` table, so this read needs no prior context.
+            $connection->execute(
+                "SELECT set_config('app.current_tenant_id', :t, true)",
+                ['t' => $tenantId ?? ''],
+            );
+            $groupIds = $userId !== null ? (new PermissionService())->activeGroupIds($userId) : [];
             (new RlsContext())->applyLocal($connection, $userId, $groupIds, false, $tenantId);
 
             $response = $handler->handle($request);

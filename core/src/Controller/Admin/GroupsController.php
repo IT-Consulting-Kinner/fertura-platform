@@ -65,8 +65,12 @@ class GroupsController extends AdminController
             . 'WHERE gu.group_id = :id ORDER BY u.username',
             ['id' => $id],
         )->fetchAll('assoc');
+        // `users` carries tenant_id but has no blocking RLS policy (pre-auth
+        // exception), so this admin candidate list must filter by tenant itself —
+        // otherwise it would offer users of OTHER tenants for membership.
         $candidates = $conn->execute(
             'SELECT id, username FROM users WHERE status <> \'anonymized\' '
+            . 'AND tenant_id = core.current_tenant() '
             . 'AND id NOT IN (SELECT user_id FROM groups_users WHERE group_id = :id) ORDER BY username',
             ['id' => $id],
         )->fetchAll('assoc');

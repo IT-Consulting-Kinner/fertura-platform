@@ -4,11 +4,13 @@ declare(strict_types=1);
 namespace App\Command;
 
 use App\Service\Permission\PermissionService;
+use App\Service\Tenant\CliTenantContext;
 use Cake\Command\Command;
 use Cake\Console\Arguments;
 use Cake\Console\ConsoleIo;
 use Cake\Console\ConsoleOptionParser;
 use Cake\Datasource\ConnectionManager;
+use RuntimeException;
 
 /**
  * BREAD permission management (until the admin GUI in Step 10).
@@ -29,7 +31,8 @@ class PermissionCommand extends Command
             ->addArgument('type', ['help' => 'resource_type'])
             ->addArgument('action_or_bread', ['help' => 'Aktion (check) oder BREAD-Buchstaben (grant)'])
             ->addOption('key', ['help' => 'resource_key (Einzelobjekt)'])
-            ->addOption('actions', ['help' => 'Zusatzaktionen (kommagetrennt, grant)']);
+            ->addOption('actions', ['help' => 'Zusatzaktionen (kommagetrennt, grant)'])
+            ->addOption('tenant', ['help' => 'Mandant (Key oder UUID; Default = Default-Mandant)']);
 
         return $parser;
     }
@@ -38,6 +41,19 @@ class PermissionCommand extends Command
     {
         $service = new PermissionService();
         $key = $args->getOption('key');
+        // Groups/permissions are tenant-scoped (RLS); establish the tenant context
+        // so check/grant/revoke operate within the right tenant. (`resources` is a
+        // central catalog and indifferent to the context.)
+        /** @var \Cake\Database\Connection $conn */
+        $conn = ConnectionManager::get('default');
+        $tenantOption = $args->getOption('tenant');
+        try {
+            CliTenantContext::apply($conn, is_string($tenantOption) ? $tenantOption : null);
+        } catch (RuntimeException $e) {
+            $io->error($e->getMessage());
+
+            return static::CODE_ERROR;
+        }
 
         switch ($args->getArgument('operation')) {
             case 'resources':
