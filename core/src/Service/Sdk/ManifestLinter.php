@@ -38,8 +38,23 @@ class ManifestLinter
         if (isset($m['version']) && !preg_match('/^\d+\.\d+\.\d+/', (string)$m['version'])) {
             $warnings[] = "version sollte SemVer sein: {$m['version']}";
         }
-        if (isset($m['type']) && !in_array($m['type'], ['main', 'extension'], true)) {
-            $warnings[] = "type unüblich (erwartet main|extension): {$m['type']}";
+        if (isset($m['type']) && !in_array($m['type'], ['main', 'extension', 'integration'], true)) {
+            $warnings[] = "type unüblich (erwartet main|extension|integration): {$m['type']}";
+        }
+        // Integration-extension module (connector, ch. 23.5.2): needs integration
+        // relations and, as a LEAF NODE (ch. 23.5.5), must provide no contracts.
+        if (($m['type'] ?? '') === 'integration') {
+            if (empty($m['integration_relations'])) {
+                $errors[] = 'Integrations-Extension-Modul: integration_relations fehlt (mind. ein Main-Modul)';
+            }
+            if (
+                !empty($m['contracts_provided'])
+                || !empty($m['resolvers_registered'])
+                || !empty($m['services_registered'])
+            ) {
+                $errors[] = 'Integrations-Extension-Modul (Blattknoten) darf keine Contracts bereitstellen '
+                    . '(contracts_provided/resolvers_registered/services_registered)';
+            }
         }
 
         foreach (self::SECTIONS as $section) {

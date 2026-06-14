@@ -477,6 +477,23 @@ class ModuleLifecycle
                     throw new LifecycleException("Abhängigkeit nicht aktiv: $depKey");
                 }
             }
+            // Integration-extension module (connector, ch. 23.5.2/28.12): every
+            // bridged main module declared in integration_relations must be active
+            // (and version-compatible, if a constraint is given), else the connector
+            // does not activate.
+            foreach ($manifest->integrationRelations() as $rel) {
+                $relKey = (string)($rel['module'] ?? $rel['id'] ?? '');
+                $relMod = $relKey !== '' ? $this->findModule($relKey) : null;
+                if ($relMod === null || $relMod['status'] !== 'active') {
+                    throw new LifecycleException("Integrations-Beziehung nicht aktiv: $relKey");
+                }
+                $constraint = (string)($rel['compatibility'] ?? $rel['version'] ?? '');
+                if ($constraint !== '' && !$this->relationSatisfied($constraint, (string)$relMod['version'])) {
+                    throw new LifecycleException(
+                        "Integrations-Beziehung $relKey: Version {$relMod['version']} erfüllt $constraint nicht.",
+                    );
+                }
+            }
 
             // License gate (ch. 28.7.2): paid modules without a valid license must
             // not be activated.
@@ -887,6 +904,16 @@ class ModuleLifecycle
     private function setStatus(string $key, string $status): void
     {
         $this->conn()->execute('UPDATE modules SET status = :s WHERE module_key = :k', ['s' => $status, 'k' => $key]);
+    }
+
+    /** Whether a module version satisfies an integration-relation version constraint. */
+    private function relationSatisfied(string $constraint, string $version): bool
+    {
+        try {
+            return VersionConstraint::parse($constraint)->isSatisfiedBy(SemVer::parse($version));
+        } catch (Throwable) {
+            return false;
+        }
     }
 
     private function assertKeySafe(string $key): void

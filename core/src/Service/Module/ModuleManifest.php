@@ -102,6 +102,18 @@ class ModuleManifest
         return array_values($this->data['contracts_used'] ?? []);
     }
 
+    /**
+     * Hard integration relations of an integration-extension module (connector,
+     * ch. 23.5.2/24.4.3): the main modules it bridges. Each entry: `module` (key)
+     * and optionally `compatibility`/`version` (a constraint on that module).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function integrationRelations(): array
+    {
+        return array_values($this->data['integration_relations'] ?? []);
+    }
+
     /** @return list<array<string, mixed>> */
     public function resolversRegistered(): array
     {
@@ -216,8 +228,8 @@ class ModuleManifest
             }
         }
 
-        if (!in_array($this->type(), ['main', 'extension'], true)) {
-            $errors[] = "Ungültiger Typ: {$this->type()} (main|extension).";
+        if (!in_array($this->type(), ['main', 'extension', 'integration'], true)) {
+            $errors[] = "Ungültiger Typ: {$this->type()} (main|extension|integration).";
         }
         if (!in_array($this->edition(), ['free', 'commercial'], true)) {
             $errors[] = "Ungültige Edition: {$this->edition()} (free|commercial).";
@@ -252,6 +264,24 @@ class ModuleManifest
             }
             if (empty($this->data['main_module_compatibility'])) {
                 $errors[] = 'Extension-Modul: main_module_compatibility fehlt.';
+            }
+        }
+
+        // Integration-extension module (connector, ch. 23.5.2): bridges N main
+        // modules via integration_relations and is a LEAF NODE (ch. 23.5.5) — it
+        // does NOT anchor to a single main (no extends_main_module) and must NOT
+        // provide any contracts (contracts_provided / resolvers / services).
+        if ($this->type() === 'integration') {
+            if ($this->integrationRelations() === []) {
+                $errors[] = 'Integrations-Extension-Modul: integration_relations fehlt (mind. ein Main-Modul).';
+            }
+            if (
+                $this->contractsProvided() !== []
+                || $this->resolversRegistered() !== []
+                || $this->servicesRegistered() !== []
+            ) {
+                $errors[] = 'Integrations-Extension-Modul (Blattknoten) darf keine Contracts bereitstellen '
+                    . '(contracts_provided/resolvers_registered/services_registered, Kap. 23.5.5).';
             }
         }
 
