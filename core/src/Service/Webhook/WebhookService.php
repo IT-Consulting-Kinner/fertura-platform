@@ -6,6 +6,7 @@ namespace App\Service\Webhook;
 use App\Audit\AuditLogger;
 use App\Infrastructure\Uuid;
 use App\Service\Http\EgressClient;
+use App\Service\Tenant\TenantIterator;
 use Cake\Datasource\ConnectionInterface;
 use Cake\Datasource\ConnectionManager;
 use InvalidArgumentException;
@@ -78,11 +79,43 @@ class WebhookService
     }
 
     /**
-     * Delivers due, pending deliveries. Returns the number of deliveries processed.
+     * Delivers due, pending deliveries across all active tenants. Returns the
+     * total number of deliveries processed.
+     *
+     * Runs in the worker loop OUTSIDE any per-event context. Per the consequent
+     * multi-tenancy rule (Decision 185) a background job iterates per tenant
+     * rather than bypassing RLS: it sets each active tenant's context, then claims
+     * and delivers that tenant's due deliveries (so the fail-closed policy is
+     * honoured). The context is set session-wide, NOT inside a transaction — each
+     * delivery makes a slow external HTTP call that must not hold a DB transaction
+     * open. The per-tenant `$limit` caps deliveries per tenant per cycle.
      */
     public function deliverPending(?int $limit = null): int
     {
         $limit ??= 25;
+        /** @var \Cake\Database\Connection $ctxConn */
+        $ctxConn = ConnectionManager::get('default');
+
+        $total = 0;
+        foreach ((new TenantIterator())->activeTenantIds() as $tenantId) {
+            $ctxConn->execute("SELECT set_config('app.current_tenant_id', :t, false)", ['t' => $tenantId]);
+            try {
+                $total += $this->deliverPendingForCurrentTenant($limit);
+            } finally {
+                $ctxConn->execute("SELECT set_config('app.current_tenant_id', '', false)");
+            }
+        }
+
+        return $total;
+    }
+
+    /**
+     * Delivers due, pending deliveries for the CURRENT tenant context. Returns the
+     * number processed. Under the fail-closed policy the claim only sees the
+     * current tenant's deliveries; the subscription read is likewise tenant-scoped.
+     */
+    private function deliverPendingForCurrentTenant(int $limit): int
+    {
         $egress = $this->egress ??= new EgressClient();
         $conn = $this->conn();
 

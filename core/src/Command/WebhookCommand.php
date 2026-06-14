@@ -3,11 +3,14 @@ declare(strict_types=1);
 
 namespace App\Command;
 
+use App\Service\Tenant\CliTenantContext;
 use App\Service\Webhook\WebhookService;
 use Cake\Command\Command;
 use Cake\Console\Arguments;
 use Cake\Console\ConsoleIo;
 use Cake\Console\ConsoleOptionParser;
+use Cake\Datasource\ConnectionManager;
+use RuntimeException;
 
 /**
  * Console management of outbound webhooks (Programme Tier-1, P05).
@@ -33,6 +36,7 @@ class WebhookCommand extends Command
         $parser->addOption('url', ['help' => 'Ziel-URL (add)']);
         $parser->addOption('events', ['help' => 'Event-Filter: * oder kommagetrennt', 'default' => '*']);
         $parser->addOption('secret', ['help' => 'HMAC-Geheimnis (add)']);
+        $parser->addOption('tenant', ['help' => 'Mandant (Key oder UUID; Default = Default-Mandant)']);
 
         return $parser;
     }
@@ -40,6 +44,19 @@ class WebhookCommand extends Command
     public function execute(Arguments $args, ConsoleIo $io): int
     {
         $svc = new WebhookService();
+        // Subscriptions/deliveries are tenant-scoped (RLS); establish the context
+        // so management actions (list/add/on/off/rm/deliveries/retry) operate
+        // within the right tenant. `deliver` iterates all active tenants itself.
+        /** @var \Cake\Database\Connection $conn */
+        $conn = ConnectionManager::get('default');
+        $tenantOption = $args->getOption('tenant');
+        try {
+            CliTenantContext::apply($conn, is_string($tenantOption) ? $tenantOption : null);
+        } catch (RuntimeException $e) {
+            $io->error($e->getMessage());
+
+            return self::CODE_ERROR;
+        }
         $action = (string)$args->getArgument('action');
         $id = (string)$args->getArgument('id');
 
