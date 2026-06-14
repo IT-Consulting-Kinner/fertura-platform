@@ -4,11 +4,13 @@ declare(strict_types=1);
 namespace App\Command;
 
 use App\Audit\AuditLogger;
+use App\Service\Tenant\CliTenantContext;
 use Cake\Command\Command;
 use Cake\Console\Arguments;
 use Cake\Console\ConsoleIo;
 use Cake\Console\ConsoleOptionParser;
 use Cake\Datasource\ConnectionManager;
+use RuntimeException;
 
 /**
  * Console management of automation rules (Programme Tier-2, P12).
@@ -30,13 +32,25 @@ class AutomationCommand extends Command
         $parser->addOption('event', ['help' => 'Event-Muster (exakt, * oder prefix.*)']);
         $parser->addOption('condition', ['help' => 'Bedingung als JSON', 'default' => '{}']);
         $parser->addOption('actions', ['help' => 'Aktionen als JSON-Array', 'default' => '[]']);
+        $parser->addOption('tenant', ['help' => 'Mandant (Key oder UUID; Default = Default-Mandant)']);
 
         return $parser;
     }
 
     public function execute(Arguments $args, ConsoleIo $io): int
     {
+        /** @var \Cake\Database\Connection $conn */
         $conn = ConnectionManager::get('default');
+        // Rules are tenant-scoped (RLS); establish the tenant context so list
+        // reads, and add/on/off/rm writes, operate within the right tenant.
+        $tenantOption = $args->getOption('tenant');
+        try {
+            CliTenantContext::apply($conn, is_string($tenantOption) ? $tenantOption : null);
+        } catch (RuntimeException $e) {
+            $io->error($e->getMessage());
+
+            return self::CODE_ERROR;
+        }
         $action = (string)$args->getArgument('action');
         $id = (string)$args->getArgument('id');
 

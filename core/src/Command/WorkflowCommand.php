@@ -5,11 +5,13 @@ namespace App\Command;
 
 use App\Audit\AuditLogger;
 use App\Service\Automation\WorkflowEngine;
+use App\Service\Tenant\CliTenantContext;
 use Cake\Command\Command;
 use Cake\Console\Arguments;
 use Cake\Console\ConsoleIo;
 use Cake\Console\ConsoleOptionParser;
 use Cake\Datasource\ConnectionManager;
+use RuntimeException;
 
 /**
  * Console management of workflow state machines (P12 extension).
@@ -33,13 +35,25 @@ class WorkflowCommand extends Command
         $parser->addOption('entity-field', ['help' => 'Pfad zur Entity-ID in der Nutzlast', 'default' => 'entity_id']);
         $parser->addOption('initial', ['help' => 'Anfangszustand']);
         $parser->addOption('transitions', ['help' => 'Transitionen als JSON-Array', 'default' => '[]']);
+        $parser->addOption('tenant', ['help' => 'Mandant (Key oder UUID; Default = Default-Mandant)']);
 
         return $parser;
     }
 
     public function execute(Arguments $args, ConsoleIo $io): int
     {
+        /** @var \Cake\Database\Connection $conn */
         $conn = ConnectionManager::get('default');
+        // Definitions/instances are tenant-scoped (RLS); establish the tenant
+        // context so reads and writes operate within the right tenant.
+        $tenantOption = $args->getOption('tenant');
+        try {
+            CliTenantContext::apply($conn, is_string($tenantOption) ? $tenantOption : null);
+        } catch (RuntimeException $e) {
+            $io->error($e->getMessage());
+
+            return self::CODE_ERROR;
+        }
         $action = (string)$args->getArgument('action');
         $id = (string)$args->getArgument('id');
 
