@@ -1,8 +1,8 @@
 # Modul-Anforderungsdokument: Ticketing
 
-Version 6.4
+Version 6.5
 
-Stand: 04. Juni 2026
+Stand: 15. Juni 2026
 
 Status: In Überarbeitung
 
@@ -99,8 +99,6 @@ stillen Zustandsänderungen.
 Folgende Funktionen sind bewusst nicht Teil der ersten Version, um
 den Produktkern nicht zu verwässern:
 
--   Keine echte Mandantenfähigkeit (Queue-Gruppen dienen der
-    Bereichstrennung, nicht der Mandantentrennung)
 -   Kein Omnichannel (kein Chat, kein Telefon-Integration, kein
     Social-Media-Eingang)
 -   Kein visueller Workflow-Designer oder Automationsengine
@@ -112,6 +110,11 @@ den Produktkern nicht zu verwässern:
     wird vom Modul geerbt, nicht selbst definiert.
 -   Kein Echtzeit-Collaboration (kein gleichzeitiges Bearbeiten
     desselben Eintrags)
+
+Mandantenfähigkeit ist kein Nicht-Ziel mehr: Sie ist gemäß
+Plattform-Entscheidung 185 verbindlich umgesetzt (siehe Kapitel 23
+„Mandantenfähigkeit"). Queue-Gruppen bleiben Bereichstrennung innerhalb
+eines Mandanten und sind orthogonal zur Mandantentrennung.
 
 ## 1.4 Standard-Konfiguration nach Installation
 
@@ -3541,6 +3544,17 @@ sind. Jedes Kriterium ist eine Muss-Anforderung.
     versendet
 
 
+# 23. Mandantenfähigkeit
+
+Das Modul ist mandantenfähig (fail-closed) gemäß Plattform-Entscheidung
+185. Jede mandanten-tragende Tabelle trägt `tenant_id` + RLS;
+Pre-Auth-Eintritte (REST-Token, Gastportal-Host) und Hintergrund-Worker
+setzen bzw. iterieren den Mandantenkontext; Ticketnummern sind pro
+Mandant eindeutig. Queue-Gruppen bleiben Bereichstrennung innerhalb eines
+Mandanten. Die technische Spezifikation und die Abnahme
+(NOBYPASSRLS-Leak-Tests) stehen in der Modul-Spezifikation §9.
+
+
 ## Anhang A: Versionshistorie
 
 | **Version** | **Datum** | **Änderung** |
@@ -3581,6 +3595,7 @@ sind. Jedes Kriterium ist eine Muss-Anforderung.
 | 6.2 | 04.06.2026 | Alignment auf Plattform v6.25 (Architektur-Review): A1 Observability (20.2 als Health-Collector-Beiträge statt eigenem Endpoint, 20.3 Cron-Status an Plattform-Statusfläche), A2 Scoped-Admin (2.1/2.5/12.9 Administrationsbereiche), A3 DSGVO-Anonymisierung auf Plattform 27.15.3 verwiesen (17.2), A4 Benachrichtigungen als Event-Listener über Plattform-Outbox (Kap. 8), A5 email_queue als Spezialisierung des Plattform-Jobsystems (3.11), A6 Rechte-Granularität BREAD/Zusatzaktionen (2.4.1), A7 SSO und A9 2FA als Plattform-Auth-Resolver (1.3.3, 19.3/19.6), A8 API-Auth-Abgrenzung (3.14.2), A10 Wissensdatenbank als Integrations-Extension (19.4). R1 Volltextsuche-Skalierungshinweis (12.5.1), R2 ticket_comments-Strategie (20.5). Modul-Entscheidungen 107–118 ergänzt. Cleanup Anhang A (doppelte Versionszeilen 5.0/5.1/5.1.1 entfernt) und Anhang B (16 fälschlich hineinkopierte Fremdzeilen vor Entscheidung 1 entfernt – Konfig-Fragmente, duplizierte Offene-Punkte- und Versionshistorie-Zeilen) |
 | 6.3 | 04.06.2026 | DB-Umstellung auf PostgreSQL (Plattform-Entscheidung 173): Backup (20.1: pg_dump / PITR) und Betriebsgrenzen (20.7) angepasst. Keine fachliche Änderung am Datenmodell. Modul-Entscheidung 119 ergänzt |
 | 6.4 | 04.06.2026 | PostgreSQL-Leverage im Modul (P8/P9): Freitextsuche auf native PostgreSQL-Volltextsuche (tsvector/GIN) umgestellt (12.5.1, löst R1-Skalierungsrisiko), Exclusion-Constraint für überlappungsfreie SLA-Geschäftszeitfenster (7.7.2). R2-Hinweis um deklarative Partitionierung (Plattform 30.8) ergänzt. Modul-Entscheidungen 120/121 ergänzt |
+| 6.5 | 15.06.2026 | Mandantenfähigkeit umgesetzt (Plattform-Entscheidung 185): neues Kapitel „Mandantenfähigkeit" (Verweis auf Modul-Spezifikation §9). Nicht-Ziel „keine echte Mandantenfähigkeit" (1.3.3 / Entscheidung 101) gestrichen; die Changelog-4.0-Aussage „Mandantentrennung ersetzt durch Bereichstrennung" ist damit überholt (Queue-Gruppen = Bereichstrennung innerhalb eines Mandanten, orthogonal). Modul-Entscheidung 122 ergänzt |
 
 ## Anhang B: Entscheidungsprotokoll
 
@@ -3693,7 +3708,7 @@ Entscheidung wider.
 | 98 | Einladungs-Widerruf Löschung | Explizite Ausnahme zu 1.6: Nicht-aktivierte Einladungs-Accounts (Status "eingeladen") dürfen bei Widerruf vollständig gelöscht werden |
 | 99 | Produktpositionierung | Selbst hostbares, E-Mail-zentriertes Ticketsystem für strukturierte Serviceprozesse |
 | 100 | Primärer Kanal | E-Mail first. GUI und API sind gleichwertige Ergänzungen, kein Ersatz |
-| 101 | Bewusste Nicht-Ziele v1 | Kein Omnichannel, kein Workflow-Designer, keine KI, kein LDAP/SSO, kein Echtzeit-Collaboration, keine echte Mandantenfähigkeit |
+| 101 | Bewusste Nicht-Ziele v1 | Kein Omnichannel, kein Workflow-Designer, keine KI, kein modul-eigenes LDAP/SSO, kein Echtzeit-Collaboration. („keine echte Mandantenfähigkeit" gestrichen — durch Entscheidung 122 / Plattform-185 überholt.) |
 | 102 | Standard-Konfiguration | System ist nach Installation sofort lauffähig. Queue- und Mailbox-Einrichtung ist der einzige notwendige manuelle Schritt |
 | 103 | Anforderungsklassifikation | Vierstufig: Muss, Soll, Empfehlung, Spätere Version. Ohne explizite Kennzeichnung gilt Muss |
 | 104 | Architekturprinzipien | 9 verbindliche technische Prinzipien (Service-Schichten, zentrale Rechte, getrennte Mail-Ingestion, SLA-Service, einheitliches Eintragsmodell, Audit als Querschnitt, gemeinsame Fachlogik API/GUI, Referenzvalidierung, rückwärtskompatible Migrationen) |
@@ -3714,3 +3729,4 @@ Entscheidung wider.
 | 119 | Datenbank PostgreSQL | Das Modul folgt der Plattform-Entscheidung 173: PostgreSQL statt MySQL. Backup via pg_dump/PITR (20.1), Betriebsgrenzen (20.7) angepasst. Keine fachliche Änderung am Datenmodell (CakePHP-ORM DB-agnostisch) |
 | 120 | Volltextsuche via PostgreSQL FTS | Freitextsuche über native PostgreSQL-Volltextsuche (tsvector/GIN) statt LIKE; löst das R1-Skalierungsrisiko auf ticket_comments ohne externe Suchmaschine. pg_trgm für Präfix-/Teilstring-Lookups; Elasticsearch nur für sehr große/erweiterte Fälle (12.5.1, P8) |
 | 121 | Überlappungsfreie SLA-Fenster via Exclusion-Constraint | Nicht-überlappende Geschäftszeit-Fenster pro Wochentag werden über ein GiST-Exclusion-Constraint in der DB erzwungen (7.7.2; Plattform-Dokument 30.2, P9) |
+| 122 | Mandantenfähigkeit verbindlich (Plattform-185) | Die frühere Nicht-Ziel-Aussage „keine echte Mandantenfähigkeit" ist überholt. Mandantentrennung ist fail-closed umgesetzt (tenant_id + RLS, Pre-Auth-Tenant-Ableitung, Worker pro Mandant, Ticketnummern pro Mandant); Queue-Gruppen = orthogonale Bereichstrennung innerhalb eines Mandanten. Details/Abnahme: Modul-Spezifikation §9 |
