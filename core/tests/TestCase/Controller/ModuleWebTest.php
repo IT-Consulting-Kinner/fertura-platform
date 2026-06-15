@@ -91,6 +91,17 @@ class ModuleWebTest extends TestCase
         $this->assertResponseContains('Oeffentliche Modulseite');
     }
 
+    public function testGuestHandlerReceivesClientIp(): void
+    {
+        // E174: the dispatcher passes the client IP into the module web request so
+        // a public/guest handler can rate-limit (e.g. the Ticketing guest portal).
+        $this->configRequest(['environment' => ['REMOTE_ADDR' => '203.0.113.7']]);
+        $this->get('/m/zztest_web/public');
+
+        $this->assertResponseOk();
+        $this->assertResponseContains('data-test="ip">203.0.113.7<'); // handler saw the IP
+    }
+
     public function testUserPageRedirectsToLoginWhenUnauthenticated(): void
     {
         $this->get('/m/zztest_web/dashboard');

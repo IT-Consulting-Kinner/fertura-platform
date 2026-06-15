@@ -86,6 +86,11 @@ class ModuleWebController extends AppController
             'query' => $this->request->getQueryParams(),
             'body' => $this->request->getParsedBody() ?? [],
             'user_id' => $userId,
+            // Client IP for module-side rate-limiting of public/guest pages (e.g.
+            // the Ticketing guest portal). Uses clientIp() = REMOTE_ADDR unless
+            // trusted proxies are configured, so it is not X-Forwarded-For-spoofable
+            // (same source the Core LoginThrottle keys on).
+            'client_ip' => $this->request->clientIp() ?: null,
         ];
 
         try {

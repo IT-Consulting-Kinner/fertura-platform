@@ -16,6 +16,9 @@ final class PublicPage implements ModuleWebInterface
             'vars' => [
                 'greeting' => 'Oeffentliche Modulseite',
                 'userId' => $request['user_id'],
+                // Echo the client IP so the dispatcher test can assert a guest
+                // handler receives it (for module-side rate-limiting).
+                'clientIp' => $request['client_ip'] ?? '(none)',
             ],
         ];
     }

@@ -30,6 +30,9 @@ interface ModuleWebInterface
      * - `query`     query-string parameters
      * - `body`      parsed request body (forms/JSON)
      * - `user_id`   the authenticated user UUID, or null for guest pages
+     * - `client_ip` the client IP (REMOTE_ADDR; not X-Forwarded-For-spoofable
+     *               unless trusted proxies are configured), or null — for
+     *               module-side rate-limiting of public/guest pages
      *
      * The return array may contain:
      * - `vars`      array<string,mixed> view variables for the template
@@ -46,7 +49,8 @@ interface ModuleWebInterface
      *               sanitized by the Core.
      *
      * @param array{method:string,path:string,params:array<string,string>,
-     *     query:array<string,mixed>,body:mixed,user_id:?string} $request
+     *     query:array<string,mixed>,body:mixed,user_id:?string,
+     *     client_ip:?string} $request
      * @return array{vars?:array<string,mixed>,status?:int,template?:string,
      *     redirect?:string,download?:array<string,mixed>}
      */
