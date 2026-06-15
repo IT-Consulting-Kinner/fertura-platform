@@ -19,7 +19,11 @@ use Cake\Datasource\ConnectionManager;
  * group ids/names are exposed — **no email, status or other PII**. A module that
  * genuinely needs more must request a dedicated, audited capability.
  *
- * Reads run in the caller's RLS context (no privileged bypass).
+ * Reads run in the caller's RLS context (no privileged bypass). Group reads are
+ * tenant-scoped by the RLS policies on `groups`/`groups_users` (E170); the user
+ * reads filter by tenant explicitly (`tenant_id = core.current_tenant()`) because
+ * `users` is a pre-auth table with no blocking policy, so without the filter a
+ * module's user dropdown would surface foreign-tenant users (E173).
  */
 class IdentityReader
 {
@@ -39,7 +43,8 @@ class IdentityReader
     public function users(): array
     {
         $rows = $this->conn()->execute(
-            "SELECT id, username, first_name, last_name FROM users WHERE status = 'active' ORDER BY username",
+            'SELECT id, username, first_name, last_name FROM users '
+            . "WHERE status = 'active' AND tenant_id = core.current_tenant() ORDER BY username",
         )->fetchAll('assoc');
 
         return array_values(array_map(fn(array $r): array => [
@@ -59,7 +64,8 @@ class IdentityReader
             return null;
         }
         $row = $this->conn()->execute(
-            "SELECT id, username, first_name, last_name FROM users WHERE id = :u AND status = 'active'",
+            'SELECT id, username, first_name, last_name FROM users '
+            . "WHERE id = :u AND status = 'active' AND tenant_id = core.current_tenant()",
             ['u' => $userId],
         )->fetch('assoc');
 
