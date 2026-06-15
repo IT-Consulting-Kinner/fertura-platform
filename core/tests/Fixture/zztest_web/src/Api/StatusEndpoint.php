@@ -26,11 +26,13 @@ final class StatusEndpoint
                 // self-managed auth (Decision D1 = pass-through).
                 'saw_module_token' => isset($headers['X-Module-Token']),
             ],
-            // A `public` route may make its content cacheable (E160). Only
-            // allowlisted caching headers pass through; `Set-Cookie` must NOT.
+            // A `public` route may set caching headers (E160) and Retry-After for
+            // its own rate-limit backoff (E175). Only allowlisted headers pass
+            // through; `Set-Cookie` must NOT.
             'headers' => [
                 'Cache-Control' => 'public, max-age=300',
                 'ETag' => '"v1"',
+                'Retry-After' => '30',
                 'Set-Cookie' => 'evil=1',
             ],
         ];

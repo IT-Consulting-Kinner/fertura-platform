@@ -176,6 +176,9 @@ class ModuleWebTest extends TestCase
         $this->assertResponseOk();
         $this->assertHeader('Cache-Control', 'public, max-age=300');
         $this->assertHeader('ETag', '"v1"');
+        // E175: Retry-After passes through so a public module route can signal
+        // 429/503 backoff for its own rate-limiting (e.g. the KB public API).
+        $this->assertHeader('Retry-After', '30');
         // Set-Cookie is not allowlisted -> the module cannot smuggle it through
         // ('' when absent, never the module's value).
         $this->assertStringNotContainsString('evil', $this->response()->getHeaderLine('Set-Cookie'));

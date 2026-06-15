@@ -70,31 +70,37 @@ class ModuleController extends ApiController
         $response = $this->json(is_array($body) ? $body : ['data' => $body], $status);
 
         // A `public` route may make its content cacheable for the headless content
-        // API (E160): the module knows when content changes, so it owns the
-        // caching directives. Only allowlisted response headers pass through —
-        // never Set-Cookie or security headers. `user` routes do not (avoid
-        // caching token-scoped data in shared caches).
+        // API (E160) and signal backoff via Retry-After for its own rate-limiting
+        // (E175): the module owns these directives. Only allowlisted response
+        // headers pass through — never Set-Cookie or security headers. `user`
+        // routes do not (avoid caching token-scoped data in shared caches).
         if ($isPublic && isset($result['headers']) && is_array($result['headers'])) {
-            $response = $this->applyCacheHeaders($response, $result['headers']);
+            $response = $this->applyPassthroughHeaders($response, $result['headers']);
         }
 
         return $response;
     }
 
-    /** Response headers a `public` module route may set (caching only). */
-    private const CACHEABLE_HEADERS = ['cache-control', 'etag', 'last-modified', 'expires', 'vary', 'age'];
+    /**
+     * Response headers a `public` module route may set: caching directives (E160)
+     * plus `Retry-After`, so a module can signal 429/503 backoff for its own
+     * rate-limiting (E175). Never `Set-Cookie` or security headers.
+     */
+    private const PASSTHROUGH_HEADERS = [
+        'cache-control', 'etag', 'last-modified', 'expires', 'vary', 'age', 'retry-after',
+    ];
 
     /**
-     * Copies only the allowlisted (caching) headers from the module result onto
-     * the response, normalizing the header name.
+     * Copies only the allowlisted response headers from the module result onto the
+     * response, normalizing the header name.
      *
      * @param array<mixed> $headers
      */
-    private function applyCacheHeaders(Response $response, array $headers): Response
+    private function applyPassthroughHeaders(Response $response, array $headers): Response
     {
         foreach ($headers as $name => $value) {
             if (
-                in_array(strtolower((string)$name), self::CACHEABLE_HEADERS, true)
+                in_array(strtolower((string)$name), self::PASSTHROUGH_HEADERS, true)
                 && (is_string($value) || is_int($value))
             ) {
                 $response = $response->withHeader((string)$name, (string)$value);
