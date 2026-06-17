@@ -5,6 +5,7 @@ namespace App\Command;
 
 use App\Service\License\LicenseService;
 use App\Service\Marketplace\MarketplaceClient;
+use App\Service\Sdk\PackageBuilder;
 use App\Service\Security\PackageVerifier;
 use App\Service\Security\Signer;
 use App\Service\Security\TrustChain;
@@ -26,6 +27,7 @@ use Cake\Console\ConsoleOptionParser;
  *   bin/cake mp_tool keygen
  *   bin/cake mp_tool sign-key      --secret <rootSecret> --key-id <rootId> \
  *                                  --pub-key <publisherPub> --pub-id <pubId> --publisher <Name>
+ *   bin/cake mp_tool package       <modulverzeichnis> [--out <dir>] [--previous <x.y.z>]
  *   bin/cake mp_tool sign          <paketverzeichnis> --secret <pubSecret> --key-id <pubId>
  *   bin/cake mp_tool license       <module> --secret <pubSecret> --key-id <pubId> --valid-to <ISO> [--grace N] [--online]
  *   bin/cake mp_tool sign-doc      <payload.json> --secret <rootSecret> --key-id <rootId>
@@ -38,10 +40,14 @@ class MpToolCommand extends Command
     {
         $parser
             ->addArgument('operation', [
-                'choices' => ['keygen', 'sign-key', 'sign', 'license', 'sign-doc'],
+                'choices' => ['keygen', 'sign-key', 'package', 'sign', 'license', 'sign-doc'],
                 'required' => true,
             ])
-            ->addArgument('target', ['help' => 'Paketverzeichnis (sign) / module_ref (license) / payload.json (sign-doc)'])
+            ->addArgument('target', [
+                'help' => 'Modulverzeichnis (package) / Paketverzeichnis (sign) / module_ref (license) / payload.json (sign-doc)',
+            ])
+            ->addOption('out', ['help' => 'package: Ausgabeverzeichnis (Default: dist)'])
+            ->addOption('previous', ['help' => 'package: Vorversion für die Monotonie-Prüfung (x.y.z)'])
             ->addOption('secret', ['help' => 'Signierender Secret-Key (base64)'])
             ->addOption('key-id', ['help' => 'Schlüssel-ID des signierenden Schlüssels'])
             ->addOption('pub-key', ['help' => 'sign-key: zu signierender Publisher-Public-Key (base64)'])
@@ -69,6 +75,9 @@ class MpToolCommand extends Command
 
             case 'sign-key':
                 return $this->signKey($args, $io, $signer);
+
+            case 'package':
+                return $this->package($args, $io);
 
             case 'sign':
                 $dir = rtrim((string)$args->getArgument('target'), '/');
@@ -103,6 +112,42 @@ class MpToolCommand extends Command
         }
 
         return static::CODE_ERROR;
+    }
+
+    /**
+     * Release-assembly pre-step (24.13.2): lints, enforces a monotonic version +
+     * reversible migrations + a changelog, and emits the signable package dir.
+     */
+    private function package(Arguments $args, ConsoleIo $io): int
+    {
+        $dir = (string)$args->getArgument('target');
+        if ($dir === '') {
+            $io->error('package benötigt ein Modulverzeichnis als Argument.');
+
+            return static::CODE_ERROR;
+        }
+        $out = $args->getOption('out') !== null ? (string)$args->getOption('out') : 'dist';
+        $previous = $args->getOption('previous') !== null ? (string)$args->getOption('previous') : null;
+
+        $res = (new PackageBuilder())->build($dir, $out, $previous);
+        if (!$res['ok']) {
+            foreach ($res['errors'] as $e) {
+                $io->error($e);
+            }
+
+            return static::CODE_ERROR;
+        }
+
+        /** @var array{path:string, release:array{version:string, migrations:list<array<string,mixed>>}} $res */
+        $io->success('Paket erstellt: ' . $res['path']);
+        $io->out(sprintf(
+            '  Version %s, %d Migration(en) (alle reversibel), Changelog vorhanden.',
+            $res['release']['version'],
+            count($res['release']['migrations']),
+        ));
+        $io->out('  Signieren: bin/cake mp_tool sign ' . $res['path'] . ' --secret <pubSecret> --key-id <pubId>');
+
+        return static::CODE_SUCCESS;
     }
 
     /**
