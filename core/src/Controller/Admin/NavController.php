@@ -67,20 +67,6 @@ class NavController extends AdminController
         $this->set('activeTop', $builder->areaTop($area));
     }
 
-    /** Self-service profile: the current admin's own account details. */
-    public function profile(): void
-    {
-        $identity = $this->identity();
-        $row = ConnectionManager::get('default')->execute(
-            'SELECT username, email, first_name, last_name, status, locale FROM users WHERE id = :id',
-            ['id' => (string)($identity?->getIdentifier() ?? '')],
-        )->fetch('assoc') ?: [];
-
-        $this->set('profile', $row);
-        $this->set('areas', $this->userAreaKeys);
-        $this->set('activeTop', '');
-    }
-
     /**
      * Count badges shown on the tiles (the "Zusatzinformation"). Keyed by the
      * item URL; only the cheap, obviously-useful counts. Mirrors the dashboard

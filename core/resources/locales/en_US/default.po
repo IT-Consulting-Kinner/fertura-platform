@@ -1556,3 +1556,63 @@ msgstr "Language"
 
 msgid "admin.profile.areas"
 msgstr "Administration areas"
+
+msgid "account.title"
+msgstr "My profile"
+
+msgid "account.data_heading"
+msgstr "Personal details"
+
+msgid "account.username"
+msgstr "Username"
+
+msgid "account.email"
+msgstr "Email"
+
+msgid "account.salutation"
+msgstr "Salutation"
+
+msgid "account.first_name"
+msgstr "First name"
+
+msgid "account.last_name"
+msgstr "Last name"
+
+msgid "account.save"
+msgstr "Save"
+
+msgid "account.password_heading"
+msgstr "Change password"
+
+msgid "account.current_password"
+msgstr "Current password"
+
+msgid "account.new_password"
+msgstr "New password"
+
+msgid "account.confirm_password"
+msgstr "Confirm new password"
+
+msgid "account.change_password"
+msgstr "Change password"
+
+msgid "account.password_hint"
+msgstr "At least %d characters."
+
+msgid "flash.account.updated"
+msgstr "Profile updated."
+
+msgid "flash.account.update_failed"
+msgstr "Could not save profile."
+
+msgid "flash.account.password_changed"
+msgstr "Password changed."
+
+msgid "flash.account.password_current_wrong"
+msgstr "Current password is incorrect."
+
+msgid "flash.account.password_too_short"
+msgstr "Password too short (at least %d characters)."
+
+msgid "flash.account.password_mismatch"
+msgstr "Passwords do not match."

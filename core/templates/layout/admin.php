@@ -89,7 +89,7 @@ $dropdown = function (string $top, string $label, array $groups) use ($activeTop
                     <?= h(__('admin.nav.user_prefix')) ?><?= h($currentUser->get('username')) ?> <span class="caret">&#9662;</span>
                 </summary>
                 <div class="dd-menu dd-right">
-                    <a class="dd-item" href="/admin/profile"><?= h(__('admin.nav.profile')) ?></a>
+                    <a class="dd-item" href="/account"><?= h(__('admin.nav.profile')) ?></a>
                     <a class="dd-item" href="/logout"><?= h(__('admin.nav.logout')) ?></a>
                 </div>
             </details>

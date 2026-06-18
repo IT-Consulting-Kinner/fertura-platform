@@ -13,6 +13,7 @@ use Cake\ORM\Entity;
  * @property string $username
  * @property string $email
  * @property string|null $password_hash
+ * @property string|null $salutation
  * @property string|null $first_name
  * @property string|null $last_name
  * @property string $status
@@ -38,6 +39,7 @@ class User extends Entity
     protected array $_accessible = [
         'username' => true,
         'email' => true,
+        'salutation' => true,
         'first_name' => true,
         'last_name' => true,
         'locale' => true,

@@ -83,6 +83,12 @@ return function (RouteBuilder $routes): void {
         // Echtzeit-Stream (P08, SSE) für den angemeldeten Benutzer.
         $builder->connect('/events/stream', ['controller' => 'Sse', 'action' => 'stream']);
 
+        // Self-service-Konto (jeder angemeldete Benutzer, KEIN Admin-Gate, Kap. 27.2):
+        // eigene Daten (Anrede/Name) + Passwort, losgeloest von der Benutzerverwaltung.
+        $builder->connect('/account', ['controller' => 'Account', 'action' => 'index']);
+        $builder->connect('/account/update', ['controller' => 'Account', 'action' => 'update']);
+        $builder->connect('/account/password', ['controller' => 'Account', 'action' => 'password']);
+
         // Admin-Bereich (scoped admin, Kap. 27.3.1).
         $builder->prefix('Admin', function (RouteBuilder $admin): void {
             $admin->connect('/', ['controller' => 'Dashboard', 'action' => 'index']);
@@ -90,7 +96,6 @@ return function (RouteBuilder $routes): void {
             // Module / Administration; groups render as tiles, cf. NavController).
             $admin->connect('/module', ['controller' => 'Nav', 'action' => 'modules']);
             $admin->connect('/administration', ['controller' => 'Nav', 'action' => 'administration']);
-            $admin->connect('/profile', ['controller' => 'Nav', 'action' => 'profile']);
             $admin->connect('/section/{area}', ['controller' => 'Nav', 'action' => 'section'])
                 ->setPass(['area'])
                 ->setPatterns(['area' => '[a-z0-9_]+']);
