@@ -8,101 +8,77 @@ use Cake\Datasource\ConnectionManager;
 use Cake\Http\Exception\ForbiddenException;
 
 /**
- * Tile-based admin navigation. The top menu has three entries — Dashboard,
- * Module, Administration — and the latter two are landing pages that render the
- * scoped navigation as tiles instead of a sidebar. Drilling into a group shows
- * its items as tiles (e.g. "Users & groups" -> Users + Groups).
+ * Tile-based admin navigation. The top menu has Dashboard plus two dropdowns —
+ * Module and Administration — whose entries are the scoped nav groups
+ * ({@see AdminNavBuilder::menu()}). Selecting a group opens its drill-down page,
+ * which renders the group's items as tiles (e.g. "Users & groups" -> Users +
+ * Groups). Also serves the lightweight self-profile page.
  *
- * Grouping is derived from the same data-driven, area-scoped navigation as the
- * old sidebar ({@see AdminNavBuilder}): the Core areas in
- * {@see AdminController::NAV} plus the admin pages contributed by active modules.
- * "Module" gathers the module-lifecycle area and every module-contributed area;
- * "Administration" gathers the remaining Core areas plus the area-less system
- * pages. Visibility stays server-side authorization — a user only sees (and may
- * open) the areas they hold.
+ * Grouping stays data-driven and area-scoped: a user only sees (and may open) the
+ * areas they hold. "Module" holds the module-contributed setting areas (Ticketing,
+ * Knowledgebase, …); "Administration" holds the Core areas incl. module management
+ * plus the always-available system pages.
  */
 class NavController extends AdminController
 {
-    /** Always-available system pages (no admin-area gate; any admin may open). */
-    private const SYSTEM = [
-        'label' => 'admin.nav.system',
-        'items' => [
-            ['admin.nav.health', '/admin/health'],
-            ['admin.nav.audit', '/admin/audit'],
-            ['admin.nav.api_tokens', '/admin/tokens'],
-        ],
-    ];
-
-    /** Core areas shown under "Administration" (module_lifecycle -> "Module"). */
-    private const ADMIN_AREAS = [
-        'user_group_admin', 'core_config', 'registry_contracts',
-        'localization', 'update_manager', 'marketplace_license',
-    ];
-
-    /** "Module" landing: module-lifecycle + every module-contributed area. */
+    /** "Module" landing: tiles for the module-contributed setting areas. */
     public function modules(): void
     {
-        $nav = (new AdminNavBuilder())->build($this->userAreaKeys);
-        $coreKeys = array_keys(AdminController::NAV);
-
-        $groups = [];
-        if (isset($nav['module_lifecycle'])) {
-            // The group label is "Module" (the top-menu word); on the Module
-            // landing the lifecycle tile reads clearer as "Module management".
-            $groups['module_lifecycle'] = $nav['module_lifecycle'];
-            $groups['module_lifecycle']['label'] = 'admin.nav.module_management';
-        }
-        foreach ($nav as $key => $def) {
-            if (!in_array($key, $coreKeys, true)) {
-                $groups[$key] = $def;
-            }
-        }
-
+        $menu = (new AdminNavBuilder())->menu($this->userAreaKeys);
         $this->set('heading', 'admin.nav.modules');
-        $this->set('groups', $groups);
+        $this->set('groups', $menu['module']);
         $this->set('metrics', $this->tileMetrics());
         $this->set('activeTop', 'module');
+        $this->viewBuilder()->setTemplate('landing');
     }
 
-    /** "Administration" landing: the remaining Core areas + the system group. */
+    /** "Administration" landing: tiles for the Core admin areas + system. */
     public function administration(): void
     {
-        $nav = (new AdminNavBuilder())->build($this->userAreaKeys);
-
-        $groups = [];
-        foreach (self::ADMIN_AREAS as $key) {
-            if (isset($nav[$key])) {
-                $groups[$key] = $nav[$key];
-            }
-        }
-        $groups['system'] = self::SYSTEM;
-
+        $menu = (new AdminNavBuilder())->menu($this->userAreaKeys);
         $this->set('heading', 'admin.nav.administration');
-        $this->set('groups', $groups);
+        $this->set('groups', $menu['administration']);
         $this->set('metrics', $this->tileMetrics());
         $this->set('activeTop', 'administration');
+        $this->viewBuilder()->setTemplate('landing');
     }
 
     /** Drill-down: one group's items rendered as tiles. */
     public function section(string $area): void
     {
+        $builder = new AdminNavBuilder();
+
         if ($area === 'system') {
-            $def = self::SYSTEM;
-            $top = 'administration';
+            $def = AdminNavBuilder::SYSTEM;
         } else {
-            $nav = (new AdminNavBuilder())->build($this->userAreaKeys);
+            $nav = $builder->build($this->userAreaKeys);
             if (!isset($nav[$area])) {
                 // Not held (or unknown) -> same fail-closed behaviour as a gated page.
                 throw new ForbiddenException('Kein Zugriff auf diesen Administrationsbereich.');
             }
             $def = $nav[$area];
-            $isCoreAdmin = in_array($area, self::ADMIN_AREAS, true);
-            $top = $isCoreAdmin ? 'administration' : 'module';
+            if ($area === 'module_lifecycle') {
+                $def['label'] = 'admin.nav.module_management';
+            }
         }
 
         $this->set('sectionDef', $def);
         $this->set('metrics', $this->tileMetrics());
-        $this->set('activeTop', $top);
+        $this->set('activeTop', $builder->areaTop($area));
+    }
+
+    /** Self-service profile: the current admin's own account details. */
+    public function profile(): void
+    {
+        $identity = $this->identity();
+        $row = ConnectionManager::get('default')->execute(
+            'SELECT username, email, first_name, last_name, status, locale FROM users WHERE id = :id',
+            ['id' => (string)($identity?->getIdentifier() ?? '')],
+        )->fetch('assoc') ?: [];
+
+        $this->set('profile', $row);
+        $this->set('areas', $this->userAreaKeys);
+        $this->set('activeTop', '');
     }
 
     /**

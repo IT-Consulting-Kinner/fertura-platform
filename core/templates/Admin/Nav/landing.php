@@ -1,5 +1,8 @@
 <?php
 /**
+ * Shared landing for the "Module" and "Administration" top-menu entries: renders
+ * the scoped nav groups as tiles.
+ *
  * @var \App\View\AppView $this
  * @var string $heading
  * @var array<string, array{label:string, items:list<array{0:string,1:string}>}> $groups

@@ -1528,3 +1528,27 @@ msgstr "Aktivierungsfehler"
 
 msgid "admin.nav.module_management"
 msgstr "Modulverwaltung"
+
+msgid "admin.nav.profile"
+msgstr "Profil anzeigen"
+
+msgid "admin.nav.user_prefix"
+msgstr "Benutzer: "
+
+msgid "admin.profile.username"
+msgstr "Benutzername"
+
+msgid "admin.profile.email"
+msgstr "E-Mail"
+
+msgid "admin.profile.name"
+msgstr "Name"
+
+msgid "admin.profile.status"
+msgstr "Status"
+
+msgid "admin.profile.locale"
+msgstr "Sprache"
+
+msgid "admin.profile.areas"
+msgstr "Administrationsbereiche"

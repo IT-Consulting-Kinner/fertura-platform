@@ -142,9 +142,12 @@ class ModuleWebController extends AppController
         // Admin pages render in the admin shell (scoped sidebar incl. this
         // module's nav entries); standalone pages in the Core module layout.
         if ($isAdmin) {
-            $this->set('navAreas', (new AdminNavBuilder())->build($userAreas));
+            $navBuilder = new AdminNavBuilder();
+            $this->set('navAreas', $navBuilder->build($userAreas));
+            $this->set('topMenu', $navBuilder->menu($userAreas));
             $this->set('userAreas', $userAreas);
             $this->set('activeArea', $route['area']);
+            $this->set('activeTop', $navBuilder->areaTop((string)$route['area']));
         }
         $this->viewBuilder()
             ->setLayout($isAdmin ? 'admin' : 'module')

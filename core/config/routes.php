@@ -90,6 +90,7 @@ return function (RouteBuilder $routes): void {
             // Module / Administration; groups render as tiles, cf. NavController).
             $admin->connect('/module', ['controller' => 'Nav', 'action' => 'modules']);
             $admin->connect('/administration', ['controller' => 'Nav', 'action' => 'administration']);
+            $admin->connect('/profile', ['controller' => 'Nav', 'action' => 'profile']);
             $admin->connect('/section/{area}', ['controller' => 'Nav', 'action' => 'section'])
                 ->setPass(['area'])
                 ->setPatterns(['area' => '[a-z0-9_]+']);

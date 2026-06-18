@@ -20,7 +20,7 @@ use Throwable;
  */
 class LocaleSwitcherCell extends Cell
 {
-    public function display(bool $persist = false): void
+    public function display(bool $persist = false, string $style = 'buttons'): void
     {
         try {
             $settings = new SettingsManager();
@@ -36,5 +36,6 @@ class LocaleSwitcherCell extends Cell
         $this->set('locales', $locales);
         $this->set('current', I18n::getLocale());
         $this->set('persist', $persist && $this->request->getAttribute('identity') !== null);
+        $this->set('style', $style);
     }
 }

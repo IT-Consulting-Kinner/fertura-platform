@@ -88,6 +88,8 @@ class AdminController extends AppController
         $this->set('currentUser', $identity);
         $this->set('userAreas', $this->userAreaKeys);
         $this->set('navAreas', (new AdminNavBuilder())->build($this->userAreaKeys));
+        // Top-menu dropdowns (Module / Administration) for the layout.
+        $this->set('topMenu', (new AdminNavBuilder())->menu($this->userAreaKeys));
         $this->set('activeArea', $this->requiredArea);
         // Which top-menu entry (Dashboard/Module/Administration) is active. Nav
         // controllers override this per landing; module-lifecycle and module-
@@ -104,12 +106,11 @@ class AdminController extends AppController
         if ((string)$this->getRequest()->getParam('controller') === 'Dashboard') {
             return 'dashboard';
         }
-        $adminAreas = ['user_group_admin', 'core_config', 'registry_contracts', 'localization', 'update_manager', 'marketplace_license'];
         if ($this->requiredArea === null) {
             return 'administration';
         }
 
-        return in_array($this->requiredArea, $adminAreas, true) ? 'administration' : 'module';
+        return in_array($this->requiredArea, AdminNavBuilder::ADMIN_ORDER, true) ? 'administration' : 'module';
     }
 
     /**
