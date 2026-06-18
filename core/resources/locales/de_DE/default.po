@@ -1501,3 +1501,27 @@ msgid "flash.trust.add_fields"
 msgstr "Key-ID, öffentlicher Schlüssel und Typ sind erforderlich."
 msgid "flash.trust.add_failed"
 msgstr "Anker konnte nicht hinzugefügt werden: {0}"
+
+msgid "admin.nav.administration"
+msgstr "Administration"
+
+msgid "admin.nav.system"
+msgstr "System"
+
+msgid "admin.nav.tiles_empty"
+msgstr "Keine Einträge."
+
+msgid "admin.module.status_active"
+msgstr "Aktiv"
+
+msgid "admin.module.status_installed_inactive"
+msgstr "Installiert (inaktiv)"
+
+msgid "admin.module.status_inactive"
+msgstr "Inaktiv"
+
+msgid "admin.module.status_error_install"
+msgstr "Installationsfehler"
+
+msgid "admin.module.status_error_activate"
+msgstr "Aktivierungsfehler"

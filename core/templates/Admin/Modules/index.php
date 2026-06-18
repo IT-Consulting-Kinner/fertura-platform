@@ -24,7 +24,7 @@ $badge = ['active' => 'success', 'installed_inactive' => 'secondary', 'installed
             <td><?= h($m['version']) ?></td>
             <td><?= h($m['type']) ?></td>
             <td><?= filter_var($m['requires_license'], FILTER_VALIDATE_BOOLEAN) ? '<span class="badge text-bg-info">' . h(__('admin.modules.license_required')) . '</span>' : '–' ?></td>
-            <td><span class="badge text-bg-<?= $badge[$m['status']] ?? 'secondary' ?>"><?= h($m['status']) ?></span></td>
+            <td><span class="badge text-bg-<?= $badge[$m['status']] ?? 'secondary' ?>"><?= h(__('admin.module.status_' . $m['status'])) ?></span></td>
             <td class="text-end">
                 <div class="d-inline-flex gap-1">
                 <?php if ($active): ?>

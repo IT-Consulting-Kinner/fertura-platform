@@ -1505,3 +1505,27 @@ msgid "flash.trust.add_fields"
 msgstr "Key ID, public key and type are required."
 msgid "flash.trust.add_failed"
 msgstr "Could not add anchor: {0}"
+
+msgid "admin.nav.administration"
+msgstr "Administration"
+
+msgid "admin.nav.system"
+msgstr "System"
+
+msgid "admin.nav.tiles_empty"
+msgstr "No entries."
+
+msgid "admin.module.status_active"
+msgstr "Active"
+
+msgid "admin.module.status_installed_inactive"
+msgstr "Installed (inactive)"
+
+msgid "admin.module.status_inactive"
+msgstr "Inactive"
+
+msgid "admin.module.status_error_install"
+msgstr "Install error"
+
+msgid "admin.module.status_error_activate"
+msgstr "Activation error"

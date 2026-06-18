@@ -86,6 +86,13 @@ return function (RouteBuilder $routes): void {
         // Admin-Bereich (scoped admin, Kap. 27.3.1).
         $builder->prefix('Admin', function (RouteBuilder $admin): void {
             $admin->connect('/', ['controller' => 'Dashboard', 'action' => 'index']);
+            // Tile-based navigation landings + drill-down (top menu: Dashboard /
+            // Module / Administration; groups render as tiles, cf. NavController).
+            $admin->connect('/module', ['controller' => 'Nav', 'action' => 'modules']);
+            $admin->connect('/administration', ['controller' => 'Nav', 'action' => 'administration']);
+            $admin->connect('/section/{area}', ['controller' => 'Nav', 'action' => 'section'])
+                ->setPass(['area'])
+                ->setPatterns(['area' => '[a-z0-9_]+']);
             $admin->fallbacks();
         });
 
