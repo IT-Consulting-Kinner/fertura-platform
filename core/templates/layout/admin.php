@@ -32,9 +32,9 @@ $dropdown = function (string $top, string $label, array $groups) use ($activeTop
         );
     }
 
+    // Closed by default; only highlight the active section (no `open` attribute).
     return sprintf(
-        '<details class="nav-dd"%s><summary class="nav-link%s">%s <span class="caret">&#9662;</span></summary><div class="dd-menu">%s</div></details>',
-        $activeTop === $top ? ' open' : '',
+        '<details class="nav-dd"><summary class="nav-link%s">%s <span class="caret">&#9662;</span></summary><div class="dd-menu">%s</div></details>',
         $activeTop === $top ? ' active' : '',
         h($label),
         $links,
