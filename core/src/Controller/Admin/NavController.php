@@ -47,7 +47,10 @@ class NavController extends AdminController
 
         $groups = [];
         if (isset($nav['module_lifecycle'])) {
+            // The group label is "Module" (the top-menu word); on the Module
+            // landing the lifecycle tile reads clearer as "Module management".
             $groups['module_lifecycle'] = $nav['module_lifecycle'];
+            $groups['module_lifecycle']['label'] = 'admin.nav.module_management';
         }
         foreach ($nav as $key => $def) {
             if (!in_array($key, $coreKeys, true)) {

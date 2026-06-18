@@ -1525,3 +1525,6 @@ msgstr "Installationsfehler"
 
 msgid "admin.module.status_error_activate"
 msgstr "Aktivierungsfehler"
+
+msgid "admin.nav.module_management"
+msgstr "Modulverwaltung"
