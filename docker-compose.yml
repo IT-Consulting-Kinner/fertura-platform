@@ -53,6 +53,10 @@ services:
       - core_langstore:/var/www/html/language-store
       # Core-Backups (DB-Dump + Datei-Stores) auf persistentem Volume (E53).
       - core_backups:/var/www/html/backups
+      # tmp/cache (P02) on ext4: the 9p Windows mount cannot chmod cache files, so
+      # CakePHP's FileEngine emits warnings that corrupt the HTTP response (headers
+      # already sent -> broken page). Keep the cache off 9p like vendor/langstore.
+      - core_cache:/var/www/html/tmp/cache
     environment:
       # Privilegierte Connection (Superuser): DDL/Migrationen/Bootstrap/Recovery.
       DATABASE_URL: "postgres://${POSTGRES_USER:-fertura}:${POSTGRES_PASSWORD:-fertura}@db/${POSTGRES_DB:-fertura}?encoding=utf8"
@@ -107,6 +111,8 @@ services:
     volumes:
       - ./core:/var/www/html
       - core_vendor:/var/www/html/vendor
+      # Same ext4 cache volume as core (off the 9p mount; see core service).
+      - core_cache:/var/www/html/tmp/cache
     environment:
       DATABASE_URL: "postgres://${POSTGRES_USER:-fertura}:${POSTGRES_PASSWORD:-fertura}@db/${POSTGRES_DB:-fertura}?encoding=utf8"
       ROLE: worker
@@ -142,3 +148,4 @@ volumes:
   core_vendor:
   core_langstore:
   core_backups:
+  core_cache:

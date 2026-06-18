@@ -70,5 +70,14 @@ mkdir -p /tmp/cake_cache/persistent /tmp/cake_cache/models 2>/dev/null || true
 chown -R www-data:www-data /tmp/cake_cache 2>/dev/null || true
 chmod -R 0775 /tmp/cake_cache 2>/dev/null || true
 
+# tmp/cache (the CACHE constant -> /var/www/html/tmp/cache) is mounted on an ext4
+# named volume (docker-compose: core_cache), NOT the 9p Windows bind mount. Make it
+# owned/writable by the runtime user so the FileEngine can write AND chmod cache
+# files; on the 9p mount the chmod fails ("Operation not permitted") and the
+# resulting warnings corrupt the HTTP response (headers already sent).
+mkdir -p /var/www/html/tmp/cache/persistent /var/www/html/tmp/cache/models 2>/dev/null || true
+chown -R www-data:www-data /var/www/html/tmp/cache 2>/dev/null || true
+chmod -R 0775 /var/www/html/tmp/cache 2>/dev/null || true
+
 echo "[entrypoint] starte: $*"
 exec "$@"
