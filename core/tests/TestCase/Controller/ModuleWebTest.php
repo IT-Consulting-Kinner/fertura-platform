@@ -130,9 +130,9 @@ class ModuleWebTest extends TestCase
 
         $this->assertResponseOk();
         $this->assertResponseContains('Modul-Admin-Seite'); // module template content
-        $this->assertResponseContains('sidebar'); // rendered in the ADMIN shell
-        $this->assertResponseContains('/m/zztest_web/admin'); // module nav item links to the page
-        $this->assertResponseContains('zztest.nav.config'); // module's sidebar item label
+        $this->assertResponseContains('top-nav'); // rendered in the ADMIN shell (top menu)
+        $this->assertResponseContains('/m/zztest_web/admin'); // module nav entry links to the page
+        $this->assertResponseContains('zztest.nav.group'); // module's nav group label in the top menu
     }
 
     public function testAdminPageForbiddenWithoutArea(): void

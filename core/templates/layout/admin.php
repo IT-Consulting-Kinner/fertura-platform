@@ -33,9 +33,12 @@ $dropdown = function (string $top, string $label, array $groups) use ($activeTop
     }
 
     // Closed by default; only highlight the active section (no `open` attribute).
+    // A11y: mark the active section with aria-current so AT announces the current
+    // location (the active sub-page lives on the section/tile page, not the bar).
     return sprintf(
-        '<details class="nav-dd"><summary class="nav-link%s">%s <span class="caret">&#9662;</span></summary><div class="dd-menu">%s</div></details>',
+        '<details class="nav-dd"><summary class="nav-link%s"%s>%s <span class="caret">&#9662;</span></summary><div class="dd-menu">%s</div></details>',
         $activeTop === $top ? ' active' : '',
+        $activeTop === $top ? ' aria-current="page"' : '',
         h($label),
         $links,
     );
