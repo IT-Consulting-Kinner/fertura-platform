@@ -24,13 +24,13 @@ $this->assign('title', __('account.title'));
                 <input class="form-control" value="<?= h((string)($user?->get('email') ?? '')) ?>" disabled>
             </div>
             <div class="col-md-4">
-                <?= $this->Form->control('salutation', ['label' => __('account.salutation'), 'class' => 'form-control', 'required' => false]) ?>
+                <?= $this->Form->control('salutation', ['type' => 'text', 'label' => __('account.salutation'), 'class' => 'form-control', 'required' => false]) ?>
             </div>
             <div class="col-md-4">
-                <?= $this->Form->control('first_name', ['label' => __('account.first_name'), 'class' => 'form-control', 'required' => false]) ?>
+                <?= $this->Form->control('first_name', ['type' => 'text', 'label' => __('account.first_name'), 'class' => 'form-control', 'required' => false]) ?>
             </div>
             <div class="col-md-4">
-                <?= $this->Form->control('last_name', ['label' => __('account.last_name'), 'class' => 'form-control', 'required' => false]) ?>
+                <?= $this->Form->control('last_name', ['type' => 'text', 'label' => __('account.last_name'), 'class' => 'form-control', 'required' => false]) ?>
             </div>
         </div>
         <div class="mt-3"><?= $this->Form->button(__('account.save'), ['class' => 'btn btn-primary']) ?></div>
