@@ -69,15 +69,9 @@ class LocaleMiddleware implements MiddlewareInterface
             }
         }
 
-        // 3b. Accept-Language (mainly public/login without session/identity).
-        if ($locale === null) {
-            $locale = $this->matchAcceptLanguage(
-                (string)($request->getHeaderLine('Accept-Language')),
-                array_map('strval', $enabled),
-            );
-        }
-
-        // 4. System default (never falls onto a non-enabled locale).
+        // 4. System default. Anonymous/login pages default to en_US (the English-
+        // default-GUI norm) — deliberately NOT the browser Accept-Language, so the
+        // login always opens in English unless the user explicitly switches.
         if ($locale === null) {
             $locale = in_array($default, $enabled, true) ? $default : (string)($enabled[0] ?? 'en_US');
         }
@@ -85,47 +79,5 @@ class LocaleMiddleware implements MiddlewareInterface
         I18n::setLocale($locale);
 
         return $handler->handle($request);
-    }
-
-    /**
-     * Best enabled locale from the Accept-Language header (by q weight).
-     * Direct `ll_CC` or language prefix `ll` → first enabled `ll_*`.
-     *
-     * @param list<string> $enabled
-     */
-    private function matchAcceptLanguage(string $header, array $enabled): ?string
-    {
-        if (trim($header) === '') {
-            return null;
-        }
-        $candidates = [];
-        foreach (explode(',', $header) as $part) {
-            $bits = explode(';', trim($part));
-            $tag = trim($bits[0]);
-            if ($tag === '' || $tag === '*') {
-                continue;
-            }
-            $q = 1.0;
-            if (isset($bits[1]) && str_starts_with(trim($bits[1]), 'q=')) {
-                $q = (float)substr(trim($bits[1]), 2);
-            }
-            $candidates[] = [str_replace('-', '_', $tag), $q];
-        }
-        usort($candidates, static fn($a, $b) => $b[1] <=> $a[1]);
-
-        foreach ($candidates as [$tag, $q]) {
-            if (in_array($tag, $enabled, true)) {
-                return $tag;
-            }
-            // Language prefix: 'de' → first enabled 'de_*'.
-            $lang = strtolower(explode('_', $tag)[0]);
-            foreach ($enabled as $e) {
-                if (strtolower(explode('_', $e)[0]) === $lang) {
-                    return $e;
-                }
-            }
-        }
-
-        return null;
     }
 }
