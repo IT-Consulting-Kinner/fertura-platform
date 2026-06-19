@@ -240,7 +240,56 @@ nachgetestet · `BLOCKED` braucht Browser-Extension/externe Voraussetzung · `N/
 
 ---
 
+## Befunde für Modul-Sessions (nicht Core-fixbar — harte Grenze: kein Modul-Code-Edit)
+- **KB-1 (Knowledgebase):** `/m/knowledgebase/admin/spaces` listet **keine** Spaces,
+  obwohl welche existieren (DB: `allgemein`, `testkb`, beide Default-Tenant). Anlegen
+  funktioniert (Flash „Bereich angelegt.", `?ok=space.created`), aber die Tabelle
+  rendert nur die Kopfzeile. → Anzeige-/Query-Bug im KB-Spaces-Admin-Handler.
+- **KB-2 (Knowledgebase):** KB-Admin-Seiten sind **ungestylt** (kein Bootstrap/UiKit;
+  Labels kleben an Feldern, Tabelle ohne Formatierung). Core-Seiten sind sauber
+  gestylt → die KB-Admin-Templates nutzen die Core-Stilklassen nicht.
+- **(Connector, früher):** KB-Nav-Kachel zeigt rohen Key `knowledgebase.nav.group`
+  (Manifest `nav_group` = i18n-Key, den der Core in der Default-Domain nicht auflöst).
+
+### Statische Review (app-unabhängig, ergänzt die Browser-Befunde)
+**Knowledgebase (mehrere echte Bugs):**
+- KB-1 (P0): Admin-Listen leer — `SpacesPage::view`/`TagsPage`/`TemplatesPage` laden
+  die Liste OHNE RLS-/Tenant-Kontext (während `create()` ihn via RlsContext setzt) →
+  Tenant-RLS liefert 0 Zeilen. Laufzeit bestätigt (Spaces in DB, Liste leer).
+- KB-2 (P1): Admin-/Author-Templates ungestylt — nutzen undefinierte `kb-*`-Klassen,
+  kein Bootstrap/UiKit (`templates/admin/*.php`, `templates/article_view.php`, …).
+- KB-4 (P2): hartkodierte deutsche Labels statt `__d()` in spaces/tags/templates.
+- KB-5 (P1): fehlende Labels (title/teaser) in `templates/author/article_edit.php`.
+- KB-6 (P2): rohes `<form>` ohne CSRF in `templates/draft_preview.php`.
+- KB-9 (P2): Admin-Tabellen ohne `scope="col"`/aria-label.
+
+**Ticketing (weitgehend sauber):**
+- TKT-i18n (HOCH): `manifest.json` `nav`/`nav_group` sind hartkodierte Literale
+  ("Queue-Gruppen", "Mailboxen", …) statt i18n-Keys → Menü nicht übersetzbar.
+- A11y/Konsistenz (mittel/niedrig): `templates/admin/priority_rules.php` (Labels
+  ohne `for`, ein `<th>` ohne `scope`), `macros.php` (Labels ohne `for`),
+  `custom_fields.php` (manuelle Labels statt UiKit). Sonst nutzt es UiKit/Bootstrap
+  + `h()` + CSRF korrekt.
+
+**Connector (strukturell sauber):**
+- Keine i18n-/Leak-/Permission-Fehler (Panel-Titel lokalisiert, kein Existenz-Leak,
+  Permission-Kontext wird durchgereicht, Degradation neutral).
+- Härtungs-Hinweise (mittel/niedrig): KB-Suchergebnisse/`purpose`/`content` vor der
+  Panel-Weitergabe whitelisten/escapen bzw. die HTML-Render-Verantwortung in der
+  MODULSPEZ dokumentieren; `subject`-Längenlimit für kb.search.
+
 ## Fortschritt
+- **Iteration 3 — Browser-Tests (Chrome-Extension verbunden):** Login (CORE-001)
+  PASS; Admin-Nav-Redesign visuell + interaktiv verifiziert (Top-Menü, Module-/
+  Administration-Dropdowns öffnen/schließen, Marke ohne Link, Sprach-Select,
+  Benutzer-Menü); Drill-down Administration→Benutzer&Gruppen (2 Kacheln + Count-
+  Badges) PASS; Benutzer-Menü→Profil PASS; **self-service `/account`**: Render +
+  **Speichern** („Profil aktualisiert.", Vorname persistiert) PASS; i18n-Status im
+  Dashboard sichtbar korrekt. **1 UI-Bug gefunden+behoben+nachgetestet:** Anrede/
+  Vor-/Nachname rendern als `<textarea>` → auf einzeilige Textfelder gefixt
+  (Commit `9f6d4c4`). Nächste Browser-Iteration: Modul-CRUD (Ticket anlegen→Status
+  →Antwort; KB-Artikel anlegen→publizieren→suchen; Connector Link Artikel↔Ticket).
+
 - **Iteration 2 — Automatisierte Suiten (ausführbare Anforderungen) GRÜN:**
   Core **428** Tests · Ticketing **278** (2 skipped) · Knowledgebase **182** ·
   Connector **43** · Integrations-Harness **4** = **~935 Tests, 0 Fehler**.
