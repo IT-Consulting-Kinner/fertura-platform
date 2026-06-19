@@ -88,10 +88,18 @@ class WebRouteRegistry
     }
 
     /**
-     * Admin sidebar entries contributed by active modules, grouped by admin area
-     * (only admin pages — `area` set — that declare a `nav` label). The shape
+     * Admin sidebar/menu entries contributed by active modules, grouped by admin
+     * area (only admin pages — `area` set — that declare a `nav` label). The shape
      * mirrors {@see \App\Controller\Admin\AdminController::NAV} so the two can be
-     * merged: `area => ['label' => i18nKey, 'items' => [[label, url], …]]`.
+     * merged: `area => ['label' => text, 'items' => [[text, url], …]]`.
+     *
+     * Labels are resolved HERE against the contributing module's i18n **domain**
+     * (the module key), because the Core renders nav labels with the default-domain
+     * `__()` and there is no default->module fallback — a module-domain key would
+     * otherwise show up raw. A module may thus use proper `<key>` labels (resolved
+     * in its own domain) or plain literals (passed through unchanged). Core areas
+     * keep their `admin.*` default-domain keys (resolved by the templates' `__()`,
+     * which is a harmless no-op on the already-resolved module strings).
      *
      * @return array<string, array{label:string, items:list<array{0:string,1:string}>}>
      */
@@ -103,10 +111,12 @@ class WebRouteRegistry
                 continue;
             }
             $area = $r['area'];
+            $domain = $r['module_key'];
             if (!isset($out[$area])) {
-                $out[$area] = ['label' => $r['nav_group'] !== '' ? $r['nav_group'] : $area, 'items' => []];
+                $label = $r['nav_group'] !== '' ? (string)__d($domain, $r['nav_group']) : $area;
+                $out[$area] = ['label' => $label, 'items' => []];
             }
-            $out[$area]['items'][] = [$r['nav'], '/m/' . $r['module_key'] . $r['path']];
+            $out[$area]['items'][] = [(string)__d($domain, $r['nav']), '/m/' . $r['module_key'] . $r['path']];
         }
 
         return $out;
