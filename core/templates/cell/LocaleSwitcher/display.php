@@ -4,8 +4,9 @@
  * @var list<string> $locales
  * @var string $current
  * @var bool $persist
- * @var string $style  'buttons' (no-JS inline buttons, public/login) | 'select'
- *                      (a select that switches on change, admin shell)
+ * @var string $style  'buttons' (no-JS inline buttons) | 'select' (a dropdown
+ *                      that switches on change). Both styles work anonymously
+ *                      (login/public, GET ?lang=) and logged-in (POST, persisted).
  */
 use App\Service\I18n\LocaleResolver;
 

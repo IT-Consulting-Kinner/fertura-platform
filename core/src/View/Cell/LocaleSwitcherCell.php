@@ -16,7 +16,7 @@ use Throwable;
  * Shows the selectable languages (enabled ∩ usable by the core). Switching via
  * `?lang=…` (session override, takes effect everywhere, including public/login).
  * For logged-in users the choice is additionally persisted as `user.locale`
- * (POST to `/locale/set`) when `persist=true`.
+ * (POST to `/locale/change`) when `persist=true`.
  */
 class LocaleSwitcherCell extends Cell
 {
