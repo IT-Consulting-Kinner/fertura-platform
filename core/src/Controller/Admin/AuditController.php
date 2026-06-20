@@ -38,21 +38,29 @@ class AuditController extends AdminController
             $where[] = 'a.module_key = :mkey';
             $params['mkey'] = $moduleKey;
         }
+        $whereSql = $where !== [] ? ' WHERE ' . implode(' AND ', $where) : '';
+        $conn = ConnectionManager::get('default');
+
+        // Paginated instead of a hard LIMIT 100 (older entries were only reachable
+        // via the NDJSON export). The filters carry into the page links (view).
+        $perPage = 50;
+        $page = max(1, (int)$this->request->getQuery('page', 1));
+        $total = (int)($conn->execute('SELECT count(*) c FROM audit_log a' . $whereSql, $params)->fetch('assoc')['c'] ?? 0);
+        $offset = ($page - 1) * $perPage;
+
         $sql = 'SELECT a.created_at, a.actor_user_id, u.username AS actor_username, a.action, '
             . 'a.entity_type, a.entity_id, a.entity_label, a.module_key, a.component '
-            . 'FROM audit_log a LEFT JOIN users u ON u.id = a.actor_user_id';
-        if ($where !== []) {
-            $sql .= ' WHERE ' . implode(' AND ', $where);
-        }
-        $sql .= ' ORDER BY a.created_at DESC LIMIT 100';
-
-        $conn = ConnectionManager::get('default');
+            . 'FROM audit_log a LEFT JOIN users u ON u.id = a.actor_user_id'
+            . $whereSql
+            . ' ORDER BY a.created_at DESC LIMIT ' . $perPage . ' OFFSET ' . $offset;
         $entries = $conn->execute($sql, $params)->fetchAll('assoc');
 
         $actions = $conn->execute('SELECT DISTINCT action FROM audit_log ORDER BY action')->fetchAll('assoc');
         $entityTypes = $conn->execute('SELECT DISTINCT entity_type FROM audit_log ORDER BY entity_type')->fetchAll('assoc');
 
-        $this->set(compact('entries', 'actions', 'entityTypes', 'action', 'entityType', 'moduleKey'));
+        $this->set(compact('entries', 'actions', 'entityTypes', 'action', 'entityType', 'moduleKey', 'page', 'total'));
+        $this->set('perPage', $perPage);
+        $this->set('query', $this->request->getQueryParams());
     }
 
     /**

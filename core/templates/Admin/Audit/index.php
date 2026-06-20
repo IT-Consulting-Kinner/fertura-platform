@@ -47,3 +47,4 @@
     <?php if ($entries === []): ?><tr><td colspan="6" class="text-muted"><?= h(__('admin.audit.empty')) ?></td></tr><?php endif; ?>
     </tbody>
 </table>
+<?= $this->UiKit->paginate($page, $perPage, $total, ['action' => 'index'], $query) ?>

@@ -1,9 +1,9 @@
 <?php
 /**
  * Admin shell: top menu (Dashboard + Module/Administration dropdowns), language
- * select and a user menu. Dropdowns use native <details>/<summary> (no JS
- * framework is loaded); the language select auto-submits via a tiny inline
- * handler.
+ * select and a user menu. Dropdowns are Bootstrap 5 dropdowns (the bundle's JS
+ * closes them on an outside click and handles keyboard/ARIA); the language select
+ * auto-submits via a tiny inline handler.
  *
  * @var \App\View\AppView $this
  */
@@ -26,17 +26,20 @@ $dropdown = function (string $top, string $label, array $groups) use ($activeTop
     $links = '';
     foreach ($groups as $key => $def) {
         $links .= sprintf(
-            '<a class="dd-item" href="%s">%s</a>',
+            '<li><a class="dropdown-item" href="%s">%s</a></li>',
             h($groupUrl($key, $def)),
             h(__($def['label'])),
         );
     }
 
-    // Closed by default; only highlight the active section (no `open` attribute).
-    // A11y: mark the active section with aria-current so AT announces the current
-    // location (the active sub-page lives on the section/tile page, not the bar).
+    // Bootstrap dropdown: the bundle's JS handles open/close (incl. closing on an
+    // outside click), keyboard and ARIA. Only the active section is highlighted;
+    // aria-current announces the current location (the active sub-page lives on
+    // the section/tile page, not the bar).
     return sprintf(
-        '<details class="nav-dd"><summary class="nav-link%s"%s>%s <span class="caret">&#9662;</span></summary><div class="dd-menu">%s</div></details>',
+        '<div class="nav-item dropdown">'
+        . '<a class="nav-link dropdown-toggle%s" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false"%s>%s</a>'
+        . '<ul class="dropdown-menu">%s</ul></div>',
         $activeTop === $top ? ' active' : '',
         $activeTop === $top ? ' aria-current="page"' : '',
         h($label),
@@ -59,20 +62,18 @@ $dropdown = function (string $top, string $label, array $groups) use ($activeTop
         /* Doppelter Abstand zwischen Marke und erstem Menüpunkt. */
         .navbar-brand { margin-right: 3rem; }
         .top-nav { display:flex; align-items:center; gap:.25rem; }
-        .top-nav .nav-link { color:rgba(255,255,255,.85); padding:.5rem .75rem; border-radius:.375rem; text-decoration:none; }
+        .top-nav .nav-link { color:rgba(255,255,255,.85); padding:.5rem .75rem; border-radius:.375rem; text-decoration:none; cursor:pointer; }
         .top-nav .nav-link:hover { color:#fff; }
         .top-nav .nav-link.active { color:#fff; font-weight:600; background:rgba(255,255,255,.12); }
-        /* Native <details> dropdown (kein JS-Framework geladen). */
-        .nav-dd { position:relative; }
-        .nav-dd > summary { list-style:none; cursor:pointer; user-select:none; }
-        .nav-dd > summary::-webkit-details-marker { display:none; }
-        .nav-dd .caret { font-size:.7em; opacity:.8; }
-        .nav-dd .dd-menu { position:absolute; top:calc(100% + .25rem); left:0; min-width:15rem; background:#fff; border:1px solid rgba(0,0,0,.15); border-radius:.5rem; box-shadow:0 .5rem 1.25rem rgba(0,0,0,.18); padding:.25rem 0; z-index:1050; }
-        .nav-dd .dd-menu.dd-right { left:auto; right:0; }
-        .nav-dd .dd-item { display:block; padding:.45rem 1rem; color:#212529; text-decoration:none; white-space:nowrap; }
-        .nav-dd .dd-item:hover { background:#f1f3f5; }
+        /* Top-menu dropdowns are Bootstrap 5 dropdowns; just widen the menu a bit. */
+        .top-nav .dropdown-menu { min-width:15rem; }
         .locale-select { max-width:11rem; }
         a.card:hover { border-color:#0d6efd; }
+        /* Responsive tile grid: a min tile width drives a dynamic column count
+           (auto-fill adds columns on wider screens instead of over-wide tiles). */
+        .tile-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(16rem, 1fr)); gap:1rem; }
+        /* Form-width utilities (replace scattered inline max-width styles). */
+        .mw-sm { max-width:28rem; } .mw-md { max-width:36rem; } .mw-lg { max-width:44rem; }
     </style>
 </head>
 <body>
@@ -87,21 +88,25 @@ $dropdown = function (string $top, string $label, array $groups) use ($activeTop
     <div class="d-flex align-items-center text-light gap-2">
         <?= $this->cell('LocaleSwitcher', [true, 'select']) ?>
         <?php if ($currentUser !== null): ?>
-            <details class="nav-dd">
-                <summary class="btn btn-sm btn-outline-light">
-                    <?= h(__('admin.nav.user_prefix')) ?><?= h($currentUser->get('username')) ?> <span class="caret">&#9662;</span>
-                </summary>
-                <div class="dd-menu dd-right">
-                    <a class="dd-item" href="/account"><?= h(__('admin.nav.profile')) ?></a>
-                    <a class="dd-item" href="/logout"><?= h(__('admin.nav.logout')) ?></a>
-                </div>
-            </details>
+            <div class="nav-item dropdown">
+                <a class="btn btn-sm btn-outline-light dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <?= h(__('admin.nav.user_prefix')) ?><?= h($currentUser->get('username')) ?>
+                </a>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li><a class="dropdown-item" href="/account"><?= h(__('admin.nav.profile')) ?></a></li>
+                    <li><a class="dropdown-item" href="/logout"><?= h(__('admin.nav.logout')) ?></a></li>
+                </ul>
+            </div>
         <?php endif; ?>
     </div>
 </nav>
 <main id="main" tabindex="-1" class="container-fluid p-4">
+    <?= $this->element('admin_breadcrumb', ['crumbs' => $breadcrumb ?? []]) ?>
     <div aria-live="polite"><?= $this->Flash->render() ?></div>
     <?= $this->fetch('content') ?>
 </main>
+<?= $this->element('admin_confirm_modal') ?>
+<?= $this->Html->script('bootstrap.bundle.min') ?>
+<?= $this->Html->script('admin') ?>
 </body>
 </html>

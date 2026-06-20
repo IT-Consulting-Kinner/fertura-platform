@@ -5,9 +5,27 @@
  */
 $evalBadge = ['valid' => 'success', 'grace' => 'warning', 'needs_online' => 'warning', 'expired' => 'danger', 'revoked' => 'danger', 'missing' => 'secondary'];
 ?>
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h1 class="h3 mb-0"><?= h(__('admin.marketplace.licenses_title')) ?></h1>
-    <?= $this->Html->link('&laquo; ' . h(__('admin.marketplace.back_to_marketplace')), ['action' => 'index'], ['class' => 'btn btn-outline-secondary btn-sm', 'escape' => false]) ?>
+<h1 class="h3 mb-3"><?= h(__('admin.marketplace.licenses_title')) ?></h1>
+
+<div class="accordion mb-4" id="licenseInstall">
+    <div class="accordion-item">
+        <h2 class="accordion-header">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#installLicense" aria-expanded="false" aria-controls="installLicense">
+                <?= h(__('admin.marketplace.install_license')) ?>
+            </button>
+        </h2>
+        <div id="installLicense" class="accordion-collapse collapse">
+            <div class="accordion-body mw-lg">
+                <?= $this->Form->create(null, ['url' => ['action' => 'uploadLicense'], 'type' => 'file']) ?>
+                <div class="mb-3"><label class="form-label"><?= h(__('admin.marketplace.license_file_label')) ?></label>
+                    <?= $this->Form->control('license_file', ['type' => 'file', 'label' => false, 'class' => 'form-control', 'accept' => 'application/json,.json']) ?></div>
+                <div class="mb-3"><label class="form-label"><?= h(__('admin.marketplace.license_json_label')) ?></label>
+                    <?= $this->Form->control('license_json', ['type' => 'textarea', 'label' => false, 'class' => 'form-control font-monospace', 'rows' => 4]) ?></div>
+                <?= $this->Form->button(__('admin.marketplace.install'), ['class' => 'btn btn-primary btn-sm']) ?>
+                <?= $this->Form->end() ?>
+            </div>
+        </div>
+    </div>
 </div>
 
 <table class="table table-hover align-middle">
@@ -26,13 +44,3 @@ $evalBadge = ['valid' => 'success', 'grace' => 'warning', 'needs_online' => 'war
     <?php if ($licenses === []): ?><tr><td colspan="6" class="text-muted"><?= h(__('admin.marketplace.no_licenses')) ?></td></tr><?php endif; ?>
     </tbody>
 </table>
-
-<div class="card mt-4"><div class="card-header"><?= h(__('admin.marketplace.install_license')) ?></div><div class="card-body">
-    <?= $this->Form->create(null, ['url' => ['action' => 'uploadLicense'], 'type' => 'file']) ?>
-    <div class="mb-3"><label class="form-label"><?= h(__('admin.marketplace.license_file_label')) ?></label>
-        <?= $this->Form->control('license_file', ['type' => 'file', 'label' => false, 'class' => 'form-control', 'accept' => 'application/json,.json']) ?></div>
-    <div class="mb-3"><label class="form-label"><?= h(__('admin.marketplace.license_json_label')) ?></label>
-        <?= $this->Form->control('license_json', ['type' => 'textarea', 'label' => false, 'class' => 'form-control font-monospace', 'rows' => 4]) ?></div>
-    <?= $this->Form->button(__('admin.marketplace.install'), ['class' => 'btn btn-primary btn-sm']) ?>
-    <?= $this->Form->end() ?>
-</div></div>

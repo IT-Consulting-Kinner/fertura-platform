@@ -8,11 +8,7 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h1 class="h3 mb-0"><?= h(__('admin.outbox.title')) ?></h1>
     <?php if (($counts['dead_letter'] ?? 0) > 0): ?>
-        <?= $this->Form->postLink(
-            __('admin.outbox.retry_all'),
-            ['action' => 'retryAll'],
-            ['class' => 'btn btn-warning btn-sm', 'confirm' => __('admin.outbox.confirm_retry_all', $counts['dead_letter'])],
-        ) ?>
+        <?= $this->UiKit->confirmPost(__('admin.outbox.retry_all'), ['action' => 'retryAll'], __('admin.outbox.confirm_retry_all', $counts['dead_letter']), ['class' => 'btn btn-warning btn-sm', 'variant' => 'btn-warning']) ?>
     <?php endif; ?>
 </div>
 <p class="text-muted small"><?= h(__('admin.outbox.intro')) ?></p>
@@ -26,6 +22,9 @@
 </div>
 
 <h2 class="h5"><?= h(__('admin.outbox.deadletter_heading')) ?></h2>
+<?php $dlTotal = (int)($counts['dead_letter'] ?? 0); if (count($deadLetters) < $dlTotal): ?>
+    <p class="text-muted small mb-2"><?= h(__('admin.outbox.deadletter_truncated', count($deadLetters), $dlTotal)) ?></p>
+<?php endif; ?>
 <?php if ($deadLetters === []): ?>
     <div class="alert alert-success"><?= h(__('admin.outbox.deadletter_empty')) ?></div>
 <?php else: ?>
@@ -49,8 +48,7 @@
             <td class="small text-danger" style="max-width:420px"><?= h((string)($e['last_error'] ?? '')) ?></td>
             <td class="text-end text-nowrap">
                 <?= $this->Form->postLink(__('admin.outbox.retry'), ['action' => 'retry', $e['id']], ['class' => 'btn btn-outline-primary btn-sm']) ?>
-                <?= $this->Form->postLink(__('admin.outbox.discard'), ['action' => 'discard', $e['id']],
-                    ['class' => 'btn btn-outline-danger btn-sm', 'confirm' => __('admin.outbox.confirm_discard')]) ?>
+                <?= $this->UiKit->confirmPost(__('admin.outbox.discard'), ['action' => 'discard', $e['id']], __('admin.outbox.confirm_discard'), ['class' => 'btn btn-outline-danger btn-sm']) ?>
             </td>
         </tr>
     <?php endforeach; ?>

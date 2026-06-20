@@ -14,7 +14,6 @@ $anon = $user['status'] === 'anonymized';
         <?php if ($user['status'] !== 'anonymized'): ?>
             <?= $this->Html->link(__('admin.users.edit'), ['action' => 'edit', $user['id']], ['class' => 'btn btn-outline-primary btn-sm']) ?>
         <?php endif; ?>
-        <?= $this->Html->link('&laquo; ' . __('admin.users.backtolist'), ['action' => 'index'], ['class' => 'btn btn-outline-secondary btn-sm', 'escape' => false]) ?>
     </div>
 </div>
 
@@ -36,7 +35,7 @@ $anon = $user['status'] === 'anonymized';
                     <?php else: ?>
                         <?= $this->Form->postLink(__('admin.users.deactivate'), ['action' => 'setStatus', $user['id'], 'disabled'], ['class' => 'btn btn-warning btn-sm']) ?>
                     <?php endif; ?>
-                    <?= $this->Form->postLink(__('admin.users.anonymize'), ['action' => 'anonymize', $user['id']], ['class' => 'btn btn-outline-danger btn-sm', 'confirm' => __('admin.users.anonymize_confirm')]) ?>
+                    <?= $this->UiKit->confirmPost(__('admin.users.anonymize'), ['action' => 'anonymize', $user['id']], __('admin.users.anonymize_confirm'), ['class' => 'btn btn-outline-danger btn-sm']) ?>
                 </div>
                 <hr>
                 <p class="mb-1 small text-muted"><?= h(__('admin.users.invite_password')) ?></p>

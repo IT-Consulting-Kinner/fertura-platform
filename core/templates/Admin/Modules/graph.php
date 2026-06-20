@@ -12,10 +12,7 @@ $fill = static fn (string $status): string => match ($status) {
     default => '#0d6efd',
 };
 ?>
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h1 class="h3 mb-0"><?= h(__('admin.modules.graph_title')) ?></h1>
-    <?= $this->Html->link(__('admin.modules.back_to_list'), ['action' => 'index'], ['class' => 'btn btn-outline-secondary btn-sm']) ?>
-</div>
+<h1 class="h3 mb-3"><?= h(__('admin.modules.graph_title')) ?></h1>
 <p class="text-muted small"><?= h(__('admin.modules.graph_intro')) ?></p>
 
 <?php if ($nodes === []): ?>

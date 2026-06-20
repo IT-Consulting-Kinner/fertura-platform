@@ -39,7 +39,7 @@ $typeBadge = ['resolver' => 'primary', 'collector' => 'info', 'event' => 'warnin
             <td><?= h($r['registration_type']) ?></td>
             <td class="small text-muted"><?= h($r['implementation_class']) ?: '–' ?></td>
             <td><?= (int)$r['priority'] ?></td>
-            <td><?= filter_var($r['active'], FILTER_VALIDATE_BOOLEAN) ? h(__('admin.registry.status_active')) : h(__('admin.registry.status_inactive')) ?></td>
+            <td><?= $this->UiKit->activeBadge($r['active'], __('admin.registry.status_active'), __('admin.registry.status_inactive')) ?></td>
         </tr>
     <?php endforeach; ?>
     <?php if ($registrations === []): ?><tr><td colspan="6" class="text-muted"><?= h(__('admin.registry.registrations_empty')) ?></td></tr><?php endif; ?>

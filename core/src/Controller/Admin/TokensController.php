@@ -17,13 +17,19 @@ class TokensController extends AdminController
 
     public function index(): void
     {
-        $userId = (string)$this->identity()->getIdentifier();
-        $session = $this->request->getSession();
-        $newToken = $session->consume('newApiToken');
+        $this->renderTokenList(false);
+    }
 
+    /** Renders the token list plus the inline "create" accordion form. */
+    private function renderTokenList(bool $openCreate): void
+    {
+        $userId = (string)$this->identity()->getIdentifier();
         $this->set('tokens', (new TokenService())->listForUser($userId));
         $this->set('knownScopes', TokenService::KNOWN_SCOPES);
-        $this->set('newToken', $newToken);
+        // Plaintext token (shown once) handed over via the session by create().
+        $this->set('newToken', $this->request->getSession()->consume('newApiToken'));
+        $this->set('openCreate', $openCreate);
+        $this->viewBuilder()->setTemplate('index');
     }
 
     public function create(): ?Response
@@ -35,9 +41,11 @@ class TokensController extends AdminController
         $expiresAt = trim((string)$this->request->getData('expires_at')) ?: null;
 
         if ($scopes === []) {
+            // Re-render with the create accordion open instead of redirecting.
             $this->Flash->error(__('flash.token.need_scope'));
+            $this->renderTokenList(true);
 
-            return $this->redirect(['action' => 'index']);
+            return null;
         }
 
         $result = (new TokenService())->create($userId, $label, $scopes, $expiresAt, $userId);

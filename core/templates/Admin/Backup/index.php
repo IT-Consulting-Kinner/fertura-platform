@@ -24,23 +24,31 @@ $human = static function ($b): string {
 <h1 class="h3 mb-2"><?= h(__('admin.backup.title')) ?></h1>
 <p class="text-muted small"><?= h(__('admin.backup.intro')) ?></p>
 
-<div class="card mb-3" style="max-width:760px">
-    <div class="card-header"><?= h(__('admin.backup.create_heading')) ?></div>
-    <div class="card-body">
-        <?= $this->Form->create(null, ['url' => ['action' => 'create'], 'class' => 'row g-2 align-items-end']) ?>
-        <div class="col-12 col-md-4">
-            <label class="form-label small mb-0"><?= h(__('admin.backup.note')) ?></label>
-            <input type="text" name="note" class="form-control form-control-sm" placeholder="z. B. vor Update 1.1.0">
+<div class="accordion mb-3" id="backupCreate">
+    <div class="accordion-item">
+        <h2 class="accordion-header">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#createBackup" aria-expanded="false" aria-controls="createBackup">
+                <?= h(__('admin.backup.create_heading')) ?>
+            </button>
+        </h2>
+        <div id="createBackup" class="accordion-collapse collapse">
+            <div class="accordion-body mw-lg">
+                <?= $this->Form->create(null, ['url' => ['action' => 'create'], 'class' => 'row g-2 align-items-end']) ?>
+                <div class="col-12 col-md-4">
+                    <label class="form-label small mb-0" for="backupNote"><?= h(__('admin.backup.note')) ?></label>
+                    <input type="text" name="note" id="backupNote" class="form-control form-control-sm" placeholder="z. B. vor Update 1.1.0">
+                </div>
+                <div class="col-12 col-md-5">
+                    <label class="form-label small mb-0" for="backupPath"><?= h(__('admin.backup.target_path')) ?></label>
+                    <input type="text" name="path" id="backupPath" class="form-control form-control-sm" placeholder="<?= h($configuredPath) ?>">
+                </div>
+                <div class="col-12 col-md-3">
+                    <?= $this->Form->button(__('admin.backup.create'), ['class' => 'btn btn-primary btn-sm w-100']) ?>
+                </div>
+                <?= $this->Form->end() ?>
+                <div class="form-text mt-2"><?= h(__('admin.backup.path_hint')) ?> <code><?= h($configuredPath) ?></code></div>
+            </div>
         </div>
-        <div class="col-12 col-md-5">
-            <label class="form-label small mb-0"><?= h(__('admin.backup.target_path')) ?></label>
-            <input type="text" name="path" class="form-control form-control-sm" placeholder="<?= h($configuredPath) ?>">
-        </div>
-        <div class="col-12 col-md-3">
-            <?= $this->Form->button(__('admin.backup.create'), ['class' => 'btn btn-primary btn-sm w-100']) ?>
-        </div>
-        <?= $this->Form->end() ?>
-        <div class="form-text mt-2"><?= h(__('admin.backup.path_hint')) ?> <code><?= h($configuredPath) ?></code></div>
     </div>
 </div>
 
@@ -93,8 +101,8 @@ $human = static function ($b): string {
             <td class="small"><?= h($human($b['db_bytes'])) ?></td>
             <td class="small"><?= h($human($b['files_bytes'])) ?></td>
             <td class="small">
-                <?php if ($enc): ?><span class="badge text-bg-dark" title="AES-256">🔒</span><?php else: ?><span class="badge text-bg-light border text-muted"><?= h(__('admin.backup.plain')) ?></span><?php endif; ?>
-                <?php if ($ver): ?><span class="badge text-bg-success" title="<?= h(__('admin.backup.verified')) ?>">✓</span><?php endif; ?>
+                <?php if ($enc): ?><span class="badge text-bg-dark" role="img" title="AES-256" aria-label="<?= h(__('admin.backup.encrypted')) ?> (AES-256)">🔒</span><?php else: ?><span class="badge text-bg-light border text-muted"><?= h(__('admin.backup.plain')) ?></span><?php endif; ?>
+                <?php if ($ver): ?><span class="badge text-bg-success" role="img" title="<?= h(__('admin.backup.verified')) ?>" aria-label="<?= h(__('admin.backup.verified')) ?>">✓</span><?php endif; ?>
             </td>
             <td class="small"><?= h((string)($b['note'] ?? '')) ?></td>
             <td class="text-end text-nowrap">
@@ -104,8 +112,7 @@ $human = static function ($b): string {
                 <?php if (!empty($offsiteEnabled)): ?>
                     <?= $this->Form->postLink(__('admin.backup.offsite_upload'), ['action' => 'offsiteUpload', $b['id']], ['class' => 'btn btn-outline-secondary btn-sm']) ?>
                 <?php endif; ?>
-                <?= $this->Form->postLink(__('admin.backup.delete'), ['action' => 'delete', $b['id']],
-                    ['class' => 'btn btn-outline-danger btn-sm', 'confirm' => __('admin.backup.confirm_delete')]) ?>
+                <?= $this->UiKit->confirmPost(__('admin.backup.delete'), ['action' => 'delete', $b['id']], __('admin.backup.confirm_delete'), ['class' => 'btn btn-outline-danger btn-sm']) ?>
             </td>
         </tr>
     <?php endforeach; ?>
@@ -123,8 +130,7 @@ $human = static function ($b): string {
         <tr>
             <td class="small text-break"><?= h($base) ?></td>
             <td class="text-end">
-                <?= $this->Form->postLink(__('admin.backup.delete'), ['action' => 'offsiteDelete', $base],
-                    ['class' => 'btn btn-outline-danger btn-sm', 'confirm' => __('admin.backup.confirm_delete')]) ?>
+                <?= $this->UiKit->confirmPost(__('admin.backup.delete'), ['action' => 'offsiteDelete', $base], __('admin.backup.confirm_delete'), ['class' => 'btn btn-outline-danger btn-sm']) ?>
             </td>
         </tr>
     <?php endforeach; ?>

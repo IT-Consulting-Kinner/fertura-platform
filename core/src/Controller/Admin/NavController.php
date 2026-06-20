@@ -62,30 +62,56 @@ class NavController extends AdminController
             }
         }
 
+        $top = $builder->areaTop($area);
         $this->set('sectionDef', $def);
         $this->set('metrics', $this->tileMetrics());
-        $this->set('activeTop', $builder->areaTop($area));
+        $this->set('activeTop', $top);
+        // Breadcrumb: top menu → this section (current). The shared element in the
+        // admin layout renders it; the section template no longer hand-rolls one.
+        $this->set('breadcrumb', [
+            [$top === 'module' ? 'admin.nav.modules' : 'admin.nav.administration', '/admin/' . $top],
+            [$def['label'], null],
+        ]);
     }
 
     /**
-     * Count badges shown on the tiles (the "Zusatzinformation"). Keyed by the
-     * item URL; only the cheap, obviously-useful counts. Mirrors the dashboard
-     * queries (search_path includes `core`).
+     * Per-tile "Zusatzinformation" keyed by the item URL: a headline `badge`
+     * (count) plus an optional `detail` sub-line (e.g. a by-status breakdown).
+     * Only cheap, obviously-useful aggregates. Mirrors the dashboard queries
+     * (search_path includes `core`).
      *
-     * @return array<string, int>
+     * @return array<string, array{badge: string, detail: string}>
      */
     private function tileMetrics(): array
     {
         $conn = ConnectionManager::get('default');
         $count = static fn(string $sql): int => (int)($conn->execute($sql)->fetch('assoc')['c'] ?? 0);
 
+        // Users by status: the headline is the active count, the detail spells out
+        // the full breakdown (active · invited · disabled · anonymized).
+        $byUserStatus = [];
+        foreach ($conn->execute('SELECT status, count(*) c FROM users GROUP BY status')->fetchAll('assoc') as $r) {
+            $byUserStatus[(string)$r['status']] = (int)$r['c'];
+        }
+        $userDetail = [];
+        foreach (['active', 'invited', 'disabled', 'anonymized'] as $s) {
+            if (($byUserStatus[$s] ?? 0) > 0) {
+                $userDetail[] = $byUserStatus[$s] . ' ' . __('admin.metric.user_' . $s);
+            }
+        }
+
+        $simple = static fn(string $sql): array => ['badge' => (string)$count($sql), 'detail' => ''];
+
         return [
-            '/admin/users' => $count("SELECT count(*) c FROM users WHERE status = 'active'"),
-            '/admin/groups' => $count('SELECT count(*) c FROM "groups" WHERE active'),
-            '/admin/modules' => $count("SELECT count(*) c FROM modules WHERE status = 'active'"),
-            '/admin/registry' => $count('SELECT count(*) c FROM contracts WHERE active'),
-            '/admin/marketplace/licenses' => $count('SELECT count(*) c FROM licenses'),
-            '/admin/outbox' => $count("SELECT count(*) c FROM event_outbox WHERE status = 'pending'"),
+            '/admin/users' => [
+                'badge' => (string)($byUserStatus['active'] ?? 0),
+                'detail' => implode(' · ', $userDetail),
+            ],
+            '/admin/groups' => $simple('SELECT count(*) c FROM "groups" WHERE active'),
+            '/admin/modules' => $simple("SELECT count(*) c FROM modules WHERE status = 'active'"),
+            '/admin/registry' => $simple('SELECT count(*) c FROM contracts WHERE active'),
+            '/admin/marketplace/licenses' => $simple('SELECT count(*) c FROM licenses'),
+            '/admin/outbox' => $simple("SELECT count(*) c FROM event_outbox WHERE status = 'pending'"),
         ];
     }
 }

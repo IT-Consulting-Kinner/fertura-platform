@@ -31,7 +31,7 @@ $badge = ['active' => 'success', 'installed_inactive' => 'secondary', 'installed
                     <?= $this->Form->postLink(__('admin.modules.btn_deactivate'), ['action' => 'deactivate', $m['module_key']], ['class' => 'btn btn-warning btn-sm']) ?>
                 <?php else: ?>
                     <?= $this->Form->postLink(__('admin.modules.btn_activate'), ['action' => 'activate', $m['module_key']], ['class' => 'btn btn-success btn-sm']) ?>
-                    <?= $this->Form->postLink(__('admin.modules.btn_delete'), ['action' => 'delete', $m['module_key']], ['class' => 'btn btn-outline-danger btn-sm', 'confirm' => __('admin.modules.confirm_delete', $m['module_key'])]) ?>
+                    <?= $this->UiKit->confirmPost(__('admin.modules.btn_delete'), ['action' => 'delete', $m['module_key']], __('admin.modules.confirm_delete', $m['module_key']), ['class' => 'btn btn-outline-danger btn-sm']) ?>
                 <?php endif; ?>
                 </div>
             </td>

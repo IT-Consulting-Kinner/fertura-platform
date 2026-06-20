@@ -18,34 +18,45 @@ class GroupsController extends AdminController
 
     public function index(): void
     {
+        $this->renderGroupList(false);
+    }
+
+    /** Renders the group list plus the inline "create" accordion form. */
+    private function renderGroupList(bool $openCreate): void
+    {
         $groups = ConnectionManager::get('default')->execute(
             'SELECT g.id, g.name, g.description, g.active, '
             . '(SELECT count(*) FROM groups_users gu WHERE gu.group_id = g.id) AS member_count '
             . 'FROM "groups" g ORDER BY g.name',
         )->fetchAll('assoc');
-        $this->set(compact('groups'));
+        $this->set(compact('groups', 'openCreate'));
+        $this->viewBuilder()->setTemplate('index');
     }
 
     public function add(): ?Response
     {
-        if ($this->request->is('post')) {
-            $name = trim((string)$this->request->getData('name'));
-            $desc = trim((string)$this->request->getData('description')) ?: null;
-            if ($name === '') {
-                $this->Flash->error(__('flash.group.name_empty'));
-            } else {
-                $row = ConnectionManager::get('default')->execute(
-                    'INSERT INTO "groups" (name, description) VALUES (:n, :d) RETURNING id',
-                    ['n' => $name, 'd' => $desc],
-                )->fetch('assoc');
-                (new AuditLogger())->log('group.create', 'group', (string)$row['id'], ['newValue' => ['name' => $name]]);
-                $this->Flash->success(__('flash.group.created'));
-
-                return $this->redirect(['action' => 'view', $row['id']]);
-            }
+        // The "create" form lives inline in the index overview (accordion) and
+        // posts here; there is no separate add page anymore -> a GET goes back.
+        if (!$this->request->is('post')) {
+            return $this->redirect(['action' => 'index']);
         }
+        $name = trim((string)$this->request->getData('name'));
+        $desc = trim((string)$this->request->getData('description')) ?: null;
+        if ($name === '') {
+            // Re-render the list with the accordion open; FormHelper keeps the input.
+            $this->Flash->error(__('flash.group.name_empty'));
+            $this->renderGroupList(true);
 
-        return null;
+            return null;
+        }
+        $row = ConnectionManager::get('default')->execute(
+            'INSERT INTO "groups" (name, description) VALUES (:n, :d) RETURNING id',
+            ['n' => $name, 'd' => $desc],
+        )->fetch('assoc');
+        (new AuditLogger())->log('group.create', 'group', (string)$row['id'], ['newValue' => ['name' => $name]]);
+        $this->Flash->success(__('flash.group.created'));
+
+        return $this->redirect(['action' => 'view', $row['id']]);
     }
 
     public function view(string $id): ?Response

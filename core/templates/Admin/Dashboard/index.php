@@ -32,7 +32,7 @@ $cards = [
 <h2 class="h5 mt-4"><?= h(__('admin.dashboard.modules_by_status')) ?></h2>
 <table class="table table-sm w-auto">
     <?php foreach ($modulesByStatus as $row): ?>
-        <tr><td class="pe-4"><?= h(__('admin.module.status_' . $row['status'])) ?></td><td><?= h((string)$row['c']) ?></td></tr>
+        <tr><td class="pe-4"><span class="badge text-bg-<?= $row['status'] === 'active' ? 'success' : 'secondary' ?>"><?= h(__('admin.module.status_' . $row['status'])) ?></span></td><td class="fw-semibold"><?= h((string)$row['c']) ?></td></tr>
     <?php endforeach; ?>
     <?php if (!$modulesByStatus): ?><tr><td class="text-muted"><?= h(__('admin.dashboard.no_modules')) ?></td></tr><?php endif; ?>
 </table>

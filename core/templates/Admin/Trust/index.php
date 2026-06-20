@@ -41,8 +41,7 @@
             </td>
             <td class="text-end">
                 <?php if (!$a['revoked']): ?>
-                    <?= $this->Form->postLink(__('admin.trust.revoke'), ['action' => 'revoke', $a['key_id']],
-                        ['class' => 'btn btn-sm btn-outline-danger', 'confirm' => __('admin.trust.revoke_confirm')]) ?>
+                    <?= $this->UiKit->confirmPost(__('admin.trust.revoke'), ['action' => 'revoke', $a['key_id']], __('admin.trust.revoke_confirm'), ['class' => 'btn btn-sm btn-outline-danger']) ?>
                 <?php endif; ?>
             </td>
         </tr>
@@ -51,23 +50,32 @@
     </tbody>
 </table></div>
 
-<details class="mt-2">
-    <summary class="btn btn-sm btn-outline-primary"><?= h(__('admin.trust.add')) ?></summary>
-    <p class="text-danger small mt-2 mb-1"><?= h(__('admin.trust.add_warning')) ?></p>
-    <?= $this->Form->create(null, ['url' => ['action' => 'addAnchor'], 'style' => 'max-width:680px']) ?>
-        <div class="row g-2 mb-2">
-            <div class="col-md-6"><label class="form-label small mb-0">Key-ID</label>
-                <?= $this->Form->control('key_id', ['label' => false, 'required' => true, 'class' => 'form-control form-control-sm']) ?></div>
-            <div class="col-md-3"><label class="form-label small mb-0"><?= h(__('admin.trust.col_type')) ?></label>
-                <?= $this->Form->select('key_type', ['root' => 'root', 'publisher' => 'publisher'], ['class' => 'form-select form-select-sm']) ?></div>
-            <div class="col-md-3"><label class="form-label small mb-0">Publisher</label>
-                <?= $this->Form->control('publisher', ['label' => false, 'class' => 'form-control form-control-sm']) ?></div>
+<div class="accordion mt-3" id="anchorAdd">
+    <div class="accordion-item">
+        <h2 class="accordion-header">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#addAnchor" aria-expanded="false" aria-controls="addAnchor">
+                <?= h(__('admin.trust.add')) ?>
+            </button>
+        </h2>
+        <div id="addAnchor" class="accordion-collapse collapse">
+            <div class="accordion-body mw-lg">
+                <p class="text-danger small mb-1"><?= h(__('admin.trust.add_warning')) ?></p>
+                <p class="text-muted small mb-1"><?= h(__('admin.trust.publisher_hint')) ?></p>
+                <?= $this->Form->create(null, ['url' => ['action' => 'addAnchor']]) ?>
+                    <div class="row g-2 mb-2">
+                        <div class="col-md-8"><label class="form-label small mb-0" for="trustKeyId">Key-ID</label>
+                            <?= $this->Form->control('key_id', ['label' => false, 'id' => 'trustKeyId', 'required' => true, 'class' => 'form-control form-control-sm']) ?></div>
+                        <div class="col-md-4"><label class="form-label small mb-0" for="trustKeyType"><?= h(__('admin.trust.col_type')) ?></label>
+                            <?= $this->Form->select('key_type', ['root' => 'root'], ['id' => 'trustKeyType', 'class' => 'form-select form-select-sm']) ?></div>
+                    </div>
+                    <div class="mb-2"><label class="form-label small mb-0" for="trustPubKey"><?= h(__('admin.trust.public_key')) ?></label>
+                        <?= $this->Form->control('public_key', ['label' => false, 'id' => 'trustPubKey', 'type' => 'textarea', 'rows' => 2, 'class' => 'form-control form-control-sm font-monospace', 'placeholder' => 'base64 Ed25519 public key']) ?></div>
+                    <?= $this->Form->button(__('admin.trust.add'), ['class' => 'btn btn-sm btn-primary', 'data-confirm' => __('admin.trust.add_confirm'), 'data-confirm-variant' => 'btn-warning']) ?>
+                <?= $this->Form->end() ?>
+            </div>
         </div>
-        <div class="mb-2"><label class="form-label small mb-0"><?= h(__('admin.trust.public_key')) ?></label>
-            <?= $this->Form->control('public_key', ['label' => false, 'type' => 'textarea', 'rows' => 2, 'class' => 'form-control form-control-sm font-monospace', 'placeholder' => 'base64 Ed25519 public key']) ?></div>
-        <?= $this->Form->button(__('admin.trust.add'), ['class' => 'btn btn-sm btn-primary', 'confirm' => __('admin.trust.add_confirm')]) ?>
-    <?= $this->Form->end() ?>
-</details>
+    </div>
+</div>
 
 <h2 class="h5 mt-4"><?= h(__('admin.trust.revoked_list')) ?></h2>
 <div class="table-responsive"><table class="table table-sm align-middle">

@@ -105,7 +105,8 @@ class LocalizationController extends AdminController
         $this->set('installed', $admin->installedComponents());
 
         if ($this->request->is('get')) {
-            return null;
+            // The upload form now lives in an accordion on the index page.
+            return $this->redirect(['action' => 'index']);
         }
         $step = (string)$this->request->getData('step');
         $component = (string)$this->request->getData('component');
@@ -117,7 +118,7 @@ class LocalizationController extends AdminController
         if ($locale === '' || !preg_match('/^[a-z]{2}_[A-Z]{2}$/', $locale)) {
             $this->Flash->error(__('flash.lang.bad_locale'));
 
-            return $this->redirect(['action' => 'import']);
+            return $this->redirect(['action' => 'index']);
         }
 
         $tmpDir = TMP . 'langimport';
@@ -145,7 +146,7 @@ class LocalizationController extends AdminController
         if ($file === null || $file->getError() !== UPLOAD_ERR_OK) {
             $this->Flash->error(__('flash.lang.no_file'));
 
-            return $this->redirect(['action' => 'import']);
+            return $this->redirect(['action' => 'index']);
         }
         $token = bin2hex(random_bytes(16));
         $path = $tmpDir . DIRECTORY_SEPARATOR . $token . '.po';
@@ -156,7 +157,7 @@ class LocalizationController extends AdminController
             @unlink($path);
             $this->Flash->error(__('flash.lang.invalid_po', (string)$preview['error']));
 
-            return $this->redirect(['action' => 'import']);
+            return $this->redirect(['action' => 'index']);
         }
         $this->set(compact('preview', 'token', 'component', 'version', 'locale', 'domain', 'type'));
         $this->viewBuilder()->setTemplate('import_confirm');

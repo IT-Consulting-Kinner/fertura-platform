@@ -101,4 +101,24 @@ class TrustControllerTest extends TestCase
             "SELECT 1 FROM trust_anchors WHERE key_id = 'zztest-incomplete'",
         )->fetch());
     }
+
+    /**
+     * A publisher anchor must NOT be insertable through the GUI: it would land with
+     * signed_by/key_signature NULL and bypass the Root->Publisher chain verification
+     * (TrustChain::verifyPublisherCert). The GUI mirrors the CLI's refusal and points
+     * the operator at `bin/cake trust add-anchor --cert`.
+     */
+    public function testAddAnchorRejectsPublisher(): void
+    {
+        $this->login();
+        $this->post('/admin/trust/addAnchor', [
+            'key_id' => 'zztest-pub-gui', 'public_key' => 'base64key', 'key_type' => 'publisher', 'publisher' => 'ACME',
+        ]);
+
+        $this->assertRedirect(['action' => 'index']);
+        $this->assertFalse(ConnectionManager::get('default')->execute(
+            "SELECT 1 FROM trust_anchors WHERE key_id = 'zztest-pub-gui'",
+        )->fetch());
+        $this->assertFlashElement('flash/error');
+    }
 }

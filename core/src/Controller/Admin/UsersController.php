@@ -8,6 +8,7 @@ use App\Model\Entity\User;
 use App\Service\Identity\PasswordResetService;
 use App\Service\Mail\MailService;
 use Cake\Datasource\ConnectionManager;
+use Cake\Datasource\EntityInterface;
 use Cake\Http\Response;
 
 /**
@@ -24,10 +25,17 @@ class UsersController extends AdminController
 
     public function index(): void
     {
+        $this->renderUserList($this->fetchTable('Users')->newEmptyEntity(), false);
+    }
+
+    /** Renders the user list plus the inline "create" accordion form. */
+    private function renderUserList(EntityInterface $user, bool $openCreate): void
+    {
         $users = ConnectionManager::get('default')->execute(
             'SELECT id, username, email, status, first_name, last_name FROM users ORDER BY username',
         )->fetchAll('assoc');
-        $this->set(compact('users'));
+        $this->set(compact('users', 'user', 'openCreate'));
+        $this->viewBuilder()->setTemplate('index');
     }
 
     public function view(string $id): void
@@ -59,20 +67,24 @@ class UsersController extends AdminController
 
     public function add(): ?Response
     {
-        $users = $this->fetchTable('Users');
-        $user = $users->newEmptyEntity();
-        if ($this->request->is('post')) {
-            $user = $users->patchEntity($user, $this->request->getData());
-            $user->set('status', User::STATUS_INVITED);
-            if ($users->save($user)) {
-                $this->audit()->log('user.create', 'user', (string)$user->id, ['newValue' => ['status' => $user->status]]);
-                $this->Flash->success(__('flash.user.created'));
-
-                return $this->redirect(['action' => 'index']);
-            }
-            $this->Flash->error(__('flash.user.create_failed'));
+        // The "create" form lives inline in the index overview (accordion) and
+        // posts here; there is no separate add page anymore, so a GET goes back to
+        // the list.
+        if (!$this->request->is('post')) {
+            return $this->redirect(['action' => 'index']);
         }
-        $this->set(compact('user'));
+        $users = $this->fetchTable('Users');
+        $user = $users->patchEntity($users->newEmptyEntity(), $this->request->getData());
+        $user->set('status', User::STATUS_INVITED);
+        if ($users->save($user)) {
+            $this->audit()->log('user.create', 'user', (string)$user->id, ['newValue' => ['status' => $user->status]]);
+            $this->Flash->success(__('flash.user.created'));
+
+            return $this->redirect(['action' => 'index']);
+        }
+        // Re-render the list with the create accordion open and the errors inline.
+        $this->Flash->error(__('flash.user.create_failed'));
+        $this->renderUserList($user, true);
 
         return null;
     }

@@ -18,8 +18,7 @@
     </dl>
     <?php if ($baseUrl !== ''): ?>
         <hr>
-        <?= $this->Form->postLink(__('admin.marketplace.sync_now'), ['action' => 'sync'],
-            ['class' => 'btn btn-primary btn-sm']) ?>
+        <?= $this->UiKit->confirmPost(__('admin.marketplace.sync_now'), ['action' => 'sync'], __('admin.marketplace.sync_confirm'), ['class' => 'btn btn-primary btn-sm', 'variant' => 'btn-warning']) ?>
         <span class="text-muted small ms-2"><?= h(__('admin.marketplace.sync_hint')) ?></span>
     <?php endif; ?>
 </div></div>

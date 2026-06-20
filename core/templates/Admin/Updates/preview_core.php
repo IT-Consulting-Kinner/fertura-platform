@@ -37,7 +37,7 @@ $blocked = $incompat !== [] && !$force;
                 <?= $this->Form->hidden('target_version', ['value' => $preview['target_version']]) ?>
                 <?= $this->Form->hidden('force', ['value' => $force ? '1' : '0']) ?>
                 <?= $this->Form->button($blocked ? __('admin.updates.force_anyway') : __('admin.updates.run_now'),
-                    ['class' => 'btn ' . ($blocked ? 'btn-danger' : 'btn-warning') . ' btn-sm', 'confirm' => __('admin.updates.confirm_core')]) ?>
+                    ['class' => 'btn ' . ($blocked ? 'btn-danger' : 'btn-warning') . ' btn-sm', 'data-confirm' => __('admin.updates.confirm_core'), 'data-confirm-variant' => $blocked ? 'btn-danger' : 'btn-warning']) ?>
             <?= $this->Form->end() ?>
         <?php endif; ?>
         <?= $this->Html->link(__('admin.updates.cancel'), ['action' => 'index'], ['class' => 'btn btn-outline-secondary btn-sm']) ?>

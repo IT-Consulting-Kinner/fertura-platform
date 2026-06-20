@@ -8,11 +8,7 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h1 class="h3 mb-0"><?= h(__('admin.search.title')) ?></h1>
     <?php if (in_array('core_config', $userAreas ?? [], true)): ?>
-        <?= $this->Form->postLink(
-            __('admin.search.reindex'),
-            ['action' => 'reindex'],
-            ['class' => 'btn btn-sm btn-outline-secondary', 'confirm' => __('admin.search.reindex_confirm')],
-        ) ?>
+        <?= $this->UiKit->confirmPost(__('admin.search.reindex'), ['action' => 'reindex'], __('admin.search.reindex_confirm'), ['class' => 'btn btn-sm btn-outline-secondary', 'variant' => 'btn-primary']) ?>
     <?php endif; ?>
 </div>
 

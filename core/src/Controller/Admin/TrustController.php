@@ -78,21 +78,35 @@ class TrustController extends AdminController
         return $this->redirect(['action' => 'index']);
     }
 
-    /** Adds a trust anchor (manual, out-of-band trust decision). */
+    /**
+     * Adds a **root** trust anchor (manual, out-of-band trust decision).
+     *
+     * Publisher anchors are deliberately refused here: they are only trustworthy
+     * with a verified Root->Publisher certificate chain
+     * (`TrustChain::verifyPublisherCert`), which is an operator/file concern and
+     * therefore CLI-only (`bin/cake trust add-anchor --cert`). Accepting one via
+     * the GUI would write `signed_by=NULL, key_signature=NULL` and bypass the chain
+     * verification that protects the module signature trust root — mirror the CLI's
+     * refusal (`TrustCommand::addAnchor`) instead.
+     */
     public function addAnchor(): ?Response
     {
         $this->request->allowMethod('post');
         $keyId = trim((string)$this->request->getData('key_id'));
         $publicKey = trim((string)$this->request->getData('public_key'));
         $type = (string)$this->request->getData('key_type');
-        $publisher = trim((string)$this->request->getData('publisher')) ?: null;
         if ($keyId === '' || $publicKey === '' || !in_array($type, ['root', 'publisher'], true)) {
             $this->Flash->error(__('flash.trust.add_fields'));
 
             return $this->redirect(['action' => 'index']);
         }
+        if ($type === 'publisher') {
+            $this->Flash->error(__('flash.trust.publisher_cli_only'));
+
+            return $this->redirect(['action' => 'index']);
+        }
         try {
-            (new TrustStore())->addAnchor($keyId, $publicKey, $type, $publisher);
+            (new TrustStore())->addAnchor($keyId, $publicKey, 'root');
             $this->Flash->success(__('flash.trust.added'));
         } catch (Throwable $e) {
             $this->Flash->error(__('flash.trust.add_failed', $e->getMessage()));

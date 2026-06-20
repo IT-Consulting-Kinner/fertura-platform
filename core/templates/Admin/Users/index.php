@@ -2,13 +2,38 @@
 /**
  * @var \App\View\AppView $this
  * @var array<int, array<string, mixed>> $users
+ * @var \App\Model\Entity\User $user      Empty entity (or, on a failed create, the one with errors).
+ * @var bool $openCreate                  Expand the create accordion (after a failed create).
  */
 $badge = ['active' => 'success', 'invited' => 'info', 'disabled' => 'secondary', 'anonymized' => 'dark'];
+$open = !empty($openCreate);
 ?>
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h1 class="h3 mb-0"><?= h(__('admin.users.title')) ?></h1>
-    <?= $this->Html->link(__('admin.users.new'), ['action' => 'add'], ['class' => 'btn btn-primary btn-sm']) ?>
+<h1 class="h3 mb-3"><?= h(__('admin.users.title')) ?></h1>
+
+<div class="accordion mb-4" id="userCreate">
+    <div class="accordion-item">
+        <h2 class="accordion-header">
+            <button class="accordion-button<?= $open ? '' : ' collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#createUser" aria-expanded="<?= $open ? 'true' : 'false' ?>" aria-controls="createUser">
+                <?= h(__('admin.users.new')) ?>
+            </button>
+        </h2>
+        <div id="createUser" class="accordion-collapse collapse<?= $open ? ' show' : '' ?>">
+            <div class="accordion-body" style="max-width:560px">
+                <?= $this->Form->create($user, ['url' => ['action' => 'add']]) ?>
+                <div class="mb-3"><?= $this->Form->control('username', ['class' => 'form-control', 'label' => __('admin.users.field_username')]) ?></div>
+                <div class="mb-3"><?= $this->Form->control('email', ['class' => 'form-control', 'label' => __('admin.users.field_email')]) ?></div>
+                <div class="row">
+                    <div class="col mb-3"><?= $this->Form->control('first_name', ['class' => 'form-control', 'label' => __('admin.users.field_first_name')]) ?></div>
+                    <div class="col mb-3"><?= $this->Form->control('last_name', ['class' => 'form-control', 'label' => __('admin.users.field_last_name')]) ?></div>
+                </div>
+                <p class="text-muted small"><?= __('admin.users.add_hint') ?></p>
+                <?= $this->Form->button(__('admin.users.add_submit'), ['class' => 'btn btn-primary']) ?>
+                <?= $this->Form->end() ?>
+            </div>
+        </div>
+    </div>
 </div>
+
 <table class="table table-hover align-middle">
     <thead><tr><th scope="col"><?= h(__('admin.users.col_username')) ?></th><th scope="col"><?= h(__('admin.users.col_name')) ?></th><th scope="col"><?= h(__('admin.users.col_email')) ?></th><th scope="col"><?= h(__('admin.users.col_status')) ?></th><th scope="col"></th></tr></thead>
     <tbody>

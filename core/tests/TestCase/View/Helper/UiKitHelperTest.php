@@ -108,7 +108,9 @@ class UiKitHelperTest extends TestCase
         ]);
         $this->assertStringContainsString('name="op" value="activate"', $bar);
         $this->assertStringContainsString('value="suspend"', $bar);
-        $this->assertStringContainsString('confirm(', $bar); // confirm dialog
+        // Destructive bulk action routes through the shared Bootstrap confirm modal
+        // (data-confirm, handled by admin.js) instead of native window.confirm().
+        $this->assertStringContainsString('data-confirm="Sicher?"', $bar);
     }
 
     public function testDetailRendersDefinitionList(): void

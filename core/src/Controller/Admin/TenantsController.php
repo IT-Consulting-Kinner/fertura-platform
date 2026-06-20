@@ -23,6 +23,12 @@ class TenantsController extends AdminController
 
     public function index(): void
     {
+        $this->renderList(false);
+    }
+
+    /** Renders the tenant list + the inline "create" accordion form. */
+    private function renderList(bool $openCreate): void
+    {
         $tenants = (new TenantService())->all();
 
         $sort = (string)$this->request->getQuery('sort', 'name');
@@ -50,6 +56,8 @@ class TenantsController extends AdminController
         $this->set(compact('tenants', 'allTenants', 'sort', 'dir', 'page', 'total'));
         $this->set('perPage', self::PER_PAGE);
         $this->set('query', $this->request->getQueryParams());
+        $this->set('openCreate', $openCreate);
+        $this->viewBuilder()->setTemplate('index');
     }
 
     /** Assigns a user (by email) to a tenant. */
@@ -86,11 +94,15 @@ class TenantsController extends AdminController
                 $this->request->getData('logo_url') !== null ? (string)$this->request->getData('logo_url') : null,
             );
             $this->Flash->success(__('flash.tenants.created'));
-        } catch (Throwable $e) {
-            $this->Flash->error($e->getMessage());
-        }
 
-        return $this->redirect(['action' => 'index']);
+            return $this->redirect(['action' => 'index']);
+        } catch (Throwable $e) {
+            // Re-render the list with the create accordion open and the input kept.
+            $this->Flash->error($e->getMessage());
+            $this->renderList(true);
+
+            return null;
+        }
     }
 
     /** Bulk action: activate or suspend the selected tenants. */

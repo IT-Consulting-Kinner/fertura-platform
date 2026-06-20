@@ -167,13 +167,13 @@ class LocalizationControllerTest extends TestCase
     {
         $this->login();
 
-        // GET: form renders with component selection.
+        // GET: the upload form now lives on the index page (accordion) -> redirect.
         $this->get('/admin/localization/import');
-        $this->assertResponseOk();
+        $this->assertRedirect(['action' => 'index']);
 
-        // Invalid locale -> back to the form.
+        // Invalid locale -> back to the index (accordion + flash).
         $this->post('/admin/localization/import', ['step' => 'preview', 'locale' => 'nope', 'component' => 'core', 'version' => '1.0.0']);
-        $this->assertRedirect(['action' => 'import']);
+        $this->assertRedirect(['action' => 'index']);
 
         // Commit step: token file already sits in the import buffer (as after preview).
         $token = bin2hex(random_bytes(16));

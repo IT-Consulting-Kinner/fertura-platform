@@ -17,7 +17,6 @@ $flag = static fn ($v) => filter_var($v, FILTER_VALIDATE_BOOLEAN) ? '✓' : '–
         <?= $this->Form->postLink($active ? __('admin.groups.deactivate') : __('admin.groups.activate'),
             ['action' => 'setActive', $group['id'], $active ? 'off' : 'on'],
             ['class' => 'btn btn-sm ' . ($active ? 'btn-warning' : 'btn-success')]) ?>
-        <?= $this->Html->link('&laquo; ' . __('admin.groups.backtolist'), ['action' => 'index'], ['class' => 'btn btn-outline-secondary btn-sm', 'escape' => false]) ?>
     </div>
 </div>
 
@@ -29,7 +28,7 @@ $flag = static fn ($v) => filter_var($v, FILTER_VALIDATE_BOOLEAN) ? '✓' : '–
                 <?php foreach ($members as $m): ?>
                     <li class="list-group-item d-flex justify-content-between align-items-center">
                         <span><?= h($m['username']) ?> <span class="text-muted small"><?= h($m['email']) ?></span></span>
-                        <?= $this->Form->postLink(__('admin.groups.member_remove'), ['action' => 'removeMember', $group['id'], $m['id']], ['class' => 'btn btn-outline-danger btn-sm']) ?>
+                        <?= $this->UiKit->confirmPost(__('admin.groups.member_remove'), ['action' => 'removeMember', $group['id'], $m['id']], __('admin.groups.member_remove_confirm'), ['class' => 'btn btn-outline-danger btn-sm']) ?>
                     </li>
                 <?php endforeach; ?>
                 <?php if ($members === []): ?><li class="list-group-item text-muted"><?= h(__('admin.groups.members_empty')) ?></li><?php endif; ?>
@@ -49,7 +48,7 @@ $flag = static fn ($v) => filter_var($v, FILTER_VALIDATE_BOOLEAN) ? '✓' : '–
         <div class="card mb-4">
             <div class="card-header"><?= h(__('admin.groups.perms_granted')) ?></div>
             <table class="table table-sm mb-0">
-                <thead><tr><th scope="col"><?= h(__('admin.groups.perms_col_resource')) ?></th><th scope="col"><?= h(__('admin.groups.perms_col_object')) ?></th><th scope="col" class="text-center">B</th><th scope="col" class="text-center">R</th><th scope="col" class="text-center">A</th><th scope="col" class="text-center">E</th><th scope="col" class="text-center">D</th><th scope="col"><?= h(__('admin.groups.perms_col_extra')) ?></th></tr></thead>
+                <thead><tr><th scope="col"><?= h(__('admin.groups.perms_col_resource')) ?></th><th scope="col"><?= h(__('admin.groups.perms_col_object')) ?></th><th scope="col" class="text-center"><abbr title="<?= h(__('admin.groups.perm_browse')) ?>">B</abbr></th><th scope="col" class="text-center"><abbr title="<?= h(__('admin.groups.perm_read')) ?>">R</abbr></th><th scope="col" class="text-center"><abbr title="<?= h(__('admin.groups.perm_add')) ?>">A</abbr></th><th scope="col" class="text-center"><abbr title="<?= h(__('admin.groups.perm_edit')) ?>">E</abbr></th><th scope="col" class="text-center"><abbr title="<?= h(__('admin.groups.perm_delete')) ?>">D</abbr></th><th scope="col"><?= h(__('admin.groups.perms_col_extra')) ?></th></tr></thead>
                 <tbody>
                 <?php foreach ($permissions as $p): ?>
                     <?php $ex = is_string($p['extra_actions'] ?? null) ? (json_decode((string)$p['extra_actions'], true) ?: []) : (array)($p['extra_actions'] ?? []); ?>
@@ -89,8 +88,8 @@ $flag = static fn ($v) => filter_var($v, FILTER_VALIDATE_BOOLEAN) ? '✓' : '–
                                 <?php if (filter_var($r['is_scoped'], FILTER_VALIDATE_BOOLEAN)): ?><span class="badge text-bg-light">scoped</span><?php endif; ?>
                             </div>
                             <?php foreach (['browse' => 'B', 'read' => 'R', 'add' => 'A', 'edit' => 'E', 'delete' => 'D'] as $a => $lbl): ?>
-                                <div class="form-check"><?= $this->Form->checkbox('can_' . $a, ['class' => 'form-check-input', 'id' => $rkey . '_' . $a]) ?>
-                                    <label class="form-check-label small" for="<?= $rkey . '_' . $a ?>"><?= $lbl ?></label></div>
+                                <div class="form-check"><?= $this->Form->checkbox('can_' . $a, ['class' => 'form-check-input', 'id' => $rkey . '_' . $a, 'aria-label' => __('admin.groups.perm_' . $a)]) ?>
+                                    <label class="form-check-label small" for="<?= $rkey . '_' . $a ?>" title="<?= h(__('admin.groups.perm_' . $a)) ?>"><?= $lbl ?></label></div>
                             <?php endforeach; ?>
                             <?php foreach (array_values($extra) as $ea): $ea = (string)$ea; if ($ea === '') { continue; } ?>
                                 <div class="form-check"><?= $this->Form->checkbox('extra[' . $ea . ']', ['class' => 'form-check-input', 'id' => $rkey . '_x_' . $ea]) ?>

@@ -104,12 +104,43 @@ class UiKitHelper extends Helper
             $attrs = 'type="submit" class="' . h((string)($b['class'] ?? 'btn btn-sm btn-outline-secondary')) . '"'
                 . ' name="' . h($name) . '" value="' . h((string)($b['value'] ?? '')) . '"';
             if (isset($b['confirm'])) {
-                $attrs .= ' onclick="return confirm(' . htmlspecialchars(json_encode((string)$b['confirm']) ?: '""', ENT_QUOTES) . ')"';
+                // Shared Bootstrap confirm modal (admin.js) instead of window.confirm().
+                $attrs .= ' data-confirm="' . h((string)$b['confirm']) . '"';
             }
             $out .= '<button ' . $attrs . '>' . h((string)($b['label'] ?? '')) . '</button> ';
         }
 
         return $out !== '' ? '<div class="btn-toolbar gap-2 mb-2">' . trim($out) . '</div>' : '';
+    }
+
+    /**
+     * A single destructive POST action as a standalone form + submit button that
+     * routes through the shared Bootstrap confirm modal (admin.js, [data-confirm])
+     * instead of `Form->postLink(['confirm'=>…])`'s native `window.confirm()`.
+     * CSRF is added by the FormHelper. Optional `variant` sets the modal OK button
+     * class (default btn-danger).
+     *
+     * @param array<string,mixed>|string $url
+     * @param array<string,mixed> $options class, variant, okLabel
+     */
+    public function confirmPost(string $label, array|string $url, string $confirm, array $options = []): string
+    {
+        $attrs = [
+            'type' => 'submit',
+            'class' => (string)($options['class'] ?? 'btn btn-sm btn-outline-danger'),
+            'data-confirm' => $confirm,
+            'escapeTitle' => false,
+        ];
+        if (isset($options['variant'])) {
+            $attrs['data-confirm-variant'] = (string)$options['variant'];
+        }
+        if (isset($options['okLabel'])) {
+            $attrs['data-confirm-ok'] = (string)$options['okLabel'];
+        }
+
+        return $this->Form->create(null, ['url' => $url, 'class' => 'd-inline'])
+            . $this->Form->button(h($label), $attrs)
+            . $this->Form->end();
     }
 
     /**
@@ -289,6 +320,19 @@ class UiKitHelper extends Helper
     }
 
     /**
+     * Standard active/inactive status badge (green/grey), so every admin list
+     * renders the same status pill instead of plain text or ad-hoc variants.
+     * Accepts a bool or a truthy DB value (`'t'`, `'true'`, `1`, …).
+     */
+    public function activeBadge(mixed $active, ?string $activeLabel = null, ?string $inactiveLabel = null): string
+    {
+        $on = filter_var($active, FILTER_VALIDATE_BOOLEAN);
+        $label = $on ? ($activeLabel ?? __d('default', 'uikit.yes')) : ($inactiveLabel ?? __d('default', 'uikit.no'));
+
+        return '<span class="badge text-bg-' . ($on ? 'success' : 'secondary') . '">' . h((string)$label) . '</span>';
+    }
+
+    /**
      * Formats a single value HTML-safe according to its type.
      */
     public function value(mixed $val, string $type = 'text'): string
@@ -348,7 +392,8 @@ class UiKitHelper extends Helper
             $url = isset($a['url']) && is_callable($a['url']) ? ($a['url'])($row) : ($a['url'] ?? '#');
             $attr = ['class' => (string)($a['class'] ?? 'btn btn-sm btn-outline-secondary')];
             if (isset($a['confirm'])) {
-                $attr['confirm'] = (string)$a['confirm'];
+                // Route through the shared confirm modal (admin.js) instead of native confirm.
+                $attr['data-confirm'] = (string)$a['confirm'];
             }
             $out .= $this->Html->link((string)($a['label'] ?? ''), $url, $attr) . ' ';
         }

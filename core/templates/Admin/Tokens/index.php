@@ -17,30 +17,39 @@
     </div>
 <?php endif; ?>
 
-<div class="card mb-4" style="max-width:720px">
-    <div class="card-header"><?= h(__('admin.tokens.create_heading')) ?></div>
-    <div class="card-body">
-        <?= $this->Form->create(null, ['url' => ['action' => 'create']]) ?>
-        <div class="mb-3">
-            <label class="form-label"><?= h(__('admin.tokens.label')) ?></label>
-            <?= $this->Form->control('label', ['label' => false, 'class' => 'form-control', 'placeholder' => 'CI deploy bot']) ?>
-        </div>
-        <div class="mb-3">
-            <label class="form-label"><?= h(__('admin.tokens.scopes')) ?></label>
-            <?php foreach ($knownScopes as $s): ?>
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" name="scopes[]" value="<?= h($s) ?>" id="sc_<?= h($s) ?>">
-                    <label class="form-check-label" for="sc_<?= h($s) ?>"><code><?= h($s) ?></code></label>
+<?php $open = !empty($openCreate); ?>
+<div class="accordion mb-4" id="tokenCreate">
+    <div class="accordion-item">
+        <h2 class="accordion-header">
+            <button class="accordion-button<?= $open ? '' : ' collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#createToken" aria-expanded="<?= $open ? 'true' : 'false' ?>" aria-controls="createToken">
+                <?= h(__('admin.tokens.create_heading')) ?>
+            </button>
+        </h2>
+        <div id="createToken" class="accordion-collapse collapse<?= $open ? ' show' : '' ?>">
+            <div class="accordion-body mw-lg">
+                <?= $this->Form->create(null, ['url' => ['action' => 'create']]) ?>
+                <div class="mb-3">
+                    <label class="form-label"><?= h(__('admin.tokens.label')) ?></label>
+                    <?= $this->Form->control('label', ['label' => false, 'class' => 'form-control', 'placeholder' => 'CI deploy bot']) ?>
                 </div>
-            <?php endforeach; ?>
+                <div class="mb-3">
+                    <label class="form-label"><?= h(__('admin.tokens.scopes')) ?></label>
+                    <?php foreach ($knownScopes as $s): ?>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="scopes[]" value="<?= h($s) ?>" id="sc_<?= h($s) ?>">
+                            <label class="form-check-label" for="sc_<?= h($s) ?>"><code><?= h($s) ?></code></label>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label" for="tokenExpires"><?= h(__('admin.tokens.expires')) ?></label>
+                    <input type="date" name="expires_at" id="tokenExpires" class="form-control mw-sm">
+                    <div class="form-text"><?= h(__('admin.tokens.expires_hint')) ?></div>
+                </div>
+                <?= $this->Form->button(__('admin.tokens.create'), ['class' => 'btn btn-primary']) ?>
+                <?= $this->Form->end() ?>
+            </div>
         </div>
-        <div class="mb-3">
-            <label class="form-label"><?= h(__('admin.tokens.expires')) ?></label>
-            <input type="date" name="expires_at" class="form-control" style="max-width:220px">
-            <div class="form-text"><?= h(__('admin.tokens.expires_hint')) ?></div>
-        </div>
-        <?= $this->Form->button(__('admin.tokens.create'), ['class' => 'btn btn-primary']) ?>
-        <?= $this->Form->end() ?>
     </div>
 </div>
 
@@ -71,8 +80,7 @@
             </td>
             <td class="text-end">
                 <?php if (!$revoked): ?>
-                    <?= $this->Form->postLink(__('admin.tokens.revoke'), ['action' => 'revoke', $t['id']],
-                        ['class' => 'btn btn-outline-danger btn-sm', 'confirm' => __('admin.tokens.confirm_revoke')]) ?>
+                    <?= $this->UiKit->confirmPost(__('admin.tokens.revoke'), ['action' => 'revoke', $t['id']], __('admin.tokens.confirm_revoke'), ['class' => 'btn btn-outline-danger btn-sm']) ?>
                 <?php endif; ?>
             </td>
         </tr>

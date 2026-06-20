@@ -37,7 +37,7 @@
             <?= $this->Form->create(null, ['url' => ['action' => 'module']]) ?>
                 <?= $this->Form->hidden('module_key', ['value' => $preview['module_key']]) ?>
                 <?= $this->Form->hidden('source_path', ['value' => $sourcePath]) ?>
-                <?= $this->Form->button(__('admin.updates.run_now'), ['class' => 'btn btn-primary btn-sm', 'confirm' => __('admin.updates.confirm_module')]) ?>
+                <?= $this->Form->button(__('admin.updates.run_now'), ['class' => 'btn btn-primary btn-sm', 'data-confirm' => __('admin.updates.confirm_module'), 'data-confirm-variant' => 'btn-warning']) ?>
             <?= $this->Form->end() ?>
         <?php else: ?>
             <span class="text-danger small align-self-center"><?= h(__('admin.updates.blocked_fix')) ?></span>

@@ -14,6 +14,30 @@
 <h1 class="h3 mb-3"><?= h(__('admin.tenants.title')) ?></h1>
 <p class="text-muted small"><?= h(__('admin.tenants.hint')) ?></p>
 
+<?php $open = !empty($openCreate); ?>
+<div class="accordion mb-4" id="tenantCreate">
+    <div class="accordion-item">
+        <h2 class="accordion-header">
+            <button class="accordion-button<?= $open ? '' : ' collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#createTenant" aria-expanded="<?= $open ? 'true' : 'false' ?>" aria-controls="createTenant">
+                <?= h(__('admin.tenants.add_title')) ?>
+            </button>
+        </h2>
+        <div id="createTenant" class="accordion-collapse collapse<?= $open ? ' show' : '' ?>">
+            <div class="accordion-body">
+                <?= $this->Form->create(null, ['url' => ['action' => 'add'], 'class' => 'mw-md']) ?>
+                <?= $this->UiKit->fields([
+                    ['key' => 'key', 'label' => __('admin.tenants.col_key'), 'required' => true, 'help' => __('admin.tenants.key_help')],
+                    ['key' => 'name', 'label' => __('admin.tenants.col_name'), 'required' => true],
+                    ['key' => 'brand_name', 'label' => __('admin.tenants.brand_name'), 'help' => __('admin.tenants.brand_help')],
+                    ['key' => 'logo_url', 'label' => __('admin.tenants.logo_url')],
+                ]) ?>
+                <?= $this->Form->button(__('admin.tenants.btn_add'), ['class' => 'btn btn-primary']) ?>
+                <?= $this->Form->end() ?>
+            </div>
+        </div>
+    </div>
+</div>
+
 <?= $this->Form->create(null, ['url' => ['action' => 'bulk']]) ?>
 <?= $this->UiKit->bulkActions([
     ['value' => 'activate', 'label' => __('admin.tenants.bulk_activate'), 'class' => 'btn btn-sm btn-outline-success'],
@@ -59,16 +83,4 @@
         <?= $this->Form->select('tenant_id', $allTenants, ['class' => 'form-select form-select-sm', 'required' => true]) ?>
     </div>
     <div class="col-auto"><?= $this->Form->button(__('admin.tenants.assign_btn'), ['class' => 'btn btn-outline-primary btn-sm']) ?></div>
-<?= $this->Form->end() ?>
-
-<hr class="my-4">
-<h2 class="h5 mb-3"><?= h(__('admin.tenants.add_title')) ?></h2>
-<?= $this->Form->create(null, ['url' => ['action' => 'add'], 'class' => 'col-md-6']) ?>
-<?= $this->UiKit->fields([
-    ['key' => 'key', 'label' => __('admin.tenants.col_key'), 'required' => true, 'help' => __('admin.tenants.key_help')],
-    ['key' => 'name', 'label' => __('admin.tenants.col_name'), 'required' => true],
-    ['key' => 'brand_name', 'label' => __('admin.tenants.brand_name'), 'help' => __('admin.tenants.brand_help')],
-    ['key' => 'logo_url', 'label' => __('admin.tenants.logo_url')],
-]) ?>
-<?= $this->Form->button(__('admin.tenants.btn_add'), ['class' => 'btn btn-primary']) ?>
 <?= $this->Form->end() ?>
