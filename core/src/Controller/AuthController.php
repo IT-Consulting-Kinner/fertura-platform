@@ -5,6 +5,7 @@ namespace App\Controller;
 
 use App\Auth\LoginThrottle;
 use App\Service\Auth\Sso\SsoService;
+use App\Service\I18n\LocaleCookie;
 use App\Service\Identity\PasswordResetService;
 use App\Service\Mail\MailService;
 use App\Service\Security\MfaService;
@@ -13,6 +14,7 @@ use App\Service\Tenant\TenantService;
 use Cake\Datasource\ConnectionManager;
 use Cake\Event\EventInterface;
 use Cake\Http\Response;
+use Cake\I18n\I18n;
 use Throwable;
 
 /**
@@ -103,7 +105,7 @@ class AuthController extends AppController
                 return $this->redirect('/mfa');
             }
 
-            return $this->redirect($target);
+            return $this->rememberLoginLocale($this->redirect($target));
         }
 
         if ($this->request->is('post')) {
@@ -114,6 +116,17 @@ class AuthController extends AppController
         }
 
         return null;
+    }
+
+    /**
+     * Persists the language the login mask was shown in into the remembering
+     * cookie, so the session continues in that language after login (and the
+     * choice survives a later logout). The active locale was already validated
+     * against `locale.enabled` by the LocaleMiddleware.
+     */
+    private function rememberLoginLocale(Response $response): Response
+    {
+        return $response->withCookie(LocaleCookie::make(I18n::getLocale()));
     }
 
     /**
@@ -187,7 +200,7 @@ class AuthController extends AppController
         $session->renew();
         $this->Authentication->setIdentity($user);
 
-        return $this->redirect((string)$pending['target'] ?: '/admin');
+        return $this->rememberLoginLocale($this->redirect((string)$pending['target'] ?: '/admin'));
     }
 
     /**

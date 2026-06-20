@@ -58,5 +58,33 @@ class LocalAuthProvider implements AuthProviderInterface
             'loginUrl' => '/login',
             'identifier' => $identifier,
         ]);
+
+        // Remember-me ("Angemeldet bleiben"): a signed long-lived cookie restores
+        // the identity after the session expires, but ONLY when the user ticked the
+        // `remember_me` box at login — the FormAuthenticator persists the cookie on
+        // success only if that field is truthy. Loaded after Form so a fresh GET
+        // (no POST data) lets the cookie authenticate. Cookie hardening mirrors the
+        // session cookie (config/app.php): HttpOnly + SameSite=Lax always, Secure
+        // once TLS is terminated (SESSION_COOKIE_SECURE=1); local HTTP dev stays usable.
+        $service->loadAuthenticator('Authentication.Cookie', [
+            'rememberMeField' => 'remember_me',
+            // The token is built from these *entity* fields (username + stored
+            // hash), so `password` must map to the actual column `password_hash`
+            // (not the form field) — otherwise _createPlainToken cannot read it.
+            // Changing the password rotates the hash and invalidates the cookie.
+            'fields' => [
+                'username' => 'username',
+                'password' => 'password_hash',
+            ],
+            'loginUrl' => '/login',
+            'identifier' => $identifier,
+            'cookie' => [
+                'name' => 'remember_me',
+                'expires' => '+30 days',
+                'httponly' => true,
+                'samesite' => 'Lax',
+                'secure' => filter_var(env('SESSION_COOKIE_SECURE', false), FILTER_VALIDATE_BOOL),
+            ],
+        ]);
     }
 }

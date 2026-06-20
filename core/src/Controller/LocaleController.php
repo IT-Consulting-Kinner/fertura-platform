@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Infrastructure\Db;
+use App\Service\I18n\LocaleCookie;
 use App\Service\Settings\SettingsManager;
 use Cake\Http\Response;
 
@@ -22,6 +23,9 @@ class LocaleController extends AppController
         $lang = (string)$this->request->getData('lang');
         $enabled = array_map('strval', (array)(new SettingsManager())->get('core', 'locale.enabled', ['en_US', 'de_DE']));
 
+        $referer = $this->request->referer();
+        $response = $this->redirect($referer ?: '/admin');
+
         if (in_array($lang, $enabled, true)) {
             $this->request->getSession()->write('locale', $lang);
             $identity = $this->identity();
@@ -34,10 +38,11 @@ class LocaleController extends AppController
                     ['l' => $lang, 'u' => (string)$identity->getIdentifier()],
                 );
             }
+            // Also remember the choice in the cookie read by LocaleMiddleware, so
+            // it survives a logout (the login mask then keeps the chosen language).
+            $response = $response->withCookie(LocaleCookie::make($lang));
         }
 
-        $referer = $this->request->referer();
-
-        return $this->redirect($referer ?: '/admin');
+        return $response;
     }
 }

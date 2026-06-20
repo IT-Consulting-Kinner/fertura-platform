@@ -32,6 +32,10 @@
         <label class="form-label" for="password"><?= __('auth.login.password') ?></label>
         <?= $this->Form->control('password', ['label' => false, 'type' => 'password', 'class' => 'form-control', 'required' => true]) ?>
     </div>
+    <div class="mb-3 form-check">
+        <?= $this->Form->checkbox('remember_me', ['class' => 'form-check-input', 'id' => 'remember_me']) ?>
+        <label class="form-check-label" for="remember_me"><?= __('auth.login.remember_me') ?></label>
+    </div>
     <?= $this->Form->button(__('auth.login.submit'), ['class' => 'btn btn-primary w-100']) ?>
 <?= $this->Form->end() ?>
 <p class="text-center mt-3 mb-0"><a href="/forgot-password"><?= __('auth.login.forgot') ?></a></p>

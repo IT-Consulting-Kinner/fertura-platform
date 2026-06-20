@@ -4,9 +4,9 @@
  * @var list<string> $locales
  * @var string $current
  * @var bool $persist
- * @var string $style  'buttons' (no-JS inline buttons) | 'select' (a dropdown
- *                      that switches on change). Both styles work anonymously
- *                      (login/public, GET ?lang=) and logged-in (POST, persisted).
+ * @var string $style  'select' (a dropdown switching on change — GET form on the
+ *                      login mask, POST in the admin shell) | 'buttons' (legacy
+ *                      no-JS inline button list)
  */
 use App\Service\I18n\LocaleResolver;
 
@@ -14,15 +14,16 @@ if (count($locales) < 2) {
     return; // nichts umzuschalten
 }
 
-// A select showing the active language, switching on change. Logged-in (persist):
-// POST /locale/change (stored as user.locale). Anonymous (login/public): GET
-// ?lang= (session-only switch, handled by LocaleMiddleware) — no form/CSRF needed.
+// Select style: a dropdown showing the active language, switching on change.
 if (($style ?? 'buttons') === 'select') {
     $options = [];
     foreach ($locales as $loc) {
         $options[$loc] = LocaleResolver::displayName($loc);
     }
+
     if ($persist) {
+        // Admin shell (authenticated): the choice is persisted (POST to
+        // /locale/change → session + user.locale + remembering cookie).
         echo $this->Form->create(null, ['url' => '/locale/change', 'class' => 'm-0']);
         echo $this->Form->control('lang', [
             'type' => 'select',
@@ -34,21 +35,31 @@ if (($style ?? 'buttons') === 'select') {
             'aria-label' => __('locale.switch'),
         ]);
         echo $this->Form->end();
-    } else {
-        $out = '<select class="form-select form-select-sm locale-select" aria-label="'
-            . h(__('locale.switch'))
-            . '" onchange="location.href=\'?lang=\'+encodeURIComponent(this.value)">';
-        foreach ($options as $code => $name) {
-            $out .= sprintf(
-                '<option value="%s"%s>%s</option>',
-                h((string)$code),
-                $code === $current ? ' selected' : '',
-                h((string)$name),
-            );
-        }
-        $out .= '</select>';
-        echo $out;
+
+        return;
     }
+
+    // Public/login (anonymous): a GET form back to the current page switches via
+    // ?lang (LocaleMiddleware applies it + drops the remembering cookie),
+    // auto-submitting on change (like the admin shell). Existing query params
+    // (e.g. ?redirect=) are carried over as hidden fields so the GET submit
+    // (which drops the action's query string) keeps them.
+    echo $this->Form->create(null, ['type' => 'get', 'url' => $this->request->getPath(), 'class' => 'm-0']);
+    foreach ($this->request->getQueryParams() as $k => $v) {
+        if ($k !== 'lang' && is_string($v)) {
+            echo $this->Form->hidden($k, ['value' => $v]);
+        }
+    }
+    echo $this->Form->control('lang', [
+        'type' => 'select',
+        'options' => $options,
+        'value' => $current,
+        'label' => false,
+        'class' => 'form-select form-select-sm locale-select',
+        'onchange' => 'this.form.submit()',
+        'aria-label' => __('locale.switch'),
+    ]);
+    echo $this->Form->end();
 
     return;
 }
