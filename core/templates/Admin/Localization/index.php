@@ -100,7 +100,7 @@ foreach ($installed as $ic) {
                     <?php foreach ($c['shipped'] as $l): ?><span class="badge text-bg-light border"><?= h($l) ?></span> <?php endforeach; ?>
                 </div>
             <?php endif; ?>
-            <table class="table table-sm align-middle mb-0">
+            <table class="table table-sm table-hover align-middle mb-0">
                 <thead>
                     <tr>
                         <th scope="col"><?= h(__('admin.localization.col_locale')) ?></th>

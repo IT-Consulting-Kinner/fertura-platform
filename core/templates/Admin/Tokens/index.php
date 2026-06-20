@@ -55,7 +55,7 @@
 
 <h2 class="h5"><?= h(__('admin.tokens.list_heading')) ?></h2>
 <div class="table-responsive">
-<table class="table table-sm align-middle">
+<table class="table table-sm table-hover align-middle">
     <thead><tr>
         <th scope="col"><?= h(__('admin.tokens.col_label')) ?></th>
         <th scope="col"><?= h(__('admin.tokens.col_scopes')) ?></th>

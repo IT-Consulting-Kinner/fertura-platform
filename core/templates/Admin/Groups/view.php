@@ -47,7 +47,7 @@ $flag = static fn ($v) => filter_var($v, FILTER_VALIDATE_BOOLEAN) ? '✓' : '–
     <div class="col-md-7">
         <div class="card mb-4">
             <div class="card-header"><?= h(__('admin.groups.perms_granted')) ?></div>
-            <table class="table table-sm mb-0">
+            <table class="table table-sm table-hover mb-0">
                 <thead><tr><th scope="col"><?= h(__('admin.groups.perms_col_resource')) ?></th><th scope="col"><?= h(__('admin.groups.perms_col_object')) ?></th><th scope="col" class="text-center"><abbr title="<?= h(__('admin.groups.perm_browse')) ?>">B</abbr></th><th scope="col" class="text-center"><abbr title="<?= h(__('admin.groups.perm_read')) ?>">R</abbr></th><th scope="col" class="text-center"><abbr title="<?= h(__('admin.groups.perm_add')) ?>">A</abbr></th><th scope="col" class="text-center"><abbr title="<?= h(__('admin.groups.perm_edit')) ?>">E</abbr></th><th scope="col" class="text-center"><abbr title="<?= h(__('admin.groups.perm_delete')) ?>">D</abbr></th><th scope="col"><?= h(__('admin.groups.perms_col_extra')) ?></th></tr></thead>
                 <tbody>
                 <?php foreach ($permissions as $p): ?>

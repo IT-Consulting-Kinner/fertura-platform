@@ -8,7 +8,7 @@
 <p class="text-muted small"><?= h(__('admin.config.intro')) ?></p>
 
 <div class="table-responsive">
-<table class="table align-middle">
+<table class="table table-hover align-middle">
     <thead><tr><th scope="col"><?= h(__('admin.config.col_key')) ?></th><th scope="col"><?= h(__('admin.config.col_type')) ?></th><th scope="col"><?= h(__('admin.config.col_default')) ?></th><th scope="col" style="min-width:280px"><?= h(__('admin.config.col_value')) ?></th></tr></thead>
     <tbody>
     <?php foreach ($settings as $s): ?>
@@ -25,7 +25,8 @@
                 <?= $this->Form->hidden('key', ['value' => $s['key']]) ?>
                 <?php if ($s['type'] === 'bool'): ?>
                     <?= $this->Form->select('value', ['1' => 'true', '0' => 'false'],
-                        ['value' => filter_var($s['value'], FILTER_VALIDATE_BOOLEAN) ? '1' : '0', 'class' => 'form-select form-select-sm']) ?>
+                        ['value' => filter_var($s['value'], FILTER_VALIDATE_BOOLEAN) ? '1' : '0', 'class' => 'form-select form-select-sm',
+                            'aria-label' => $s['namespace'] . '.' . $s['key']]) ?>
                 <?php else: ?>
                     <?= $this->Form->control('value', [
                         'label' => false,
@@ -33,6 +34,7 @@
                         'value' => $s['secret'] ? '' : $s['value'],
                         'placeholder' => $s['secret'] ? ($s['value'] !== null ? __('admin.config.secret_set') : __('admin.config.secret_unset')) : '',
                         'class' => 'form-control form-control-sm',
+                        'aria-label' => $s['namespace'] . '.' . $s['key'],
                     ]) ?>
                 <?php endif; ?>
                 <?= $this->Form->button(__('admin.config.save'), ['class' => 'btn btn-outline-primary btn-sm']) ?>

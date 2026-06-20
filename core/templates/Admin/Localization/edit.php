@@ -23,7 +23,7 @@
     '?' => ['component' => $component, 'version' => $version, 'locale' => $locale, 'domain' => $domain],
 ]]) ?>
 <div class="table-responsive">
-<table class="table align-middle" id="langTable">
+<table class="table table-hover align-middle" id="langTable">
     <thead><tr>
         <th scope="col" style="width:40%"><?= h(__('admin.localization.col_key')) ?></th>
         <th scope="col"><?= h(__('admin.localization.col_translation')) ?></th>

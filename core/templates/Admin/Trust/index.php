@@ -19,7 +19,7 @@
 </p>
 
 <h2 class="h5 mt-4"><?= h(__('admin.trust.anchors')) ?></h2>
-<div class="table-responsive"><table class="table table-sm align-middle">
+<div class="table-responsive"><table class="table table-sm table-hover align-middle">
     <thead><tr>
         <th scope="col">Key-ID</th><th scope="col"><?= h(__('admin.trust.col_type')) ?></th>
         <th scope="col">Publisher</th><th scope="col"><?= h(__('admin.trust.col_validity')) ?></th>
@@ -78,7 +78,7 @@
 </div>
 
 <h2 class="h5 mt-4"><?= h(__('admin.trust.revoked_list')) ?></h2>
-<div class="table-responsive"><table class="table table-sm align-middle">
+<div class="table-responsive"><table class="table table-sm table-hover align-middle">
     <thead><tr><th scope="col">Key-ID</th><th scope="col"><?= h(__('admin.trust.col_reason')) ?></th><th scope="col"><?= h(__('admin.trust.col_source')) ?></th><th scope="col"><?= h(__('admin.trust.col_revoked_at')) ?></th></tr></thead>
     <tbody>
     <?php foreach ($revoked as $r): ?>

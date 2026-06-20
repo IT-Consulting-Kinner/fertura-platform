@@ -18,7 +18,7 @@ $badge = static fn (bool $a): string => $a
 <?php if ($webhooks === []): ?>
     <p class="text-muted"><?= h(__('admin.integrations.none')) ?></p>
 <?php else: ?>
-<div class="table-responsive"><table class="table table-sm align-middle">
+<div class="table-responsive"><table class="table table-sm table-hover align-middle">
     <thead><tr><th scope="col">Name</th><th scope="col">URL</th><th scope="col">Events</th><th scope="col"><?= h(__('admin.integrations.status')) ?></th><th scope="col" class="text-end"></th></tr></thead>
     <tbody>
     <?php foreach ($webhooks as $w): ?>
@@ -64,7 +64,7 @@ $badge = static fn (bool $a): string => $a
 <?php if ($deliveries === []): ?>
     <p class="text-muted"><?= h(__('admin.integrations.none')) ?></p>
 <?php else: ?>
-<div class="table-responsive"><table class="table table-sm align-middle">
+<div class="table-responsive"><table class="table table-sm table-hover align-middle">
     <thead><tr><th scope="col">Event</th><th scope="col"><?= h(__('admin.integrations.status')) ?></th><th scope="col">HTTP</th><th scope="col">Versuche</th><th scope="col" class="text-end"></th></tr></thead>
     <tbody>
     <?php foreach ($deliveries as $d): ?>
@@ -88,7 +88,7 @@ $badge = static fn (bool $a): string => $a
 <?php if ($ssoProviders === []): ?>
     <p class="text-muted"><?= h(__('admin.integrations.none')) ?></p>
 <?php else: ?>
-<div class="table-responsive"><table class="table table-sm align-middle">
+<div class="table-responsive"><table class="table table-sm table-hover align-middle">
     <thead><tr><th scope="col">Name</th><th scope="col">Typ</th><th scope="col"><?= h(__('admin.integrations.status')) ?></th><th scope="col" class="text-end"></th></tr></thead>
     <tbody>
     <?php foreach ($ssoProviders as $p): ?>
@@ -164,7 +164,7 @@ $badge = static fn (bool $a): string => $a
 <?php if ($automationRules === []): ?>
     <p class="text-muted"><?= h(__('admin.integrations.none')) ?></p>
 <?php else: ?>
-<div class="table-responsive"><table class="table table-sm align-middle">
+<div class="table-responsive"><table class="table table-sm table-hover align-middle">
     <thead><tr><th scope="col">Name</th><th scope="col">Event</th><th scope="col"><?= h(__('admin.integrations.status')) ?></th><th scope="col" class="text-end"></th></tr></thead>
     <tbody>
     <?php foreach ($automationRules as $r): ?>
@@ -211,7 +211,7 @@ $badge = static fn (bool $a): string => $a
 <?php if ($workflows === []): ?>
     <p class="text-muted"><?= h(__('admin.integrations.none')) ?></p>
 <?php else: ?>
-<div class="table-responsive"><table class="table table-sm align-middle">
+<div class="table-responsive"><table class="table table-sm table-hover align-middle">
     <thead><tr><th scope="col">Name</th><th scope="col">Entity</th><th scope="col">Start</th><th scope="col"><?= h(__('admin.integrations.status')) ?></th><th scope="col" class="text-end"></th></tr></thead>
     <tbody>
     <?php foreach ($workflows as $w): ?>

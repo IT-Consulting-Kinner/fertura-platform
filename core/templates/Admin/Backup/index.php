@@ -78,7 +78,7 @@ $human = static function ($b): string {
     <code>bin/cake backup restore --from &lt;pfad.zip&gt; --yes</code></div>
 
 <div class="table-responsive">
-<table class="table table-sm align-middle">
+<table class="table table-sm table-hover align-middle">
     <thead><tr>
         <th scope="col"><?= h(__('admin.backup.col_created')) ?></th>
         <th scope="col"><?= h(__('admin.backup.col_id')) ?></th>
@@ -123,7 +123,7 @@ $human = static function ($b): string {
 
 <?php if (!empty($offsiteEnabled)): ?>
 <h2 class="h5 mt-4"><?= h(__('admin.backup.offsite_heading')) ?></h2>
-<div class="table-responsive"><table class="table table-sm align-middle">
+<div class="table-responsive"><table class="table table-sm table-hover align-middle">
     <thead><tr><th scope="col"><?= h(__('admin.backup.offsite_col_name')) ?></th><th scope="col" class="text-end"></th></tr></thead>
     <tbody>
     <?php foreach (($offsiteBackups ?? []) as $name): $base = basename((string)$name); ?>
@@ -141,7 +141,7 @@ $human = static function ($b): string {
 
 <h2 class="h5 mt-4"><?= h(__('admin.backup.log_heading')) ?></h2>
 <div class="table-responsive">
-<table class="table table-sm align-middle">
+<table class="table table-sm table-hover align-middle">
     <thead><tr>
         <th scope="col"><?= h(__('admin.backup.log_time')) ?></th>
         <th scope="col"><?= h(__('admin.backup.log_operation')) ?></th>

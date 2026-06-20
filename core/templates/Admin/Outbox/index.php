@@ -29,7 +29,7 @@
     <div class="alert alert-success"><?= h(__('admin.outbox.deadletter_empty')) ?></div>
 <?php else: ?>
 <div class="table-responsive">
-<table class="table table-sm align-middle">
+<table class="table table-sm table-hover align-middle">
     <thead><tr>
         <th scope="col"><?= h(__('admin.outbox.col_created')) ?></th>
         <th scope="col"><?= h(__('admin.outbox.col_contract')) ?></th>
