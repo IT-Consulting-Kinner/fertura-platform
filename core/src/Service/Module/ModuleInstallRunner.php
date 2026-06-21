@@ -32,19 +32,39 @@ class ModuleInstallRunner
             return null;
         }
         $id = (string)$job['id'];
-        $workDir = null;
         try {
-            $workDir = $this->extract((string)$job['package_path']);
-            $sourceDir = $this->locateManifestDir($workDir);
-            $mod = $this->lifecycle->install($sourceDir, (string)$job['isolation']);
+            $mod = $this->installPackage((string)$job['package_path'], (string)$job['isolation']);
             $this->jobs->markSucceeded($id, (string)$mod['module_key']);
         } catch (Throwable $e) {
             $this->jobs->markFailed($id, $e->getMessage());
         } finally {
-            $this->cleanup($workDir, (string)$job['package_path']);
+            @unlink((string)$job['package_path']);
         }
 
         return $id;
+    }
+
+    /**
+     * Extracts a signed package zip and runs the DDL-heavy lifecycle install. Shared
+     * by the standalone worker job ({@see tick()}) and the maintenance critical-action
+     * handler ({@see \App\Service\System\ModuleInstallHandler}). Removes only the work
+     * dir — the caller owns the source zip's lifecycle.
+     *
+     * @return array<string, mixed> the installed module row
+     */
+    public function installPackage(string $packagePath, string $isolation): array
+    {
+        $workDir = null;
+        try {
+            $workDir = $this->extract($packagePath);
+            $sourceDir = $this->locateManifestDir($workDir);
+
+            return $this->lifecycle->install($sourceDir, $isolation);
+        } finally {
+            if ($workDir !== null && is_dir($workDir)) {
+                $this->rrmdir($workDir);
+            }
+        }
     }
 
     /** Extracts the .zip into a fresh working directory (zip-slip guarded). */
@@ -90,14 +110,6 @@ class ModuleInstallRunner
             return $subDirs[0];
         }
         throw new LifecycleException('manifest.json im Paket nicht gefunden.');
-    }
-
-    private function cleanup(?string $workDir, string $zipPath): void
-    {
-        if ($workDir !== null && is_dir($workDir)) {
-            $this->rrmdir($workDir);
-        }
-        @unlink($zipPath);
     }
 
     private function rrmdir(string $dir): void

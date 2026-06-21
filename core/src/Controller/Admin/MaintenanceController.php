@@ -28,14 +28,17 @@ class MaintenanceController extends AdminController
     {
         $session = (new MaintenanceService())->activeSession();
         $blocking = 0;
+        $actionList = [];
         if ($session !== null) {
             $actions = new CriticalActionService();
-            $actions->recoverStale(); // reflect crashed actions in the view
+            $actions->maintenanceRecoverStale(); // reflect crashed actions in the view
             $blocking = $actions->nonTerminalCount((string)$session['id']);
+            $actionList = $actions->forSession((string)$session['id']);
         }
         $this->set('session', $session);
         $this->set('quiesce', $session !== null ? (new QuiesceService())->status() : null);
         $this->set('blockingActions', $blocking);
+        $this->set('actions', $actionList);
     }
 
     /**
@@ -92,7 +95,7 @@ class MaintenanceController extends AdminController
         // Exit only when stable (decision #4): sweep crashed actions first so a dead
         // process cannot deadlock the exit, then close ATOMICALLY — the close happens
         // only if nothing of this session is still in flight (one conditional UPDATE).
-        (new CriticalActionService())->recoverStale();
+        (new CriticalActionService())->maintenanceRecoverStale();
         if (!$maint->releaseIfStable((string)$session['id'])) {
             $this->Flash->error(__('flash.maintenance.action_in_progress'));
 
@@ -109,6 +112,59 @@ class MaintenanceController extends AdminController
         return $redirect->withCookie(AllowTokenCookie::expire());
     }
 
+    /**
+     * Queues a PROTECTED module install as a critical action (Phase 6). Only while
+     * maintenance is engaged: the upload is stored and a `module_install`
+     * critical_action is enqueued; the worker runs it (backup → install → verify →
+     * rollback) once the platform has drained, and the exit gate blocks release until
+     * it reaches a terminal state.
+     */
+    public function installModule(): ?Response
+    {
+        $this->request->allowMethod('post');
+
+        $session = (new MaintenanceService())->activeSession();
+        if ($session === null) {
+            $this->Flash->error(__('flash.maintenance.not_active'));
+
+            return $this->redirect(['action' => 'index']);
+        }
+        $file = $this->request->getUploadedFile('package');
+        if ($file === null || $file->getError() !== UPLOAD_ERR_OK) {
+            $this->Flash->error(__('flash.module.no_package'));
+
+            return $this->redirect(['action' => 'index']);
+        }
+        if (strtolower(pathinfo((string)$file->getClientFilename(), PATHINFO_EXTENSION)) !== 'zip') {
+            $this->Flash->error(__('flash.module.not_zip'));
+
+            return $this->redirect(['action' => 'index']);
+        }
+        $isolation = (string)$this->request->getData('isolation') === 'out_of_process' ? 'out_of_process' : 'in_process';
+
+        $dir = TMP . 'module_uploads';
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0o775, true);
+        }
+        $path = $dir . DIRECTORY_SEPARATOR . bin2hex(random_bytes(16)) . '.zip';
+        $file->moveTo($path);
+
+        $actorId = $this->actorId();
+        $action = (new CriticalActionService())->enqueue(
+            'module_install',
+            (string)$session['id'],
+            $actorId,
+            ['package_path' => $path, 'isolation' => $isolation],
+        );
+        $this->audit('maintenance.action.enqueue', (string)$session['id'], $actorId, [
+            'type' => 'module_install',
+            'action_id' => $action['id'],
+        ]);
+        $this->Flash->success(__('flash.maintenance.action_queued'));
+
+        return $this->redirect(['action' => 'index']);
+    }
+
     /** JSON drain status polled by the index page while maintenance is engaged. */
     public function status(): Response
     {
@@ -119,7 +175,7 @@ class MaintenanceController extends AdminController
             $payload = ['active' => false];
         } else {
             $actions = new CriticalActionService();
-            $actions->recoverStale();
+            $actions->maintenanceRecoverStale();
             $blocking = $actions->nonTerminalCount((string)$session['id']);
             $payload = ['active' => true]
                 + (new QuiesceService())->status()

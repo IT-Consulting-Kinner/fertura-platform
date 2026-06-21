@@ -199,6 +199,58 @@ class CriticalActionServiceTest extends TestCase
         $this->assertStringContainsString('[recovered: stale heartbeat]', $msg);
     }
 
+    public function testTransitionRespectsTheFenceToken(): void
+    {
+        $action = $this->svc->start('module_install', null, null);
+        $fence = (string)$action['fence_token'];
+
+        // Wrong (but valid-uuid) fence -> no-op; correct fence -> applies. A real
+        // zombie holds the OLD token after recoverStale rotated it — also a uuid.
+        $this->assertFalse($this->svc->transition($action['id'], 'verifying', '00000000-0000-7000-8000-000000000000'));
+        $this->assertSame('running', $this->statusOf($action['id']));
+        $this->assertTrue($this->svc->transition($action['id'], 'verifying', $fence));
+        $this->assertSame('verifying', $this->statusOf($action['id']));
+    }
+
+    public function testRecoverStaleRotatesFenceTokenFencingTheZombie(): void
+    {
+        $action = $this->svc->start('module_install', null, null);
+        $fence = (string)$action['fence_token'];
+        ConnectionManager::get('default')->execute(
+            "UPDATE core.critical_action SET heartbeat_at = now() - interval '300 seconds' WHERE id = :id",
+            ['id' => $action['id']],
+        );
+        $this->assertSame(1, $this->svc->recoverStale(120));
+
+        // The recovered row got a NEW fence_token, and the (terminal) row can no
+        // longer be advanced by a zombie still holding the original token.
+        $newFence = (string)ConnectionManager::get('default')->execute(
+            'SELECT fence_token FROM core.critical_action WHERE id = :id',
+            ['id' => $action['id']],
+        )->fetch('assoc')['fence_token'];
+        $this->assertNotSame($fence, $newFence);
+        $this->assertFalse($this->svc->markSucceeded($action['id'], $fence));
+        $this->assertSame('needs_manual_restore', $this->statusOf($action['id']));
+    }
+
+    public function testEnqueueThenClaimEngaged(): void
+    {
+        $session = '22222222-2222-7222-8222-222222222222';
+        $queued = $this->svc->enqueue('module_install', $session, null, ['package_path' => '/tmp/x.zip']);
+        $this->assertSame('quiescing', $queued['status']);
+
+        $claimed = $this->svc->claimEngaged($session);
+        $this->assertNotNull($claimed);
+        $this->assertSame($queued['id'], $claimed['id']);
+        $this->assertSame('backing_up', $claimed['status']);
+        $this->assertSame($queued['fence_token'], $claimed['fence_token']);
+
+        // Nothing left to claim, and an action of a DIFFERENT session is not claimed.
+        $this->assertNull($this->svc->claimEngaged($session));
+        $this->svc->enqueue('module_install', '33333333-3333-7333-8333-333333333333', null, []);
+        $this->assertNull($this->svc->claimEngaged($session));
+    }
+
     private function typeStatus(string $type): string
     {
         return (string)ConnectionManager::get('default')->execute(

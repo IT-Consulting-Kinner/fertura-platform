@@ -4,6 +4,7 @@
  * @var array<string, mixed>|null $session
  * @var array<string, mixed>|null $quiesce
  * @var int $blockingActions
+ * @var list<array<string, mixed>> $actions
  */
 ?>
 <h1 class="h3 mb-3"><?= h(__('admin.maintenance.title')) ?></h1>
@@ -50,6 +51,57 @@
     <div id="maintBlocking" class="small text-danger mb-2"<?= ($blockingActions ?? 0) > 0 ? '' : ' hidden' ?>>
         <?= h(__('admin.maintenance.blocking_actions', (string)($blockingActions ?? 0))) ?>
     </div>
+
+    <div class="accordion mb-3" id="protectedActions">
+        <div class="accordion-item">
+            <h2 class="accordion-header">
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#protInstall" aria-expanded="false" aria-controls="protInstall">
+                    <?= h(__('admin.maintenance.action_install_heading')) ?>
+                </button>
+            </h2>
+            <div id="protInstall" class="accordion-collapse collapse">
+                <div class="accordion-body mw-lg">
+                    <p class="text-muted small mb-2"><?= h(__('admin.maintenance.action_install_hint')) ?></p>
+                    <?= $this->Form->create(null, ['url' => ['action' => 'installModule'], 'type' => 'file']) ?>
+                    <div class="mb-3">
+                        <label class="form-label" for="protPackage"><?= h(__('admin.modules.package_label')) ?></label>
+                        <input type="file" name="package" id="protPackage" accept=".zip" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="protIsolation"><?= h(__('admin.modules.isolation_label')) ?></label>
+                        <?= $this->Form->select('isolation', ['in_process' => 'in_process', 'out_of_process' => 'out_of_process'], ['id' => 'protIsolation', 'class' => 'form-select mw-sm']) ?>
+                    </div>
+                    <?= $this->Form->button(__('admin.maintenance.action_install_submit'), ['class' => 'btn btn-warning']) ?>
+                    <?= $this->Form->end() ?>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <?php if (($actions ?? []) !== []) : ?>
+        <table class="table table-sm table-hover align-middle small mw-lg">
+            <thead><tr>
+                <th scope="col"><?= h(__('admin.maintenance.action_type')) ?></th>
+                <th scope="col"><?= h(__('admin.maintenance.action_status')) ?></th>
+                <th scope="col"><?= h(__('admin.maintenance.action_message')) ?></th>
+            </tr></thead>
+            <tbody>
+            <?php
+            $variant = [
+                'succeeded' => 'success', 'failed' => 'danger', 'needs_manual_restore' => 'danger',
+                'aborted' => 'secondary',
+            ];
+            ?>
+            <?php foreach ($actions as $a) : ?>
+                <tr>
+                    <td><code><?= h((string)$a['type']) ?></code></td>
+                    <td><span class="badge text-bg-<?= h($variant[(string)$a['status']] ?? 'warning') ?>"><?= h((string)$a['status']) ?></span></td>
+                    <td class="text-muted"><?= h((string)($a['message'] ?? '')) ?></td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+    <?php endif; ?>
 
     <?= $this->UiKit->confirmPost(
         __('admin.maintenance.release'),

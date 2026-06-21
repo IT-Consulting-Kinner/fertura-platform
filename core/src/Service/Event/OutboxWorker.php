@@ -16,6 +16,7 @@ use App\Service\Observability\OtlpMetricsExporter;
 use App\Service\Registry\ContractRegistry;
 use App\Service\Schedule\ScheduledTaskRunner;
 use App\Service\Settings\SettingsManager;
+use App\Service\System\CriticalActionRunner;
 use App\Service\System\CriticalActionService;
 use App\Service\System\WorkerPauseGate;
 use App\Service\Webhook\WebhookService;
@@ -336,7 +337,7 @@ class OutboxWorker
         // the maintenance exit. Done at startup (recovers a previous crash) and
         // throttled in the loop (recovers a web action that dies mid-flight).
         try {
-            $recovered = (new CriticalActionService())->recoverStale();
+            $recovered = (new CriticalActionService())->maintenanceRecoverStale();
             if ($recovered > 0) {
                 $this->log("$recovered haengende kritische Aktion(en) zurueckgesetzt.");
             }
@@ -362,6 +363,17 @@ class OutboxWorker
                     // Refresh the heartbeat so health sees "alive, paused" not
                     // "overdue"; a real crash still surfaces via staleness.
                     WorkerHeartbeat::markState('outbox', 'paused');
+                    // Phase 6: the normal cycle stays paused, but the worker DOES run
+                    // the engaged session's critical actions (once drained) — that is
+                    // the only place a protected mutation may execute. Error-isolated.
+                    try {
+                        $ranAction = (new CriticalActionRunner())->tick();
+                        if ($ranAction !== null) {
+                            $this->log("Kritische Aktion verarbeitet: $ranAction");
+                        }
+                    } catch (Throwable $e) {
+                        $this->log('Critical-Action-Runner-Fehler: ' . $e->getMessage());
+                    }
                     $this->waitForWork($listenPdo);
 
                     continue;
@@ -440,7 +452,7 @@ class OutboxWorker
                     // that died mid-flight leaves a stale heartbeat -> sweep it so it
                     // never deadlocks the maintenance exit. Throttled, error-isolated.
                     try {
-                        $recovered = (new CriticalActionService())->recoverStale();
+                        $recovered = (new CriticalActionService())->maintenanceRecoverStale();
                         if ($recovered > 0) {
                             $this->log("$recovered haengende kritische Aktion(en) zurueckgesetzt.");
                         }

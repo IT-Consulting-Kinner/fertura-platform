@@ -114,7 +114,7 @@ class OutboxWorkerPauseTest extends TestCase
         $conn = ConnectionManager::get('default');
         $conn->execute(
             'INSERT INTO core.critical_action (type, status, heartbeat_at) '
-            . "VALUES ('worker.recovery.test', 'running', now() - interval '300 seconds')",
+            . "VALUES ('worker.recovery.test', 'running', now() - interval '1000 seconds')",
         );
         $this->gate->requestPause(null, null, 120);
 

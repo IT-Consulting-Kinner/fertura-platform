@@ -1755,3 +1755,24 @@ msgstr "Wartung kann nicht beendet werden: es laufen noch kritische Aktionen."
 
 msgid "admin.maintenance.blocking_actions"
 msgstr "%s kritische Aktion(en) laufen — Beenden gesperrt."
+
+msgid "flash.maintenance.action_queued"
+msgstr "Geschützte Aktion eingereiht — der Worker führt sie nach dem Drain aus."
+
+msgid "admin.maintenance.action_install_heading"
+msgstr "Geschützte Modul-Installation"
+
+msgid "admin.maintenance.action_install_hint"
+msgstr "Läuft als kritische Aktion: Pflicht-Backup → Installation → Verifikation, mit aktionseigenem Rollback. Beenden ist gesperrt, bis die Aktion terminal ist."
+
+msgid "admin.maintenance.action_install_submit"
+msgstr "Geschützt installieren"
+
+msgid "admin.maintenance.action_type"
+msgstr "Typ"
+
+msgid "admin.maintenance.action_status"
+msgstr "Status"
+
+msgid "admin.maintenance.action_message"
+msgstr "Meldung"

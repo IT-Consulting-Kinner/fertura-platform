@@ -1759,3 +1759,24 @@ msgstr "Cannot end maintenance: critical actions are still running."
 
 msgid "admin.maintenance.blocking_actions"
 msgstr "%s critical action(s) running — exit blocked."
+
+msgid "flash.maintenance.action_queued"
+msgstr "Protected action queued — the worker runs it after the drain."
+
+msgid "admin.maintenance.action_install_heading"
+msgstr "Protected module install"
+
+msgid "admin.maintenance.action_install_hint"
+msgstr "Runs as a critical action: mandatory backup → install → verification, with an action-own rollback. Exit is blocked until the action is terminal."
+
+msgid "admin.maintenance.action_install_submit"
+msgstr "Install protected"
+
+msgid "admin.maintenance.action_type"
+msgstr "Type"
+
+msgid "admin.maintenance.action_status"
+msgstr "Status"
+
+msgid "admin.maintenance.action_message"
+msgstr "Message"

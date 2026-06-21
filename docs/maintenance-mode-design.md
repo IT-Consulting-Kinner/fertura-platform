@@ -98,7 +98,7 @@ ENTER_MAINTENANCE ─→ QUIESCE ─→ PRE_ACTION_BACKUP ─→ ACTION ─→ V
 3. `SelectiveMaintenanceMiddleware` + Allow-Token + Login/Cookie-Block ← **Phase 3 ✅** (+ GUI: `MaintenanceController` engage/release/status + Drain-Polling-View)
 4. `critical_action`-State-Machine + Crash-Recovery-Sweep ← **Phase 4 ✅**
 5. Pre-Action-Backup-Gate (`createLocked`, erzwungene Verschluesselung, Store-Registry) ← **Phase 5 ✅**
-6. `ActionVerifier` pro Typ + aktionseigener Rollback
+6. `ActionVerifier` pro Typ + aktionseigener Rollback ← **Phase 6 läuft** (Increment 1: Fundament + module install ✅; tenant/secret/trust folgen)
 7. zuletzt globaler Restore / `backup restore`-GUI hinter dem reifen Cutover-Pfad
 
 ### Umsetzungsstand
@@ -177,6 +177,24 @@ ENTER_MAINTENANCE ─→ QUIESCE ─→ PRE_ACTION_BACKUP ─→ ACTION ─→ V
   - **Offen (Follow-up)**: `backups.verified` vermengt Integritäts- mit Restore-Verifikation
     (vorbestehend, UI-Label); `STORES als Registry` (modul-beigesteuerte Stores) — heute deckt der
     fixe STORES-Satz Modul-Code (modules/) + Modul-Daten (DB-Dump) ab.
+
+- **Phase 6 — Increment 1** (Fundament + module install als Referenz-Aktion):
+  - `CriticalActionHandler`-Contract (execute/verify/rollback) + Core-interne
+    `CriticalActionRegistry`; `CriticalActionRunner` treibt eine eingereihte Aktion durch
+    claim → Pflicht-Backup → execute → verify → succeed, mit Rollback (aktionseigener Undo)
+    bei execute/verify-Fehler und Eskalation zu `needs_manual_restore`, wenn der Undo scheitert.
+  - **Worker führt die Aktion während der Pause aus**: das Phase-2-Pause-Gate ruft
+    `CriticalActionRunner::tick()` — verarbeitet die engagte Session-Aktion **erst** wenn der
+    Platform gedrained ist (`inFlight()==0`); normale Arbeit bleibt pausiert.
+  - **fence_token-Enforcement**: jede Transition/heartbeat trägt das Token; `recoverStale`
+    rotiert es, sodass ein wiederbelebter Stale-Prozess die Aktion nicht mehr fortschreiben kann.
+    Großzügiges Recovery-Fenster (`STALE_SECONDS=900`) für lange Phasen (Backup/Migrationen).
+  - module install: `ModuleInstallHandler` (execute=`installPackage`, verify=modules-Row+Schema,
+    rollback=`ModuleLifecycle::purge`→rollbackInstall); GUI reiht eine geschützte Installation
+    während Maintenance ein (`critical_action.payload`).
+  - 15 Tests (Runner-Orchestrierung mit Stub-Handler, Fence-Rotation, enqueue/claim, Verifier).
+  - **Increment 2–4 offen**: tenant provision, secret rotate (+ Audit), trust rotate
+    (transaktional wrappen) als eigene Handler.
 
 #### Offene Review-Punkte (bewusst nach Phase 3 / Follow-up deferred)
 - **Quiesce-aware Health**: ein pausierter Worker skippt `ScheduledTaskRunner.tick()`, daher können

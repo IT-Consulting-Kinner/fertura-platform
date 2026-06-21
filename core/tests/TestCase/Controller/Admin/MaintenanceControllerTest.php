@@ -207,11 +207,11 @@ class MaintenanceControllerTest extends TestCase
     {
         $sessionId = $this->engageSession();
         $conn = ConnectionManager::get('default');
-        // A crashed action (stale heartbeat) must NOT deadlock the exit: release
-        // recovers it first, then closes the session.
+        // A crashed action (stale beyond the maintenance recovery window) must NOT
+        // deadlock the exit: release recovers it first, then closes the session.
         $conn->execute(
             'INSERT INTO core.critical_action (type, status, maintenance_session_id, heartbeat_at) '
-            . "VALUES ('test', 'running', :s, now() - interval '300 seconds')",
+            . "VALUES ('test', 'running', :s, now() - interval '1000 seconds')",
             ['s' => $sessionId],
         );
 
@@ -230,6 +230,20 @@ class MaintenanceControllerTest extends TestCase
             "SELECT count(*) AS c FROM core.critical_action WHERE status = 'needs_manual_restore'",
         )->fetch('assoc')['c'];
         $this->assertSame(1, $recovered);
+    }
+
+    public function testProtectedInstallRequiresMaintenance(): void
+    {
+        // No active session -> the protected install is refused, nothing is enqueued.
+        $this->login();
+        $this->enableCsrfToken();
+        $this->enableSecurityToken();
+        $this->post('/admin/maintenance/installModule', []);
+        $this->assertRedirect(['action' => 'index']);
+
+        $count = (int)ConnectionManager::get('default')
+            ->execute('SELECT count(*) AS c FROM core.critical_action')->fetch('assoc')['c'];
+        $this->assertSame(0, $count);
     }
 
     public function testStatusReportsBlockingActions(): void

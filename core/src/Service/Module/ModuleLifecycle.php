@@ -158,6 +158,29 @@ class ModuleLifecycle
         $this->removeDir((new LanguagePackStore())->base() . '/' . $key);
     }
 
+    /**
+     * Public action-own rollback for the maintenance critical-action runner (Phase 6):
+     * removes an installed/half-installed module by key. install() only self-rolls-back
+     * on its OWN execute failure; this lets the runner undo a module whose post-install
+     * VERIFY failed. Derives schema/target/isolation from the key + module row and
+     * delegates to the same best-effort {@see rollbackInstall()} cleanup, under the
+     * lifecycle lock.
+     */
+    public function purge(string $moduleKey): void
+    {
+        $this->assertKeySafe($moduleKey);
+        $this->withLock(function () use ($moduleKey): void {
+            $mod = $this->findModule($moduleKey);
+            $outOfProcess = $mod !== null && (string)($mod['isolation'] ?? 'in_process') === 'out_of_process';
+            $this->rollbackInstall(
+                $moduleKey,
+                'mod_' . $moduleKey,
+                $this->modulesBaseDir() . '/' . $moduleKey,
+                $outOfProcess,
+            );
+        });
+    }
+
     private function grantSchemaToAppRole(string $schema): void
     {
         $role = (string)(env('APP_DB_USER') ?: '');
