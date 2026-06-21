@@ -105,8 +105,8 @@ $dropdown = function (string $top, string $label, array $groups) use ($activeTop
     <div aria-live="polite"><?= $this->Flash->render() ?></div>
     <?= $this->fetch('content') ?>
 </main>
-<?= $this->element('admin_confirm_modal') ?>
+<?= $this->element('confirm_modal') ?>
 <?= $this->Html->script('bootstrap.bundle.min') ?>
-<?= $this->Html->script('admin') ?>
+<?= $this->Html->script('ui') ?>
 </body>
 </html>

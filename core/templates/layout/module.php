@@ -51,14 +51,14 @@ $moduleTitle = $moduleTitle ?? '';
  * Shared confirm wiring, identical to the admin shell. Module operator pages
  * (e.g. Ticketing's ticket list/detail) route destructive actions through the
  * Bootstrap confirm modal via [data-confirm] / UiKit->confirmPost() instead of
- * native window.confirm(). admin.js listens document-wide and the modal element
+ * native window.confirm(). ui.js listens document-wide and the modal element
  * is generic, so loading the same three pieces here gives module pages the same
  * confirmation UX. Without the JS, a [data-confirm] control would submit with no
  * prompt at all — the shell must ship the handler, not just the attribute.
  */
 ?>
-<?= $this->element('admin_confirm_modal') ?>
+<?= $this->element('confirm_modal') ?>
 <?= $this->Html->script('bootstrap.bundle.min') ?>
-<?= $this->Html->script('admin') ?>
+<?= $this->Html->script('ui') ?>
 </body>
 </html>

@@ -1,8 +1,9 @@
 <?php
 /**
- * Shared confirm modal for destructive admin actions (rendered once by the admin
- * layout). A control with data-confirm="..." opens it (wiring in webroot/js/admin.js)
- * instead of native window.confirm(); confirming submits that control's form.
+ * Shared confirm modal for destructive actions (rendered once by the admin AND
+ * module layouts). A control with data-confirm="..." opens it (wiring in
+ * webroot/js/ui.js) instead of native window.confirm(); confirming submits that
+ * control's form.
  * Optional per-trigger attributes: data-confirm-ok (button label),
  * data-confirm-variant (e.g. "btn-danger" | "btn-warning").
  *

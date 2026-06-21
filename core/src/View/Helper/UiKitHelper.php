@@ -104,7 +104,7 @@ class UiKitHelper extends Helper
             $attrs = 'type="submit" class="' . h((string)($b['class'] ?? 'btn btn-sm btn-outline-secondary')) . '"'
                 . ' name="' . h($name) . '" value="' . h((string)($b['value'] ?? '')) . '"';
             if (isset($b['confirm'])) {
-                // Shared Bootstrap confirm modal (admin.js) instead of window.confirm().
+                // Shared Bootstrap confirm modal (ui.js) instead of window.confirm().
                 $attrs .= ' data-confirm="' . h((string)$b['confirm']) . '"';
             }
             $out .= '<button ' . $attrs . '>' . h((string)($b['label'] ?? '')) . '</button> ';
@@ -115,7 +115,7 @@ class UiKitHelper extends Helper
 
     /**
      * A single destructive POST action as a standalone form + submit button that
-     * routes through the shared Bootstrap confirm modal (admin.js, [data-confirm])
+     * routes through the shared Bootstrap confirm modal (ui.js, [data-confirm])
      * instead of `Form->postLink(['confirm'=>…])`'s native `window.confirm()`.
      * CSRF is added by the FormHelper. Optional `variant` sets the modal OK button
      * class (default btn-danger).
@@ -392,7 +392,7 @@ class UiKitHelper extends Helper
             $url = isset($a['url']) && is_callable($a['url']) ? ($a['url'])($row) : ($a['url'] ?? '#');
             $attr = ['class' => (string)($a['class'] ?? 'btn btn-sm btn-outline-secondary')];
             if (isset($a['confirm'])) {
-                // Route through the shared confirm modal (admin.js) instead of native confirm.
+                // Route through the shared confirm modal (ui.js) instead of native confirm.
                 $attr['data-confirm'] = (string)$a['confirm'];
             }
             $out .= $this->Html->link((string)($a['label'] ?? ''), $url, $attr) . ' ';

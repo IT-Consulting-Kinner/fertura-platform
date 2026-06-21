@@ -1,10 +1,11 @@
 /**
- * Admin-shell progressive enhancement. Loaded AFTER bootstrap.bundle.min.js, so
- * the global `bootstrap` namespace is available. Two responsibilities:
+ * Shared UI progressive enhancement (loaded by the admin AND module shells).
+ * Loaded AFTER bootstrap.bundle.min.js, so the global `bootstrap` namespace is
+ * available. Two responsibilities:
  *   1. Initialise Bootstrap tooltips (opt-in via data-bs-toggle="tooltip").
  *   2. A shared confirm modal that replaces native window.confirm() for
  *      destructive actions: any control with [data-confirm] opens the modal in
- *      core/templates/element/admin_confirm_modal.php; confirming submits the
+ *      core/templates/element/confirm_modal.php; confirming submits the
  *      control's form (or, for a link, follows its href).
  */
 (function () {

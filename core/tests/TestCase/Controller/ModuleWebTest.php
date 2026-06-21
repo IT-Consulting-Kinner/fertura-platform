@@ -95,7 +95,7 @@ class ModuleWebTest extends TestCase
         $this->assertResponseOk();
         $this->assertResponseContains('id="confirmModal"'); // generic confirm modal element
         $this->assertResponseContains('bootstrap.bundle.min'); // Bootstrap JS (modal/dropdown/tooltip)
-        $this->assertResponseContains('js/admin.js'); // [data-confirm] -> modal wiring
+        $this->assertResponseContains('js/ui.js'); // [data-confirm] -> modal wiring
     }
 
     public function testGuestPageRendersWithoutLogin(): void
