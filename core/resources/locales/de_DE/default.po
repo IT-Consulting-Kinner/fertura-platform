@@ -1780,6 +1780,18 @@ msgstr "Mandantenname"
 msgid "admin.maintenance.action_tenant_submit"
 msgstr "Geschützt provisionieren"
 
+msgid "admin.maintenance.action_secret_heading"
+msgstr "Geschützte Schlüsselrotation"
+
+msgid "admin.maintenance.action_secret_hint"
+msgstr "Re-verschlüsselt alle Geheimnisse mit dem aktiven Schlüssel. Voraussetzung: der ALTE Schlüssel ist als SECURITY_ENCRYPTION_KEY_OLD bereitgestellt. Kein aktionseigener Undo → bei Fehler Pre-Action-Backup wiederherstellen."
+
+msgid "admin.maintenance.action_secret_submit"
+msgstr "Schlüssel rotieren"
+
+msgid "admin.maintenance.action_secret_confirm"
+msgstr "Schlüsselrotation jetzt einreihen? Ist der alte Schlüssel als SECURITY_ENCRYPTION_KEY_OLD bereitgestellt?"
+
 msgid "admin.maintenance.action_install_heading"
 msgstr "Geschützte Modul-Installation"
 

@@ -123,12 +123,6 @@ parameters:
 		-
 			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
 			identifier: method.notFound
-			count: 3
-			path: src/Command/SecretCommand.php
-
-		-
-			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:transactional\(\)\.$#'
-			identifier: method.notFound
 			count: 1
 			path: src/Command/SecretCommand.php
 

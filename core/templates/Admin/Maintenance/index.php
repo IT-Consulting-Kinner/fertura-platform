@@ -99,6 +99,26 @@
                 </div>
             </div>
         </div>
+        <div class="accordion-item">
+            <h2 class="accordion-header">
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#protSecret" aria-expanded="false" aria-controls="protSecret">
+                    <?= h(__('admin.maintenance.action_secret_heading')) ?>
+                </button>
+            </h2>
+            <div id="protSecret" class="accordion-collapse collapse">
+                <div class="accordion-body mw-lg">
+                    <p class="text-muted small mb-2"><?= h(__('admin.maintenance.action_secret_hint')) ?></p>
+                    <?= $this->Form->create(null, ['url' => ['action' => 'rotateSecret']]) ?>
+                    <?= $this->Form->button(__('admin.maintenance.action_secret_submit'), [
+                        'class' => 'btn btn-warning',
+                        'data-confirm' => __('admin.maintenance.action_secret_confirm'),
+                        'data-confirm-variant' => 'btn-warning',
+                        'escapeTitle' => false,
+                    ]) ?>
+                    <?= $this->Form->end() ?>
+                </div>
+            </div>
+        </div>
     </div>
 
     <?php if (($actions ?? []) !== []) : ?>

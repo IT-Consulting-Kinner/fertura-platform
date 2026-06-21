@@ -1784,6 +1784,18 @@ msgstr "Tenant name"
 msgid "admin.maintenance.action_tenant_submit"
 msgstr "Provision protected"
 
+msgid "admin.maintenance.action_secret_heading"
+msgstr "Protected key rotation"
+
+msgid "admin.maintenance.action_secret_hint"
+msgstr "Re-encrypts all secrets with the active key. Prerequisite: the OLD key is deployed as SECURITY_ENCRYPTION_KEY_OLD. No action-own undo → on failure restore the pre-action backup."
+
+msgid "admin.maintenance.action_secret_submit"
+msgstr "Rotate key"
+
+msgid "admin.maintenance.action_secret_confirm"
+msgstr "Queue the key rotation now? Is the old key deployed as SECURITY_ENCRYPTION_KEY_OLD?"
+
 msgid "admin.maintenance.action_install_heading"
 msgstr "Protected module install"
 

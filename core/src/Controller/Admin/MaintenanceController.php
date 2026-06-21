@@ -204,6 +204,32 @@ class MaintenanceController extends AdminController
         return $this->redirect(['action' => 'index']);
     }
 
+    /**
+     * Queues a PROTECTED secret-key rotation as a critical action (Phase 6 Inc 3).
+     * The OLD key must already be deployed to the environment
+     * (SECURITY_ENCRYPTION_KEY_OLD[_FILE]); it is never sent through the form.
+     */
+    public function rotateSecret(): ?Response
+    {
+        $this->request->allowMethod('post');
+
+        $session = (new MaintenanceService())->activeSession();
+        if ($session === null) {
+            $this->Flash->error(__('flash.maintenance.not_active'));
+
+            return $this->redirect(['action' => 'index']);
+        }
+        $actorId = $this->actorId();
+        $action = (new CriticalActionService())->enqueue('secret_rotate', (string)$session['id'], $actorId, []);
+        $this->audit('maintenance.action.enqueue', (string)$session['id'], $actorId, [
+            'type' => 'secret_rotate',
+            'action_id' => $action['id'],
+        ]);
+        $this->Flash->success(__('flash.maintenance.action_queued'));
+
+        return $this->redirect(['action' => 'index']);
+    }
+
     /** JSON drain status polled by the index page while maintenance is engaged. */
     public function status(): Response
     {

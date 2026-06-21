@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Command;
 
 use App\Service\Settings\SecretCipher;
+use App\Service\Settings\SecretRotationService;
 use Cake\Command\Command;
 use Cake\Console\Arguments;
 use Cake\Console\ConsoleIo;
@@ -108,32 +109,17 @@ class SecretCommand extends Command
             return static::CODE_SUCCESS;
         }
 
-        // 2. Write transactionally.
-        $conn->transactional(function () use ($conn, $reencrypted): void {
-            foreach ($reencrypted as $id => $info) {
-                $conn->execute(
-                    'UPDATE settings SET value_encrypted = :v WHERE id = :id',
-                    ['v' => $info['cipher'], 'id' => $id],
-                );
-            }
-        });
+        // Real rotation via the shared, AUDITED service (write + verify in one place,
+        // reused by the maintenance critical-action handler).
+        try {
+            $count = (new SecretRotationService())->rotate((string)$old, (string)$newMaterial);
+        } catch (Throwable $e) {
+            $io->error('Rotation fehlgeschlagen: ' . $e->getMessage());
 
-        // 3. Verify: is everything decryptable with the NEW key?
-        $verifyRows = $conn->execute(
-            'SELECT namespace, config_key, value_encrypted FROM settings '
-            . 'WHERE is_secret = true AND value_encrypted IS NOT NULL',
-        )->fetchAll('assoc');
-        foreach ($verifyRows as $r) {
-            try {
-                $newCipher->decrypt((string)$r['value_encrypted']);
-            } catch (Throwable $e) {
-                $io->error("VERIFY fehlgeschlagen für {$r['namespace']}.{$r['config_key']}: {$e->getMessage()}");
-
-                return static::CODE_ERROR;
-            }
+            return static::CODE_ERROR;
         }
 
-        $io->success(sprintf('%d Geheimnis(se) rotiert und verifiziert.', count($reencrypted)));
+        $io->success(sprintf('%d Geheimnis(se) rotiert und verifiziert.', $count));
 
         return static::CODE_SUCCESS;
     }

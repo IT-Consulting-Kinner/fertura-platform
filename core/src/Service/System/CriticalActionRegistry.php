@@ -28,6 +28,7 @@ class CriticalActionRegistry
         return [
             new ModuleInstallHandler(),
             new TenantProvisionHandler(),
+            new SecretRotateHandler(),
         ];
     }
 
