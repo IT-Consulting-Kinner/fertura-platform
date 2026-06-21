@@ -98,7 +98,7 @@ ENTER_MAINTENANCE ─→ QUIESCE ─→ PRE_ACTION_BACKUP ─→ ACTION ─→ V
 3. `SelectiveMaintenanceMiddleware` + Allow-Token + Login/Cookie-Block ← **Phase 3 ✅** (+ GUI: `MaintenanceController` engage/release/status + Drain-Polling-View)
 4. `critical_action`-State-Machine + Crash-Recovery-Sweep ← **Phase 4 ✅**
 5. Pre-Action-Backup-Gate (`createLocked`, erzwungene Verschluesselung, Store-Registry) ← **Phase 5 ✅**
-6. `ActionVerifier` pro Typ + aktionseigener Rollback ← **Phase 6 läuft** (Increment 1: Fundament + module install ✅; tenant/secret/trust folgen)
+6. `ActionVerifier` pro Typ + aktionseigener Rollback ← **Phase 6 ✅** (alle vier Aktionen: module install, tenant provision, secret rotate, trust rotate)
 7. zuletzt globaler Restore / `backup restore`-GUI hinter dem reifen Cutover-Pfad
 
 ### Umsetzungsstand
@@ -193,8 +193,16 @@ ENTER_MAINTENANCE ─→ QUIESCE ─→ PRE_ACTION_BACKUP ─→ ACTION ─→ V
     rollback=`ModuleLifecycle::purge`→rollbackInstall); GUI reiht eine geschützte Installation
     während Maintenance ein (`critical_action.payload`).
   - 15 Tests (Runner-Orchestrierung mit Stub-Handler, Fence-Rotation, enqueue/claim, Verifier).
-  - **Increment 2–4 offen**: tenant provision, secret rotate (+ Audit), trust rotate
-    (transaktional wrappen) als eigene Handler.
+  - **Increment 2** (tenant provision): `TenantProvisionHandler` — execute=`TenantService::create`,
+    verify=Row+aktiv, rollback=`TenantService::delete` (gated → sauberer Undo eines frischen
+    Mandanten).
+  - **Increment 3** (secret rotate): `SecretRotationService` (aus `SecretCommand` extrahiert +
+    **Audit** ergänzt) re-verschlüsselt alle Secrets old→new transaktional. `SecretRotateHandler`:
+    Old-Key aus **env** (nie Payload/DB-Klartext), verify=Roundtrip, rollback=needs_manual_restore
+    (kein sauberer Reverse, da Secrets sonst vom aktiven env-Key entkoppeln).
+  - **Increment 4** (trust rotate): `TrustRotationService` (aus `TrustCommand` extrahiert, jetzt
+    **transaktional + auditiert** + Snapshot). `TrustRotateHandler`: rollback ist ein **sauberer**
+    aktionseigener Undo (Snapshot der Gültigkeitsfenster wiederherstellen).
 
 #### Offene Review-Punkte (bewusst nach Phase 3 / Follow-up deferred)
 - **Quiesce-aware Health**: ein pausierter Worker skippt `ScheduledTaskRunner.tick()`, daher können
