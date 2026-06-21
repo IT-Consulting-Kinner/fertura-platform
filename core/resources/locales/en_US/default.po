@@ -74,7 +74,7 @@ msgid "admin.nav.users_groups"
 msgstr "Users & groups"
 
 msgid "admin.nav.modules"
-msgstr "Modules"
+msgstr "Tenant"
 
 msgid "admin.nav.marketplace"
 msgstr "Marketplace & license"
@@ -1558,7 +1558,7 @@ msgid "flash.trust.publisher_cli_only"
 msgstr "Publisher anchors require a verified certificate chain; add them via the CLI: bin/cake trust add-anchor --cert <cert.json>."
 
 msgid "admin.nav.administration"
-msgstr "Administration"
+msgstr "Operator"
 
 msgid "admin.nav.system"
 msgstr "System"

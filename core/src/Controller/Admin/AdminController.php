@@ -206,7 +206,10 @@ class AdminController extends AppController
             return 'administration';
         }
 
-        return in_array($this->requiredArea, AdminNavBuilder::ADMIN_ORDER, true) ? 'administration' : 'module';
+        // Realm by scope: operator areas highlight the operator realm (Betreiber,
+        // internal key 'administration'), tenant + module areas the tenant realm
+        // (Mandant, internal key 'module').
+        return $this->isOperatorArea($this->requiredArea) ? 'administration' : 'module';
     }
 
     /**

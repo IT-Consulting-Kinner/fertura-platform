@@ -48,10 +48,20 @@ class AdminNavBuilder
     }
 
     /**
-     * Splits the scoped navigation into the two top-menu dropdowns:
-     *   - "module": the module-contributed setting areas (e.g. Ticketing, KB);
-     *   - "administration": the Core admin areas (incl. module management) plus
-     *     the always-available system group.
+     * Splits the held navigation into the two top-menu REALMS (Betreiber/Mandant,
+     * operator-tenant design §6), grouped by area SCOPE:
+     *   - operator realm: the operator-scoped Core areas (tenants, lifecycle, updates,
+     *     system config/backup/trust, maintenance, …) + the system pages;
+     *   - tenant realm: the tenant-scoped Core area (user/group mgmt) + the
+     *     module-contributed setting areas (Ticketing, KB, …).
+     *
+     * The return KEYS stay `module`/`administration` so routes, highlighting and
+     * breadcrumbs keep working unchanged; only the grouping and the visible LABELS
+     * (Betreiber/Mandant, set in the layout) change. `administration` = operator
+     * (Betreiber), `module` = tenant (Mandant). Grouping by scope — not by the viewer's
+     * tenant — is deliberate: in single-org the default tenant is BOTH the operator and
+     * the (only) module user, so a viewer may legitimately hold both realms' areas.
+     * (Renaming the keys/routes to betreiber/mandant is a later cosmetic cleanup.)
      *
      * @param list<string> $userAreaKeys areas the current user holds
      * @return array{module: array<string,array{label:string,items:list<array{0:string,1:string}>}>, administration: array<string,array{label:string,items:list<array{0:string,1:string}>}>}
@@ -59,19 +69,13 @@ class AdminNavBuilder
     public function menu(array $userAreaKeys): array
     {
         $nav = $this->build($userAreaKeys);
-        $coreKeys = array_keys(AdminController::NAV);
 
-        // "Module": every area NOT defined by the Core (module-contributed).
-        $module = [];
-        foreach ($nav as $key => $def) {
-            if (!in_array($key, $coreKeys, true)) {
-                $module[$key] = $def;
-            }
-        }
-
-        // "Administration": Core areas in a fixed order; module_lifecycle gets the
-        // clearer "Module management" label. The system group is always present.
-        $administration = [];
+        // Operator realm: operator-scoped Core areas in a fixed order; module_lifecycle
+        // gets the clearer "Module management" label. The system group rides along here.
+        $operator = [];
+        // Tenant realm: tenant-scoped Core areas (user/group mgmt) first, then the
+        // module-contributed areas.
+        $tenant = [];
         foreach (self::ADMIN_ORDER as $key) {
             if (!isset($nav[$key])) {
                 continue;
@@ -80,21 +84,41 @@ class AdminNavBuilder
             if ($key === 'module_lifecycle') {
                 $def['label'] = 'admin.nav.module_management';
             }
-            $administration[$key] = $def;
+            if ($this->isOperatorArea($key)) {
+                $operator[$key] = $def;
+            } else {
+                $tenant[$key] = $def;
+            }
         }
-        $administration['system'] = self::SYSTEM;
+        foreach ($nav as $key => $def) {
+            if (!array_key_exists($key, AdminController::NAV)) { // module-contributed
+                $tenant[$key] = $def;
+            }
+        }
+        $operator['system'] = self::SYSTEM;
 
-        return ['module' => $module, 'administration' => $administration];
+        return ['module' => $tenant, 'administration' => $operator];
     }
 
-    /** Which top-menu entry an area belongs to (for highlighting / back links). */
+    /** Which top-menu realm an area belongs to (for highlighting / back links). */
     public function areaTop(string $area): string
     {
-        if ($area === 'system' || in_array($area, self::ADMIN_ORDER, true)) {
-            return 'administration';
+        if ($area === 'system' || $this->isOperatorArea($area)) {
+            return 'administration'; // operator realm (Betreiber)
         }
 
-        return 'module';
+        return 'module'; // tenant realm (Mandant)
+    }
+
+    /**
+     * Operator-scoped = a Core area not typed as tenant. Mirrors
+     * {@see AdminController::isOperatorArea()} so the nav grouping and the access gate
+     * agree on the operator/tenant boundary.
+     */
+    private function isOperatorArea(string $area): bool
+    {
+        return array_key_exists($area, AdminController::NAV)
+            && !in_array($area, AdminController::TENANT_AREAS, true);
     }
 
     /**

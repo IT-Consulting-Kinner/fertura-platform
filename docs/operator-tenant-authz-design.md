@@ -158,8 +158,16 @@ umgestellt; `AdminController::NAV` bekommt je Area den `scope`.
    inkl. setPassword-Takeover) + `GroupsController::addMember` (Review-HIGH) auf
    `tenant_id = core.current_tenant()`; Last-Admin-Schutz per-Tenant; `add()` fail-closed;
    Isolationstests, die den Leak nachweisen + schließen.
-3. **Area-Split + Nav-Realms:** `core_config`/`user_group_admin` zerlegen, `AdminController::NAV` +
-   `AdminNavBuilder` auf Betreiber/Mandant, Mapping-Migration, i18n.
+3. **Nav-Realms:** ✅ (Teil) — `AdminNavBuilder::menu()` gruppiert die gehaltenen Areas nach **Scope**
+   in das Operator-Realm (Betreiber: operator-scoped Core-Areas + System) und das Tenant-Realm
+   (Mandant: tenant-scoped Core-Area + modul-beigesteuerte Areas); `areaTop`/`computeActiveTop` folgen
+   dem Scope; Labels via i18n (Betreiber/Mandant bzw. Operator/Tenant). Gruppierung **by Scope** (nicht
+   by Viewer), weil in Single-Org der Default-Tenant zugleich Operator ist UND Module nutzt — ein
+   Viewer kann legitim beide Realms halten. Interne Keys `module`/`administration` + Routen bleiben
+   (transitional; Rename ist späterer Kosmetik-Cleanup). **Noch offen** (eigene Increments): die
+   granularen Area-Key-Splits (`core_config`→`op_tenants`/`op_system`, `user_group_admin`→`op_admins`/
+   `tenant_users`) + Mapping-Migration fallen mit Inc 4 / den Feature-Increments; der System-Seiten-
+   Realm-Split (audit/tokens je Realm) bleibt §10.
 4. **`op_admins`** (Operator-Admin-Verwaltung, nur Operator-Mandant-User) als eigener gescopeter
    Bereich.
 5. **Per-Tenant-Modul-Enable + -Config** (`tenant_modules`, Dispatch/Nav/Listener tenant-aware,
