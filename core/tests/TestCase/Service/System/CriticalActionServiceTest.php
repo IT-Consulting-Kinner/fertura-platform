@@ -122,6 +122,19 @@ class CriticalActionServiceTest extends TestCase
         $this->assertTrue($this->svc->hasNonTerminal());
     }
 
+    public function testAttachBackupLinksBackupId(): void
+    {
+        $action = $this->svc->start('module_install', null, null);
+        $backupId = '019eaaaa-aaaa-7aaa-8aaa-aaaaaaaaaaaa';
+        $this->svc->attachBackup($action['id'], $backupId);
+
+        $row = ConnectionManager::get('default')->execute(
+            'SELECT backup_id FROM core.critical_action WHERE id = :id',
+            ['id' => $action['id']],
+        )->fetch('assoc');
+        $this->assertSame($backupId, $row['backup_id']);
+    }
+
     public function testHeartbeatUnStalesAnAction(): void
     {
         $action = $this->svc->start('module_install', null, null);

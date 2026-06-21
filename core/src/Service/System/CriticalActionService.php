@@ -3,8 +3,10 @@ declare(strict_types=1);
 
 namespace App\Service\System;
 
+use App\Service\Backup\BackupService;
 use Cake\Database\Connection;
 use Cake\Datasource\ConnectionManager;
+use RuntimeException;
 
 /**
  * Critical-action state machine — Phase 4 (docs/maintenance-mode-design.md §4.1/§4.2).
@@ -62,15 +64,16 @@ class CriticalActionService
      * overwrite a state the recovery sweep already finalised (a defensive precursor
      * to the Phase 5/6 fence_token enforcement).
      */
-    public function transition(string $id, string $status): void
+    public function transition(string $id, string $status): bool
     {
         $terminal = !in_array($status, self::NON_TERMINAL, true);
-        $this->conn()->execute(
+
+        return $this->conn()->execute(
             'UPDATE core.critical_action SET status = :s, heartbeat_at = now(), '
             . 'finished_at = CASE WHEN :term THEN now() ELSE finished_at END '
             . "WHERE id = :id AND status IN ('quiescing','backing_up','running','verifying','rolling_back')",
             ['s' => $status, 'term' => $terminal ? 'true' : 'false', 'id' => $id],
-        );
+        )->rowCount() > 0;
     }
 
     public function markSucceeded(string $id): void
@@ -82,6 +85,38 @@ class CriticalActionService
     {
         $this->setMessage($id, $message);
         $this->transition($id, 'failed');
+    }
+
+    /** Links a (pre-action) backup to the action. */
+    public function attachBackup(string $id, string $backupId): void
+    {
+        $this->conn()->execute(
+            'UPDATE core.critical_action SET backup_id = :b, heartbeat_at = now() WHERE id = :id',
+            ['b' => $backupId, 'id' => $id],
+        );
+    }
+
+    /**
+     * The mandatory pre-action backup phase (Phase 5; design §4.2 PRE_ACTION_BACKUP):
+     * moves the action to `backing_up`, creates an enforced-encrypted, probe-verified
+     * backup via {@see BackupService::createLocked()}, links it, and returns the
+     * backup id. The action runner (Phase 6) calls this BEFORE the action mutates
+     * anything. On failure it throws and leaves the action in `backing_up` — a
+     * pre-mutation state the recovery sweep aborts cleanly, so no rollback is needed.
+     */
+    public function backupGate(string $actionId, ?string $actorId = null, ?BackupService $backup = null): string
+    {
+        // Refuse (before any expensive dump) if the action is not in a state that can
+        // enter the backup phase — e.g. already terminal/recovered (the guarded
+        // transition would otherwise no-op and we'd link a backup to a dead action).
+        if (!$this->transition($actionId, 'backing_up')) {
+            throw new RuntimeException('Kritische Aktion nicht im Zustand fuer ein Pre-Action-Backup (bereits terminal?).');
+        }
+        $backup ??= new BackupService();
+        $backupId = $backup->context('gui', $actorId)->createLocked('pre-action ' . $actionId, $actorId);
+        $this->attachBackup($actionId, $backupId);
+
+        return $backupId;
     }
 
     /**

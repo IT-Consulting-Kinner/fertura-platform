@@ -97,7 +97,7 @@ ENTER_MAINTENANCE ─→ QUIESCE ─→ PRE_ACTION_BACKUP ─→ ACTION ─→ V
 2. Worker-Pause-Gate + `QuiesceService` ← **Phase 2 ✅**
 3. `SelectiveMaintenanceMiddleware` + Allow-Token + Login/Cookie-Block ← **Phase 3 ✅** (+ GUI: `MaintenanceController` engage/release/status + Drain-Polling-View)
 4. `critical_action`-State-Machine + Crash-Recovery-Sweep ← **Phase 4 ✅**
-5. Pre-Action-Backup-Gate (`createLocked`, erzwungene Verschluesselung, Store-Registry)
+5. Pre-Action-Backup-Gate (`createLocked`, erzwungene Verschluesselung, Store-Registry) ← **Phase 5 ✅**
 6. `ActionVerifier` pro Typ + aktionseigener Rollback
 7. zuletzt globaler Restore / `backup restore`-GUI hinter dem reifen Cutover-Pfad
 
@@ -162,6 +162,21 @@ ENTER_MAINTENANCE ─→ QUIESCE ─→ PRE_ACTION_BACKUP ─→ ACTION ─→ V
   - **Offen (Phase 5/6)**: echte Aktionen (module install, tenant provision, secret/trust rotate)
     mit `start()…markSucceeded()` umklammern; `fence_token`-Enforcement + `start()`-seitiger
     Refuse-when-closing (volle TOCTOU-Schließung); `needs_manual_restore`-Operator-Quittung-UI.
+
+- **Phase 5** (Pre-Action-Backup-Gate):
+  - `BackupService::createLocked()`: erzwingt Verschlüsselung + garantiert Probe-Restore — beides
+    als **Post-Condition auf dem erzeugten Artefakt** (nicht als Pre-Check, der durch die
+    unabhängige zweite `password()`-Lesung in `create()` umgangen werden könnte); bei Fehler wird
+    das Backup verworfen (`delete`). Immer-Probe statt Setting-Inferenz (kein Coupling).
+  - `CriticalActionService::backupGate()`: §4.2-BACKUP-Phase (`transition('backing_up')` mit
+    Bewegt-Prüfung → `createLocked()` → `attachBackup()`); bei Fehler bleibt die Aktion
+    `backing_up` (pre-mutation → Sweep abortet sauber). `transition()` liefert nun bool.
+  - Security-Review (0 critical/high, 3 medium, 6 low) eingearbeitet: Verschlüsselungs- und
+    Verifikations-Garantie als Artefakt-Invariante, Verwerfen verwaister Backups bei Probe-Fail,
+    `backing_up`-Recoverable- und verify_on_create-ON-Tests ergänzt.
+  - **Offen (Follow-up)**: `backups.verified` vermengt Integritäts- mit Restore-Verifikation
+    (vorbestehend, UI-Label); `STORES als Registry` (modul-beigesteuerte Stores) — heute deckt der
+    fixe STORES-Satz Modul-Code (modules/) + Modul-Daten (DB-Dump) ab.
 
 #### Offene Review-Punkte (bewusst nach Phase 3 / Follow-up deferred)
 - **Quiesce-aware Health**: ein pausierter Worker skippt `ScheduledTaskRunner.tick()`, daher können

@@ -5,6 +5,7 @@ namespace App\Test\TestCase\Service\Backup;
 
 use App\Service\Backup\BackupService;
 use App\Service\Settings\SettingsManager;
+use App\Service\System\CriticalActionService;
 use Cake\Database\Connection;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\TestCase;
@@ -67,8 +68,104 @@ class BackupRoundtripTest extends TestCase
         foreach ($this->prev as $k => $v) {
             $sm->set('core', $k, $v ?? '');
         }
+        ConnectionManager::get('default')->execute("DELETE FROM core.critical_action WHERE type = 'ca.backup.test'");
         $this->rrmdir($this->tmpDir);
         parent::tearDown();
+    }
+
+    public function testCreateLockedRejectsWithoutEncryption(): void
+    {
+        // setUp() leaves backup.password empty -> a mandatory pre-action backup must
+        // be refused rather than stored in plaintext.
+        $this->expectException(RuntimeException::class);
+        (new BackupService($this->tmpDir))->context('gui')->createLocked('locked', null);
+    }
+
+    public function testCreateLockedProducesEncryptedVerifiedBackup(): void
+    {
+        (new SettingsManager())->set('core', 'backup.password', 'Geheim!123');
+        $svc = new BackupService($this->tmpDir);
+
+        $id = $svc->context('gui')->createLocked('locked', null);
+        $this->created[] = $id;
+
+        $rec = $svc->get($id);
+        $this->assertNotNull($rec);
+        $this->assertSame('complete', $rec['status']);
+        $this->assertTrue((bool)$rec['encrypted']);
+        // createLocked() guarantees a probe-restore even with verify_on_create off.
+        $this->assertTrue($svc->verify($id)['ok']);
+    }
+
+    public function testBackupGateRunsBackupPhaseAndLinks(): void
+    {
+        (new SettingsManager())->set('core', 'backup.password', 'Geheim!123');
+        $actions = new CriticalActionService();
+        $action = $actions->start('ca.backup.test', null, null, 'quiescing');
+
+        $backupId = $actions->backupGate($action['id'], null, new BackupService($this->tmpDir));
+        $this->created[] = $backupId;
+
+        $row = ConnectionManager::get('default')->execute(
+            'SELECT status, backup_id FROM core.critical_action WHERE id = :id',
+            ['id' => $action['id']],
+        )->fetch('assoc');
+        $this->assertSame('backing_up', $row['status']); // pre-mutation phase
+        $this->assertSame($backupId, $row['backup_id']); // linked
+        $this->assertTrue((new BackupService($this->tmpDir))->verify($backupId)['ok']);
+    }
+
+    public function testCreateLockedProbesEvenWhenVerifyOnCreateIsOn(): void
+    {
+        $sm = new SettingsManager();
+        $sm->set('core', 'backup.password', 'Geheim!123');
+        $sm->set('core', 'backup.verify_on_create', true); // create() probes; createLocked probes too
+
+        $svc = new BackupService($this->tmpDir);
+        $id = $svc->context('gui')->createLocked('locked-deep', null);
+        $this->created[] = $id;
+
+        $rec = $svc->get($id);
+        $this->assertSame('complete', $rec['status']);
+        $this->assertTrue((bool)$rec['encrypted']);
+        $this->assertTrue($svc->verify($id)['ok']);
+    }
+
+    public function testBackupGateFailureLeavesActionRecoverable(): void
+    {
+        // No backup password (setUp default) -> createLocked refuses -> backupGate
+        // throws, leaving the action in the pre-mutation 'backing_up' state, which the
+        // recovery sweep then ABORTS cleanly (nothing was mutated, no rollback needed).
+        $actions = new CriticalActionService();
+        $action = $actions->start('ca.backup.test', null, null, 'quiescing');
+
+        $threw = false;
+        try {
+            $actions->backupGate($action['id'], null, new BackupService($this->tmpDir));
+        } catch (RuntimeException) {
+            $threw = true;
+        }
+        $this->assertTrue($threw);
+
+        $conn = ConnectionManager::get('default');
+        $row = $conn->execute(
+            'SELECT status, backup_id FROM core.critical_action WHERE id = :id',
+            ['id' => $action['id']],
+        )->fetch('assoc');
+        $this->assertSame('backing_up', $row['status']);
+        $this->assertNull($row['backup_id']);
+
+        // Stale -> the sweep aborts a pre-mutation action.
+        $conn->execute(
+            "UPDATE core.critical_action SET heartbeat_at = now() - interval '300 seconds' WHERE id = :id",
+            ['id' => $action['id']],
+        );
+        $this->assertSame(1, $actions->recoverStale(120));
+        $swept = $conn->execute(
+            'SELECT status FROM core.critical_action WHERE id = :id',
+            ['id' => $action['id']],
+        )->fetch('assoc');
+        $this->assertSame('aborted', $swept['status']);
     }
 
     public function testCreateVerifyTestRestore(): void

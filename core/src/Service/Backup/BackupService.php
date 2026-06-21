@@ -314,6 +314,66 @@ class BackupService
         return $id;
     }
 
+    /**
+     * Mandatory pre-action backup for a critical action (maintenance mode, Phase 5;
+     * docs/maintenance-mode-design.md §4.2 PRE_ACTION_BACKUP). Returns the backup ID.
+     *
+     * Two guarantees on top of {@see create()}, both fail-closed:
+     *  - ENCRYPTION is enforced. A critical-action backup is a full DB dump — every
+     *    secret in the system — so storing it in plaintext is never acceptable; if no
+     *    backup password is configured (BACKUP_PASSWORD_FILE / BACKUP_PASSWORD / the
+     *    DB setting), this throws instead of producing a usable-but-plaintext archive.
+     *  - VERIFICATION is guaranteed by a probe-restore regardless of the
+     *    `backup.verify_on_create` setting — a backup you cannot restore is no safety
+     *    net before a destructive action. (When the setting is on, {@see create()}
+     *    already probed, so we don't probe twice.)
+     */
+    public function createLocked(?string $note, ?string $actorId): string
+    {
+        if (!$this->encryptionEnabled()) {
+            throw new RuntimeException(
+                'Pflicht-Backup verlangt Verschlüsselung, aber kein Backup-Passwort gesetzt '
+                . '(BACKUP_PASSWORD_FILE / BACKUP_PASSWORD / Einstellung backup.password) — Abbruch.',
+            );
+        }
+
+        $id = $this->create($note, $actorId);
+
+        // Enforce both guarantees as POST-CONDITIONS over the produced artifact, not
+        // as pre-checks: create() re-reads the password independently, so a transient
+        // read failure or a concurrent clear could have made it fall back to a
+        // plaintext dump (marked encrypted=false) that the pre-check never sees. And
+        // probe-restore unconditionally (a critical-action backup must be restorable,
+        // whatever backup.verify_on_create currently reads). On any failure, discard
+        // the artifact — never hand back an unencrypted or unrestorable full-DB backup.
+        $failure = $this->lockedPostconditionFailure($id);
+        if ($failure !== null) {
+            $this->delete($id);
+
+            throw new RuntimeException($failure);
+        }
+
+        return $id;
+    }
+
+    /** @return string|null failure reason, or null when the mandatory backup is sound */
+    private function lockedPostconditionFailure(string $id): ?string
+    {
+        $row = $this->get($id);
+        if ($row === null) {
+            return 'Pflicht-Backup nach Erstellung nicht auffindbar.';
+        }
+        if (!$this->bool($row['encrypted'])) {
+            return 'Pflicht-Backup wurde nicht verschlüsselt erstellt — verworfen.';
+        }
+        $probe = $this->testRestore($id);
+        if (($probe['ok'] ?? false) !== true) {
+            return 'Pflicht-Backup nicht per Probe-Restore verifizierbar: ' . ($probe['reason'] ?? 'unbekannt');
+        }
+
+        return null;
+    }
+
     /** @return list<array<string,mixed>> */
     public function list(): array
     {
