@@ -10,6 +10,7 @@ use App\Service\Health\WorkerHeartbeat;
 use App\Service\Module\ContributionRuntime;
 use App\Service\Module\ModuleAutoloader;
 use App\Service\Module\ModuleHostSupervisor;
+use App\Service\Module\ModuleInstallRunner;
 use App\Service\Observability\HealthAlertService;
 use App\Service\Observability\OtlpMetricsExporter;
 use App\Service\Registry\ContractRegistry;
@@ -324,6 +325,17 @@ class OutboxWorker
                     }
                 } catch (Throwable $e) {
                     $this->log('Scheduler-Fehler: ' . $e->getMessage());
+                }
+                // Process one queued GUI module-install job (async install, Audit
+                // Prio 1) — error-isolated; the install runs privileged here in the
+                // worker (DDL: CREATE SCHEMA, module migrations).
+                try {
+                    $installed = (new ModuleInstallRunner())->tick();
+                    if ($installed !== null) {
+                        $this->log("Modul-Install-Job verarbeitet: $installed");
+                    }
+                } catch (Throwable $e) {
+                    $this->log('Modul-Install-Runner-Fehler: ' . $e->getMessage());
                 }
                 // Supervise out-of-process module hosts (self-healing, ch. 23.16.2):
                 // restart crashed hosts, stop orphaned ones — throttled.

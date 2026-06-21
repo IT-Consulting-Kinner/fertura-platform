@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Controller\Admin;
 
+use App\Service\Module\ModuleInstallJobService;
 use App\Service\Module\ModuleLifecycle;
 use Cake\Datasource\ConnectionManager;
 use Cake\Http\Response;
@@ -11,7 +12,8 @@ use Throwable;
 /**
  * Module lifecycle (admin area "Module Lifecycle").
  *
- * Installation happens via the CLI (signed packages); the GUI controls
+ * Installs a **signed** module package uploaded via the GUI as an async job (the
+ * worker extracts + installs; the page polls the status); also controls
  * activation/deactivation/removal and displays dependencies.
  */
 class ModulesController extends AdminController
@@ -31,7 +33,64 @@ class ModulesController extends AdminController
             'SELECT m.module_key AS module, d.required_module_key AS requires, d.required_version '
             . 'FROM module_dependencies d JOIN modules m ON m.id = d.module_id ORDER BY m.module_key',
         )->fetchAll('assoc');
+        // Active install job (if any) -> status banner + polling in the view.
+        $this->set('installJob', (new ModuleInstallJobService())->active());
         $this->set(compact('modules', 'deps'));
+    }
+
+    /**
+     * Receives an uploaded **signed** module package (.zip), stores it and enqueues
+     * an async install job (the worker extracts + installs; signature is verified
+     * there). Returns immediately — the page polls {@see installStatus()}.
+     */
+    public function install(): ?Response
+    {
+        $this->request->allowMethod('post');
+        $file = $this->request->getUploadedFile('package');
+        if ($file === null || $file->getError() !== UPLOAD_ERR_OK) {
+            $this->Flash->error(__('flash.module.no_package'));
+
+            return $this->redirect(['action' => 'index']);
+        }
+        $name = (string)$file->getClientFilename();
+        if (strtolower(pathinfo($name, PATHINFO_EXTENSION)) !== 'zip') {
+            $this->Flash->error(__('flash.module.not_zip'));
+
+            return $this->redirect(['action' => 'index']);
+        }
+        $isolation = (string)$this->request->getData('isolation') === 'out_of_process' ? 'out_of_process' : 'in_process';
+
+        // Stored under the shared ./core mount so the worker can read it.
+        $dir = TMP . 'module_uploads';
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0o775, true);
+        }
+        $path = $dir . DIRECTORY_SEPARATOR . bin2hex(random_bytes(16)) . '.zip';
+        $file->moveTo($path);
+
+        $actor = $this->identity()?->getIdentifier();
+        (new ModuleInstallJobService())->enqueue($path, $name, $isolation, $actor !== null ? (string)$actor : null);
+        $this->Flash->success(__('flash.module.install_queued'));
+
+        return $this->redirect(['action' => 'index']);
+    }
+
+    /** JSON status of an install job (polled by the index page). */
+    public function installStatus(): Response
+    {
+        $id = (string)$this->request->getQuery('id');
+        $job = $id !== '' ? (new ModuleInstallJobService())->get($id) : null;
+        $payload = $job === null
+            ? ['found' => false]
+            : [
+                'found' => true,
+                'status' => (string)$job['status'],
+                'done' => in_array($job['status'], ['succeeded', 'failed'], true),
+                'module_key' => $job['module_key'],
+                'message' => $job['message'],
+            ];
+
+        return $this->response->withType('application/json')->withStringBody((string)json_encode($payload));
     }
 
     /**
