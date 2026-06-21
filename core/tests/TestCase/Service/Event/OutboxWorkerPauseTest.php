@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Test\TestCase\Service\Event;
 
 use App\Service\Event\OutboxWorker;
+use App\Service\System\CriticalActionService;
 use App\Service\System\WorkerPauseGate;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\TestCase;
@@ -41,7 +42,10 @@ class OutboxWorkerPauseTest extends TestCase
         $conn->execute("DELETE FROM event_outbox WHERE contract_name = 'worker.pause.test'");
         $conn->execute("DELETE FROM worker_heartbeats WHERE worker_key = 'outbox'");
         $conn->execute('UPDATE core.worker_pause SET paused = false, deadline_at = NULL WHERE id = true');
-        $conn->execute("DELETE FROM core.critical_action WHERE type = 'worker.recovery.test'");
+        // Phase 6: the runner reads the maintenance session — clean it (a leak would
+        // 503 the rest of the suite via the gate) and the test critical actions.
+        $conn->execute("DELETE FROM core.critical_action WHERE type LIKE 'worker.%' OR type LIKE 'seam.%'");
+        $conn->execute('DELETE FROM core.maintenance_session');
     }
 
     public function testPausedWorkerReportsStateAndSkipsProcessing(): void
@@ -114,7 +118,7 @@ class OutboxWorkerPauseTest extends TestCase
         $conn = ConnectionManager::get('default');
         $conn->execute(
             'INSERT INTO core.critical_action (type, status, heartbeat_at) '
-            . "VALUES ('worker.recovery.test', 'running', now() - interval '1000 seconds')",
+            . "VALUES ('worker.recovery.test', 'running', now() - interval '2000 seconds')",
         );
         $this->gate->requestPause(null, null, 120);
 
@@ -132,5 +136,39 @@ class OutboxWorkerPauseTest extends TestCase
             "SELECT status FROM core.critical_action WHERE type = 'worker.recovery.test'",
         )->fetch('assoc');
         $this->assertSame('needs_manual_restore', $status['status']);
+    }
+
+    public function testPausedWorkerRunsEngagedCriticalAction(): void
+    {
+        $conn = ConnectionManager::get('default');
+        // Drained platform so the runner fires (inFlight() == 0).
+        foreach (['event_outbox', 'webhook_deliveries', 'job_queue', 'module_install_jobs'] as $t) {
+            $conn->execute("DELETE FROM $t");
+        }
+        // Engage maintenance + pause + enqueue an action of an UNKNOWN type so the
+        // runner marks it failed without a real install — proves the pause-gate ->
+        // CriticalActionRunner::tick() seam fires inside the worker.
+        $sessionId = (string)$conn->execute(
+            'INSERT INTO core.maintenance_session (actor_user_id, allow_token_hash) VALUES (NULL, :h) RETURNING id',
+            ['h' => hash('sha256', 'x')],
+        )->fetch('assoc')['id'];
+        $this->gate->requestPause(null, $sessionId, 120);
+        $action = (new CriticalActionService())->enqueue('seam.test.notype', $sessionId, null, []);
+
+        $worker = null;
+        $logger = function (string $msg) use (&$worker): void {
+            if ($worker !== null && str_contains($msg, 'pausiert')) {
+                $worker->stop();
+            }
+        };
+        $worker = new OutboxWorker(null, 50, 5, 300, 50, $logger);
+        $worker->run();
+
+        // The runner claimed + ran it; no handler for the type -> failed (terminal).
+        $status = $conn->execute(
+            'SELECT status FROM core.critical_action WHERE id = :id',
+            ['id' => $action['id']],
+        )->fetch('assoc');
+        $this->assertSame('failed', $status['status']);
     }
 }

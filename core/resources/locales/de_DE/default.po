@@ -1759,6 +1759,9 @@ msgstr "%s kritische Aktion(en) laufen — Beenden gesperrt."
 msgid "flash.maintenance.action_queued"
 msgstr "Geschützte Aktion eingereiht — der Worker führt sie nach dem Drain aus."
 
+msgid "flash.module.use_protected_install"
+msgstr "Wartungsmodus aktiv: bitte die geschützte Installation unter Wartung nutzen."
+
 msgid "admin.maintenance.action_install_heading"
 msgstr "Geschützte Modul-Installation"
 

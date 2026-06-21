@@ -211,7 +211,7 @@ class MaintenanceControllerTest extends TestCase
         // deadlock the exit: release recovers it first, then closes the session.
         $conn->execute(
             'INSERT INTO core.critical_action (type, status, maintenance_session_id, heartbeat_at) '
-            . "VALUES ('test', 'running', :s, now() - interval '1000 seconds')",
+            . "VALUES ('test', 'running', :s, now() - interval '2000 seconds')",
             ['s' => $sessionId],
         );
 

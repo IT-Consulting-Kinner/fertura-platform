@@ -60,7 +60,7 @@ class QuiesceService
                 (SELECT count(*) FROM webhook_deliveries WHERE status = 'delivering') AS webhook_delivering,
                 (SELECT count(*) FROM webhook_deliveries
                     WHERE status = 'pending' AND available_at <= now()) AS webhook_due,
-                (SELECT count(*) FROM module_install_jobs WHERE status IN ('queued','running')) AS install_jobs,
+                (SELECT count(*) FROM module_install_jobs WHERE status = 'running') AS install_jobs,
                 (SELECT count(*) FROM job_queue WHERE status = 'reserved') AS jobs_reserved
             SQL,)->fetch('assoc');
 

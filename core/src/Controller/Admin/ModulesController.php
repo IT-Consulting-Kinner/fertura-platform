@@ -5,6 +5,7 @@ namespace App\Controller\Admin;
 
 use App\Service\Module\ModuleInstallJobService;
 use App\Service\Module\ModuleLifecycle;
+use App\Service\System\MaintenanceService;
 use Cake\Datasource\ConnectionManager;
 use Cake\Http\Response;
 use Throwable;
@@ -46,6 +47,14 @@ class ModulesController extends AdminController
     public function install(): ?Response
     {
         $this->request->allowMethod('post');
+        // During maintenance the worker is paused, so a standalone install would sit
+        // un-drained and wedge the protected drain. Route the operator to the
+        // protected install (backup → install → verify) instead.
+        if ((new MaintenanceService())->isActive()) {
+            $this->Flash->error(__('flash.module.use_protected_install'));
+
+            return $this->redirect(['action' => 'index']);
+        }
         $file = $this->request->getUploadedFile('package');
         if ($file === null || $file->getError() !== UPLOAD_ERR_OK) {
             $this->Flash->error(__('flash.module.no_package'));
@@ -69,7 +78,7 @@ class ModulesController extends AdminController
         $file->moveTo($path);
 
         $actor = $this->identity()?->getIdentifier();
-        (new ModuleInstallJobService())->enqueue($path, $name, $isolation, $actor !== null ? (string)$actor : null);
+        (new ModuleInstallJobService())->enqueue($path, $name, $isolation, is_scalar($actor) ? (string)$actor : null);
         $this->Flash->success(__('flash.module.install_queued'));
 
         return $this->redirect(['action' => 'index']);

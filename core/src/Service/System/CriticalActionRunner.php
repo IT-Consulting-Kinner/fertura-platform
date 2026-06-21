@@ -4,6 +4,8 @@ declare(strict_types=1);
 namespace App\Service\System;
 
 use App\Service\Backup\BackupService;
+use Cake\Database\Connection;
+use Cake\Datasource\ConnectionManager;
 use Throwable;
 
 /**
@@ -20,6 +22,9 @@ use Throwable;
  */
 class CriticalActionRunner
 {
+    /** Advisory lock so only ONE worker drives the protected-action queue at a time. */
+    private const RUNNER_LOCK = 778899002;
+
     private MaintenanceService $maintenance;
     private QuiesceService $quiesce;
 
@@ -47,26 +52,61 @@ class CriticalActionRunner
         if ($this->quiesce->inFlight()['total'] > 0) {
             return null; // wait for the workers to drain before mutating (design QUIESCE)
         }
-        $action = $this->actions->claimEngaged((string)$session['id']);
-        if ($action === null) {
+        // Serialize: only ONE worker drives the queue at a time, so two parallel
+        // workers can never run two protected actions concurrently (which would defeat
+        // the quiet-system + per-action-backup invariants). A worker that loses the
+        // race simply retries next cycle.
+        if (!$this->acquireLock()) {
             return null;
         }
+        try {
+            $action = $this->actions->claimEngaged((string)$session['id']);
+            if ($action === null) {
+                return null;
+            }
 
-        $id = (string)$action['id'];
-        $fence = (string)$action['fence_token'];
-        $actorId = isset($session['actor_user_id']) ? (string)$session['actor_user_id'] : null;
-        $payload = $this->decodePayload($action['payload'] ?? null);
+            $id = (string)$action['id'];
+            $fence = (string)$action['fence_token'];
+            $actorId = isset($session['actor_user_id']) ? (string)$session['actor_user_id'] : null;
+            $payload = $this->decodePayload($action['payload'] ?? null);
 
-        $handler = $this->registry->get((string)$action['type']);
-        if ($handler === null) {
-            $this->actions->markFailed($id, 'Kein Handler fuer Aktionstyp: ' . $action['type'], $fence);
+            $handler = $this->registry->get((string)$action['type']);
+            if ($handler === null) {
+                $this->actions->markFailed($id, 'Kein Handler fuer Aktionstyp: ' . $action['type'], $fence);
+
+                return $id;
+            }
+
+            $this->drive($id, $fence, $handler, $payload, $actorId);
 
             return $id;
+        } finally {
+            $this->releaseLock();
         }
+    }
 
-        $this->drive($id, $fence, $handler, $payload, $actorId);
+    private function lockConn(): Connection
+    {
+        /** @var \Cake\Database\Connection $c */
+        $c = ConnectionManager::get('default');
 
-        return $id;
+        return $c;
+    }
+
+    private function acquireLock(): bool
+    {
+        $row = $this->lockConn()->execute('SELECT pg_try_advisory_lock(:k) AS ok', ['k' => self::RUNNER_LOCK])->fetch('assoc');
+
+        return $row['ok'] === true || $row['ok'] === 't';
+    }
+
+    private function releaseLock(): void
+    {
+        try {
+            $this->lockConn()->execute('SELECT pg_advisory_unlock(:k)', ['k' => self::RUNNER_LOCK]);
+        } catch (Throwable) {
+            // best effort — the lock also releases when the connection closes
+        }
     }
 
     /**
@@ -78,7 +118,7 @@ class CriticalActionRunner
         // leaves the action pre-mutation, which the recovery sweep aborts cleanly.
         try {
             $backupId = $this->backupService()->context('gui', $actorId)->createLocked('pre-action ' . $id, $actorId);
-            $this->actions->attachBackup($id, $backupId);
+            $this->actions->attachBackup($id, $backupId, $fence);
         } catch (Throwable $e) {
             $this->actions->markFailed($id, 'Pflicht-Backup fehlgeschlagen: ' . $e->getMessage(), $fence);
 

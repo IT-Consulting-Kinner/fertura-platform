@@ -1763,6 +1763,9 @@ msgstr "%s critical action(s) running — exit blocked."
 msgid "flash.maintenance.action_queued"
 msgstr "Protected action queued — the worker runs it after the drain."
 
+msgid "flash.module.use_protected_install"
+msgstr "Maintenance is active: please use the protected install under Maintenance."
+
 msgid "admin.maintenance.action_install_heading"
 msgstr "Protected module install"
 

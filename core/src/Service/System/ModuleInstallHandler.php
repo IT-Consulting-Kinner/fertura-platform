@@ -6,6 +6,7 @@ namespace App\Service\System;
 use App\Infrastructure\Db;
 use App\Service\Module\ModuleInstallRunner;
 use App\Service\Module\ModuleLifecycle;
+use RuntimeException;
 
 /**
  * The module-install critical action — Phase 6 reference handler.
@@ -19,7 +20,9 @@ use App\Service\Module\ModuleLifecycle;
  */
 class ModuleInstallHandler implements CriticalActionHandler
 {
-    /** The key the install actually produced — set in execute(), used by verify/rollback. */
+    /**
+     * The key the install actually produced — set in execute(), used by verify/rollback.
+     */
     private ?string $installedKey = null;
 
     public function __construct(
@@ -75,8 +78,22 @@ class ModuleInstallHandler implements CriticalActionHandler
     public function rollback(array $payload): void
     {
         $key = $this->key($payload);
-        if ($key !== '') {
-            $this->lifecycle->purge($key);
+        if ($key === '') {
+            return;
+        }
+        $this->lifecycle->purge($key);
+        // purge() is best-effort — each cleanup step swallows its own error. Verify it
+        // actually removed the module; a remnant means the action-own undo did NOT
+        // fully succeed, so we throw and let the runner escalate to
+        // needs_manual_restore instead of reporting a clean rollback.
+        $conn = Db::privileged();
+        $modLeft = $conn->execute('SELECT 1 FROM modules WHERE module_key = :k', ['k' => $key])->fetch('assoc');
+        $schemaLeft = $conn->execute(
+            'SELECT 1 FROM pg_namespace WHERE nspname = :s',
+            ['s' => 'mod_' . $key],
+        )->fetch('assoc');
+        if ($modLeft !== false || $schemaLeft !== false) {
+            throw new RuntimeException('Modul-Rollback unvollstaendig — Reste fuer ' . $key . ' verblieben.');
         }
     }
 
@@ -86,4 +103,3 @@ class ModuleInstallHandler implements CriticalActionHandler
         return $this->installedKey ?? (string)($payload['module_key'] ?? '');
     }
 }
-

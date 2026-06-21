@@ -42,10 +42,13 @@ class CriticalActionService
      * Stale window for the maintenance recovery path. Generous because a real action
      * (pre-action backup = pg_dump + probe-restore, then module migrations) has long
      * phases without an intra-phase heartbeat; a too-short window would falsely sweep
-     * a healthy long-running action. A real crash therefore takes up to this long to
-     * recover — acceptable for an operator-supervised window (CLI break-glass exists).
+     * a healthy long-running action. The runner refreshes the heartbeat at every phase
+     * boundary, so only a SINGLE phase exceeding this is at risk. A real crash takes up
+     * to this long to recover — acceptable for an operator-supervised window (CLI
+     * break-glass exists). Follow-up: thread an intra-phase heartbeat into createLocked
+     * + the install for very large datasets (review #4/#6).
      */
-    public const STALE_SECONDS = 900;
+    public const STALE_SECONDS = 1800;
 
     private function conn(): Connection
     {
@@ -190,22 +193,28 @@ class CriticalActionService
         return $this->transition($id, 'needs_manual_restore', $fence);
     }
 
-    /** Links a (pre-action) backup to the action. */
-    public function attachBackup(string $id, string $backupId): void
+    /** Links a (pre-action) backup to the action (status- + fence-guarded). */
+    public function attachBackup(string $id, string $backupId, ?string $fence = null): void
     {
-        $this->conn()->execute(
-            'UPDATE core.critical_action SET backup_id = :b, heartbeat_at = now() WHERE id = :id',
-            ['b' => $backupId, 'id' => $id],
-        );
+        $this->attachField('backup_id', $id, $backupId, $fence);
     }
 
     /** Links the snapshot taken right before attempting a rollback (Phase 6). */
-    public function attachPreRollbackBackup(string $id, string $backupId): void
+    public function attachPreRollbackBackup(string $id, string $backupId, ?string $fence = null): void
     {
-        $this->conn()->execute(
-            'UPDATE core.critical_action SET pre_rollback_backup_id = :b, heartbeat_at = now() WHERE id = :id',
-            ['b' => $backupId, 'id' => $id],
-        );
+        $this->attachField('pre_rollback_backup_id', $id, $backupId, $fence);
+    }
+
+    private function attachField(string $column, string $id, string $backupId, ?string $fence): void
+    {
+        $sql = "UPDATE core.critical_action SET $column = :b, heartbeat_at = now() "
+            . 'WHERE id = :id AND status IN ' . self::NON_TERMINAL_SQL;
+        $params = ['b' => $backupId, 'id' => $id];
+        if ($fence !== null) {
+            $sql .= ' AND fence_token = :fence';
+            $params['fence'] = $fence;
+        }
+        $this->conn()->execute($sql, $params);
     }
 
     /**
