@@ -188,8 +188,10 @@ Jeder Increment: phpstan + phpcs + Tests grün, adversarial review (Autz-kritisc
 
 ## 10. Offene Punkte (für die Umsetzung zu klären)
 
-- **Erst-Mandanten-Admin-Onboarding:** legt der Operator beim Tenant-Provisioning direkt einen
-  Mandanten-Admin an (Einladung/Passwort-Reset-Flow), oder gibt es einen separaten Schritt?
+- **Erst-Mandanten-Admin-Onboarding:** ✅ **entschieden — separater Schritt.** Das Provisioning legt
+  nur den leeren Mandanten an; der erste Mandanten-Admin wird danach in einem eigenen Schritt erzeugt
+  (Operator legt einen User im Ziel-Tenant an + vergibt die Tenant-Admin-Area + Einladungs-/Passwort-
+  Reset-Link). Fällt in Inc 4 (`op_admins` / Operator-seitige Mandanten-Admin-Verwaltung).
 - **Audit-Sichtbarkeit:** sieht ein Mandanten-Admin nur seinen Tenant-Audit-Ausschnitt? (Audit ist
   tenant-markiert; Vorschlag: ja, gescoped.)
 - **`SYSTEM`-Gruppe (health/audit/tokens):** `/admin/health` ist seit Inc 1 operator-gegated
