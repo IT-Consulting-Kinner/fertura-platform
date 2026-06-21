@@ -6,6 +6,7 @@ namespace App\Controller\Admin;
 use App\Controller\AppController;
 use App\Infrastructure\Uuid;
 use App\Service\Admin\AdminNavBuilder;
+use App\Service\Tenant\TenantService;
 use Cake\Datasource\ConnectionManager;
 use Cake\Event\EventInterface;
 use Cake\Http\Exception\ForbiddenException;
@@ -21,9 +22,34 @@ use Cake\Http\Response;
 class AdminController extends AppController
 {
     /**
+     * The operator tenant: the platform's default tenant, whose users are the
+     * OPERATOR admins (Betreiber/Mandant-Trennung, design §3.1). Operator-scoped
+     * areas (platform-wide functions) require membership here.
+     */
+    public const OPERATOR_TENANT_ID = TenantService::DEFAULT_TENANT_ID;
+
+    /**
+     * Core areas that are TENANT-scoped (administer within one tenant). Every OTHER
+     * Core area in {@see self::NAV} is operator-scoped; module-contributed areas (not
+     * in NAV) are tenant config. Fail-closed: a NEW Core area is operator until listed
+     * here. The area SPLIT (op_admins vs tenant_users etc.) lands in a later increment;
+     * here user_group_admin stays one tenant area (the operator's own user mgmt is the
+     * operator-tenant slice of it).
+     */
+    public const TENANT_AREAS = ['user_group_admin'];
+
+    /**
      * Required administration area (null = any admin).
      */
     protected ?string $requiredArea = null;
+
+    /**
+     * Operator-only WITHOUT a fixed area (e.g. the platform health dashboard): forces
+     * the operator-tenant gate even when {@see self::$requiredArea} is null. Use for
+     * gate-free admin pages that surface operator/platform-wide data which a tenant
+     * admin must not see.
+     */
+    protected bool $requiresOperator = false;
 
     /**
      * @var list<string>
@@ -87,6 +113,18 @@ class AdminController extends AppController
         }
         if ($this->requiredArea !== null && !in_array($this->requiredArea, $this->userAreaKeys, true)) {
             throw new ForbiddenException('Kein Zugriff auf diesen Administrationsbereich.');
+        }
+        // Operator gate (Betreiber/Mandant-Trennung, Inc 1): an operator-scoped area is
+        // a platform-wide function (tenants, updates, module lifecycle, system backup,
+        // maintenance, …) and may be reached ONLY by an operator admin — a user of the
+        // operator tenant. A tenant admin holding such a grant is still refused here, so
+        // the grant alone never crosses the operator boundary. `$requiresOperator`
+        // extends this to gate-free operator pages (no fixed area). Tenant-scoped +
+        // module areas pass (their data isolation is enforced per-controller).
+        $needsOperator = $this->requiresOperator
+            || ($this->requiredArea !== null && $this->isOperatorArea($this->requiredArea));
+        if ($needsOperator && !$this->isOperatorTenant()) {
+            throw new ForbiddenException('Operator-Bereich: nur fuer Betreiber-Administratoren.');
         }
 
         $this->set('currentUser', $identity);
@@ -197,5 +235,34 @@ class AdminController extends AppController
         )->fetchAll('assoc');
 
         return array_map(static fn($r) => (string)$r['admin_area_key'], $rows);
+    }
+
+    /**
+     * Whether $area is OPERATOR-scoped: a Core area ({@see self::NAV}) not listed in
+     * {@see self::TENANT_AREAS}. Module-contributed areas (absent from NAV) are tenant
+     * config, never operator. Fail-closed for Core: a new Core area is operator by
+     * default.
+     */
+    protected function isOperatorArea(string $area): bool
+    {
+        return array_key_exists($area, self::NAV) && !in_array($area, self::TENANT_AREAS, true);
+    }
+
+    /**
+     * Whether the acting admin belongs to the operator tenant (the gate for
+     * operator-scoped areas). Reads the request's RLS tenant context; NULL/unset
+     * yields false (fail-closed). Single-org installs run entirely in the operator
+     * (default) tenant, so this is true for everyone — backward-compatible.
+     */
+    protected function isOperatorTenant(): bool
+    {
+        /** @var \Cake\Database\Connection $conn */
+        $conn = ConnectionManager::get('default');
+        $row = $conn->execute(
+            'SELECT core.current_tenant() = :op AS ok',
+            ['op' => self::OPERATOR_TENANT_ID],
+        )->fetch('assoc');
+
+        return $row !== false && ($row['ok'] === true || $row['ok'] === 't');
     }
 }

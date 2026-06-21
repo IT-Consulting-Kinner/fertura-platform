@@ -9,12 +9,16 @@ use App\Service\Health\WorkerHeartbeat;
 /**
  * Admin status dashboard (ch. 20.2.4 / 20.3): operational state at a glance —
  * subsystem health, module lifecycle, registry, outbox/dead-letter, licenses
- * and worker freshness. Accessible to any administrator (no fixed
- * administration area), as it is a purely read-only operations overview.
+ * and worker freshness. This is PLATFORM-WIDE operator data (worker heartbeats,
+ * DB role, storage paths, backup/license/module status across all tenants and not
+ * tenant-scoped), so it is OPERATOR-ONLY — a tenant admin must not see it. No fixed
+ * area (any operator admin), but the operator-tenant gate is enforced.
  */
 class HealthController extends AdminController
 {
     protected ?string $requiredArea = null;
+
+    protected bool $requiresOperator = true;
 
     public function index(): void
     {

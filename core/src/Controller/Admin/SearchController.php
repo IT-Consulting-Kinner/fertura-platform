@@ -36,7 +36,11 @@ class SearchController extends AdminController
     public function reindex(): ?Response
     {
         $this->request->allowMethod('post');
-        if (!in_array('core_config', $this->userAreaKeys, true)) {
+        // Operator-only: a platform-wide, RLS-BYPASSING reindex across all tenants. The
+        // grant alone is not enough — the actor must also be an operator-tenant admin
+        // (this controller is requiredArea=null, so the central operator gate does not
+        // fire; the check is conjoined here, design §3.3).
+        if (!in_array('core_config', $this->userAreaKeys, true) || !$this->isOperatorTenant()) {
             $this->Flash->error(__('flash.search.reindex_denied'));
 
             return $this->redirect(['action' => 'index']);

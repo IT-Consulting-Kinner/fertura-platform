@@ -146,10 +146,18 @@ umgestellt; `AdminController::NAV` bekommt je Area den `scope`.
 ## 8. Increment-Plan
 
 0. **Dieses Design-Doc** (Freigabe).
-1. **Diskriminator + Area-Typisierung + Enforcement:** `scope` auf `admin_areas`, Operator-Tenant-Tor
-   in `AdminController`, `OPERATOR_TENANT_ID`. Reiner Gate-Mechanismus, noch ohne Area-Umbau.
-2. **Cross-Tenant-Scoping / Leak-Fix (Sicherheit, zuerst):** `UsersController` + alle Tenant-Area-
-   Controller auf `tenant_id = current_tenant()`; Tests, die den Leak nachweisen + schließen.
+1. **Diskriminator + Area-Typisierung + Enforcement:** ✅ — `OPERATOR_TENANT_ID`, Area-Scope per
+   Code-Klassifikation (`AdminController::TENANT_AREAS`; jede andere Core-Area = operator; Modul-Areas =
+   tenant; **fail-closed** für Core), Operator-Tenant-Tor in `AdminController::beforeFilter`, plus
+   `requiresOperator` für gate-freie Operator-Seiten. Adversarial reviewed → zwei Bypässe abgedichtet:
+   `SearchController::reindex` (inline-Grant ohne Operator-Tor) und `/admin/health` (gate-frei →
+   Plattform-Operator-Daten an Mandanten-Admins). Die `scope`-DB-Spalte ist bewusst auf Inc 3
+   verschoben (Code ist die Quelle der Wahrheit für Core-Areas; die Spalte wird erst beim Nav-/Area-
+   Umbau konsumiert).
+2. **Cross-Tenant-Scoping / Leak-Fix (Sicherheit, vorgezogen):** ✅ — `UsersController` (ALLE Aktionen,
+   inkl. setPassword-Takeover) + `GroupsController::addMember` (Review-HIGH) auf
+   `tenant_id = core.current_tenant()`; Last-Admin-Schutz per-Tenant; `add()` fail-closed;
+   Isolationstests, die den Leak nachweisen + schließen.
 3. **Area-Split + Nav-Realms:** `core_config`/`user_group_admin` zerlegen, `AdminController::NAV` +
    `AdminNavBuilder` auf Betreiber/Mandant, Mapping-Migration, i18n.
 4. **`op_admins`** (Operator-Admin-Verwaltung, nur Operator-Mandant-User) als eigener gescopeter
@@ -176,8 +184,10 @@ Jeder Increment: phpstan + phpcs + Tests grün, adversarial review (Autz-kritisc
   Mandanten-Admin an (Einladung/Passwort-Reset-Flow), oder gibt es einen separaten Schritt?
 - **Audit-Sichtbarkeit:** sieht ein Mandanten-Admin nur seinen Tenant-Audit-Ausschnitt? (Audit ist
   tenant-markiert; Vorschlag: ja, gescoped.)
-- **`SYSTEM`-Gruppe (health/audit/tokens):** heute gate-frei für jeden Admin — künftig je Realm
-  unterschiedlich (Operator: plattformweit; Mandant: gescoped/teilweise).
+- **`SYSTEM`-Gruppe (health/audit/tokens):** `/admin/health` ist seit Inc 1 operator-gegated
+  (`requiresOperator` → Plattform-Operator-Daten nur für Betreiber); `audit_log` hat RLS
+  (auto-tenant-gescoped, kein Leak); **API-Tokens** noch offen (vermutlich tenant-scoped). Die
+  Nav-Sichtbarkeit der SYSTEM-Links je Realm folgt mit dem Nav-Umbau (Inc 3).
 - **API-Tokens:** Operator- vs. Mandanten-Scope der Tokens (vermutlich tenant-scoped für Mandanten).
 - **Modul-Config-Contract:** wie deklariert ein Modul seinen Per-Tenant-Config-Vertrag (Schema)? —
   fällt in Increment 5.
