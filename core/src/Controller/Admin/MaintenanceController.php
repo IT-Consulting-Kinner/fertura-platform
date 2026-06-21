@@ -230,6 +230,45 @@ class MaintenanceController extends AdminController
         return $this->redirect(['action' => 'index']);
     }
 
+    /**
+     * Queues a PROTECTED trust-anchor rotation as a critical action (Phase 6 Inc 4).
+     * The new anchor must already be installed; the old one expires after the overlap.
+     */
+    public function rotateTrust(): ?Response
+    {
+        $this->request->allowMethod('post');
+
+        $session = (new MaintenanceService())->activeSession();
+        if ($session === null) {
+            $this->Flash->error(__('flash.maintenance.not_active'));
+
+            return $this->redirect(['action' => 'index']);
+        }
+        $old = trim((string)$this->request->getData('old_key_id'));
+        $new = trim((string)$this->request->getData('new_key_id'));
+        if ($old === '' || $new === '') {
+            $this->Flash->error(__('flash.maintenance.trust_params'));
+
+            return $this->redirect(['action' => 'index']);
+        }
+        $overlap = max(0, (int)$this->request->getData('overlap_days'));
+
+        $actorId = $this->actorId();
+        $action = (new CriticalActionService())->enqueue(
+            'trust_rotate',
+            (string)$session['id'],
+            $actorId,
+            ['old_key_id' => $old, 'new_key_id' => $new, 'overlap_days' => $overlap > 0 ? $overlap : 30],
+        );
+        $this->audit('maintenance.action.enqueue', (string)$session['id'], $actorId, [
+            'type' => 'trust_rotate',
+            'action_id' => $action['id'],
+        ]);
+        $this->Flash->success(__('flash.maintenance.action_queued'));
+
+        return $this->redirect(['action' => 'index']);
+    }
+
     /** JSON drain status polled by the index page while maintenance is engaged. */
     public function status(): Response
     {

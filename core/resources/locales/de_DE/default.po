@@ -1792,6 +1792,27 @@ msgstr "Schlüssel rotieren"
 msgid "admin.maintenance.action_secret_confirm"
 msgstr "Schlüsselrotation jetzt einreihen? Ist der alte Schlüssel als SECURITY_ENCRYPTION_KEY_OLD bereitgestellt?"
 
+msgid "flash.maintenance.trust_params"
+msgstr "Alte und neue Anker-Schlüssel-ID sind erforderlich."
+
+msgid "admin.maintenance.action_trust_heading"
+msgstr "Geschützte Trust-Anker-Rotation"
+
+msgid "admin.maintenance.action_trust_hint"
+msgstr "Der neue Anker gilt ab sofort unbegrenzt, der alte läuft nach dem Überlappungsfenster aus. Voraussetzung: der neue Anker ist bereits installiert. Aktionseigener Rollback (Wiederherstellen der Gültigkeitsfenster)."
+
+msgid "admin.maintenance.action_trust_old"
+msgstr "Alte Schlüssel-ID"
+
+msgid "admin.maintenance.action_trust_new"
+msgstr "Neue Schlüssel-ID"
+
+msgid "admin.maintenance.action_trust_overlap"
+msgstr "Überlappung (Tage)"
+
+msgid "admin.maintenance.action_trust_submit"
+msgstr "Geschützt rotieren"
+
 msgid "admin.maintenance.action_install_heading"
 msgstr "Geschützte Modul-Installation"
 

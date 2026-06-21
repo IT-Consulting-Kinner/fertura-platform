@@ -4,12 +4,14 @@ declare(strict_types=1);
 namespace App\Command;
 
 use App\Service\Security\TrustChain;
+use App\Service\Security\TrustRotationService;
 use App\Service\Security\TrustStore;
 use Cake\Command\Command;
 use Cake\Console\Arguments;
 use Cake\Console\ConsoleIo;
 use Cake\Console\ConsoleOptionParser;
 use Cake\Datasource\ConnectionManager;
+use Throwable;
 
 /**
  * Management of trust anchors and the revocation list (ch. 24.9.2).
@@ -92,33 +94,17 @@ class TrustCommand extends Command
     {
         $old = (string)$args->getArgument('key_id');
         $new = (string)$args->getArgument('public_key');
-        if ($old === '' || $new === '') {
-            $io->error('rotate benötigt <alte-key-id> <neue-key-id>.');
-
-            return static::CODE_ERROR;
-        }
-        if ($trust->getAnchor($new) === null) {
-            $io->error("Neuer Anker nicht aktiv/vorhanden: $new (zuerst 'trust add-anchor' bzw. '--cert').");
-
-            return static::CODE_ERROR;
-        }
         $days = max(0, (int)$args->getOption('overlap-days'));
-        $conn = ConnectionManager::get('default');
-        // New anchor: valid from now on, indefinitely.
-        $conn->execute(
-            'UPDATE trust_anchors SET valid_from = COALESCE(valid_from, now()), valid_to = NULL WHERE key_id = :k',
-            ['k' => $new],
-        );
-        // Old anchor: let it expire after the window.
-        $n = $conn->execute(
-            "UPDATE trust_anchors SET valid_to = now() + (:d || ' days')::interval WHERE key_id = :k",
-            ['d' => (string)$days, 'k' => $old],
-        )->rowCount();
-        if ($n === 0) {
-            $io->warning("Alter Anker '$old' nicht gefunden — nur der neue Anker wurde aktiviert.");
-        } else {
-            $io->success("Rotation: '$new' gilt ab sofort; '$old' läuft in $days Tagen aus (beide bis dahin akzeptiert).");
+        // Transactional + audited via the shared service (reused by the maintenance
+        // critical-action handler), which also snapshots the prior windows.
+        try {
+            (new TrustRotationService(null, $trust))->rotate($old, $new, $days);
+        } catch (Throwable $e) {
+            $io->error($e->getMessage());
+
+            return static::CODE_ERROR;
         }
+        $io->success("Rotation: '$new' gilt ab sofort; '$old' läuft in $days Tagen aus (beide bis dahin akzeptiert).");
 
         return static::CODE_SUCCESS;
     }

@@ -29,6 +29,7 @@ class CriticalActionRegistry
             new ModuleInstallHandler(),
             new TenantProvisionHandler(),
             new SecretRotateHandler(),
+            new TrustRotateHandler(),
         ];
     }
 

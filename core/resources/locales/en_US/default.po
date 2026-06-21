@@ -1796,6 +1796,27 @@ msgstr "Rotate key"
 msgid "admin.maintenance.action_secret_confirm"
 msgstr "Queue the key rotation now? Is the old key deployed as SECURITY_ENCRYPTION_KEY_OLD?"
 
+msgid "flash.maintenance.trust_params"
+msgstr "Old and new anchor key IDs are required."
+
+msgid "admin.maintenance.action_trust_heading"
+msgstr "Protected trust-anchor rotation"
+
+msgid "admin.maintenance.action_trust_hint"
+msgstr "The new anchor becomes valid indefinitely; the old one expires after the overlap window. Prerequisite: the new anchor is already installed. Action-own rollback (restores the validity windows)."
+
+msgid "admin.maintenance.action_trust_old"
+msgstr "Old key ID"
+
+msgid "admin.maintenance.action_trust_new"
+msgstr "New key ID"
+
+msgid "admin.maintenance.action_trust_overlap"
+msgstr "Overlap (days)"
+
+msgid "admin.maintenance.action_trust_submit"
+msgstr "Rotate protected"
+
 msgid "admin.maintenance.action_install_heading"
 msgstr "Protected module install"
 

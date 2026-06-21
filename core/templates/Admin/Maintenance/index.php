@@ -119,6 +119,33 @@
                 </div>
             </div>
         </div>
+        <div class="accordion-item">
+            <h2 class="accordion-header">
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#protTrust" aria-expanded="false" aria-controls="protTrust">
+                    <?= h(__('admin.maintenance.action_trust_heading')) ?>
+                </button>
+            </h2>
+            <div id="protTrust" class="accordion-collapse collapse">
+                <div class="accordion-body mw-lg">
+                    <p class="text-muted small mb-2"><?= h(__('admin.maintenance.action_trust_hint')) ?></p>
+                    <?= $this->Form->create(null, ['url' => ['action' => 'rotateTrust']]) ?>
+                    <div class="mb-3">
+                        <label class="form-label" for="protTrustOld"><?= h(__('admin.maintenance.action_trust_old')) ?></label>
+                        <input type="text" name="old_key_id" id="protTrustOld" class="form-control mw-sm" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="protTrustNew"><?= h(__('admin.maintenance.action_trust_new')) ?></label>
+                        <input type="text" name="new_key_id" id="protTrustNew" class="form-control mw-sm" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="protTrustOverlap"><?= h(__('admin.maintenance.action_trust_overlap')) ?></label>
+                        <input type="number" name="overlap_days" id="protTrustOverlap" class="form-control mw-sm" value="30" min="0">
+                    </div>
+                    <?= $this->Form->button(__('admin.maintenance.action_trust_submit'), ['class' => 'btn btn-warning']) ?>
+                    <?= $this->Form->end() ?>
+                </div>
+            </div>
+        </div>
     </div>
 
     <?php if (($actions ?? []) !== []) : ?>
