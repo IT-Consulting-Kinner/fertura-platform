@@ -165,6 +165,45 @@ class MaintenanceController extends AdminController
         return $this->redirect(['action' => 'index']);
     }
 
+    /**
+     * Queues a PROTECTED tenant provision as a critical action (Phase 6 Increment 2).
+     * Only while maintenance is engaged; the worker runs it (backup → create → verify
+     * → rollback) once drained.
+     */
+    public function provisionTenant(): ?Response
+    {
+        $this->request->allowMethod('post');
+
+        $session = (new MaintenanceService())->activeSession();
+        if ($session === null) {
+            $this->Flash->error(__('flash.maintenance.not_active'));
+
+            return $this->redirect(['action' => 'index']);
+        }
+        $key = trim((string)$this->request->getData('key'));
+        $name = trim((string)$this->request->getData('name'));
+        if ($key === '' || $name === '') {
+            $this->Flash->error(__('flash.maintenance.tenant_params'));
+
+            return $this->redirect(['action' => 'index']);
+        }
+
+        $actorId = $this->actorId();
+        $action = (new CriticalActionService())->enqueue(
+            'tenant_provision',
+            (string)$session['id'],
+            $actorId,
+            ['key' => $key, 'name' => $name],
+        );
+        $this->audit('maintenance.action.enqueue', (string)$session['id'], $actorId, [
+            'type' => 'tenant_provision',
+            'action_id' => $action['id'],
+        ]);
+        $this->Flash->success(__('flash.maintenance.action_queued'));
+
+        return $this->redirect(['action' => 'index']);
+    }
+
     /** JSON drain status polled by the index page while maintenance is engaged. */
     public function status(): Response
     {

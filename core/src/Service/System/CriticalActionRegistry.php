@@ -25,7 +25,10 @@ class CriticalActionRegistry
     /** @return list<CriticalActionHandler> */
     private static function defaults(): array
     {
-        return [new ModuleInstallHandler()];
+        return [
+            new ModuleInstallHandler(),
+            new TenantProvisionHandler(),
+        ];
     }
 
     public function get(string $type): ?CriticalActionHandler

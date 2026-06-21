@@ -1762,6 +1762,24 @@ msgstr "Geschützte Aktion eingereiht — der Worker führt sie nach dem Drain a
 msgid "flash.module.use_protected_install"
 msgstr "Wartungsmodus aktiv: bitte die geschützte Installation unter Wartung nutzen."
 
+msgid "flash.maintenance.tenant_params"
+msgstr "Mandanten-Schlüssel und -Name sind erforderlich."
+
+msgid "admin.maintenance.action_tenant_heading"
+msgstr "Geschützte Mandanten-Provisionierung"
+
+msgid "admin.maintenance.action_tenant_hint"
+msgstr "Läuft als kritische Aktion: Pflicht-Backup → Mandant anlegen → Verifikation, mit aktionseigenem Rollback (Löschen des frischen Mandanten)."
+
+msgid "admin.maintenance.action_tenant_key"
+msgstr "Mandanten-Schlüssel (a-z, 0-9, _-)"
+
+msgid "admin.maintenance.action_tenant_name"
+msgstr "Mandantenname"
+
+msgid "admin.maintenance.action_tenant_submit"
+msgstr "Geschützt provisionieren"
+
 msgid "admin.maintenance.action_install_heading"
 msgstr "Geschützte Modul-Installation"
 

@@ -76,6 +76,29 @@
                 </div>
             </div>
         </div>
+        <div class="accordion-item">
+            <h2 class="accordion-header">
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#protTenant" aria-expanded="false" aria-controls="protTenant">
+                    <?= h(__('admin.maintenance.action_tenant_heading')) ?>
+                </button>
+            </h2>
+            <div id="protTenant" class="accordion-collapse collapse">
+                <div class="accordion-body mw-lg">
+                    <p class="text-muted small mb-2"><?= h(__('admin.maintenance.action_tenant_hint')) ?></p>
+                    <?= $this->Form->create(null, ['url' => ['action' => 'provisionTenant']]) ?>
+                    <div class="mb-3">
+                        <label class="form-label" for="protTenantKey"><?= h(__('admin.maintenance.action_tenant_key')) ?></label>
+                        <input type="text" name="key" id="protTenantKey" class="form-control mw-sm" maxlength="63" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="protTenantName"><?= h(__('admin.maintenance.action_tenant_name')) ?></label>
+                        <input type="text" name="name" id="protTenantName" class="form-control" maxlength="120" required>
+                    </div>
+                    <?= $this->Form->button(__('admin.maintenance.action_tenant_submit'), ['class' => 'btn btn-warning']) ?>
+                    <?= $this->Form->end() ?>
+                </div>
+            </div>
+        </div>
     </div>
 
     <?php if (($actions ?? []) !== []) : ?>
