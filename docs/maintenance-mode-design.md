@@ -96,7 +96,7 @@ ENTER_MAINTENANCE ─→ QUIESCE ─→ PRE_ACTION_BACKUP ─→ ACTION ─→ V
 1. DB-Leitzustand + ungecachter Reader + `pg_notify` ← **Phase 1 ✅**
 2. Worker-Pause-Gate + `QuiesceService` ← **Phase 2 ✅**
 3. `SelectiveMaintenanceMiddleware` + Allow-Token + Login/Cookie-Block ← **Phase 3 ✅** (+ GUI: `MaintenanceController` engage/release/status + Drain-Polling-View)
-4. `critical_action`-State-Machine + Crash-Recovery-Sweep
+4. `critical_action`-State-Machine + Crash-Recovery-Sweep ← **Phase 4 ✅**
 5. Pre-Action-Backup-Gate (`createLocked`, erzwungene Verschluesselung, Store-Registry)
 6. `ActionVerifier` pro Typ + aktionseigener Rollback
 7. zuletzt globaler Restore / `backup restore`-GUI hinter dem reifen Cutover-Pfad
@@ -141,6 +141,27 @@ ENTER_MAINTENANCE ─→ QUIESCE ─→ PRE_ACTION_BACKUP ─→ ACTION ─→ V
     nicht nur `maint_allow`); `release()` „exit only when stable"-Gate kommt mit Phase 4
     (heute jederzeit freigebbar); engage/release-Audit nutzt aktuell den Operator-Tenant-Scope
     (kein System-Tenant-Override im `AuditLogger`).
+
+- **Phase 4** (Critical-Action-State-Machine + Crash-Recovery):
+  - `core.critical_action` (9 States: quiescing/backing_up/running/verifying/rolling_back =
+    non-terminal; succeeded/failed/aborted/needs_manual_restore = terminal) + Partial-Index
+    über Non-Terminal + `fence_token` (reserviert für Phase-5/6-Fencing).
+  - `CriticalActionService`: `start`/`transition`/`markSucceeded`/`markFailed`/`heartbeat`
+    (Terminal-Writes sind guarded → kein Zombie-Overwrite), `hasNonTerminal`/`nonTerminalCount`
+    (optional session-scoped), `recoverStale` (pre-mutation→aborted, mutating/post→
+    needs_manual_restore; Message wird erhalten + angehängt).
+  - **Exit-Gate atomar** (§4.3 EXIT): `MaintenanceService::releaseIfStable($sessionId)` schließt
+    die Session in EINEM bedingten UPDATE nur, wenn keine non-terminale Aktion DIESER Session
+    läuft (kein read-then-act); bei Verweigerung bleiben die Worker pausiert. Vorab `recoverStale`,
+    damit ein toter Prozess den Exit nie deadlockt.
+  - Crash-Recovery-Sweep: OutboxWorker-Startup + throttled im Loop (headless-Backstop) **und**
+    Web-Read-Time (index/status).
+  - Security-Review (0 critical/high, 2 medium, 6 low, 1 nit) eingearbeitet: atomares
+    session-scoped Exit-Gate, Terminal-Write-Guard, Worker-Recovery- + Boundary-/Heartbeat-/
+    Message-Tests ergänzt.
+  - **Offen (Phase 5/6)**: echte Aktionen (module install, tenant provision, secret/trust rotate)
+    mit `start()…markSucceeded()` umklammern; `fence_token`-Enforcement + `start()`-seitiger
+    Refuse-when-closing (volle TOCTOU-Schließung); `needs_manual_restore`-Operator-Quittung-UI.
 
 #### Offene Review-Punkte (bewusst nach Phase 3 / Follow-up deferred)
 - **Quiesce-aware Health**: ein pausierter Worker skippt `ScheduledTaskRunner.tick()`, daher können

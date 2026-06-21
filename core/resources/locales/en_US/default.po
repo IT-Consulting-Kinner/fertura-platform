@@ -1753,3 +1753,9 @@ msgstr "Maintenance mode ended."
 
 msgid "flash.maintenance.not_active"
 msgstr "No maintenance mode is active."
+
+msgid "flash.maintenance.action_in_progress"
+msgstr "Cannot end maintenance: critical actions are still running."
+
+msgid "admin.maintenance.blocking_actions"
+msgstr "%s critical action(s) running — exit blocked."

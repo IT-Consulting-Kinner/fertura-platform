@@ -98,6 +98,32 @@ class MaintenanceService
     }
 
     /**
+     * "Exit only when stable" (design §4.3 EXIT, decision #4): closes the session
+     * ATOMICALLY only if no critical action of that session is still in flight — the
+     * close and the in-flight check are one conditional UPDATE, so no action can slip
+     * in between a separate read and the close. Returns whether it actually closed
+     * (false = refused because work is still running). The caller must NOT resume the
+     * workers when this returns false.
+     */
+    public function releaseIfStable(string $sessionId): bool
+    {
+        $closed = $this->conn()->execute(
+            "UPDATE core.maintenance_session SET status = 'closed', closed_at = now() "
+            . "WHERE id = :id AND status <> 'closed' "
+            . 'AND NOT EXISTS (SELECT 1 FROM core.critical_action '
+            . 'WHERE maintenance_session_id = :id '
+            . "AND status IN ('quiescing','backing_up','running','verifying','rolling_back'))",
+            ['id' => $sessionId],
+        )->rowCount() > 0;
+
+        if ($closed) {
+            $this->notify();
+        }
+
+        return $closed;
+    }
+
+    /**
      * Refreshes the active session's liveness timestamp. Phase 9's TTL sweep flips a
      * session whose heartbeat has gone stale to `operator_gone`, so the break-glass
      * CLI can reassign or release it without the original operator.

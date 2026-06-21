@@ -3,6 +3,7 @@
  * @var \App\View\AppView $this
  * @var array<string, mixed>|null $session
  * @var array<string, mixed>|null $quiesce
+ * @var int $blockingActions
  */
 ?>
 <h1 class="h3 mb-3"><?= h(__('admin.maintenance.title')) ?></h1>
@@ -46,6 +47,10 @@
         <dd class="col-7"><?= h((string)($session['opened_at'] ?? '')) ?></dd>
     </dl>
 
+    <div id="maintBlocking" class="small text-danger mb-2"<?= ($blockingActions ?? 0) > 0 ? '' : ' hidden' ?>>
+        <?= h(__('admin.maintenance.blocking_actions', (string)($blockingActions ?? 0))) ?>
+    </div>
+
     <?= $this->UiKit->confirmPost(
         __('admin.maintenance.release'),
         ['action' => 'release'],
@@ -57,15 +62,25 @@
     (function () {
         var banner = document.getElementById('maintBanner');
         var status = document.getElementById('maintStatus');
+        var blocking = document.getElementById('maintBlocking');
         if (!banner || !status) { return; }
         var tplDraining = <?= json_encode(__('admin.maintenance.draining', '%N%')) ?>;
         var tplDrained = <?= json_encode(__('admin.maintenance.drained')) ?>;
         var tplTimedOut = <?= json_encode(__('admin.maintenance.timed_out')) ?>;
+        var tplBlocking = <?= json_encode(__('admin.maintenance.blocking_actions', '%N%')) ?>;
         var timer = setInterval(function () {
             fetch('/admin/maintenance/status', { headers: { 'Accept': 'application/json' } })
                 .then(function (r) { return r.json(); })
                 .then(function (d) {
                     if (!d.active) { clearInterval(timer); location.reload(); return; }
+                    if (blocking) {
+                        if (d.blocking_actions > 0) {
+                            blocking.hidden = false;
+                            blocking.textContent = tplBlocking.replace('%N%', d.blocking_actions);
+                        } else {
+                            blocking.hidden = true;
+                        }
+                    }
                     if (d.done) {
                         clearInterval(timer);
                         var sp = banner.querySelector('.spinner-border'); if (sp) { sp.remove(); }

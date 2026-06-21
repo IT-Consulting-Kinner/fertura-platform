@@ -1749,3 +1749,9 @@ msgstr "Wartungsmodus beendet."
 
 msgid "flash.maintenance.not_active"
 msgstr "Es ist kein Wartungsmodus aktiv."
+
+msgid "flash.maintenance.action_in_progress"
+msgstr "Wartung kann nicht beendet werden: es laufen noch kritische Aktionen."
+
+msgid "admin.maintenance.blocking_actions"
+msgstr "%s kritische Aktion(en) laufen — Beenden gesperrt."

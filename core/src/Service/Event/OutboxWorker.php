@@ -16,6 +16,7 @@ use App\Service\Observability\OtlpMetricsExporter;
 use App\Service\Registry\ContractRegistry;
 use App\Service\Schedule\ScheduledTaskRunner;
 use App\Service\Settings\SettingsManager;
+use App\Service\System\CriticalActionService;
 use App\Service\System\WorkerPauseGate;
 use App\Service\Webhook\WebhookService;
 use Cake\Database\Connection;
@@ -330,6 +331,18 @@ class OutboxWorker
         // stopped (SIGTERM) mid-pause: a freshly started worker is running. If the
         // pause is still engaged, the first cycle re-marks 'paused' (idempotent).
         WorkerHeartbeat::markState('outbox', 'running');
+        // Crash recovery (Phase 4): a critical action whose process died leaves a
+        // stale heartbeat -> sweep it to a terminal state so it can never deadlock
+        // the maintenance exit. Done at startup (recovers a previous crash) and
+        // throttled in the loop (recovers a web action that dies mid-flight).
+        try {
+            $recovered = (new CriticalActionService())->recoverStale();
+            if ($recovered > 0) {
+                $this->log("$recovered haengende kritische Aktion(en) zurueckgesetzt.");
+            }
+        } catch (Throwable $e) {
+            $this->log('Critical-Action-Recovery-Fehler: ' . $e->getMessage());
+        }
 
         while ($this->running) {
             try {
@@ -422,6 +435,17 @@ class OutboxWorker
                         }
                     } catch (Throwable $e) {
                         $this->log('Observability-Fehler: ' . $e->getMessage());
+                    }
+                    // Crash recovery for critical actions (Phase 4): a web action
+                    // that died mid-flight leaves a stale heartbeat -> sweep it so it
+                    // never deadlocks the maintenance exit. Throttled, error-isolated.
+                    try {
+                        $recovered = (new CriticalActionService())->recoverStale();
+                        if ($recovered > 0) {
+                            $this->log("$recovered haengende kritische Aktion(en) zurueckgesetzt.");
+                        }
+                    } catch (Throwable $e) {
+                        $this->log('Critical-Action-Recovery-Fehler: ' . $e->getMessage());
                     }
                 }
                 // Fully drain the existing events. Re-check the pause flag each

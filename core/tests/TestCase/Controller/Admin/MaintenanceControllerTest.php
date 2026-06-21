@@ -48,9 +48,18 @@ class MaintenanceControllerTest extends TestCase
     private function cleanup(): void
     {
         $conn = ConnectionManager::get('default');
+        $conn->execute('DELETE FROM core.critical_action');
         $conn->execute('DELETE FROM core.maintenance_session');
         $conn->execute('UPDATE core.worker_pause SET paused = false, deadline_at = NULL WHERE id = true');
         $conn->execute("DELETE FROM users WHERE email LIKE '%@zzmaint.local'");
+    }
+
+    private function engageSession(): string
+    {
+        return (string)ConnectionManager::get('default')->execute(
+            'INSERT INTO core.maintenance_session (actor_user_id, allow_token_hash) VALUES (:a, :h) RETURNING id',
+            ['a' => $this->userId, 'h' => hash('sha256', 'x')],
+        )->fetch('assoc')['id'];
     }
 
     private function login(?string $userId = null): void
@@ -157,10 +166,7 @@ class MaintenanceControllerTest extends TestCase
 
     public function testStatusReturnsActiveJson(): void
     {
-        ConnectionManager::get('default')->execute(
-            'INSERT INTO core.maintenance_session (actor_user_id, allow_token_hash) VALUES (:a, :h)',
-            ['a' => $this->userId, 'h' => hash('sha256', 'x')],
-        );
+        $this->engageSession();
 
         $this->login();
         $this->get('/admin/maintenance/status');
@@ -168,5 +174,77 @@ class MaintenanceControllerTest extends TestCase
         $this->assertResponseOk();
         $this->assertContentType('application/json');
         $this->assertResponseContains('"active":true');
+    }
+
+    public function testReleaseBlockedWhileActionInFlight(): void
+    {
+        $sessionId = $this->engageSession();
+        $conn = ConnectionManager::get('default');
+        // A fresh, in-flight critical action must block "exit only when stable".
+        $conn->execute(
+            "INSERT INTO core.critical_action (type, status, maintenance_session_id) VALUES ('test', 'running', :s)",
+            ['s' => $sessionId],
+        );
+        $conn->execute('UPDATE core.worker_pause SET paused = true WHERE id = true');
+
+        $this->login();
+        $this->enableCsrfToken();
+        $this->enableSecurityToken();
+        $this->post('/admin/maintenance/release');
+        $this->assertRedirect(['action' => 'index']);
+
+        // Still in maintenance — release was refused.
+        $open = (int)$conn->execute(
+            "SELECT count(*) AS c FROM core.maintenance_session WHERE status <> 'closed'",
+        )->fetch('assoc')['c'];
+        $this->assertSame(1, $open);
+        // Workers must stay paused on the refused path (no premature resume).
+        $paused = $conn->execute('SELECT paused FROM core.worker_pause WHERE id = true')->fetch('assoc');
+        $this->assertTrue((bool)$paused['paused']);
+    }
+
+    public function testReleaseRecoversStaleActionThenSucceeds(): void
+    {
+        $sessionId = $this->engageSession();
+        $conn = ConnectionManager::get('default');
+        // A crashed action (stale heartbeat) must NOT deadlock the exit: release
+        // recovers it first, then closes the session.
+        $conn->execute(
+            'INSERT INTO core.critical_action (type, status, maintenance_session_id, heartbeat_at) '
+            . "VALUES ('test', 'running', :s, now() - interval '300 seconds')",
+            ['s' => $sessionId],
+        );
+
+        $this->login();
+        $this->enableCsrfToken();
+        $this->enableSecurityToken();
+        $this->post('/admin/maintenance/release');
+        $this->assertRedirect(['action' => 'index']);
+
+        $open = (int)$conn->execute(
+            "SELECT count(*) AS c FROM core.maintenance_session WHERE status <> 'closed'",
+        )->fetch('assoc')['c'];
+        $this->assertSame(0, $open);
+        // The crashed action was swept to a terminal recovery state.
+        $recovered = (int)$conn->execute(
+            "SELECT count(*) AS c FROM core.critical_action WHERE status = 'needs_manual_restore'",
+        )->fetch('assoc')['c'];
+        $this->assertSame(1, $recovered);
+    }
+
+    public function testStatusReportsBlockingActions(): void
+    {
+        $sessionId = $this->engageSession();
+        ConnectionManager::get('default')->execute(
+            "INSERT INTO core.critical_action (type, status, maintenance_session_id) VALUES ('test', 'running', :s)",
+            ['s' => $sessionId],
+        );
+
+        $this->login();
+        $this->get('/admin/maintenance/status');
+
+        $this->assertResponseOk();
+        $this->assertResponseContains('"blocking_actions":1');
+        $this->assertResponseContains('"can_release":false');
     }
 }

@@ -5,6 +5,7 @@ namespace App\Controller\Admin;
 
 use App\Audit\AuditLogger;
 use App\Service\System\AllowTokenCookie;
+use App\Service\System\CriticalActionService;
 use App\Service\System\MaintenanceService;
 use App\Service\System\QuiesceService;
 use Cake\Http\Response;
@@ -26,8 +27,15 @@ class MaintenanceController extends AdminController
     public function index(): void
     {
         $session = (new MaintenanceService())->activeSession();
+        $blocking = 0;
+        if ($session !== null) {
+            $actions = new CriticalActionService();
+            $actions->recoverStale(); // reflect crashed actions in the view
+            $blocking = $actions->nonTerminalCount((string)$session['id']);
+        }
         $this->set('session', $session);
         $this->set('quiesce', $session !== null ? (new QuiesceService())->status() : null);
+        $this->set('blockingActions', $blocking);
     }
 
     /**
@@ -73,15 +81,25 @@ class MaintenanceController extends AdminController
     {
         $this->request->allowMethod('post');
 
-        $session = (new MaintenanceService())->activeSession();
+        $maint = new MaintenanceService();
+        $session = $maint->activeSession();
         if ($session === null) {
             $this->Flash->error(__('flash.maintenance.not_active'));
 
             return $this->redirect(['action' => 'index']);
         }
 
+        // Exit only when stable (decision #4): sweep crashed actions first so a dead
+        // process cannot deadlock the exit, then close ATOMICALLY — the close happens
+        // only if nothing of this session is still in flight (one conditional UPDATE).
+        (new CriticalActionService())->recoverStale();
+        if (!$maint->releaseIfStable((string)$session['id'])) {
+            $this->Flash->error(__('flash.maintenance.action_in_progress'));
+
+            return $this->redirect(['action' => 'index']); // workers stay paused
+        }
+
         (new QuiesceService())->resume();
-        (new MaintenanceService())->release((string)$session['id']);
         $this->audit('maintenance.release', (string)$session['id'], $this->actorId(), []);
         $this->Flash->success(__('flash.maintenance.released'));
 
@@ -97,9 +115,16 @@ class MaintenanceController extends AdminController
         $this->request->allowMethod('get');
 
         $session = (new MaintenanceService())->activeSession();
-        $payload = $session === null
-            ? ['active' => false]
-            : ['active' => true] + (new QuiesceService())->status();
+        if ($session === null) {
+            $payload = ['active' => false];
+        } else {
+            $actions = new CriticalActionService();
+            $actions->recoverStale();
+            $blocking = $actions->nonTerminalCount((string)$session['id']);
+            $payload = ['active' => true]
+                + (new QuiesceService())->status()
+                + ['blocking_actions' => $blocking, 'can_release' => $blocking === 0];
+        }
 
         return $this->response->withType('application/json')->withStringBody((string)json_encode($payload));
     }
