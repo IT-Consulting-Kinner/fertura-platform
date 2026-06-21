@@ -99,11 +99,13 @@ class MaintenanceService
 
     /**
      * "Exit only when stable" (design §4.3 EXIT, decision #4): closes the session
-     * ATOMICALLY only if no critical action of that session is still in flight — the
-     * close and the in-flight check are one conditional UPDATE, so no action can slip
-     * in between a separate read and the close. Returns whether it actually closed
-     * (false = refused because work is still running). The caller must NOT resume the
-     * workers when this returns false.
+     * ATOMICALLY only if (a) no critical action of that session is still in flight and
+     * (b) no `needs_manual_restore` of that session is still UNACKNOWLEDGED ("Flag
+     * HALTEN", §4.2) — the close and both checks are one conditional UPDATE, so no
+     * action can slip in between a separate read and the close. Returns whether it
+     * actually closed (false = refused because work is still running OR a manual
+     * restore is still unacknowledged). The caller must NOT resume the workers when
+     * this returns false.
      */
     public function releaseIfStable(string $sessionId): bool
     {
@@ -112,7 +114,10 @@ class MaintenanceService
             . "WHERE id = :id AND status <> 'closed' "
             . 'AND NOT EXISTS (SELECT 1 FROM core.critical_action '
             . 'WHERE maintenance_session_id = :id '
-            . "AND status IN ('quiescing','backing_up','running','verifying','rolling_back'))",
+            . "AND status IN ('quiescing','backing_up','running','verifying','rolling_back')) "
+            . 'AND NOT EXISTS (SELECT 1 FROM core.critical_action '
+            . 'WHERE maintenance_session_id = :id '
+            . "AND status = 'needs_manual_restore' AND acknowledged_at IS NULL)",
             ['id' => $sessionId],
         )->rowCount() > 0;
 

@@ -163,9 +163,9 @@ ENTER_MAINTENANCE ─→ QUIESCE ─→ PRE_ACTION_BACKUP ─→ ACTION ─→ V
   - Security-Review (0 critical/high, 2 medium, 6 low, 1 nit) eingearbeitet: atomares
     session-scoped Exit-Gate, Terminal-Write-Guard, Worker-Recovery- + Boundary-/Heartbeat-/
     Message-Tests ergänzt.
-  - **Offen (Phase 5/6)**: echte Aktionen (module install, tenant provision, secret/trust rotate)
-    mit `start()…markSucceeded()` umklammern; `fence_token`-Enforcement + `start()`-seitiger
-    Refuse-when-closing (volle TOCTOU-Schließung); `needs_manual_restore`-Operator-Quittung-UI.
+  - **Offen (Phase 6)**: `start()`-seitiger Refuse-when-closing (volle TOCTOU-Schließung). Die echten
+    Aktionen, `fence_token`-Enforcement und die `needs_manual_restore`-Quittung-UI sind umgesetzt
+    (Inc 1–5).
 
 - **Phase 5** (Pre-Action-Backup-Gate):
   - `BackupService::createLocked()`: erzwingt Verschlüsselung + garantiert Probe-Restore — beides
@@ -210,6 +210,17 @@ ENTER_MAINTENANCE ─→ QUIESCE ─→ PRE_ACTION_BACKUP ─→ ACTION ─→ V
   - **Increment 4** (trust rotate): `TrustRotationService` (aus `TrustCommand` extrahiert, jetzt
     **transaktional + auditiert** + Snapshot). `TrustRotateHandler`: rollback ist ein **sauberer**
     aktionseigener Undo (Snapshot der Gültigkeitsfenster wiederherstellen).
+  - **Increment 5** (`needs_manual_restore`-Quittung-UI, Stufe 1): setzt das „Flag HALTEN" aus
+    §4.2/§4.3 um — ein **unbestätigtes** `needs_manual_restore` blockt jetzt die Freigabe
+    (`releaseIfStable` + `status.needs_ack`/`can_release`). Die GUI zeigt pro betroffener Aktion die
+    Pre-Action-Backup-ID, die exakten `bin/cake backup test-restore <id>` (nicht-destruktiv) /
+    `backup restore <id> --yes` (destruktiv) Befehle und eine Cross-Tenant-Datenverlust-Warnung;
+    `acknowledgeRestore` stempelt `acknowledged_at`/`_by` (revisionssicher — Status bleibt
+    `needs_manual_restore`) und hebt die Sperre. **Nicht-destruktiv**: der globale Restore bleibt
+    CLI-only (Entscheidung #7). Migration `…180000` ergänzt die zwei Acknowledge-Spalten + Teilindex.
+    (Die Phase-4-Migration formulierte `needs_manual_restore` noch als exit-erlaubend — das war
+    Interim; §4.2 wollte immer „Flag HALTEN".) Tests: Service (Quittung + State-/Session-Guards),
+    Controller (Release verweigert bis quittiert, Release nach Quittung, `status.needs_ack`).
 
 #### Offene Review-Punkte (bewusst nach Phase 3 / Follow-up deferred)
 - **Quiesce-aware Health**: ein pausierter Worker skippt `ScheduledTaskRunner.tick()`, daher können
@@ -224,10 +235,14 @@ ENTER_MAINTENANCE ─→ QUIESCE ─→ PRE_ACTION_BACKUP ─→ ACTION ─→ V
 1. Leitzustand DB-ungecacht + `pg_notify`, Datei-Flag nur Restore-Cutover. **JA**
 2. Mass-Logout: Post-Auth-Reject Pflicht; `core.sessions.user_id` optionaler Komfort. **REJECT**
 3. Aktivierer-Identität: server-ausgestelltes Allow-Token-Cookie (+ `actor_id` Fallback). **TOKEN-COOKIE**
-4. „Stabil" = „keine nicht-terminale Aktion". **SO**
+4. „Stabil" = „keine nicht-terminale Aktion **und kein unbestätigtes `needs_manual_restore`**" (Flag HALTEN). **SO**
 5. Rollback: aktionseigener transaktionaler Undo primär; globaler Restore nur Notnagel. **SO**
 6. Backup-Recht: dediziertes `system.maintenance` + erzwungen verschluesseltes Backup. **SO**
-7. `backup restore` in Stufe 1 GUI-fähig? **NEIN**
+7. `backup restore` in Stufe 1 GUI-fähig? **NEIN (destruktiv).** Stattdessen `needs_manual_restore`-
+   Quittung-UI (Inc 5): Pre-Action-Backup-ID + exakte CLI-Befehle (`test-restore`/`restore --yes`) +
+   Cross-Tenant-Warnung; die Operator-Quittung hebt das „Flag HALTEN" und erlaubt erst dann die
+   Freigabe. Scoped Ein-Klick-Restore (nur Pre-Action-Backup der aktiven Session, getippte
+   Bestätigung + Safety-Snapshot) erst in **Stufe 2**; DR-Restore beliebiger Backups bleibt CLI/Break-Glass.
 8. Quiesce-Wait asynchron mit GUI-Polling + harte Deadline. **ASYNC**
 9. Notausstieg: CLI-Break-Glass + TTL/Reassignment first-class. **JA**
 

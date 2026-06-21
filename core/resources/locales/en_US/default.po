@@ -1834,3 +1834,45 @@ msgstr "Status"
 
 msgid "admin.maintenance.action_message"
 msgstr "Message"
+
+msgid "admin.maintenance.restore_heading"
+msgstr "Manual restore required"
+
+msgid "admin.maintenance.restore_intro"
+msgstr "A critical action could not complete its rollback — the data state is uncertain. Restore the pre-action backup via the CLI and then acknowledge it here. The release stays blocked until you do."
+
+msgid "admin.maintenance.restore_warning"
+msgstr "Warning: the restore is cross-tenant and destructive — it resets ALL tenants to the backup state (data loss since the backup for everyone)."
+
+msgid "admin.maintenance.restore_backup_label"
+msgstr "Pre-action backup"
+
+msgid "admin.maintenance.restore_verify_label"
+msgstr "Verify first (non-destructive)"
+
+msgid "admin.maintenance.restore_cmd_label"
+msgstr "Restore (destructive)"
+
+msgid "admin.maintenance.restore_no_backup"
+msgstr "No pre-action backup linked — check backups via “bin/cake backup list”."
+
+msgid "admin.maintenance.restore_ack_note_label"
+msgstr "Note (optional, audit log only)"
+
+msgid "admin.maintenance.restore_ack_submit"
+msgstr "Acknowledge as manually restored"
+
+msgid "admin.maintenance.restore_ack_confirm"
+msgstr "Confirm that the restore is done or the state is resolved? This lifts the block and allows the release."
+
+msgid "admin.maintenance.restore_acknowledged_badge"
+msgstr "acknowledged"
+
+msgid "admin.maintenance.needs_ack"
+msgstr "%s manual restore(s) pending — acknowledge first, then you can exit."
+
+msgid "flash.maintenance.restore_acknowledged"
+msgstr "Manual restore acknowledged — the release is now possible."
+
+msgid "flash.maintenance.restore_ack_failed"
+msgstr "Acknowledgement not possible: action is not in needs_manual_restore or already acknowledged."

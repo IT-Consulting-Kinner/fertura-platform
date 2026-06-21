@@ -203,15 +203,49 @@ class MaintenanceControllerTest extends TestCase
         $this->assertTrue((bool)$paused['paused']);
     }
 
-    public function testReleaseRecoversStaleActionThenSucceeds(): void
+    public function testReleaseRefusedWhileRecoveredRestoreUnacknowledged(): void
     {
         $sessionId = $this->engageSession();
         $conn = ConnectionManager::get('default');
-        // A crashed action (stale beyond the maintenance recovery window) must NOT
-        // deadlock the exit: release recovers it first, then closes the session.
+        $conn->execute('UPDATE core.worker_pause SET paused = true WHERE id = true');
+        // A crashed mutating action is swept to needs_manual_restore on the release
+        // attempt — and now HOLDS the exit ("Flag HALTEN") until it is acknowledged,
+        // so a crash no longer silently brings the platform back on an uncertain DB.
         $conn->execute(
             'INSERT INTO core.critical_action (type, status, maintenance_session_id, heartbeat_at) '
             . "VALUES ('test', 'running', :s, now() - interval '2000 seconds')",
+            ['s' => $sessionId],
+        );
+
+        $this->login();
+        $this->enableCsrfToken();
+        $this->enableSecurityToken();
+        $this->post('/admin/maintenance/release');
+        $this->assertRedirect(['action' => 'index']);
+
+        // Swept to needs_manual_restore...
+        $recovered = (int)$conn->execute(
+            "SELECT count(*) AS c FROM core.critical_action WHERE status = 'needs_manual_restore'",
+        )->fetch('assoc')['c'];
+        $this->assertSame(1, $recovered);
+        // ...and the unacknowledged restore refused the exit (session stays open).
+        $open = (int)$conn->execute(
+            "SELECT count(*) AS c FROM core.maintenance_session WHERE status <> 'closed'",
+        )->fetch('assoc')['c'];
+        $this->assertSame(1, $open);
+        $paused = $conn->execute('SELECT paused FROM core.worker_pause WHERE id = true')->fetch('assoc');
+        $this->assertTrue((bool)$paused['paused']); // no premature resume
+    }
+
+    public function testReleaseSucceedsAfterRestoreAcknowledged(): void
+    {
+        $sessionId = $this->engageSession();
+        $conn = ConnectionManager::get('default');
+        $conn->execute('UPDATE core.worker_pause SET paused = true WHERE id = true');
+        // An ALREADY-acknowledged needs_manual_restore no longer holds the exit.
+        $conn->execute(
+            'INSERT INTO core.critical_action (type, status, maintenance_session_id, acknowledged_at) '
+            . "VALUES ('test', 'needs_manual_restore', :s, now())",
             ['s' => $sessionId],
         );
 
@@ -225,11 +259,65 @@ class MaintenanceControllerTest extends TestCase
             "SELECT count(*) AS c FROM core.maintenance_session WHERE status <> 'closed'",
         )->fetch('assoc')['c'];
         $this->assertSame(0, $open);
-        // The crashed action was swept to a terminal recovery state.
-        $recovered = (int)$conn->execute(
-            "SELECT count(*) AS c FROM core.critical_action WHERE status = 'needs_manual_restore'",
-        )->fetch('assoc')['c'];
-        $this->assertSame(1, $recovered);
+        $paused = $conn->execute('SELECT paused FROM core.worker_pause WHERE id = true')->fetch('assoc');
+        $this->assertFalse((bool)$paused['paused']);
+    }
+
+    public function testAcknowledgeRestoreStampsActorAndPreservesState(): void
+    {
+        $sessionId = $this->engageSession();
+        $conn = ConnectionManager::get('default');
+        $actionId = (string)$conn->execute(
+            'INSERT INTO core.critical_action (type, status, maintenance_session_id) '
+            . "VALUES ('test', 'needs_manual_restore', :s) RETURNING id",
+            ['s' => $sessionId],
+        )->fetch('assoc')['id'];
+
+        $this->login();
+        $this->enableCsrfToken();
+        $this->enableSecurityToken();
+        $this->post('/admin/maintenance/acknowledge-restore', [
+            'action_id' => $actionId,
+            'note' => 'restored from pre-action backup',
+        ]);
+        $this->assertRedirect(['action' => 'index']);
+
+        $row = $conn->execute(
+            'SELECT status, acknowledged_at, acknowledged_by FROM core.critical_action WHERE id = :id',
+            ['id' => $actionId],
+        )->fetch('assoc');
+        // State stays needs_manual_restore (revision-proof); acknowledgement recorded.
+        $this->assertSame('needs_manual_restore', $row['status']);
+        $this->assertNotNull($row['acknowledged_at']);
+        $this->assertSame($this->userId, $row['acknowledged_by']);
+    }
+
+    public function testAcknowledgeRestoreRejectsMalformedActionId(): void
+    {
+        $this->engageSession();
+        $this->login();
+        $this->enableCsrfToken();
+        $this->enableSecurityToken();
+        // A non-UUID id must fail cleanly (redirect + flash), not raise a 500 when the
+        // raw UPDATE binds it to the uuid id column (PG 22P02).
+        $this->post('/admin/maintenance/acknowledge-restore', ['action_id' => 'not-a-uuid']);
+        $this->assertRedirect(['action' => 'index']);
+    }
+
+    public function testStatusReportsNeedsAck(): void
+    {
+        $sessionId = $this->engageSession();
+        ConnectionManager::get('default')->execute(
+            "INSERT INTO core.critical_action (type, status, maintenance_session_id) VALUES ('test', 'needs_manual_restore', :s)",
+            ['s' => $sessionId],
+        );
+
+        $this->login();
+        $this->get('/admin/maintenance/status');
+
+        $this->assertResponseOk();
+        $this->assertResponseContains('"needs_ack":1');
+        $this->assertResponseContains('"can_release":false');
     }
 
     public function testProtectedInstallRequiresMaintenance(): void

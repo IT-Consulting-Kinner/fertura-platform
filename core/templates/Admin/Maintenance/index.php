@@ -4,6 +4,7 @@
  * @var array<string, mixed>|null $session
  * @var array<string, mixed>|null $quiesce
  * @var int $blockingActions
+ * @var int $needsAck
  * @var list<array<string, mixed>> $actions
  */
 ?>
@@ -51,6 +52,63 @@
     <div id="maintBlocking" class="small text-danger mb-2"<?= ($blockingActions ?? 0) > 0 ? '' : ' hidden' ?>>
         <?= h(__('admin.maintenance.blocking_actions', (string)($blockingActions ?? 0))) ?>
     </div>
+    <div id="maintNeedsAck" class="small text-danger mb-2"<?= ($needsAck ?? 0) > 0 ? '' : ' hidden' ?>>
+        <?= h(__('admin.maintenance.needs_ack', (string)($needsAck ?? 0))) ?>
+    </div>
+
+    <?php
+    // Manual-restore panel: a needs_manual_restore action holds the maintenance exit
+    // ("Flag HALTEN") until the operator restores the pre-action backup out of band
+    // (global restore stays CLI-only, decision #7) and acknowledges it here. The panel
+    // lists only the UNACKNOWLEDGED ones; acknowledging removes it on the next load.
+    $needsRestore = array_filter(
+        $actions ?? [],
+        static fn(array $a): bool =>
+            (string)$a['status'] === 'needs_manual_restore' && ($a['acknowledged_at'] ?? null) === null,
+    );
+    ?>
+    <?php if ($needsRestore !== []) : ?>
+        <div class="alert alert-danger mw-lg">
+            <h2 class="h6"><?= h(__('admin.maintenance.restore_heading')) ?></h2>
+            <p class="small mb-1"><?= h(__('admin.maintenance.restore_intro')) ?></p>
+            <p class="small fw-semibold mb-3"><?= h(__('admin.maintenance.restore_warning')) ?></p>
+            <?php foreach ($needsRestore as $a) : ?>
+                <?php $bid = (string)($a['backup_id'] ?? ''); ?>
+                <div class="border rounded bg-white text-body p-2 mb-2">
+                    <div class="small mb-1">
+                        <code><?= h((string)$a['type']) ?></code> — <?= h((string)($a['message'] ?? '')) ?>
+                    </div>
+                    <?php if ($bid !== '') : ?>
+                        <dl class="row small mb-2">
+                            <dt class="col-sm-5"><?= h(__('admin.maintenance.restore_backup_label')) ?></dt>
+                            <dd class="col-sm-7"><code><?= h($bid) ?></code></dd>
+                            <dt class="col-sm-5"><?= h(__('admin.maintenance.restore_verify_label')) ?></dt>
+                            <dd class="col-sm-7"><code>bin/cake backup test-restore <?= h($bid) ?></code></dd>
+                            <dt class="col-sm-5"><?= h(__('admin.maintenance.restore_cmd_label')) ?></dt>
+                            <dd class="col-sm-7"><code>bin/cake backup restore <?= h($bid) ?> --yes</code></dd>
+                        </dl>
+                    <?php else : ?>
+                        <p class="small text-muted mb-2"><?= h(__('admin.maintenance.restore_no_backup')) ?></p>
+                    <?php endif; ?>
+                    <?= $this->Form->create(null, ['url' => ['action' => 'acknowledgeRestore']]) ?>
+                    <?= $this->Form->hidden('action_id', ['value' => (string)$a['id']]) ?>
+                    <div class="mb-2">
+                        <label class="form-label small mb-0" for="ackNote_<?= h((string)$a['id']) ?>">
+                            <?= h(__('admin.maintenance.restore_ack_note_label')) ?>
+                        </label>
+                        <input type="text" name="note" id="ackNote_<?= h((string)$a['id']) ?>" class="form-control form-control-sm" maxlength="500">
+                    </div>
+                    <?= $this->Form->button(__('admin.maintenance.restore_ack_submit'), [
+                        'class' => 'btn btn-sm btn-danger',
+                        'data-confirm' => __('admin.maintenance.restore_ack_confirm'),
+                        'data-confirm-variant' => 'btn-danger',
+                        'escapeTitle' => false,
+                    ]) ?>
+                    <?= $this->Form->end() ?>
+                </div>
+            <?php endforeach; ?>
+        </div>
+    <?php endif; ?>
 
     <div class="accordion mb-3" id="protectedActions">
         <div class="accordion-item">
@@ -165,7 +223,12 @@
             <?php foreach ($actions as $a) : ?>
                 <tr>
                     <td><code><?= h((string)$a['type']) ?></code></td>
-                    <td><span class="badge text-bg-<?= h($variant[(string)$a['status']] ?? 'warning') ?>"><?= h((string)$a['status']) ?></span></td>
+                    <td>
+                        <span class="badge text-bg-<?= h($variant[(string)$a['status']] ?? 'warning') ?>"><?= h((string)$a['status']) ?></span>
+                        <?php if ((string)$a['status'] === 'needs_manual_restore' && ($a['acknowledged_at'] ?? null) !== null) : ?>
+                            <span class="badge text-bg-secondary"><?= h(__('admin.maintenance.restore_acknowledged_badge')) ?></span>
+                        <?php endif; ?>
+                    </td>
                     <td class="text-muted"><?= h((string)($a['message'] ?? '')) ?></td>
                 </tr>
             <?php endforeach; ?>
@@ -173,23 +236,33 @@
         </table>
     <?php endif; ?>
 
-    <?= $this->UiKit->confirmPost(
-        __('admin.maintenance.release'),
-        ['action' => 'release'],
-        __('admin.maintenance.release_confirm'),
-        ['class' => 'btn btn-danger', 'variant' => 'btn-danger'],
-    ) ?>
+    <?php $canRelease = ($blockingActions ?? 0) === 0 && ($needsAck ?? 0) === 0; ?>
+    <div id="maintRelease"<?= $canRelease ? '' : ' hidden' ?>>
+        <?= $this->UiKit->confirmPost(
+            __('admin.maintenance.release'),
+            ['action' => 'release'],
+            __('admin.maintenance.release_confirm'),
+            ['class' => 'btn btn-danger', 'variant' => 'btn-danger'],
+        ) ?>
+    </div>
 
     <script>
     (function () {
         var banner = document.getElementById('maintBanner');
         var status = document.getElementById('maintStatus');
         var blocking = document.getElementById('maintBlocking');
+        var needsAck = document.getElementById('maintNeedsAck');
+        var release = document.getElementById('maintRelease');
         if (!banner || !status) { return; }
         var tplDraining = <?= json_encode(__('admin.maintenance.draining', '%N%')) ?>;
         var tplDrained = <?= json_encode(__('admin.maintenance.drained')) ?>;
         var tplTimedOut = <?= json_encode(__('admin.maintenance.timed_out')) ?>;
         var tplBlocking = <?= json_encode(__('admin.maintenance.blocking_actions', '%N%')) ?>;
+        var tplNeedsAck = <?= json_encode(__('admin.maintenance.needs_ack', '%N%')) ?>;
+        // A fresh needs_manual_restore (e.g. a crash swept mid-poll) appears server-
+        // rendered on the next load; reload once when one shows up so its restore
+        // panel + acknowledge form are present, not just the count.
+        var ackSeen = <?= ($needsAck ?? 0) > 0 ? 'true' : 'false' ?>;
         var timer = setInterval(function () {
             fetch('/admin/maintenance/status', { headers: { 'Accept': 'application/json' } })
                 .then(function (r) { return r.json(); })
@@ -203,6 +276,22 @@
                             blocking.hidden = true;
                         }
                     }
+                    if (needsAck) {
+                        if (d.needs_ack > 0) {
+                            needsAck.hidden = false;
+                            needsAck.textContent = tplNeedsAck.replace('%N%', d.needs_ack);
+                            // A restore that wasn't server-rendered yet (e.g. swept by a
+                            // recovery sweep between loads) -> reload so its acknowledge
+                            // form appears, not just the count.
+                            if (!ackSeen) { clearInterval(timer); location.reload(); return; }
+                        } else {
+                            needsAck.hidden = true;
+                        }
+                    }
+                    // Mirror the server gate: only offer release when it would succeed
+                    // (nothing in flight AND no unacknowledged restore). The server stays
+                    // authoritative; this just avoids inviting a refused click.
+                    if (release) { release.hidden = !d.can_release; }
                     if (d.done) {
                         clearInterval(timer);
                         var sp = banner.querySelector('.spinner-border'); if (sp) { sp.remove(); }

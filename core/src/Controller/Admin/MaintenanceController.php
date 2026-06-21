@@ -28,16 +28,19 @@ class MaintenanceController extends AdminController
     {
         $session = (new MaintenanceService())->activeSession();
         $blocking = 0;
+        $needsAck = 0;
         $actionList = [];
         if ($session !== null) {
             $actions = new CriticalActionService();
             $actions->maintenanceRecoverStale(); // reflect crashed actions in the view
             $blocking = $actions->nonTerminalCount((string)$session['id']);
+            $needsAck = $actions->unacknowledgedManualRestoreCount((string)$session['id']);
             $actionList = $actions->forSession((string)$session['id']);
         }
         $this->set('session', $session);
         $this->set('quiesce', $session !== null ? (new QuiesceService())->status() : null);
         $this->set('blockingActions', $blocking);
+        $this->set('needsAck', $needsAck);
         $this->set('actions', $actionList);
     }
 
@@ -75,10 +78,13 @@ class MaintenanceController extends AdminController
     }
 
     /**
-     * Releases maintenance. EXIT order: resume the workers FIRST, then close the
-     * session (so no request slips through against a half-released state), then
-     * clear the allow-token cookie. (The "exit only when stable" critical-action
-     * gate arrives in Phase 4; here the operator may release at any time.)
+     * Releases maintenance. EXIT order (design §4.3): sweep crashed actions FIRST so a
+     * dead process cannot deadlock the exit, then close the session ATOMICALLY — the
+     * conditional close in {@see MaintenanceService::releaseIfStable()} succeeds only
+     * when nothing of this session is in flight AND no `needs_manual_restore` is still
+     * unacknowledged ("Flag HALTEN", §4.2). The workers are resumed and the allow-token
+     * cookie cleared ONLY after a successful close; on a refused close the workers stay
+     * paused and the operator must finish (or acknowledge) the pending action first.
      */
     public function release(): ?Response
     {
@@ -110,6 +116,51 @@ class MaintenanceController extends AdminController
         $redirect = $this->redirect(['action' => 'index']);
 
         return $redirect->withCookie(AllowTokenCookie::expire());
+    }
+
+    /**
+     * Operator acknowledgement of a `needs_manual_restore` action (Stufe-1 restore
+     * handling, decision #7). NON-destructive: it restores NOTHING — the global
+     * restore stays CLI-only — it only records that the operator has restored/resolved
+     * the action out of band (the GUI shows the exact `bin/cake backup restore` /
+     * `test-restore` commands + the pre-action backup id). That lifts the "Flag
+     * HALTEN" (§4.2) so the maintenance window can then be released. Scoped to the
+     * active session; the optional note is kept in the audit trail only.
+     */
+    public function acknowledgeRestore(): ?Response
+    {
+        $this->request->allowMethod('post');
+
+        $session = (new MaintenanceService())->activeSession();
+        if ($session === null) {
+            $this->Flash->error(__('flash.maintenance.not_active'));
+
+            return $this->redirect(['action' => 'index']);
+        }
+        $actionId = trim((string)$this->request->getData('action_id'));
+        if ($actionId === '' || !$this->isUuid($actionId)) {
+            // A malformed id would raise PG 22P02 on the raw bind (-> HTTP 500); fail
+            // it cleanly like an unknown id instead (cf. peer admin controllers).
+            $this->Flash->error(__('flash.maintenance.restore_ack_failed'));
+
+            return $this->redirect(['action' => 'index']);
+        }
+        $actorId = $this->actorId();
+        $ok = (new CriticalActionService())->acknowledgeManualRestore($actionId, (string)$session['id'], $actorId);
+        if (!$ok) {
+            // Not a needs_manual_restore of this session, or already acknowledged.
+            $this->Flash->error(__('flash.maintenance.restore_ack_failed'));
+
+            return $this->redirect(['action' => 'index']);
+        }
+        $note = trim((string)$this->request->getData('note'));
+        $this->audit('maintenance.action.acknowledge_restore', (string)$session['id'], $actorId, [
+            'action_id' => $actionId,
+            'note' => $note !== '' ? mb_substr($note, 0, 500) : null,
+        ]);
+        $this->Flash->success(__('flash.maintenance.restore_acknowledged'));
+
+        return $this->redirect(['action' => 'index']);
     }
 
     /**
@@ -281,9 +332,14 @@ class MaintenanceController extends AdminController
             $actions = new CriticalActionService();
             $actions->maintenanceRecoverStale();
             $blocking = $actions->nonTerminalCount((string)$session['id']);
+            $needsAck = $actions->unacknowledgedManualRestoreCount((string)$session['id']);
             $payload = ['active' => true]
                 + (new QuiesceService())->status()
-                + ['blocking_actions' => $blocking, 'can_release' => $blocking === 0];
+                + [
+                    'blocking_actions' => $blocking,
+                    'needs_ack' => $needsAck,
+                    'can_release' => $blocking === 0 && $needsAck === 0,
+                ];
         }
 
         return $this->response->withType('application/json')->withStringBody((string)json_encode($payload));

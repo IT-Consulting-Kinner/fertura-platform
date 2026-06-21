@@ -1830,3 +1830,45 @@ msgstr "Status"
 
 msgid "admin.maintenance.action_message"
 msgstr "Meldung"
+
+msgid "admin.maintenance.restore_heading"
+msgstr "Manueller Restore erforderlich"
+
+msgid "admin.maintenance.restore_intro"
+msgstr "Eine kritische Aktion konnte ihren Rollback nicht abschließen — der Datenstand ist ungewiss. Stelle das Pre-Action-Backup per CLI wieder her und quittiere es anschließend hier. Bis dahin bleibt die Freigabe gesperrt."
+
+msgid "admin.maintenance.restore_warning"
+msgstr "Achtung: Der Restore ist tenant-übergreifend und destruktiv — er setzt ALLE Mandanten auf den Backup-Stand zurück (Datenverlust seit dem Backup für alle)."
+
+msgid "admin.maintenance.restore_backup_label"
+msgstr "Pre-Action-Backup"
+
+msgid "admin.maintenance.restore_verify_label"
+msgstr "Vorher prüfen (nicht-destruktiv)"
+
+msgid "admin.maintenance.restore_cmd_label"
+msgstr "Wiederherstellen (destruktiv)"
+
+msgid "admin.maintenance.restore_no_backup"
+msgstr "Kein Pre-Action-Backup verknüpft — Backups per „bin/cake backup list“ prüfen."
+
+msgid "admin.maintenance.restore_ack_note_label"
+msgstr "Notiz (optional, nur im Audit-Log)"
+
+msgid "admin.maintenance.restore_ack_submit"
+msgstr "Als manuell wiederhergestellt quittieren"
+
+msgid "admin.maintenance.restore_ack_confirm"
+msgstr "Bestätigen, dass der Restore durchgeführt bzw. der Zustand bereinigt ist? Das hebt die Sperre auf und erlaubt die Freigabe."
+
+msgid "admin.maintenance.restore_acknowledged_badge"
+msgstr "quittiert"
+
+msgid "admin.maintenance.needs_ack"
+msgstr "%s manueller Restore offen — erst quittieren, dann ist das Beenden möglich."
+
+msgid "flash.maintenance.restore_acknowledged"
+msgstr "Manueller Restore quittiert — die Freigabe ist jetzt möglich."
+
+msgid "flash.maintenance.restore_ack_failed"
+msgstr "Quittung nicht möglich: Aktion nicht im Zustand needs_manual_restore oder bereits quittiert."

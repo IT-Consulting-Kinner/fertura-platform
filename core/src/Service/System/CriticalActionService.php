@@ -130,7 +130,7 @@ class CriticalActionService
     public function forSession(string $sessionId, int $limit = 20): array
     {
         return array_values($this->conn()->execute(
-            'SELECT id, type, status, message, backup_id, created_at, finished_at '
+            'SELECT id, type, status, message, backup_id, acknowledged_at, acknowledged_by, created_at, finished_at '
             . 'FROM core.critical_action WHERE maintenance_session_id = :s ORDER BY created_at DESC LIMIT :lim',
             ['s' => $sessionId, 'lim' => $limit],
         )->fetchAll('assoc'));
@@ -191,6 +191,44 @@ class CriticalActionService
         $this->setMessage($id, $message);
 
         return $this->transition($id, 'needs_manual_restore', $fence);
+    }
+
+    /**
+     * Operator acknowledgement of a `needs_manual_restore` action (§4.3 "Flag
+     * HALTEN"): records who/when so the release gate ({@see MaintenanceService::releaseIfStable()})
+     * stops treating it as blocking. The action STAYS `needs_manual_restore` — the
+     * acknowledgement is a separate, revision-proof stamp, not a state change, so the
+     * "this needed a manual restore" fact is never overwritten. Guarded so only an
+     * unacknowledged restore of THIS session can be acknowledged (idempotent: a second
+     * acknowledgement is a no-op). Returns whether a row was actually acknowledged.
+     */
+    public function acknowledgeManualRestore(string $id, string $sessionId, ?string $actorId = null): bool
+    {
+        return $this->conn()->execute(
+            'UPDATE core.critical_action SET acknowledged_at = now(), acknowledged_by = :a '
+            . 'WHERE id = :id AND maintenance_session_id = :sess '
+            . "AND status = 'needs_manual_restore' AND acknowledged_at IS NULL",
+            ['a' => $actorId, 'id' => $id, 'sess' => $sessionId],
+        )->rowCount() > 0;
+    }
+
+    /**
+     * Count of `needs_manual_restore` actions still awaiting an operator
+     * acknowledgement — these block the maintenance exit ("Flag HALTEN").
+     * Optionally scoped to one maintenance session.
+     */
+    public function unacknowledgedManualRestoreCount(?string $sessionId = null): int
+    {
+        $sql = 'SELECT count(*) AS c FROM core.critical_action '
+            . "WHERE status = 'needs_manual_restore' AND acknowledged_at IS NULL";
+        $params = [];
+        if ($sessionId !== null) {
+            $sql .= ' AND maintenance_session_id = :sess';
+            $params['sess'] = $sessionId;
+        }
+        $row = $this->conn()->execute($sql, $params)->fetch('assoc');
+
+        return (int)$row['c'];
     }
 
     /** Links a (pre-action) backup to the action (status- + fence-guarded). */
@@ -295,6 +333,7 @@ class CriticalActionService
      * silently declared good. ROTATES fence_token so a process that later resumes on
      * the swept row cannot transition it (it holds the old token). Returns the count.
      */
+
     /** Recovery sweep for the maintenance path, using the generous {@see STALE_SECONDS}. */
     public function maintenanceRecoverStale(): int
     {

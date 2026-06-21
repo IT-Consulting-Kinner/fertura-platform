@@ -251,6 +251,45 @@ class CriticalActionServiceTest extends TestCase
         $this->assertNull($this->svc->claimEngaged($session));
     }
 
+    public function testAcknowledgeManualRestoreRecordsAndIsIdempotent(): void
+    {
+        $session = '44444444-4444-7444-8444-444444444444';
+        $actor = '11111111-1111-7111-8111-111111111111';
+        $action = $this->svc->start('module_install', $session, null);
+        $this->svc->markNeedsManualRestore($action['id'], 'rollback failed');
+        $this->assertSame(1, $this->svc->unacknowledgedManualRestoreCount($session));
+
+        // Acknowledge -> stamped, count drops, state STAYS needs_manual_restore.
+        $this->assertTrue($this->svc->acknowledgeManualRestore($action['id'], $session, $actor));
+        $this->assertSame(0, $this->svc->unacknowledgedManualRestoreCount($session));
+        $this->assertSame('needs_manual_restore', $this->statusOf($action['id']));
+        $row = ConnectionManager::get('default')->execute(
+            'SELECT acknowledged_at, acknowledged_by FROM core.critical_action WHERE id = :id',
+            ['id' => $action['id']],
+        )->fetch('assoc');
+        $this->assertNotNull($row['acknowledged_at']);
+        $this->assertSame($actor, $row['acknowledged_by']);
+
+        // A second acknowledgement is a no-op (already acknowledged).
+        $this->assertFalse($this->svc->acknowledgeManualRestore($action['id'], $session, $actor));
+    }
+
+    public function testAcknowledgeManualRestoreGuardsStateAndSession(): void
+    {
+        $session = '44444444-4444-7444-8444-444444444444';
+        // A running action cannot be acknowledged (only needs_manual_restore can).
+        $running = $this->svc->start('module_install', $session, null);
+        $this->assertFalse($this->svc->acknowledgeManualRestore($running['id'], $session, null));
+
+        // needs_manual_restore, but acknowledging it under a DIFFERENT session fails.
+        $action = $this->svc->start('secret_rotate', $session, null);
+        $this->svc->markNeedsManualRestore($action['id']);
+        $this->assertFalse(
+            $this->svc->acknowledgeManualRestore($action['id'], '55555555-5555-7555-8555-555555555555', null),
+        );
+        $this->assertSame(1, $this->svc->unacknowledgedManualRestoreCount($session));
+    }
+
     private function typeStatus(string $type): string
     {
         return (string)ConnectionManager::get('default')->execute(
