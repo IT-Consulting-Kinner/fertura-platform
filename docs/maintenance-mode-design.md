@@ -178,9 +178,13 @@ ENTER_MAINTENANCE ─→ QUIESCE ─→ PRE_ACTION_BACKUP ─→ ACTION ─→ V
   - Security-Review (0 critical/high, 3 medium, 6 low) eingearbeitet: Verschlüsselungs- und
     Verifikations-Garantie als Artefakt-Invariante, Verwerfen verwaister Backups bei Probe-Fail,
     `backing_up`-Recoverable- und verify_on_create-ON-Tests ergänzt.
-  - **Offen (Follow-up)**: `backups.verified` vermengt Integritäts- mit Restore-Verifikation
-    (vorbestehend, UI-Label); `STORES als Registry` (modul-beigesteuerte Stores) — heute deckt der
-    fixe STORES-Satz Modul-Code (modules/) + Modul-Daten (DB-Dump) ab.
+  - **Follow-up A7**: `backups.verified`-Label präzisiert ✅ — der ✓-Badge-Tooltip sagt jetzt
+    „Archiv-Integrität geprüft (Pre-Action-/Deep-Backups zusätzlich per Probe-Restore)" statt eines
+    pauschalen „verifiziert", das Restore-Verifikation überclaimte (rein i18n; ein separates
+    restore-verified-Flag bräuchte eine Spalte und ist es nicht wert). `STORES als Registry` (modul-
+    beigesteuerte Backup-Stores) **bewusst zurückgestellt (YAGNI)**: der fixe STORES-Satz deckt
+    Modul-Code (`modules/`) + Modul-Daten (DB-Dump) ab; ein Modul mit eigenem externen Datei-Store
+    existiert nicht — bei Bedarf als Registry nachziehen.
 
 - **Phase 6 — Increment 1** (Fundament + module install als Referenz-Aktion):
   - `CriticalActionHandler`-Contract (execute/verify/rollback) + Core-interne
