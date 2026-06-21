@@ -83,6 +83,21 @@ class ModuleWebTest extends TestCase
         $this->assertResponseContains('Fertura'); // Core layout wraps the page
     }
 
+    public function testModuleShellShipsSharedConfirmWiring(): void
+    {
+        // Operator module pages drive destructive actions through the shared
+        // Bootstrap confirm modal ([data-confirm] / UiKit->confirmPost). The module
+        // shell must therefore ship the same three pieces as the admin shell, else
+        // a [data-confirm] control would submit with no prompt at all.
+        $this->session(['Auth' => ['id' => $this->userId, 'username' => 'zztest_web', 'email' => 'w@zztest.local']]);
+        $this->get('/m/zztest_web/dashboard');
+
+        $this->assertResponseOk();
+        $this->assertResponseContains('id="confirmModal"'); // generic confirm modal element
+        $this->assertResponseContains('bootstrap.bundle.min'); // Bootstrap JS (modal/dropdown/tooltip)
+        $this->assertResponseContains('js/admin.js'); // [data-confirm] -> modal wiring
+    }
+
     public function testGuestPageRendersWithoutLogin(): void
     {
         $this->get('/m/zztest_web/public');
