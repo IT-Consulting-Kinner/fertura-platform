@@ -19,7 +19,9 @@ use App\Service\Security\TrustRotationService;
  */
 class TrustRotateHandler implements CriticalActionHandler
 {
-    /** @var array<string, array{valid_from:?string, valid_to:?string}> */
+    /**
+     * @var array<string, array{valid_from:?string, valid_to:?string}>
+     */
     private array $snapshot = [];
 
     public function __construct(private TrustRotationService $rotation = new TrustRotationService())
@@ -58,6 +60,18 @@ class TrustRotateHandler implements CriticalActionHandler
         }
         if ($row['valid_to'] !== null) {
             return ['ok' => false, 'reason' => 'Neuer Anker hat ein valid_to (sollte unbegrenzt gelten).'];
+        }
+        // Defense-in-depth: confirm the OLD anchor actually got its expiry, so a
+        // half-applied rotation can never pass even if the service guard is bypassed.
+        $old = (string)($payload['old_key_id'] ?? '');
+        if ($old !== '') {
+            $oldRow = Db::privileged()->execute(
+                'SELECT valid_to FROM trust_anchors WHERE key_id = :k',
+                ['k' => $old],
+            )->fetch('assoc');
+            if ($oldRow !== false && $oldRow['valid_to'] === null) {
+                return ['ok' => false, 'reason' => 'Alter Anker hat kein valid_to (Rotation halb angewendet).'];
+            }
         }
 
         return ['ok' => true, 'reason' => null];

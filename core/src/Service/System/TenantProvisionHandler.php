@@ -9,8 +9,9 @@ use App\Service\Tenant\TenantService;
 /**
  * The tenant-provision critical action — Phase 6 (Increment 2).
  *
- * payload: {key, name, brand_name?, logo_url?}. execute() creates the (logical,
- * RLS-scoped) tenant row via {@see TenantService::create()}. verify() asserts the
+ * payload: {key, name, brand_name?, logo_url?}. execute() creates the (logical)
+ * tenant row via {@see TenantService::create()} (on the request/app-role 'default'
+ * connection — core.tenants has no RLS policy). verify() asserts the
  * tenant exists and is active. rollback() is a CLEAN action-own undo:
  * {@see TenantService::delete()} — gated (not the default tenant, no assigned users),
  * which a freshly-created tenant satisfies, so it removes the row + cascades. The
@@ -47,7 +48,8 @@ class TenantProvisionHandler implements CriticalActionHandler
         if ($id === '') {
             return ['ok' => false, 'reason' => 'tenant_id fehlt.'];
         }
-        // Privileged read (the worker is superuser; tenants is tenant-scoped).
+        // Read via the privileged connection defensively (core.tenants has no RLS
+        // today, so this is future-proofing, not a requirement).
         $row = Db::privileged()->execute(
             'SELECT 1 FROM tenants WHERE id = :id AND active',
             ['id' => $id],

@@ -27,8 +27,6 @@ use function Cake\Core\env;
  */
 class SecretRotateHandler implements CriticalActionHandler
 {
-    private bool $rotated = false;
-
     public function __construct(private SecretRotationService $rotation = new SecretRotationService())
     {
     }
@@ -51,13 +49,12 @@ class SecretRotateHandler implements CriticalActionHandler
             throw new RuntimeException('Kein aktiver Verschlüsselungsschlüssel konfiguriert.');
         }
         $this->rotation->rotate($old, $new);
-        $this->rotated = true;
     }
 
     public function verify(array $payload): array
     {
         $row = Db::privileged()->execute(
-            "SELECT value_encrypted FROM settings WHERE is_secret = true AND value_encrypted IS NOT NULL LIMIT 1",
+            'SELECT value_encrypted FROM settings WHERE is_secret = true AND value_encrypted IS NOT NULL LIMIT 1',
         )->fetch('assoc');
         if ($row === false) {
             return ['ok' => true, 'reason' => null]; // no secrets -> trivially consistent
@@ -67,19 +64,26 @@ class SecretRotateHandler implements CriticalActionHandler
 
             return ['ok' => true, 'reason' => null];
         } catch (Throwable $e) {
-            return ['ok' => false, 'reason' => 'Secret nicht mit aktivem Schlüssel entschlüsselbar: ' . $e->getMessage()];
+            $reason = 'Secret nicht mit aktivem Schlüssel entschlüsselbar: ' . $e->getMessage();
+
+            return ['ok' => false, 'reason' => $reason];
         }
     }
 
     public function rollback(array $payload): void
     {
-        if ($this->rotated) {
+        // A secret rotation has no clean action-own reverse (re-encrypting back would
+        // leave the secrets out of sync with the active env key). What matters is the
+        // RESULTING consistency: if the active key can no longer decrypt the secrets
+        // (a failed/half rotation against the pre-deployed new key), the system needs
+        // manual intervention -> throw -> the runner escalates to needs_manual_restore.
+        // If the active key still decrypts them, the failure left a consistent state.
+        if (($this->verify($payload)['ok'] ?? false) !== true) {
             throw new RuntimeException(
-                'Secret-Rotation hat keinen aktionseigenen Undo — Pre-Action-Backup wiederherstellen '
-                . 'bzw. Schlüssel-Deployment prüfen.',
+                'Secret-Zustand inkonsistent (aktiver Schlüssel entschlüsselt nicht) — '
+                . 'Pre-Action-Backup wiederherstellen bzw. Schlüssel-Deployment prüfen.',
             );
         }
-        // execute() failed before the (atomic) rotation committed -> nothing changed.
     }
 
     private function oldKeyMaterial(): string

@@ -137,8 +137,12 @@ ENTER_MAINTENANCE ─→ QUIESCE ─→ PRE_ACTION_BACKUP ─→ ACTION ─→ V
   - Security-Review (0 critical/high, 1 medium, 7 low, 4 nit) eingearbeitet: Allow-Liste von
     Prefix auf exakte LB-Proben verengt + vor den Fail-closed-Branch gezogen; Fail-closed-Login,
     Non-Actor-e2e- und Cookie-Hardening-Tests ergänzt.
-  - **Offen (deferred)**: `SESSION_COOKIE_SECURE`-Default in Prod fail-safe machen (plattformweit,
-    nicht nur `maint_allow`); `release()` „exit only when stable"-Gate kommt mit Phase 4
+  - **Erledigt** (Maintenance-Review Phase 3, Finding #4 LOW): `SESSION_COOKIE_SECURE`-Default ist
+    jetzt in Prod fail-safe AN — plattformweit zentral via `App\Service\Security\CookieSecurity::enabled()`
+    (Secure AN in jeder Nicht-Debug-Umgebung, nur lokaler HTTP-Dev/`DEBUG` lässt es weg; ein
+    explizites `SESSION_COOKIE_SECURE` überschreibt beides). Gilt für Session-, CSRF-, Locale-,
+    Remember-me- und `maint_allow`-Cookie; gepinnt in `CookieSecurityTest`.
+  - **Offen (deferred)**: `release()` „exit only when stable"-Gate kommt mit Phase 4
     (heute jederzeit freigebbar); engage/release-Audit nutzt aktuell den Operator-Tenant-Scope
     (kein System-Tenant-Override im `AuditLogger`).
 
@@ -188,7 +192,7 @@ ENTER_MAINTENANCE ─→ QUIESCE ─→ PRE_ACTION_BACKUP ─→ ACTION ─→ V
     Platform gedrained ist (`inFlight()==0`); normale Arbeit bleibt pausiert.
   - **fence_token-Enforcement**: jede Transition/heartbeat trägt das Token; `recoverStale`
     rotiert es, sodass ein wiederbelebter Stale-Prozess die Aktion nicht mehr fortschreiben kann.
-    Großzügiges Recovery-Fenster (`STALE_SECONDS=900`) für lange Phasen (Backup/Migrationen).
+    Großzügiges Recovery-Fenster (`STALE_SECONDS=1800`) für lange Phasen (Backup/Migrationen).
   - module install: `ModuleInstallHandler` (execute=`installPackage`, verify=modules-Row+Schema,
     rollback=`ModuleLifecycle::purge`→rollbackInstall); GUI reiht eine geschützte Installation
     während Maintenance ein (`critical_action.payload`).
@@ -198,8 +202,11 @@ ENTER_MAINTENANCE ─→ QUIESCE ─→ PRE_ACTION_BACKUP ─→ ACTION ─→ V
     Mandanten).
   - **Increment 3** (secret rotate): `SecretRotationService` (aus `SecretCommand` extrahiert +
     **Audit** ergänzt) re-verschlüsselt alle Secrets old→new transaktional. `SecretRotateHandler`:
-    Old-Key aus **env** (nie Payload/DB-Klartext), verify=Roundtrip, rollback=needs_manual_restore
-    (kein sauberer Reverse, da Secrets sonst vom aktiven env-Key entkoppeln).
+    Old-Key aus **env** (nie Payload/DB-Klartext), verify=Roundtrip. rollback hat keinen sauberen
+    Reverse (Re-Encrypt zum Old-Key würde die Secrets vom aktiven env-Key entkoppeln); statt eines
+    blinden `needs_manual_restore` prüft es per verify-Probe den *Ergebnis*-Zustand: entschlüsselt
+    der aktive Key noch → No-op (der execute-Fehler ließ einen konsistenten Stand zurück), sonst
+    → `needs_manual_restore` (Pre-Action-Backup wiederherstellen / Key-Deployment prüfen).
   - **Increment 4** (trust rotate): `TrustRotationService` (aus `TrustCommand` extrahiert, jetzt
     **transaktional + auditiert** + Snapshot). `TrustRotateHandler`: rollback ist ein **sauberer**
     aktionseigener Undo (Snapshot der Gültigkeitsfenster wiederherstellen).

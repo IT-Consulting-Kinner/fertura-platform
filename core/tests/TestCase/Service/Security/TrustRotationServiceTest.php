@@ -74,6 +74,17 @@ class TrustRotationServiceTest extends TestCase
         (new TrustRotationService())->rotate($old, 'zztest-tr-absent', 30);
     }
 
+    public function testRotateThrowsWhenOldAnchorAbsent(): void
+    {
+        // New anchor present, old key typo'd/absent -> the old-anchor UPDATE matches
+        // nothing -> the rotation must abort (not silently half-apply).
+        $new = 'zztest-tr-new-' . bin2hex(random_bytes(2));
+        $this->seed($new);
+
+        $this->expectException(RuntimeException::class);
+        (new TrustRotationService())->rotate('zztest-tr-no-such-old', $new, 30);
+    }
+
     public function testRotateThrowsWithEmptyIds(): void
     {
         $this->expectException(RuntimeException::class);

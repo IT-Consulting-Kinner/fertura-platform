@@ -6,6 +6,7 @@ namespace App\Service\Settings;
 use App\Audit\AuditLogger;
 use App\Infrastructure\Db;
 use RuntimeException;
+use Throwable;
 
 /**
  * Encryption-key rotation for secret settings (Decision 164) — extracted from the
@@ -49,15 +50,26 @@ class SecretRotationService
             $params['ns'] = $onlyNamespace;
         }
 
-        $rows = $conn->execute("SELECT id, value_encrypted FROM settings $where", $params)->fetchAll('assoc');
+        $rows = $conn->execute(
+            "SELECT id, namespace, config_key, value_encrypted FROM settings $where",
+            $params,
+        )->fetchAll('assoc');
         if ($rows === []) {
             return 0;
         }
 
-        // Decrypt-old + encrypt-new up front; a wrong old key fails here, before any write.
+        // Decrypt-old + encrypt-new up front; a wrong old key fails here, before any
+        // write — naming the offending secret for a clear diagnostic.
         $reencrypted = [];
         foreach ($rows as $r) {
-            $plain = $oldCipher->decrypt((string)$r['value_encrypted']);
+            try {
+                $plain = $oldCipher->decrypt((string)$r['value_encrypted']);
+            } catch (Throwable $e) {
+                throw new RuntimeException(
+                    'Entschlüsselung mit altem Schlüssel fehlgeschlagen: '
+                    . "{$r['namespace']}.{$r['config_key']} ({$e->getMessage()})",
+                );
+            }
             $reencrypted[(string)$r['id']] = $newCipher->encrypt($plain);
         }
 
@@ -77,10 +89,16 @@ class SecretRotationService
         }
 
         $count = count($reencrypted);
-        ($this->audit ??= new AuditLogger())->log('secret.rotate', 'settings', null, [
-            'component' => 'core',
-            'newValue' => ['rotated' => $count],
-        ]);
+        // Best-effort: an audit-only failure must not propagate and make a caller
+        // revert an already-committed rotation.
+        try {
+            ($this->audit ??= new AuditLogger())->log('secret.rotate', 'settings', null, [
+                'component' => 'core',
+                'newValue' => ['rotated' => $count],
+            ]);
+        } catch (Throwable) {
+            // committed rotation stands; audit is a mirror
+        }
 
         return $count;
     }

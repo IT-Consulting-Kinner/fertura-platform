@@ -6,6 +6,7 @@ namespace App\Service\Security;
 use App\Audit\AuditLogger;
 use App\Infrastructure\Db;
 use RuntimeException;
+use Throwable;
 
 /**
  * Rolling trust-anchor rotation (ch. 1.4) — extracted from the CLI
@@ -60,16 +61,29 @@ class TrustRotationService
                 'UPDATE trust_anchors SET valid_from = COALESCE(valid_from, now()), valid_to = NULL WHERE key_id = :k',
                 ['k' => $newKeyId],
             );
-            $conn->execute(
+            // Fail loudly when the OLD anchor matches nothing (typo'd/absent key): a
+            // 0-row UPDATE is not a PG error, so without this the tx would commit a
+            // HALF-APPLIED rotation (new anchor opened, old never expired) and the
+            // action would falsely report success.
+            $oldUpdated = $conn->execute(
                 "UPDATE trust_anchors SET valid_to = now() + (:d || ' days')::interval WHERE key_id = :k",
                 ['d' => (string)$days, 'k' => $oldKeyId],
-            );
+            )->rowCount();
+            if ($oldUpdated === 0) {
+                throw new RuntimeException("Alter Anker nicht gefunden: $oldKeyId — Rotation abgebrochen.");
+            }
         });
 
-        ($this->audit ??= new AuditLogger())->log('trust.rotate', 'trust_anchor', $newKeyId, [
-            'component' => 'core',
-            'newValue' => ['old' => $oldKeyId, 'overlap_days' => $days],
-        ]);
+        // Best-effort: an audit-only failure must NOT propagate and make the runner
+        // revert an already-committed rotation.
+        try {
+            ($this->audit ??= new AuditLogger())->log('trust.rotate', 'trust_anchor', $newKeyId, [
+                'component' => 'core',
+                'newValue' => ['old' => $oldKeyId, 'overlap_days' => $days],
+            ]);
+        } catch (Throwable) {
+            // committed rotation stands; audit is a mirror
+        }
 
         return $snapshot;
     }
