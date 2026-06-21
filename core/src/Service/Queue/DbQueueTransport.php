@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace App\Service\Queue;
 
-use Cake\Datasource\ConnectionInterface;
+use Cake\Database\Connection;
 use Cake\Datasource\ConnectionManager;
 use stdClass;
 
@@ -14,9 +14,14 @@ use stdClass;
  */
 class DbQueueTransport implements QueueTransportInterface
 {
-    private function conn(): ConnectionInterface
+    private function conn(): Connection
     {
-        return ConnectionManager::get('default');
+        // Narrow to the concrete Connection so execute() resolves (ConnectionInterface
+        // omits it); same idiom as App\Infrastructure\Db.
+        /** @var \Cake\Database\Connection $c */
+        $c = ConnectionManager::get('default');
+
+        return $c;
     }
 
     /** @param array<string,mixed> $payload */
@@ -68,6 +73,22 @@ class DbQueueTransport implements QueueTransportInterface
             "UPDATE job_queue SET status = 'ready', reserved_at = NULL WHERE queue = :q AND id = :id",
             ['q' => $queue, 'id' => $id],
         );
+    }
+
+    /**
+     * Returns jobs stuck in 'reserved' — a consumer crashed between {@see reserve()}
+     * and {@see ack()}/{@see release()} — back to 'ready' so another consumer can
+     * claim them. Mirrors the outbox/webhook reclaim sweeps: a job whose `reserved_at`
+     * is still within the window is assumed genuinely in flight and left alone. Spans
+     * all queues. Returns the number reclaimed.
+     */
+    public function reclaimStuck(int $olderThanSeconds = 300): int
+    {
+        return $this->conn()->execute(
+            "UPDATE job_queue SET status = 'ready', reserved_at = NULL "
+            . "WHERE status = 'reserved' AND reserved_at < now() - (:secs || ' seconds')::interval",
+            ['secs' => (string)max(1, $olderThanSeconds)],
+        )->rowCount();
     }
 
     public function size(string $queue): int

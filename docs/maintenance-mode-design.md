@@ -244,8 +244,11 @@ ENTER_MAINTENANCE ─→ QUIESCE ─→ PRE_ACTION_BACKUP ─→ ACTION ─→ V
   worker-eigene Heartbeat bleibt während der Pause frisch (state=paused), ein echter Crash (stale
   non-`sched:`-Worker) **und** ein prior `error` schlagen weiterhin auf `degraded`/`down` durch.
   Sichtbar via `pause_suppressed`/`paused` je Worker.
-- **job_queue-Reclaim**: `webhook_deliveries` hat jetzt einen Reclaim-Sweep; das generische
-  `job_queue` (DB-Treiber) noch nicht — heute kein Produzent (dormant), bei Anbindung nachziehen.
+- **job_queue-Reclaim** ✅ (A5): `DbQueueTransport::reclaimStuck()` setzt Jobs, die ein Consumer-Crash
+  in `reserved` hängen ließ (älter als das Fenster), zurück auf `ready` — verdrahtet im
+  OutboxWorker-Reclaim-Zyklus neben outbox + webhooks. Heute dormant (kein Produzent), self-heilt aber
+  ab dem ersten Zyklus, sobald `job_queue` angebunden wird. (Nebenbei: `conn()` auf `Connection`
+  verengt → ein phpstan-Baseline-Eintrag abgebaut.)
 - **Zusatztests (Hardening)**: Inner-Drain-Pause-Break (braucht Gate-Injection-Seam),
   SIGTERM-im-Pause-Wait, LISTEN-`core_worker_pause`-Nudge, Health-`paused`-Sichtbarkeit via `report()`.
 

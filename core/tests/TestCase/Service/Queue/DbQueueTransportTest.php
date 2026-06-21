@@ -60,4 +60,33 @@ class DbQueueTransportTest extends TestCase
             $conn->rollback();
         }
     }
+
+    public function testReclaimStuckResetsStaleReservedJobsOnly(): void
+    {
+        $conn = ConnectionManager::get('default');
+        $conn->begin();
+        try {
+            $t = new DbQueueTransport();
+            $t->push('zzq3', ['k' => 'a']);
+            $t->push('zzq3', ['k' => 'b']);
+            $res = $t->reserve('zzq3', 2); // both reserved (reserved_at = now())
+            $this->assertCount(2, $res);
+            $this->assertSame(0, $t->size('zzq3'), 'beide reserviert -> keiner bereit');
+
+            // Age ONE reservation past the window (a crashed consumer); the other is fresh.
+            $conn->execute(
+                "UPDATE job_queue SET reserved_at = now() - interval '600 seconds' WHERE id = :id",
+                ['id' => $res[0]['id']],
+            );
+
+            // Only the stale reservation is reclaimed back to 'ready'.
+            $this->assertSame(1, $t->reclaimStuck(300));
+            $this->assertSame(1, $t->size('zzq3'), 'der zurueckgesetzte ist wieder bereit');
+            // ...and it is the stale one (the fresh reservation stays reserved).
+            $reReserved = $t->reserve('zzq3', 5);
+            $this->assertSame([$res[0]['id']], array_column($reReserved, 'id'));
+        } finally {
+            $conn->rollback();
+        }
+    }
 }

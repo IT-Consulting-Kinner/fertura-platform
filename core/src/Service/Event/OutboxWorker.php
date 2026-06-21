@@ -13,6 +13,7 @@ use App\Service\Module\ModuleHostSupervisor;
 use App\Service\Module\ModuleInstallRunner;
 use App\Service\Observability\HealthAlertService;
 use App\Service\Observability\OtlpMetricsExporter;
+use App\Service\Queue\DbQueueTransport;
 use App\Service\Registry\ContractRegistry;
 use App\Service\Schedule\ScheduledTaskRunner;
 use App\Service\Settings\SettingsManager;
@@ -398,6 +399,13 @@ class OutboxWorker
                 $reclaimedWebhooks = (new WebhookService())->reclaimStuckDeliveries($this->reclaimAfterSeconds);
                 if ($reclaimedWebhooks > 0) {
                     $this->log("$reclaimedWebhooks haengende Webhook-Zustellungen zurueckgesetzt.");
+                }
+                // job_queue (generic DB transport): return jobs stuck in 'reserved' by a
+                // consumer crash back to 'ready'. Dormant today (no producer) — wired
+                // here so a future job_queue consumer self-heals from the first cycle.
+                $reclaimedJobs = (new DbQueueTransport())->reclaimStuck($this->reclaimAfterSeconds);
+                if ($reclaimedJobs > 0) {
+                    $this->log("$reclaimedJobs haengende Queue-Jobs zurueckgesetzt.");
                 }
                 // Tick periodic module tasks (extension point, ch. 20.4) –
                 // error-isolated, so a module job does not stop the worker.
