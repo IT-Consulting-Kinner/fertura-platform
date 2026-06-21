@@ -249,8 +249,14 @@ ENTER_MAINTENANCE ─→ QUIESCE ─→ PRE_ACTION_BACKUP ─→ ACTION ─→ V
   OutboxWorker-Reclaim-Zyklus neben outbox + webhooks. Heute dormant (kein Produzent), self-heilt aber
   ab dem ersten Zyklus, sobald `job_queue` angebunden wird. (Nebenbei: `conn()` auf `Connection`
   verengt → ein phpstan-Baseline-Eintrag abgebaut.)
-- **Zusatztests (Hardening)**: Inner-Drain-Pause-Break (braucht Gate-Injection-Seam),
-  SIGTERM-im-Pause-Wait, LISTEN-`core_worker_pause`-Nudge, Health-`paused`-Sichtbarkeit via `report()`.
+- **Zusatztests (Hardening)**: Health-`paused`-Sichtbarkeit via `report()`/`checkWorkers` ✅ (A6) —
+  der bestehende Pause-Test prüfte nur die rohe Heartbeat-Zeile, der neue prüft die Health-
+  Aggregation, die Operatoren lesen. **Bewusst NICHT als Test ergänzt**: Inner-Drain-Pause-Break
+  (bräuchte einen reinen Test-Seam zur Gate-Injektion), SIGTERM-im-Pause-Wait (Signal-Harness) und
+  der LISTEN-`core_worker_pause`-Nudge (NOTIFY-/Timing-abhängig) — alle drei wären signal-/timing-
+  getriebene Harnesses mit Flaky-Risiko für ohnehin produktiv ausgeübtes, von vier Pause-
+  Integrationstests gedecktes Verhalten (ein flaky Test ist schlechter als keiner). Bei Bedarf
+  später mit einem dedizierten, deterministischen Seam nachziehen.
 
 ## 6. Fixierte Entscheidungen
 1. Leitzustand DB-ungecacht + `pg_notify`, Datei-Flag nur Restore-Cutover. **JA**

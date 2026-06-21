@@ -115,4 +115,22 @@ class HealthWorkersQuiesceTest extends TestCase
 
         $this->assertSame('down', $res['status']);
     }
+
+    public function testPausedWorkerIsReportedPausedAndNotDegraded(): void
+    {
+        // A6 visibility: the quiesce handshake writes state='paused' AND keeps the
+        // heartbeat fresh, so checkWorkers() — and thus the health report() that calls
+        // it — must surface the worker as paused + up, never as a fault. (The existing
+        // pause integration test only asserts the raw heartbeat row; this asserts the
+        // health aggregation that operators actually read.)
+        ConnectionManager::get('default')->execute(
+            'INSERT INTO worker_heartbeats (worker_key, last_run_at, last_status, state) '
+            . "VALUES ('outbox', now(), 'ok', 'paused')",
+        );
+        $res = $this->checkWorkers();
+
+        $this->assertSame('up', $res['status']);
+        $this->assertTrue($res['detail']['workers']['outbox']['paused']);
+        $this->assertSame('paused', $res['detail']['workers']['outbox']['state']);
+    }
 }
