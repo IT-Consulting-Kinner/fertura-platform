@@ -102,6 +102,36 @@ class WebhookServiceTest extends TestCase
         $this->assertSame(500, (int)$dead[0]['last_status_code']);
     }
 
+    public function testReclaimStuckDeliveriesResetsCrashedOnesOnly(): void
+    {
+        $s = new WebhookService(new FakeEgress());
+        $sid = $s->createSubscription('zztest_reclaim', 'https://example.com/r', '*')['id'];
+        $conn = ConnectionManager::get('default');
+        // A crashed delivery: stuck in 'delivering' with a stale lock.
+        $conn->execute(
+            'INSERT INTO webhook_deliveries (subscription_id, event_id, event_name, status, locked_at) '
+            . "VALUES (:s, core.uuid_generate_v7(), 'zztest.reclaim', 'delivering', now() - interval '400 seconds')",
+            ['s' => $sid],
+        );
+        // A delivery genuinely in flight (fresh lock) must NOT be reclaimed.
+        $conn->execute(
+            'INSERT INTO webhook_deliveries (subscription_id, event_id, event_name, status, locked_at) '
+            . "VALUES (:s, core.uuid_generate_v7(), 'zztest.reclaim', 'delivering', now())",
+            ['s' => $sid],
+        );
+
+        $this->assertSame(1, $s->reclaimStuckDeliveries(300));
+
+        $pending = (int)$conn->execute(
+            "SELECT count(*) AS c FROM webhook_deliveries WHERE event_name = 'zztest.reclaim' AND status = 'pending'",
+        )->fetch('assoc')['c'];
+        $delivering = (int)$conn->execute(
+            "SELECT count(*) AS c FROM webhook_deliveries WHERE event_name = 'zztest.reclaim' AND status = 'delivering'",
+        )->fetch('assoc')['c'];
+        $this->assertSame(1, $pending);
+        $this->assertSame(1, $delivering);
+    }
+
     private function uuid(): string
     {
         return ConnectionManager::get('default')

@@ -181,9 +181,16 @@ class HealthService
             if ($wStatus !== 'up') {
                 $status = $wStatus === 'down' ? 'down' : ($status === 'down' ? 'down' : 'degraded');
             }
+            // Quiesce handshake (Phase 2): a worker paused for maintenance keeps
+            // refreshing its heartbeat, so a healthy paused worker stays fresh
+            // (up) while a crash still surfaces via staleness — no special-casing
+            // of the up/degraded decision needed, only visibility of the state.
+            $workerState = (string)($b['state'] ?? 'running');
             $workers[(string)$b['worker_key']] = [
                 'age_seconds' => $age,
                 'last_status' => $b['last_status'],
+                'state' => $workerState,
+                'paused' => $workerState === 'paused',
                 'interval_seconds' => $interval ?: null,
                 'overdue_threshold_seconds' => $threshold,
                 'last_duration_ms' => isset($detail['duration_ms']) ? (int)$detail['duration_ms'] : null,

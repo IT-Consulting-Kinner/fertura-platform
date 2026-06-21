@@ -16,6 +16,7 @@ use App\Service\Observability\OtlpMetricsExporter;
 use App\Service\Registry\ContractRegistry;
 use App\Service\Schedule\ScheduledTaskRunner;
 use App\Service\Settings\SettingsManager;
+use App\Service\System\WorkerPauseGate;
 use App\Service\Webhook\WebhookService;
 use Cake\Database\Connection;
 use Cake\Datasource\ConnectionManager;
@@ -41,6 +42,7 @@ class OutboxWorker
     private ContractRegistry $registry;
     private bool $running = false;
     private ?Closure $logger;
+    private ?WorkerPauseGate $pauseGate = null;
 
     public function __construct(
         ?ContractRegistry $registry = null,
@@ -60,6 +62,22 @@ class OutboxWorker
         $conn = ConnectionManager::get('default');
 
         return $conn;
+    }
+
+    /** Uncached worker-pause reader (maintenance quiesce, Phase 2). */
+    private function pauseGate(): WorkerPauseGate
+    {
+        return $this->pauseGate ??= new WorkerPauseGate();
+    }
+
+    /** Blocks for new work: wakes on a NOTIFY (any LISTENed channel) or the poll timeout. */
+    private function waitForWork(?PDO $listenPdo): void
+    {
+        if ($listenPdo !== null) {
+            $listenPdo->pgsqlGetNotify(PDO::FETCH_ASSOC, $this->pollMs);
+        } else {
+            usleep($this->pollMs * 1000);
+        }
     }
 
     private function log(string $message): void
@@ -292,6 +310,9 @@ class OutboxWorker
         $listenPdo = $this->openListenPdo();
         if ($listenPdo !== null) {
             $listenPdo->exec('LISTEN ' . OutboxPublisher::CHANNEL);
+            // Also wake immediately on a maintenance pause/release (Phase 2); the
+            // single pgsqlGetNotify wait below fires on whichever channel notifies.
+            $listenPdo->exec('LISTEN ' . WorkerPauseGate::NOTIFY_CHANNEL);
             $this->log('LISTEN ' . OutboxPublisher::CHANNEL . ' aktiv.');
         } else {
             $this->log('Kein LISTEN möglich -> reiner Poll-Modus.');
@@ -303,9 +324,40 @@ class OutboxWorker
         // (DB query + socket checks per isolated module are otherwise expensive).
         $lastSupervision = 0.0;
         $supervisionEverySec = 30.0;
+        // Tracks the quiesce pause across iterations so entry/exit are logged once.
+        $paused = false;
+        // Clear any stale 'paused' handshake left by a previous process that was
+        // stopped (SIGTERM) mid-pause: a freshly started worker is running. If the
+        // pause is still engaged, the first cycle re-marks 'paused' (idempotent).
+        WorkerHeartbeat::markState('outbox', 'running');
 
         while ($this->running) {
             try {
+                // Maintenance pause-gate (Phase 2): when a quiesce is engaged this
+                // worker stops claiming new work, reports the paused handshake, and
+                // waits on the pause channel — any batch already in flight finishes
+                // (the inner drain re-checks the flag). The uncached DB read is
+                // authoritative; LISTEN/NOTIFY only shortens reaction time. Inside
+                // the try so a transient pause-read error is recovered like any
+                // other iteration error, never crashing the worker. SIGTERM still
+                // exits: the wait is interruptible and the loop re-checks $running.
+                if ($this->pauseGate()->isPaused()) {
+                    if (!$paused) {
+                        $this->log('Worker pausiert (Quiesce).');
+                        $paused = true;
+                    }
+                    // Refresh the heartbeat so health sees "alive, paused" not
+                    // "overdue"; a real crash still surfaces via staleness.
+                    WorkerHeartbeat::markState('outbox', 'paused');
+                    $this->waitForWork($listenPdo);
+
+                    continue;
+                }
+                if ($paused) {
+                    WorkerHeartbeat::markState('outbox', 'running');
+                    $this->log('Worker fortgesetzt (Quiesce aufgehoben).');
+                    $paused = false;
+                }
                 // Heartbeat (ch. 20.3): every cycle logs its run including run
                 // duration and expected interval (for the >2× interval overdue
                 // warning in the health/dashboard, ch. 20.3).
@@ -315,6 +367,12 @@ class OutboxWorker
                 $reclaimed = $this->reclaimStuck();
                 if ($reclaimed > 0) {
                     $this->log("$reclaimed haengende Events zurueckgesetzt.");
+                }
+                // Recover deliveries pinned in 'delivering' by a crash, so a quiesce
+                // can genuinely reach in-flight=0 instead of only timing out.
+                $reclaimedWebhooks = (new WebhookService())->reclaimStuckDeliveries($this->reclaimAfterSeconds);
+                if ($reclaimedWebhooks > 0) {
+                    $this->log("$reclaimedWebhooks haengende Webhook-Zustellungen zurueckgesetzt.");
                 }
                 // Tick periodic module tasks (extension point, ch. 20.4) –
                 // error-isolated, so a module job does not stop the worker.
@@ -366,9 +424,11 @@ class OutboxWorker
                         $this->log('Observability-Fehler: ' . $e->getMessage());
                     }
                 }
-                // Fully drain the existing events.
+                // Fully drain the existing events. Re-check the pause flag each
+                // batch so a quiesce engaged mid-drain stops claiming NEW batches
+                // (the batch already claimed inside processBatch still finishes).
                 $processed = 0;
-                while ($this->running && ($n = $this->processBatch()) > 0) {
+                while ($this->running && !$this->pauseGate()->isPaused() && ($n = $this->processBatch()) > 0) {
                     $processed += $n;
                 }
                 // Deliver due webhook deliveries (P05) — capped per cycle
@@ -385,12 +445,8 @@ class OutboxWorker
                     'processed' => $processed,
                     'webhooks_delivered' => $deliveredWebhooks,
                 ]);
-                // Wait for NOTIFY or timeout.
-                if ($listenPdo !== null) {
-                    $listenPdo->pgsqlGetNotify(PDO::FETCH_ASSOC, $this->pollMs);
-                } else {
-                    usleep($this->pollMs * 1000);
-                }
+                // Wait for NOTIFY (work or pause/release) or the poll timeout.
+                $this->waitForWork($listenPdo);
             } catch (Throwable $e) {
                 $this->log('Iterationsfehler: ' . $e->getMessage());
                 usleep(2_000_000);
@@ -398,6 +454,7 @@ class OutboxWorker
                 if ($listenPdo !== null) {
                     try {
                         $listenPdo->exec('LISTEN ' . OutboxPublisher::CHANNEL);
+                        $listenPdo->exec('LISTEN ' . WorkerPauseGate::NOTIFY_CHANNEL);
                     } catch (Throwable) {
                         $listenPdo = null;
                     }

@@ -110,6 +110,28 @@ class WebhookService
     }
 
     /**
+     * Recovers deliveries pinned in 'delivering' by a hard worker crash between the
+     * claim commit and the terminal status write (the claim auto-commits before the
+     * slow HTTP attempt, so no transaction protects that window). Resets them to
+     * 'pending' for redelivery — so a maintenance quiesce can actually reach
+     * in-flight=0 instead of only timing out. Mirrors the outbox reclaimStuck()
+     * sweep; the worker runs privileged, so this one pass recovers all tenants. The
+     * threshold is generous (far beyond any egress timeout) so a delivery that is
+     * genuinely still in flight is never reclaimed.
+     */
+    public function reclaimStuckDeliveries(int $olderThanSeconds = 300): int
+    {
+        /** @var \Cake\Database\Connection $conn */
+        $conn = $this->conn();
+
+        return $conn->execute(
+            "UPDATE webhook_deliveries SET status = 'pending', locked_at = NULL "
+            . "WHERE status = 'delivering' AND locked_at < now() - (:secs || ' seconds')::interval",
+            ['secs' => (string)max(1, $olderThanSeconds)],
+        )->rowCount();
+    }
+
+    /**
      * Delivers due, pending deliveries for the CURRENT tenant context. Returns the
      * number processed. Under the fail-closed policy the claim only sees the
      * current tenant's deliveries; the subscription read is likewise tenant-scoped.

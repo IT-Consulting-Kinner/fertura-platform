@@ -5,6 +5,7 @@ namespace App\Service\System;
 
 use Cake\Database\Connection;
 use Cake\Datasource\ConnectionManager;
+use Throwable;
 
 /**
  * Maintenance-mode leading state — Phase 1 (docs/maintenance-mode-design.md).
@@ -114,7 +115,7 @@ class MaintenanceService
     {
         try {
             $this->conn()->execute("SELECT pg_notify(:c, '')", ['c' => self::NOTIFY_CHANNEL]);
-        } catch (\Throwable) {
+        } catch (Throwable) {
             // NOTIFY is an optimisation only — never let it break engage/release.
         }
     }

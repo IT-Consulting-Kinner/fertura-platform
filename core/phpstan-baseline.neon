@@ -835,12 +835,6 @@ parameters:
 			path: src/Service/Health/HealthService.php
 
 		-
-			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
-			identifier: method.notFound
-			count: 2
-			path: src/Service/Health/WorkerHeartbeat.php
-
-		-
 			message: '#^Parameter \#2 \$parts of method App\\Service\\Http\\EgressClient\:\:pinLine\(\) expects array\<string, mixed\>, array\<string, int\|string\>\|false given\.$#'
 			identifier: argument.type
 			count: 2

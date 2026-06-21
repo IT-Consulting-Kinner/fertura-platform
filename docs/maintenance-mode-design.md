@@ -92,13 +92,44 @@ ENTER_MAINTENANCE ─→ QUIESCE ─→ PRE_ACTION_BACKUP ─→ ACTION ─→ V
 - **backup restore** → bedingt, aber **Stufe 1 NICHT** (erst nach erprobtem Quiesce/Cutover).
 
 ## 5. Empfohlene Umsetzungsreihenfolge
-1. DB-Leitzustand + ungecachter Reader + `pg_notify` ← **Phase 1**
-2. Worker-Pause-Gate + `QuiesceService`
-3. `SelectiveMaintenanceMiddleware` + Allow-Token + Login/Cookie-Block
+1. DB-Leitzustand + ungecachter Reader + `pg_notify` ← **Phase 1 ✅**
+2. Worker-Pause-Gate + `QuiesceService` ← **Phase 2 ✅**
+3. `SelectiveMaintenanceMiddleware` + Allow-Token + Login/Cookie-Block ← Phase 3 (+ GUI: `MaintenanceController` engage/release/status + Drain-Polling-View)
 4. `critical_action`-State-Machine + Crash-Recovery-Sweep
 5. Pre-Action-Backup-Gate (`createLocked`, erzwungene Verschluesselung, Store-Registry)
 6. `ActionVerifier` pro Typ + aktionseigener Rollback
 7. zuletzt globaler Restore / `backup restore`-GUI hinter dem reifen Cutover-Pfad
+
+### Umsetzungsstand
+- **Phase 1** (`core.maintenance_session` + `MaintenanceService`): ungecachter Reader,
+  atomares `engage()` (Partial-Unique-Index), `release()`, `pg_notify('core_maintenance')`.
+- **Phase 2** (Worker-Pause-Gate + Quiesce):
+  - `core.worker_pause` (Single-Row-Control-Tabelle, ungecacht) + `core.worker_heartbeats.state`.
+  - `WorkerPauseGate` (uncached `isPaused`/`requestPause`/`release`, `pg_notify('core_worker_pause')`,
+    120s-Deadline-Stempel).
+  - `QuiesceService.inFlight()` aggregiert 6 Quellen (outbox processing + due-pending,
+    webhook delivering + due-pending, module_install_jobs queued/running, job_queue reserved)
+    über `Db::privileged()` (webhook_deliveries ist RLS-geschützt); `status()` liefert
+    `paused/in_flight/by_source/workers_*/deadline_seconds_remaining/drained/timed_out/done`.
+  - `OutboxWorker::run()`: Pause-Gate als erste Schleifenanweisung (skippt reclaim/scheduler/
+    install/processBatch/webhooks), LISTEN `core_worker_pause` (auch im Recovery-Branch),
+    Inner-Drain-Re-Check, `WorkerHeartbeat::markState('paused'/'running')` als Handshake.
+  - **Entscheidung Multi-Worker**: gemeinsames Flag (alle Worker lesen dieselbe `worker_pause`-Row,
+    pausieren gemeinsam; Drain-Beweis ist `inFlight()==0`, der Handshake ist sekundär).
+  - Adversariale Review (0 critical/high, 3 medium, 11 low, 2 nit) eingearbeitet:
+    Startup-`markState('running')` (SIGTERM-while-paused-Reststate), `WebhookService::reclaimStuckDeliveries()`
+    im Worker-Zyklus (Drain wird self-healing statt nur Timeout), `timed_out` aus direktem
+    `now() >= deadline_at` statt gerundetem Countdown, Redis-XPENDING-Limit dokumentiert.
+  - 18 Tests; volle Suite grün; phpstan + phpcs sauber.
+
+#### Offene Review-Punkte (bewusst nach Phase 3 / Follow-up deferred)
+- **Quiesce-aware Health**: ein pausierter Worker skippt `ScheduledTaskRunner.tick()`, daher können
+  `sched:*`-Heartbeats während einer (≤120s) Quiesce kurz `stale→degraded` zeigen → `checkWorkers`
+  während aktiver Pause nicht herabstufen (besser zusammen mit der Phase-3-Health/Maintenance-GUI).
+- **job_queue-Reclaim**: `webhook_deliveries` hat jetzt einen Reclaim-Sweep; das generische
+  `job_queue` (DB-Treiber) noch nicht — heute kein Produzent (dormant), bei Anbindung nachziehen.
+- **Zusatztests (Hardening)**: Inner-Drain-Pause-Break (braucht Gate-Injection-Seam),
+  SIGTERM-im-Pause-Wait, LISTEN-`core_worker_pause`-Nudge, Health-`paused`-Sichtbarkeit via `report()`.
 
 ## 6. Fixierte Entscheidungen
 1. Leitzustand DB-ungecacht + `pg_notify`, Datei-Flag nur Restore-Cutover. **JA**
