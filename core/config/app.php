@@ -524,12 +524,15 @@ return [
         // Schicht und überlebt Container-Recreates (kein Zwangs-Logout). Für reine
         // Einzelinstanz lässt sich per `SESSION_DEFAULTS=php` auf Datei zurückstellen.
         'defaults' => env('SESSION_DEFAULTS', 'database'),
-        // Cookie-Härtung: HttpOnly + SameSite=Lax immer; Secure, sobald TLS
-        // terminiert wird (SESSION_COOKIE_SECURE=1). Lokaler HTTP-Dev bleibt nutzbar.
+        // Cookie-Härtung: HttpOnly + SameSite=Lax immer; Secure ist fail-safe AN
+        // (in jeder Nicht-Debug-Umgebung), nur lokaler HTTP-Dev (DEBUG) lässt es
+        // weg. SESSION_COOKIE_SECURE überschreibt beides. Plattformweit zentral in
+        // \App\Service\Security\CookieSecurity entschieden (gilt auch für CSRF-,
+        // Locale-, Remember-me- und Maintenance-Cookies).
         'ini' => [
             'session.cookie_httponly' => true,
             'session.cookie_samesite' => 'Lax',
-            'session.cookie_secure' => filter_var(env('SESSION_COOKIE_SECURE', false), FILTER_VALIDATE_BOOL),
+            'session.cookie_secure' => \App\Service\Security\CookieSecurity::enabled(),
         ],
     ],
 

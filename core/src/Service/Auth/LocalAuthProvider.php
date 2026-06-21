@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Service\Auth;
 
+use App\Service\Security\CookieSecurity;
 use Authentication\AuthenticationService;
 
 /**
@@ -65,7 +66,7 @@ class LocalAuthProvider implements AuthProviderInterface
         // success only if that field is truthy. Loaded after Form so a fresh GET
         // (no POST data) lets the cookie authenticate. Cookie hardening mirrors the
         // session cookie (config/app.php): HttpOnly + SameSite=Lax always, Secure
-        // once TLS is terminated (SESSION_COOKIE_SECURE=1); local HTTP dev stays usable.
+        // fail-safe ON outside local debug/dev (see CookieSecurity).
         $service->loadAuthenticator('Authentication.Cookie', [
             'rememberMeField' => 'remember_me',
             // The token is built from these *entity* fields (username + stored
@@ -83,7 +84,7 @@ class LocalAuthProvider implements AuthProviderInterface
                 'expires' => '+30 days',
                 'httponly' => true,
                 'samesite' => 'Lax',
-                'secure' => filter_var(env('SESSION_COOKIE_SECURE', false), FILTER_VALIDATE_BOOL),
+                'secure' => CookieSecurity::enabled(),
             ],
         ]);
     }

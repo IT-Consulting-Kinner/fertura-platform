@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Service\System;
 
+use App\Service\Security\CookieSecurity;
 use Cake\Http\Cookie\Cookie;
 use DateTimeImmutable;
 
@@ -18,8 +19,8 @@ use DateTimeImmutable;
  *
  * Path `/` so the cookie is also presented on `/login` and `/sso/*` (which the gate
  * blocks for everyone else — fail-closed login). Hardening mirrors the session/locale
- * cookies: HttpOnly (not script-readable) + SameSite=Lax always, Secure once TLS is
- * terminated (SESSION_COOKIE_SECURE=1). The token is meaningless once the session is
+ * cookies: HttpOnly (not script-readable) + SameSite=Lax always, Secure fail-safe ON
+ * outside local debug/dev (see CookieSecurity). The token is meaningless once the session is
  * released (the gate no longer matches), but a bounded TTL keeps a stray token from
  * lingering indefinitely.
  */
@@ -38,7 +39,7 @@ final class AllowTokenCookie
             'path' => '/',
             'httponly' => true,
             'samesite' => 'Lax',
-            'secure' => filter_var(env('SESSION_COOKIE_SECURE', false), FILTER_VALIDATE_BOOL),
+            'secure' => CookieSecurity::enabled(),
         ]);
     }
 

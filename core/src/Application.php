@@ -33,6 +33,7 @@ use App\Middleware\SessionGuardMiddleware;
 use App\Middleware\TransactionRlsMiddleware;
 use App\Service\Auth\AuthProviderResolver;
 use App\Service\Module\ModuleAutoloader;
+use App\Service\Security\CookieSecurity;
 use App\Service\Settings\SettingsManager;
 use App\Service\System\FeatureFlags;
 use Authentication\AuthenticationService;
@@ -167,11 +168,11 @@ class Application extends BaseApplication implements AuthenticationServiceProvid
             // https://book.cakephp.org/5/en/security/csrf.html#cross-site-request-forgery-csrf-middleware
             ->add((new CsrfProtectionMiddleware([
                 'httponly' => true,
-                // Defense-in-depth for the CSRF cookie: SameSite=Lax and — when
-                // TLS is terminated (SESSION_COOKIE_SECURE/HTTPS) — the Secure flag.
-                // Local HTTP dev usage stays functional (default false).
+                // Defense-in-depth for the CSRF cookie: SameSite=Lax always and
+                // the Secure flag fail-safe ON outside local debug/dev (see
+                // CookieSecurity). Local HTTP dev usage stays functional.
                 'samesite' => 'Lax',
-                'secure' => filter_var(env('SESSION_COOKIE_SECURE', false), FILTER_VALIDATE_BOOL),
+                'secure' => CookieSecurity::enabled(),
             ]))->skipCheckCallback(static function (ServerRequestInterface $request): bool {
                 $path = $request->getUri()->getPath();
 

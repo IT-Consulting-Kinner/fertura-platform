@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Service\I18n;
 
+use App\Service\Security\CookieSecurity;
 use Cake\Http\Cookie\Cookie;
 use DateTimeImmutable;
 
@@ -12,8 +13,8 @@ use DateTimeImmutable;
  * Written on an explicit language switch (`?lang=…` / `/locale/change`) and on a
  * successful login (capturing the language the login mask was shown in), so the
  * choice survives the session and a logout. Hardening mirrors the session cookie
- * (config/app.php): HttpOnly + SameSite=Lax always, Secure once TLS is terminated
- * (SESSION_COOKIE_SECURE=1); local HTTP dev stays usable.
+ * (config/app.php): HttpOnly + SameSite=Lax always, Secure fail-safe ON outside
+ * local debug/dev (see CookieSecurity).
  */
 final class LocaleCookie
 {
@@ -27,7 +28,7 @@ final class LocaleCookie
             'path' => '/',
             'httponly' => true,
             'samesite' => 'Lax',
-            'secure' => filter_var(env('SESSION_COOKIE_SECURE', false), FILTER_VALIDATE_BOOL),
+            'secure' => CookieSecurity::enabled(),
         ]);
     }
 }
