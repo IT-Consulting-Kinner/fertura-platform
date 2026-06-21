@@ -6,6 +6,11 @@
 /tmp/*
 /vendor/*
 
+# Build/packaging output #
+##########################
+# Local build/extraction area (e.g. dist/src/<module> module checkouts); never tracked.
+/dist/
+
 # OS generated files #
 ######################
 .DS_Store
