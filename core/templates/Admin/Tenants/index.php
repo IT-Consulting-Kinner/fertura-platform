@@ -84,3 +84,22 @@
     </div>
     <div class="col-auto"><?= $this->Form->button(__('admin.tenants.assign_btn'), ['class' => 'btn btn-outline-primary btn-sm']) ?></div>
 <?= $this->Form->end() ?>
+
+<hr class="my-4">
+<h2 class="h5 mb-1"><?= h(__('admin.tenants.create_admin_title')) ?></h2>
+<p class="text-muted small mb-3"><?= h(__('admin.tenants.create_admin_hint')) ?></p>
+<?= $this->Form->create(null, ['url' => ['action' => 'createAdmin'], 'class' => 'row g-2 align-items-end col-md-12']) ?>
+    <div class="col">
+        <label class="form-label small mb-0"><?= h(__('admin.tenants.create_admin_tenant')) ?></label>
+        <?= $this->Form->select('tenant_id', $allTenants, ['class' => 'form-select form-select-sm', 'required' => true, 'empty' => true]) ?>
+    </div>
+    <div class="col">
+        <label class="form-label small mb-0"><?= h(__('admin.tenants.create_admin_username')) ?></label>
+        <?= $this->Form->control('username', ['label' => false, 'required' => true, 'class' => 'form-control form-control-sm']) ?>
+    </div>
+    <div class="col">
+        <label class="form-label small mb-0"><?= h(__('admin.tenants.create_admin_email')) ?></label>
+        <?= $this->Form->control('email', ['label' => false, 'type' => 'email', 'required' => true, 'class' => 'form-control form-control-sm']) ?>
+    </div>
+    <div class="col-auto"><?= $this->Form->button(__('admin.tenants.create_admin_btn'), ['class' => 'btn btn-outline-primary btn-sm']) ?></div>
+<?= $this->Form->end() ?>

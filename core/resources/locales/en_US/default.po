@@ -1268,6 +1268,33 @@ msgstr "Tenant"
 msgid "admin.tenants.assign_btn"
 msgstr "Assign"
 
+msgid "admin.tenants.create_admin_title"
+msgstr "Create tenant admin"
+
+msgid "admin.tenants.create_admin_hint"
+msgstr "Creates the first (or another) administrator for a tenant: a user IN the target tenant with user/group management + an invitation link. The operator tenant is excluded here."
+
+msgid "admin.tenants.create_admin_tenant"
+msgstr "Tenant"
+
+msgid "admin.tenants.create_admin_username"
+msgstr "Username"
+
+msgid "admin.tenants.create_admin_email"
+msgstr "Email"
+
+msgid "admin.tenants.create_admin_btn"
+msgstr "Create admin + invite"
+
+msgid "flash.tenants.admin_invalid_tenant"
+msgstr "Invalid tenant (or the operator tenant, which is not allowed here)."
+
+msgid "flash.tenants.admin_params"
+msgstr "Username and email are required."
+
+msgid "flash.tenants.admin_created"
+msgstr "Tenant admin created and invited. Invitation link: %s"
+
 msgid "flash.tenants.assigned"
 msgstr "User assigned to tenant."
 

@@ -23,10 +23,14 @@ class TenantsControllerTest extends TestCase
         parent::setUp();
         $this->cleanup();
         $conn = ConnectionManager::get('default');
-        $conn->execute(
-            "INSERT INTO admin_areas (area_key, label, sort_order) VALUES ('core_config', 'Core', 60) "
-            . 'ON CONFLICT (area_key) DO NOTHING',
-        );
+        foreach ([['core_config', 'Core', 60], ['user_group_admin', 'Users', 10]] as [$key, $label, $sort]) {
+            // user_group_admin is the area createAdmin grants the new tenant admin
+            // (FK target of user_admin_areas); in prod the area set is seeded.
+            $conn->execute(
+                'INSERT INTO admin_areas (area_key, label, sort_order) VALUES (:k, :l, :s) ON CONFLICT (area_key) DO NOTHING',
+                ['k' => $key, 'l' => $label, 's' => $sort],
+            );
+        }
         $this->userId = (string)$conn->execute(
             "INSERT INTO users (username, email, status) VALUES (:u, :e, 'active') RETURNING id",
             ['u' => 'zztest_tadmin_' . bin2hex(random_bytes(3)), 'e' => 'tadmin_' . bin2hex(random_bytes(3)) . '@zztenant.local'],
@@ -46,6 +50,15 @@ class TenantsControllerTest extends TestCase
     private function cleanup(): void
     {
         $conn = ConnectionManager::get('default');
+        // Children of the test users first (no ON DELETE CASCADE), then users/tenants.
+        $conn->execute(
+            'DELETE FROM password_reset_tokens WHERE user_id IN '
+            . "(SELECT id FROM users WHERE email LIKE '%@zztenant.local')",
+        );
+        $conn->execute(
+            'DELETE FROM user_admin_areas WHERE user_id IN '
+            . "(SELECT id FROM users WHERE email LIKE '%@zztenant.local')",
+        );
         $conn->execute("DELETE FROM users WHERE email LIKE '%@zztenant.local'");
         $conn->execute("DELETE FROM tenants WHERE key LIKE 'zztest-%'");
     }
@@ -138,6 +151,68 @@ class TenantsControllerTest extends TestCase
 
         $this->post('/admin/tenants/bulk', ['op' => 'suspend', 'ids' => ['garbage']]);
         $this->assertRedirect(['action' => 'index']);
+    }
+
+    public function testCreateAdminCreatesTenantUserWithGrantAndInvite(): void
+    {
+        $conn = ConnectionManager::get('default');
+        $tid = (string)$conn->execute(
+            "INSERT INTO tenants (key, name) VALUES ('zztest-onb', 'Onboard') RETURNING id",
+        )->fetch('assoc')['id'];
+
+        $this->login();
+        $this->enableCsrfToken();
+        $this->enableSecurityToken();
+        $email = 'newadmin_' . bin2hex(random_bytes(3)) . '@zztenant.local';
+        $this->post('/admin/tenants/create-admin', [
+            'tenant_id' => $tid,
+            'username' => 'zztest_newadmin_' . bin2hex(random_bytes(3)),
+            'email' => $email,
+        ]);
+        $this->assertRedirect(['action' => 'index']);
+
+        // The new user lives in the TARGET tenant, is invited, and holds the tenant
+        // user/group-admin area; an invitation token was created.
+        $row = $conn->execute(
+            'SELECT id, tenant_id, status FROM users WHERE lower(email) = lower(:e)',
+            ['e' => $email],
+        )->fetch('assoc');
+        $this->assertNotFalse($row);
+        $this->assertSame($tid, $row['tenant_id']);
+        $this->assertSame('invited', $row['status']);
+        $this->assertNotFalse(
+            $conn->execute(
+                "SELECT 1 FROM user_admin_areas WHERE user_id = :u AND admin_area_key = 'user_group_admin'",
+                ['u' => $row['id']],
+            )->fetch(),
+        );
+        $this->assertSame(
+            1,
+            (int)$conn->execute(
+                "SELECT count(*) AS c FROM password_reset_tokens WHERE user_id = :u AND purpose = 'invite'",
+                ['u' => $row['id']],
+            )->fetch('assoc')['c'],
+        );
+    }
+
+    public function testCreateAdminRefusesOperatorTenant(): void
+    {
+        $this->login();
+        $this->enableCsrfToken();
+        $this->enableSecurityToken();
+        $email = 'reject_' . bin2hex(random_bytes(3)) . '@zztenant.local';
+        // The operator tenant (default) is not a valid onboarding target -> no user.
+        $this->post('/admin/tenants/create-admin', [
+            'tenant_id' => '00000000-0000-0000-0000-000000000001',
+            'username' => 'zztest_reject',
+            'email' => $email,
+        ]);
+        $this->assertRedirect(['action' => 'index']);
+        $this->assertFalse(
+            ConnectionManager::get('default')
+                ->execute('SELECT 1 FROM users WHERE lower(email) = lower(:e)', ['e' => $email])
+                ->fetch(),
+        );
     }
 
     public function testBulkSuspendAndActivate(): void

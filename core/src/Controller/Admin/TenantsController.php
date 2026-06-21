@@ -3,6 +3,10 @@ declare(strict_types=1);
 
 namespace App\Controller\Admin;
 
+use App\Audit\AuditLogger;
+use App\Model\Entity\User;
+use App\Service\Identity\PasswordResetService;
+use App\Service\Mail\MailService;
 use App\Service\Tenant\TenantService;
 use Cake\Datasource\ConnectionManager;
 use Cake\Http\Response;
@@ -103,6 +107,65 @@ class TenantsController extends AdminController
 
             return null;
         }
+    }
+
+    /**
+     * Onboarding step (operator-tenant design §7, decided: a SEPARATE step after
+     * provisioning): creates the first/another ADMIN for a tenant — a user IN the
+     * target tenant, granted the tenant user/group-admin area, plus an invitation
+     * link. Operator-only (core_config, gate-enforced). Cross-tenant by design: the
+     * operator creates a user whose tenant differs from the operator's own RLS context
+     * (`users`/`user_admin_areas` carry no RLS, so the writes are not blocked). The
+     * operator tenant itself is refused here — its admins are operator-admins, managed
+     * separately, not onboarded as tenant admins.
+     */
+    public function createAdmin(): ?Response
+    {
+        $this->request->allowMethod('post');
+        $tenantId = (string)$this->request->getData('tenant_id');
+        $email = trim((string)$this->request->getData('email'));
+        $username = trim((string)$this->request->getData('username'));
+        try {
+            if (!$this->isUuid($tenantId) || $tenantId === self::OPERATOR_TENANT_ID) {
+                throw new RuntimeException(__('flash.tenants.admin_invalid_tenant'));
+            }
+            if ((new TenantService())->get($tenantId) === null) {
+                throw new RuntimeException(__('flash.tenants.admin_invalid_tenant'));
+            }
+            if ($email === '' || $username === '') {
+                throw new RuntimeException(__('flash.tenants.admin_params'));
+            }
+            $users = $this->fetchTable('Users');
+            /** @var \App\Model\Entity\User $user */
+            $user = $users->patchEntity($users->newEmptyEntity(), ['username' => $username, 'email' => $email]);
+            $user->set('status', User::STATUS_INVITED);
+            $user->set('tenant_id', $tenantId); // the TARGET tenant, not the operator's
+            if (!$users->save($user)) {
+                throw new RuntimeException(__('flash.user.create_failed'));
+            }
+            $userId = (string)$user->id;
+            // Grant the tenant user/group-admin area (held within the new tenant).
+            /** @var \Cake\Database\Connection $conn */
+            $conn = ConnectionManager::get('default');
+            $conn->execute(
+                'INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a) ON CONFLICT DO NOTHING',
+                ['u' => $userId, 'a' => 'user_group_admin'],
+            );
+            // Invitation / password-set link (like UsersController::invite).
+            $actor = $this->identity()?->getIdentifier();
+            $token = (new PasswordResetService())->create($userId, 'invite', 72, is_scalar($actor) ? (string)$actor : null);
+            $url = (string)$this->request->getUri()->withPath('/set-password')->withQuery('token=' . $token);
+            (new MailService())->sendInvitation($email, $username, $url);
+            (new AuditLogger())->log('tenant.create_admin', 'user', $userId, [
+                'component' => 'core',
+                'newValue' => ['tenant_id' => $tenantId],
+            ]);
+            $this->Flash->success(__('flash.tenants.admin_created', $url));
+        } catch (Throwable $e) {
+            $this->Flash->error($e->getMessage());
+        }
+
+        return $this->redirect(['action' => 'index']);
     }
 
     /** Bulk action: activate or suspend the selected tenants. */

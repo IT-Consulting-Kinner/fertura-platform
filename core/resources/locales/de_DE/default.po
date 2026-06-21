@@ -1264,6 +1264,33 @@ msgstr "Mandant"
 msgid "admin.tenants.assign_btn"
 msgstr "Zuordnen"
 
+msgid "admin.tenants.create_admin_title"
+msgstr "Mandanten-Admin anlegen"
+
+msgid "admin.tenants.create_admin_hint"
+msgstr "Legt den ersten (oder einen weiteren) Administrator für einen Mandanten an: ein Benutzer IM Ziel-Mandanten mit Benutzer-/Gruppen-Verwaltung + Einladungs-Link. Der Betreiber-Mandant ist hier ausgeschlossen."
+
+msgid "admin.tenants.create_admin_tenant"
+msgstr "Mandant"
+
+msgid "admin.tenants.create_admin_username"
+msgstr "Benutzername"
+
+msgid "admin.tenants.create_admin_email"
+msgstr "E-Mail"
+
+msgid "admin.tenants.create_admin_btn"
+msgstr "Admin anlegen + einladen"
+
+msgid "flash.tenants.admin_invalid_tenant"
+msgstr "Ungültiger Mandant (oder der Betreiber-Mandant, der hier nicht zulässig ist)."
+
+msgid "flash.tenants.admin_params"
+msgstr "Benutzername und E-Mail sind erforderlich."
+
+msgid "flash.tenants.admin_created"
+msgstr "Mandanten-Admin angelegt und eingeladen. Einladungs-Link: %s"
+
 msgid "flash.tenants.assigned"
 msgstr "Benutzer dem Mandanten zugeordnet."
 

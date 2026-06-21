@@ -168,8 +168,15 @@ umgestellt; `AdminController::NAV` bekommt je Area den `scope`.
    granularen Area-Key-Splits (`core_config`→`op_tenants`/`op_system`, `user_group_admin`→`op_admins`/
    `tenant_users`) + Mapping-Migration fallen mit Inc 4 / den Feature-Increments; der System-Seiten-
    Realm-Split (audit/tokens je Realm) bleibt §10.
-4. **`op_admins`** (Operator-Admin-Verwaltung, nur Operator-Mandant-User) als eigener gescopeter
-   Bereich.
+4. **Onboarding-Schritt** ✅ — `TenantsController::createAdmin` (Operator-Aktion, core_config-gegated):
+   legt einen User IM Ziel-Tenant an (cross-tenant, Operator-Privileg; `users`/`user_admin_areas`
+   ohne RLS), vergibt `user_group_admin` + Einladungs-Link; der Operator-Mandant ist als Ziel
+   ausgeschlossen. Tests: User landet im Ziel-Tenant + Grant + Invite; Operator-Tenant wird abgewiesen.
+   **Noch offen** (Refinement, da die Grenze schon erzwungen ist): `op_admins` (eigener Operator-Admin-
+   Verwaltungsbereich) + die granularen Area-Key-Splits (`user_group_admin`→`op_admins`/`tenant_users`,
+   `core_config`→`op_tenants`/`op_system`) + `toggleArea`-Scoping (Tenant-Admin darf nur Tenant-Areas
+   vergeben). E-Mail-Eindeutigkeit (per-Tenant vs. global) ist ein vorbestehender, davon unabhängiger
+   Punkt.
 5. **Per-Tenant-Modul-Enable + -Config** (`tenant_modules`, Dispatch/Nav/Listener tenant-aware,
    Core/Modul-Config-Contract).
 6. **Tenant-Daten-Backup/Restore** (Mandant) + **System-Backup/Restore** (Operator) sauber getrennt;
