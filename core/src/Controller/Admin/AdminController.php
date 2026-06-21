@@ -60,6 +60,10 @@ class AdminController extends AppController
             'label' => 'admin.nav.localization',
             'items' => [['admin.nav.language_packs', '/admin/localization']],
         ],
+        'system_maintenance' => [
+            'label' => 'admin.nav.maintenance',
+            'items' => [['admin.nav.maintenance_item', '/admin/maintenance']],
+        ],
     ];
 
     public function initialize(): void

@@ -1,0 +1,83 @@
+<?php
+/**
+ * @var \App\View\AppView $this
+ * @var array<string, mixed>|null $session
+ * @var array<string, mixed>|null $quiesce
+ */
+?>
+<h1 class="h3 mb-3"><?= h(__('admin.maintenance.title')) ?></h1>
+<p class="text-muted small"><?= h(__('admin.maintenance.intro')) ?></p>
+
+<?php if ($session === null) : ?>
+    <div class="card mw-lg">
+        <div class="card-body">
+            <h2 class="h6"><?= h(__('admin.maintenance.engage_heading')) ?></h2>
+            <p class="text-muted small mb-3"><?= h(__('admin.maintenance.engage_hint')) ?></p>
+            <?= $this->Form->create(null, ['url' => ['action' => 'engage']]) ?>
+            <div class="mb-3">
+                <label class="form-label" for="reason"><?= h(__('admin.maintenance.reason_label')) ?></label>
+                <input type="text" name="reason" id="reason" class="form-control" maxlength="200">
+            </div>
+            <?= $this->Form->button(__('admin.maintenance.engage'), [
+                'class' => 'btn btn-warning',
+                'data-confirm' => __('admin.maintenance.engage_confirm'),
+                'data-confirm-variant' => 'btn-warning',
+                'escapeTitle' => false,
+            ]) ?>
+            <?= $this->Form->end() ?>
+        </div>
+    </div>
+<?php else : ?>
+    <?php $q = $quiesce ?? []; ?>
+    <div id="maintBanner" class="alert alert-warning">
+        <div class="d-flex align-items-center gap-2">
+            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+            <strong><?= h(__('admin.maintenance.active')) ?></strong>
+        </div>
+        <div id="maintStatus" class="small mt-2">
+            <?= h(__('admin.maintenance.draining', (string)($q['in_flight'] ?? '?'))) ?>
+        </div>
+    </div>
+
+    <dl class="row small mw-lg">
+        <dt class="col-5"><?= h(__('admin.maintenance.reason_label')) ?></dt>
+        <dd class="col-7"><?= h((string)($session['reason'] ?? '–')) ?></dd>
+        <dt class="col-5"><?= h(__('admin.maintenance.opened_at')) ?></dt>
+        <dd class="col-7"><?= h((string)($session['opened_at'] ?? '')) ?></dd>
+    </dl>
+
+    <?= $this->UiKit->confirmPost(
+        __('admin.maintenance.release'),
+        ['action' => 'release'],
+        __('admin.maintenance.release_confirm'),
+        ['class' => 'btn btn-danger', 'variant' => 'btn-danger'],
+    ) ?>
+
+    <script>
+    (function () {
+        var banner = document.getElementById('maintBanner');
+        var status = document.getElementById('maintStatus');
+        if (!banner || !status) { return; }
+        var tplDraining = <?= json_encode(__('admin.maintenance.draining', '%N%')) ?>;
+        var tplDrained = <?= json_encode(__('admin.maintenance.drained')) ?>;
+        var tplTimedOut = <?= json_encode(__('admin.maintenance.timed_out')) ?>;
+        var timer = setInterval(function () {
+            fetch('/admin/maintenance/status', { headers: { 'Accept': 'application/json' } })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (!d.active) { clearInterval(timer); location.reload(); return; }
+                    if (d.done) {
+                        clearInterval(timer);
+                        var sp = banner.querySelector('.spinner-border'); if (sp) { sp.remove(); }
+                        banner.classList.remove('alert-warning');
+                        banner.classList.add(d.timed_out ? 'alert-danger' : 'alert-success');
+                        status.textContent = d.timed_out ? tplTimedOut : tplDrained;
+                    } else {
+                        status.textContent = tplDraining.replace('%N%', d.in_flight);
+                    }
+                })
+                .catch(function () {});
+        }, 2000);
+    })();
+    </script>
+<?php endif; ?>

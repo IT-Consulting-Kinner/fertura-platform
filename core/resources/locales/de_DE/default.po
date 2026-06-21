@@ -1689,3 +1689,63 @@ msgstr "Passwort zu kurz (mindestens %d Zeichen)."
 
 msgid "flash.account.password_mismatch"
 msgstr "Die Passwörter stimmen nicht überein."
+
+msgid "admin.nav.maintenance"
+msgstr "Wartung"
+
+msgid "admin.nav.maintenance_item"
+msgstr "Wartungsmodus"
+
+msgid "admin.maintenance.title"
+msgstr "Wartungsmodus"
+
+msgid "admin.maintenance.intro"
+msgstr "Sperrt die Plattform für alle ausser dem aktivierenden Operator und fährt die Hintergrundverarbeitung kontrolliert herunter."
+
+msgid "admin.maintenance.engage_heading"
+msgstr "Wartung aktivieren"
+
+msgid "admin.maintenance.engage_hint"
+msgstr "Alle anderen Benutzer werden mit 503 abgewiesen; laufende Jobs werden abgewartet (Drain)."
+
+msgid "admin.maintenance.reason_label"
+msgstr "Grund (optional)"
+
+msgid "admin.maintenance.engage"
+msgstr "Wartung aktivieren"
+
+msgid "admin.maintenance.engage_confirm"
+msgstr "Wartungsmodus jetzt aktivieren? Alle anderen Benutzer werden ausgesperrt."
+
+msgid "admin.maintenance.active"
+msgstr "Wartungsmodus aktiv"
+
+msgid "admin.maintenance.draining"
+msgstr "Drainage läuft … %s offene Vorgänge"
+
+msgid "admin.maintenance.drained"
+msgstr "System ist leergelaufen (drained)."
+
+msgid "admin.maintenance.timed_out"
+msgstr "Drain-Frist abgelaufen — es laufen noch Vorgänge."
+
+msgid "admin.maintenance.opened_at"
+msgstr "Aktiviert am"
+
+msgid "admin.maintenance.release"
+msgstr "Wartung beenden"
+
+msgid "admin.maintenance.release_confirm"
+msgstr "Wartungsmodus beenden und Worker fortsetzen?"
+
+msgid "flash.maintenance.engaged"
+msgstr "Wartungsmodus aktiviert."
+
+msgid "flash.maintenance.already_active"
+msgstr "Es ist bereits ein Wartungsmodus aktiv."
+
+msgid "flash.maintenance.released"
+msgstr "Wartungsmodus beendet."
+
+msgid "flash.maintenance.not_active"
+msgstr "Es ist kein Wartungsmodus aktiv."

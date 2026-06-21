@@ -28,6 +28,7 @@ use App\Middleware\LogContextMiddleware;
 use App\Middleware\LoginThrottleMiddleware;
 use App\Middleware\MaintenanceMiddleware;
 use App\Middleware\SecurityHeadersMiddleware;
+use App\Middleware\SelectiveMaintenanceMiddleware;
 use App\Middleware\SessionGuardMiddleware;
 use App\Middleware\TransactionRlsMiddleware;
 use App\Service\Auth\AuthProviderResolver;
@@ -193,6 +194,12 @@ class Application extends BaseApplication implements AuthenticationServiceProvid
             // Session anomaly detection (UA binding, IP change, new device) —
             // immediately after authentication (needs the identity).
             ->add(new SessionGuardMiddleware())
+
+            // Selective maintenance gate (Phase 3): when a maintenance session is
+            // engaged, 503 every request EXCEPT the operator who engaged it (identity
+            // == actor or a valid allow-token cookie). After the AuthenticationMiddleware
+            // so the identity is available; also fail-closes POST /login + SSO + MFA.
+            ->add(new SelectiveMaintenanceMiddleware())
 
             // External API: Bearer-token authentication (only /api/ paths);
             // sets identity + scopes, otherwise JSON 401. After the session auth,

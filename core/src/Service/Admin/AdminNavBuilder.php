@@ -27,6 +27,7 @@ class AdminNavBuilder
     public const ADMIN_ORDER = [
         'user_group_admin', 'module_lifecycle', 'core_config',
         'registry_contracts', 'localization', 'update_manager', 'marketplace_license',
+        'system_maintenance',
     ];
 
     /** Always-available system pages (no admin-area gate; any admin may open). */

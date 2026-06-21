@@ -1693,3 +1693,63 @@ msgstr "Password too short (at least %d characters)."
 
 msgid "flash.account.password_mismatch"
 msgstr "Passwords do not match."
+
+msgid "admin.nav.maintenance"
+msgstr "Maintenance"
+
+msgid "admin.nav.maintenance_item"
+msgstr "Maintenance mode"
+
+msgid "admin.maintenance.title"
+msgstr "Maintenance mode"
+
+msgid "admin.maintenance.intro"
+msgstr "Locks the platform for everyone except the activating operator and drains background processing in a controlled way."
+
+msgid "admin.maintenance.engage_heading"
+msgstr "Engage maintenance"
+
+msgid "admin.maintenance.engage_hint"
+msgstr "All other users are rejected with 503; in-flight jobs are drained."
+
+msgid "admin.maintenance.reason_label"
+msgstr "Reason (optional)"
+
+msgid "admin.maintenance.engage"
+msgstr "Engage maintenance"
+
+msgid "admin.maintenance.engage_confirm"
+msgstr "Engage maintenance mode now? All other users will be locked out."
+
+msgid "admin.maintenance.active"
+msgstr "Maintenance mode active"
+
+msgid "admin.maintenance.draining"
+msgstr "Draining … %s in-flight"
+
+msgid "admin.maintenance.drained"
+msgstr "System has drained."
+
+msgid "admin.maintenance.timed_out"
+msgstr "Drain deadline elapsed — work still outstanding."
+
+msgid "admin.maintenance.opened_at"
+msgstr "Engaged at"
+
+msgid "admin.maintenance.release"
+msgstr "End maintenance"
+
+msgid "admin.maintenance.release_confirm"
+msgstr "End maintenance mode and resume the workers?"
+
+msgid "flash.maintenance.engaged"
+msgstr "Maintenance mode engaged."
+
+msgid "flash.maintenance.already_active"
+msgstr "A maintenance mode is already active."
+
+msgid "flash.maintenance.released"
+msgstr "Maintenance mode ended."
+
+msgid "flash.maintenance.not_active"
+msgstr "No maintenance mode is active."

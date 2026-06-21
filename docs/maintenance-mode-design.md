@@ -53,8 +53,9 @@ für *Daten*, nie für die Erreichbarkeit des Exits.
 ### 4.1 Persistente Bausteine (DB als Single Source of Truth)
 - **`core.maintenance_session`** `(id uuidv7, actor_user_id, allow_token_hash, status
   enum[active|operator_gone|closed], opened_at, heartbeat_at, scope)` — **Partial Unique Index
-  `WHERE status='active'`** erzwingt genau eine offene Session (atomarer Eintritt via
-  `INSERT … ON CONFLICT DO NOTHING`, Verlierer = 409).
+  `WHERE status <> 'closed'`** (`uq_maintenance_one_open`) erzwingt genau eine OFFENE Session
+  (active ODER operator_gone); atomarer Eintritt via `INSERT … ON CONFLICT DO NOTHING`,
+  Verlierer = 409.
 - **`core.critical_action`** `(id, type, status enum[quiescing|backing_up|running|verifying|
   rolling_back|succeeded|failed|aborted|needs_manual_restore], backup_id, pre_rollback_backup_id,
   maintenance_session_id, heartbeat_at, fence_token, actor_id)`.
@@ -94,7 +95,7 @@ ENTER_MAINTENANCE ─→ QUIESCE ─→ PRE_ACTION_BACKUP ─→ ACTION ─→ V
 ## 5. Empfohlene Umsetzungsreihenfolge
 1. DB-Leitzustand + ungecachter Reader + `pg_notify` ← **Phase 1 ✅**
 2. Worker-Pause-Gate + `QuiesceService` ← **Phase 2 ✅**
-3. `SelectiveMaintenanceMiddleware` + Allow-Token + Login/Cookie-Block ← Phase 3 (+ GUI: `MaintenanceController` engage/release/status + Drain-Polling-View)
+3. `SelectiveMaintenanceMiddleware` + Allow-Token + Login/Cookie-Block ← **Phase 3 ✅** (+ GUI: `MaintenanceController` engage/release/status + Drain-Polling-View)
 4. `critical_action`-State-Machine + Crash-Recovery-Sweep
 5. Pre-Action-Backup-Gate (`createLocked`, erzwungene Verschluesselung, Store-Registry)
 6. `ActionVerifier` pro Typ + aktionseigener Rollback
@@ -121,6 +122,25 @@ ENTER_MAINTENANCE ─→ QUIESCE ─→ PRE_ACTION_BACKUP ─→ ACTION ─→ V
     im Worker-Zyklus (Drain wird self-healing statt nur Timeout), `timed_out` aus direktem
     `now() >= deadline_at` statt gerundetem Countdown, Redis-XPENDING-Limit dokumentiert.
   - 18 Tests; volle Suite grün; phpstan + phpcs sauber.
+
+- **Phase 3** (Selektives Gate + Allow-Token + GUI):
+  - `SelectiveMaintenanceMiddleware` (nach `AuthenticationMiddleware`): bei offener Session 503
+    für alle ausser dem Operator (`identity===actor_user_id` ODER `hash_equals`-Allow-Token-Cookie);
+    ungecacht, **fail-closed** bei DB-Fehler; allow-listet **exakt** `/health` + `/health/ready`
+    (LB-Proben) — `/health/detail` + `/metrics` bleiben hinter dem Gate. Blockt damit auch
+    POST /login + SSO + MFA (Post-Auth-Reject, Decision #2).
+  - `AllowTokenCookie` (`maint_allow`): 256-bit-Token, nur SHA-256 persistiert, HttpOnly +
+    SameSite=Lax + Secure-env-gated, Path `/` (für den Login-Block).
+  - `MaintenanceController` (`system_maintenance`-Area): engage (atomar → Cookie → pause),
+    release (resume → close → Cookie löschen), status-JSON; Audit `maintenance.engage/release`.
+  - GUI: Drain-Polling-Banner (`templates/Admin/Maintenance/index.php`) + NAV-Eintrag + i18n.
+  - Security-Review (0 critical/high, 1 medium, 7 low, 4 nit) eingearbeitet: Allow-Liste von
+    Prefix auf exakte LB-Proben verengt + vor den Fail-closed-Branch gezogen; Fail-closed-Login,
+    Non-Actor-e2e- und Cookie-Hardening-Tests ergänzt.
+  - **Offen (deferred)**: `SESSION_COOKIE_SECURE`-Default in Prod fail-safe machen (plattformweit,
+    nicht nur `maint_allow`); `release()` „exit only when stable"-Gate kommt mit Phase 4
+    (heute jederzeit freigebbar); engage/release-Audit nutzt aktuell den Operator-Tenant-Scope
+    (kein System-Tenant-Override im `AuditLogger`).
 
 #### Offene Review-Punkte (bewusst nach Phase 3 / Follow-up deferred)
 - **Quiesce-aware Health**: ein pausierter Worker skippt `ScheduledTaskRunner.tick()`, daher können
