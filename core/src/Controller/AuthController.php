@@ -124,9 +124,11 @@ class AuthController extends AppController
      * choice survives a later logout). The active locale was already validated
      * against `locale.enabled` by the LocaleMiddleware.
      */
-    private function rememberLoginLocale(Response $response): Response
+    private function rememberLoginLocale(?Response $response): ?Response
     {
-        return $response->withCookie(LocaleCookie::make(I18n::getLocale()));
+        // redirect() is typed ?Response (a beforeRedirect listener may stop it),
+        // and both call sites return ?Response, so a null flows through unchanged.
+        return $response?->withCookie(LocaleCookie::make(I18n::getLocale()));
     }
 
     /**

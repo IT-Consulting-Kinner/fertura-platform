@@ -181,12 +181,6 @@ parameters:
 			path: src/Controller/Admin/AdminController.php
 
 		-
-			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
-			identifier: method.notFound
-			count: 3
-			path: src/Controller/Admin/AuditController.php
-
-		-
 			message: '#^Cannot cast array\|int\|string\|null to string\.$#'
 			identifier: cast.string
 			count: 2
@@ -357,12 +351,6 @@ parameters:
 		-
 			message: '#^Cannot call method getOriginalData\(\) on class\-string\|object\.$#'
 			identifier: method.nonObject
-			count: 1
-			path: src/Middleware/LocaleMiddleware.php
-
-		-
-			message: '#^Parameter \#2 \$enabled of method App\\Middleware\\LocaleMiddleware\:\:matchAcceptLanguage\(\) expects list\<string\>, array\<string\> given\.$#'
-			identifier: argument.type
 			count: 1
 			path: src/Middleware/LocaleMiddleware.php
 

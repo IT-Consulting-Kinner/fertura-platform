@@ -84,6 +84,9 @@ class NavController extends AdminController
      */
     private function tileMetrics(): array
     {
+        // RLS-effective default connection. Narrow to the concrete Connection so
+        // execute() resolves; ConnectionInterface intentionally omits it.
+        /** @var \Cake\Database\Connection $conn */
         $conn = ConnectionManager::get('default');
         $count = static fn(string $sql): int => (int)($conn->execute($sql)->fetch('assoc')['c'] ?? 0);
 

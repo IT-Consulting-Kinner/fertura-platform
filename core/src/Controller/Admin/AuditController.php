@@ -39,6 +39,9 @@ class AuditController extends AdminController
             $params['mkey'] = $moduleKey;
         }
         $whereSql = $where !== [] ? ' WHERE ' . implode(' AND ', $where) : '';
+        // RLS-effective default connection. Narrow to the concrete Connection so
+        // execute() resolves; ConnectionInterface intentionally omits it.
+        /** @var \Cake\Database\Connection $conn */
         $conn = ConnectionManager::get('default');
 
         // Paginated instead of a hard LIMIT 100 (older entries were only reachable

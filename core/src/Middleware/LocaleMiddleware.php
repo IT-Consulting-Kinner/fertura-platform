@@ -41,7 +41,10 @@ class LocaleMiddleware implements MiddlewareInterface
     {
         $settings = new SettingsManager();
         $default = (string)$settings->get('core', 'locale.default', 'en_US');
-        $enabled = array_map('strval', (array)$settings->get('core', 'locale.enabled', ['en_US', 'de_DE']));
+        // array_values() re-keys to a genuine list<string>: the enabled locales are
+        // an ordered list (first-enabled fallback below, preference-ordered matching),
+        // and the (array) cast/array_map would otherwise preserve non-sequential keys.
+        $enabled = array_values(array_map('strval', (array)$settings->get('core', 'locale.enabled', ['en_US', 'de_DE'])));
 
         $session = $request->getAttribute('session');
 

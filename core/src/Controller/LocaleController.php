@@ -40,7 +40,9 @@ class LocaleController extends AppController
             }
             // Also remember the choice in the cookie read by LocaleMiddleware, so
             // it survives a logout (the login mask then keeps the chosen language).
-            $response = $response->withCookie(LocaleCookie::make($lang));
+            // redirect() is typed ?Response; guard so withCookie() runs on a real
+            // Response only (a null redirect simply propagates as the ?Response return).
+            $response = $response?->withCookie(LocaleCookie::make($lang));
         }
 
         return $response;
