@@ -18,7 +18,17 @@
                 <?php if ($s['secret']): ?><span class="badge text-bg-dark">secret</span><?php endif; ?>
             </td>
             <td><span class="text-muted small"><?= h($s['type']) ?><?php if ($s['min'] !== null): ?> [<?= (int)$s['min'] ?>–<?= (int)$s['max'] ?>]<?php endif; ?></span></td>
-            <td class="small text-muted"><?= h(is_bool($s['default']) ? ($s['default'] ? 'true' : 'false') : (string)($s['default'] ?? '–')) ?></td>
+            <td class="small text-muted"><?php
+                $def = $s['default'];
+                if (is_bool($def)) {
+                    $def = $def ? 'true' : 'false';
+                } elseif (is_array($def)) {
+                    // json-typed settings carry array defaults — render them, don't cast.
+                    $def = (string)json_encode($def, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+                } else {
+                    $def = (string)($def ?? '–');
+                }
+                ?><?= h($def) ?></td>
             <td>
                 <?= $this->Form->create(null, ['url' => ['action' => 'save'], 'class' => 'd-flex gap-2 align-items-center']) ?>
                 <?= $this->Form->hidden('namespace', ['value' => $s['namespace']]) ?>
