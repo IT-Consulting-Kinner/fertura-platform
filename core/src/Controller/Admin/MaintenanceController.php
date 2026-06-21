@@ -201,17 +201,10 @@ class MaintenanceController extends AdminController
         $file->moveTo($path);
 
         $actorId = $this->actorId();
-        $action = (new CriticalActionService())->enqueue(
-            'module_install',
-            (string)$session['id'],
-            $actorId,
-            ['package_path' => $path, 'isolation' => $isolation],
-        );
-        $this->audit('maintenance.action.enqueue', (string)$session['id'], $actorId, [
-            'type' => 'module_install',
-            'action_id' => $action['id'],
+        $this->enqueueProtected('module_install', (string)$session['id'], $actorId, [
+            'package_path' => $path,
+            'isolation' => $isolation,
         ]);
-        $this->Flash->success(__('flash.maintenance.action_queued'));
 
         return $this->redirect(['action' => 'index']);
     }
@@ -240,17 +233,10 @@ class MaintenanceController extends AdminController
         }
 
         $actorId = $this->actorId();
-        $action = (new CriticalActionService())->enqueue(
-            'tenant_provision',
-            (string)$session['id'],
-            $actorId,
-            ['key' => $key, 'name' => $name],
-        );
-        $this->audit('maintenance.action.enqueue', (string)$session['id'], $actorId, [
-            'type' => 'tenant_provision',
-            'action_id' => $action['id'],
+        $this->enqueueProtected('tenant_provision', (string)$session['id'], $actorId, [
+            'key' => $key,
+            'name' => $name,
         ]);
-        $this->Flash->success(__('flash.maintenance.action_queued'));
 
         return $this->redirect(['action' => 'index']);
     }
@@ -271,12 +257,7 @@ class MaintenanceController extends AdminController
             return $this->redirect(['action' => 'index']);
         }
         $actorId = $this->actorId();
-        $action = (new CriticalActionService())->enqueue('secret_rotate', (string)$session['id'], $actorId, []);
-        $this->audit('maintenance.action.enqueue', (string)$session['id'], $actorId, [
-            'type' => 'secret_rotate',
-            'action_id' => $action['id'],
-        ]);
-        $this->Flash->success(__('flash.maintenance.action_queued'));
+        $this->enqueueProtected('secret_rotate', (string)$session['id'], $actorId, []);
 
         return $this->redirect(['action' => 'index']);
     }
@@ -305,17 +286,11 @@ class MaintenanceController extends AdminController
         $overlap = max(0, (int)$this->request->getData('overlap_days'));
 
         $actorId = $this->actorId();
-        $action = (new CriticalActionService())->enqueue(
-            'trust_rotate',
-            (string)$session['id'],
-            $actorId,
-            ['old_key_id' => $old, 'new_key_id' => $new, 'overlap_days' => $overlap > 0 ? $overlap : 30],
-        );
-        $this->audit('maintenance.action.enqueue', (string)$session['id'], $actorId, [
-            'type' => 'trust_rotate',
-            'action_id' => $action['id'],
+        $this->enqueueProtected('trust_rotate', (string)$session['id'], $actorId, [
+            'old_key_id' => $old,
+            'new_key_id' => $new,
+            'overlap_days' => $overlap > 0 ? $overlap : 30,
         ]);
-        $this->Flash->success(__('flash.maintenance.action_queued'));
 
         return $this->redirect(['action' => 'index']);
     }
@@ -350,6 +325,30 @@ class MaintenanceController extends AdminController
         $id = $this->identity()?->getIdentifier();
 
         return is_string($id) ? $id : null;
+    }
+
+    /**
+     * Enqueues a protected action and reports the outcome: on success it audits and
+     * flashes "queued"; on a refuse-when-closing (the session was released between the
+     * active-session check above and the enqueue — {@see CriticalActionService::enqueue()}
+     * inserts only while the session is open) it flashes "not active". The caller
+     * redirects to index either way.
+     *
+     * @param array<string,mixed> $payload
+     */
+    private function enqueueProtected(string $type, string $sessionId, ?string $actorId, array $payload): void
+    {
+        $action = (new CriticalActionService())->enqueue($type, $sessionId, $actorId, $payload);
+        if ($action === null) {
+            $this->Flash->error(__('flash.maintenance.not_active'));
+
+            return;
+        }
+        $this->audit('maintenance.action.enqueue', $sessionId, $actorId, [
+            'type' => $type,
+            'action_id' => $action['id'],
+        ]);
+        $this->Flash->success(__('flash.maintenance.action_queued'));
     }
 
     /** @param array<string,mixed> $detail */

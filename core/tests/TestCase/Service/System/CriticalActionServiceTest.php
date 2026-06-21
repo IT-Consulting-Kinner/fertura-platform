@@ -34,7 +34,19 @@ class CriticalActionServiceTest extends TestCase
 
     private function clean(): void
     {
-        ConnectionManager::get('default')->execute('DELETE FROM core.critical_action');
+        $conn = ConnectionManager::get('default');
+        $conn->execute('DELETE FROM core.critical_action');
+        // A leaked OPEN session would 503 the rest of the suite via the gate.
+        $conn->execute('DELETE FROM core.maintenance_session');
+    }
+
+    /** Seeds a real, open maintenance session (enqueue now requires one). */
+    private function seedSession(): string
+    {
+        return (string)ConnectionManager::get('default')->execute(
+            'INSERT INTO core.maintenance_session (actor_user_id, allow_token_hash) VALUES (NULL, :h) RETURNING id',
+            ['h' => hash('sha256', 'x')],
+        )->fetch('assoc')['id'];
     }
 
     private function seedStale(string $status): void
@@ -235,8 +247,9 @@ class CriticalActionServiceTest extends TestCase
 
     public function testEnqueueThenClaimEngaged(): void
     {
-        $session = '22222222-2222-7222-8222-222222222222';
+        $session = $this->seedSession();
         $queued = $this->svc->enqueue('module_install', $session, null, ['package_path' => '/tmp/x.zip']);
+        $this->assertNotNull($queued);
         $this->assertSame('quiescing', $queued['status']);
 
         $claimed = $this->svc->claimEngaged($session);
@@ -246,9 +259,31 @@ class CriticalActionServiceTest extends TestCase
         $this->assertSame($queued['fence_token'], $claimed['fence_token']);
 
         // Nothing left to claim, and an action of a DIFFERENT session is not claimed.
+        // (Seeded directly — only one maintenance session may be open at a time.)
         $this->assertNull($this->svc->claimEngaged($session));
-        $this->svc->enqueue('module_install', '33333333-3333-7333-8333-333333333333', null, []);
+        ConnectionManager::get('default')->execute(
+            'INSERT INTO core.critical_action (type, status, maintenance_session_id) '
+            . "VALUES ('module_install', 'quiescing', '33333333-3333-7333-8333-333333333333')",
+        );
         $this->assertNull($this->svc->claimEngaged($session));
+    }
+
+    public function testEnqueueRefusedWhenSessionClosedOrUnknown(): void
+    {
+        // Refuse-when-closing (TOCTOU): no OPEN session for this id -> nothing queued.
+        $this->assertNull(
+            $this->svc->enqueue('module_install', '99999999-9999-7999-8999-999999999999', null, []),
+        );
+        $this->assertSame(0, $this->svc->nonTerminalCount());
+
+        // A CLOSED session is likewise refused (the release won the race).
+        $closed = (string)ConnectionManager::get('default')->execute(
+            'INSERT INTO core.maintenance_session (actor_user_id, allow_token_hash, status, closed_at) '
+            . "VALUES (NULL, :h, 'closed', now()) RETURNING id",
+            ['h' => hash('sha256', 'x')],
+        )->fetch('assoc')['id'];
+        $this->assertNull($this->svc->enqueue('module_install', $closed, null, []));
+        $this->assertSame(0, $this->svc->nonTerminalCount());
     }
 
     public function testAcknowledgeManualRestoreRecordsAndIsIdempotent(): void

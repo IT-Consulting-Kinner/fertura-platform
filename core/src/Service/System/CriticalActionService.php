@@ -85,20 +85,34 @@ class CriticalActionService
      * Queues a critical action for the worker to run once the platform is quiesced.
      * Starts in `quiescing` (queued) and carries the action parameters in `payload`.
      *
+     * Refuse-when-closing (symmetric to {@see MaintenanceService::releaseIfStable()},
+     * §4.2): the row is inserted ONLY while its maintenance session is still open. The
+     * INSERT…SELECT…WHERE EXISTS makes the open-session check and the insert one
+     * statement, so a release racing this enqueue can never strand a fresh action
+     * behind an already-closed window (the missing half of the TOCTOU closure — the
+     * exit gate already refuses while an action is in flight). Returns null when
+     * refused (session closed/unknown); the GUI then reports "not active".
+     *
      * @param array<string,mixed> $payload
-     * @return array<string,mixed>
+     * @return array<string,mixed>|null
      */
-    public function enqueue(string $type, ?string $sessionId, ?string $actorId, array $payload = []): array
+    public function enqueue(string $type, ?string $sessionId, ?string $actorId, array $payload = []): ?array
     {
         $row = $this->conn()->execute(
             'INSERT INTO core.critical_action (type, status, maintenance_session_id, actor_user_id, payload) '
-            . "VALUES (:t, 'quiescing', :sess, :a, CAST(:p AS jsonb)) "
+            . "SELECT :t, 'quiescing', :sess, :a, CAST(:p AS jsonb) "
+            . "WHERE EXISTS (SELECT 1 FROM core.maintenance_session WHERE id = :sessguard AND status <> 'closed') "
             . 'RETURNING id, type, status, fence_token, payload',
-            ['t' => $type, 'sess' => $sessionId, 'a' => $actorId, 'p' => json_encode($payload === [] ? new stdClass() : $payload)],
+            [
+                't' => $type,
+                'sess' => $sessionId,
+                'sessguard' => $sessionId,
+                'a' => $actorId,
+                'p' => json_encode($payload === [] ? new stdClass() : $payload),
+            ],
         )->fetch('assoc');
 
-        /** @var array<string,mixed> $row */
-        return $row;
+        return $row === false ? null : $row;
     }
 
     /**

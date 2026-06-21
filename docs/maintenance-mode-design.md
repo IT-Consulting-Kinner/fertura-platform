@@ -163,9 +163,9 @@ ENTER_MAINTENANCE ─→ QUIESCE ─→ PRE_ACTION_BACKUP ─→ ACTION ─→ V
   - Security-Review (0 critical/high, 2 medium, 6 low, 1 nit) eingearbeitet: atomares
     session-scoped Exit-Gate, Terminal-Write-Guard, Worker-Recovery- + Boundary-/Heartbeat-/
     Message-Tests ergänzt.
-  - **Offen (Phase 6)**: `start()`-seitiger Refuse-when-closing (volle TOCTOU-Schließung). Die echten
-    Aktionen, `fence_token`-Enforcement und die `needs_manual_restore`-Quittung-UI sind umgesetzt
-    (Inc 1–5).
+  - Refuse-when-closing / volle TOCTOU-Schließung ist umgesetzt (Inc 6, s. u.). Damit sind die
+    echten Aktionen, `fence_token`-Enforcement, die `needs_manual_restore`-Quittung-UI **und** die
+    symmetrische Einreih-Sperre umgesetzt — **Phase 6 vollständig (Inc 1–6)**.
 
 - **Phase 5** (Pre-Action-Backup-Gate):
   - `BackupService::createLocked()`: erzwingt Verschlüsselung + garantiert Probe-Restore — beides
@@ -221,6 +221,14 @@ ENTER_MAINTENANCE ─→ QUIESCE ─→ PRE_ACTION_BACKUP ─→ ACTION ─→ V
     (Die Phase-4-Migration formulierte `needs_manual_restore` noch als exit-erlaubend — das war
     Interim; §4.2 wollte immer „Flag HALTEN".) Tests: Service (Quittung + State-/Session-Guards),
     Controller (Release verweigert bis quittiert, Release nach Quittung, `status.needs_ack`).
+  - **Increment 6** (Refuse-when-closing / volle TOCTOU-Schließung): `enqueue()` reiht eine Aktion
+    nur ein, **solange ihre Maintenance-Session offen ist** — atomares `INSERT…SELECT…WHERE EXISTS`,
+    symmetrisch zum Exit-Gate (`releaseIfStable` verweigert die Schließung, solange eine Aktion
+    läuft). Eine Freigabe, die mit dem Einreihen rennt, kann so keine frische Aktion hinter einem
+    bereits geschlossenen Fenster stranden lassen. `enqueue` liefert bei Verweigerung `null`; der
+    Controller bündelt Einreihen + Audit + Flash in `enqueueProtected()` und meldet dann „not active".
+    Tests: Service (Refuse bei geschlossener/unbekannter Session). `start()` bleibt das ungated
+    sessionlose Primitiv (kein Prod-Aufrufer mit Session).
 
 #### Offene Review-Punkte (bewusst nach Phase 3 / Follow-up deferred)
 - **Quiesce-aware Health**: ein pausierter Worker skippt `ScheduledTaskRunner.tick()`, daher können
