@@ -41,12 +41,14 @@ class CriticalActionService
     /**
      * Stale window for the maintenance recovery path. Generous because a real action
      * (pre-action backup = pg_dump + probe-restore, then module migrations) has long
-     * phases without an intra-phase heartbeat; a too-short window would falsely sweep
-     * a healthy long-running action. The runner refreshes the heartbeat at every phase
-     * boundary, so only a SINGLE phase exceeding this is at risk. A real crash takes up
-     * to this long to recover — acceptable for an operator-supervised window (CLI
-     * break-glass exists). Follow-up: thread an intra-phase heartbeat into createLocked
-     * + the install for very large datasets (review #4/#6).
+     * phases; a too-short window would falsely sweep a healthy long-running action. The
+     * runner refreshes the heartbeat at every phase boundary, and the BACKUP phase now
+     * also pings an intra-phase heartbeat at each whole-DB sub-operation (A3,
+     * {@see \App\Service\Backup\BackupService::createLocked()}). What remains at risk is
+     * only a SINGLE opaque operation that ALONE exceeds this window — an external
+     * pg_dump/pg_restore process or a black-box module migration the libraries don't
+     * surface progress for; a real crash likewise takes up to this long to recover.
+     * Acceptable for an operator-supervised window (CLI break-glass exists).
      */
     public const STALE_SECONDS = 1800;
 

@@ -117,7 +117,16 @@ class CriticalActionRunner
         // PRE_ACTION_BACKUP — already in backing_up via claimEngaged(). A failure here
         // leaves the action pre-mutation, which the recovery sweep aborts cleanly.
         try {
-            $backupId = $this->backupService()->context('gui', $actorId)->createLocked('pre-action ' . $id, $actorId);
+            // Intra-phase heartbeat (A3): the pre-action backup is whole-DB dump +
+            // whole-DB probe-restore — minutes on a large dataset. Refresh the action's
+            // heartbeat at each sub-operation boundary so the recovery sweep does not
+            // mistake a healthy long backup for a crash (STALE_SECONDS otherwise applies
+            // to the whole phase at once).
+            $backupId = $this->backupService()->context('gui', $actorId)->createLocked(
+                'pre-action ' . $id,
+                $actorId,
+                fn() => $this->actions->heartbeat($id, $fence),
+            );
             $this->actions->attachBackup($id, $backupId, $fence);
         } catch (Throwable $e) {
             $this->actions->markFailed($id, 'Pflicht-Backup fehlgeschlagen: ' . $e->getMessage(), $fence);

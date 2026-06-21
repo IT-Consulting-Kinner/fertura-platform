@@ -193,6 +193,13 @@ ENTER_MAINTENANCE ─→ QUIESCE ─→ PRE_ACTION_BACKUP ─→ ACTION ─→ V
   - **fence_token-Enforcement**: jede Transition/heartbeat trägt das Token; `recoverStale`
     rotiert es, sodass ein wiederbelebter Stale-Prozess die Aktion nicht mehr fortschreiben kann.
     Großzügiges Recovery-Fenster (`STALE_SECONDS=1800`) für lange Phasen (Backup/Migrationen).
+    **Intra-Phase-Heartbeat (A3):** `BackupService::createLocked()` nimmt einen optionalen
+    Progress-Hook und pingt ihn je Whole-DB-Sub-Operation (Dump+Tar, Zip, Integrität,
+    Probe-Restore, zweiter Postcondition-Restore); der Runner verdrahtet ihn auf
+    `heartbeat($id,$fence)`. Damit strandet ein mehrteiliges langes Backup (Summe > Fenster)
+    nicht mehr — nur eine einzelne **opake** Op (externer pg_dump/pg_restore, Black-Box-
+    Modul-Migration) die ALLEIN das Fenster übersteigt, bleibt durch `STALE_SECONDS` gedeckt
+    (kein Bibliotheks-Progress, daher bewusst nicht weiter zerlegt).
   - module install: `ModuleInstallHandler` (execute=`installPackage`, verify=modules-Row+Schema,
     rollback=`ModuleLifecycle::purge`→rollbackInstall); GUI reiht eine geschützte Installation
     während Maintenance ein (`critical_action.payload`).

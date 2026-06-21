@@ -203,8 +203,18 @@ class BackupService
     /**
      * Creates a consistent, verified (possibly encrypted) backup. Returns the
      * backup ID. `$targetDir` optionally overrides the storage location.
+     *
+     * `$onProgress` is an optional liveness hook fired at each long sub-operation
+     * boundary (post-dump+tar, post-zip, post-integrity, post-probe). The maintenance
+     * runner wires it to the critical-action heartbeat so a multi-minute backup
+     * (whole-DB dump + whole-DB probe-restore) does not look stalled to the recovery
+     * sweep when the individual ops each finish inside the window but their SUM would
+     * exceed it (A3). It is best-effort — a hook that throws never fails the backup. A
+     * single op that itself exceeds the window stays unhelpable (opaque pg_dump/restore
+     * process), as does the migration step in the action phase — both rely on the
+     * generous STALE_SECONDS.
      */
-    public function create(?string $note, ?string $actorId, ?string $targetDir = null): string
+    public function create(?string $note, ?string $actorId, ?string $targetDir = null, ?callable $onProgress = null): string
     {
         $this->actor ??= $actorId;
         $dir = $targetDir !== null && trim($targetDir) !== ''
@@ -270,6 +280,7 @@ class BackupService
             } finally {
                 $this->unlock();
             }
+            $this->progress($onProgress); // dump + file tar done (the heaviest I/O)
 
             $dbSha = hash_file('sha256', $dumpFile) ?: '';
             $filesSha = hash_file('sha256', $filesTar) ?: '';
@@ -282,17 +293,20 @@ class BackupService
 
             $this->buildZip($zip, $dumpFile, $filesTar, (string)json_encode($manifest, JSON_PRETTY_PRINT), $pw);
             @exec('rm -rf ' . escapeshellarg($work));
+            $this->progress($onProgress); // archive (encryption) built
 
             // --- Verification BEFORE completion (E56) ---
             if (!$this->archiveIntact($zip, $dbSha, $filesSha, $pw)) {
                 throw new RuntimeException('Integritätsprüfung des Archivs fehlgeschlagen.');
             }
+            $this->progress($onProgress); // integrity verified
             $deep = (bool)(new SettingsManager())->get('core', 'backup.verify_on_create', true);
             if ($deep) {
                 $probe = $this->probeRestore($zip, $pw);
                 if (!$probe['ok']) {
                     throw new RuntimeException('Probe-Restore fehlgeschlagen: ' . ($probe['reason'] ?? ''));
                 }
+                $this->progress($onProgress); // probe-restore (whole-DB) done
             }
         } catch (Throwable $e) {
             @exec('rm -rf ' . escapeshellarg($work));
@@ -328,7 +342,7 @@ class BackupService
      *    net before a destructive action. (When the setting is on, {@see create()}
      *    already probed, so we don't probe twice.)
      */
-    public function createLocked(?string $note, ?string $actorId): string
+    public function createLocked(?string $note, ?string $actorId, ?callable $onProgress = null): string
     {
         if (!$this->encryptionEnabled()) {
             throw new RuntimeException(
@@ -337,7 +351,7 @@ class BackupService
             );
         }
 
-        $id = $this->create($note, $actorId);
+        $id = $this->create($note, $actorId, null, $onProgress);
 
         // Enforce both guarantees as POST-CONDITIONS over the produced artifact, not
         // as pre-checks: create() re-reads the password independently, so a transient
@@ -346,6 +360,7 @@ class BackupService
         // probe-restore unconditionally (a critical-action backup must be restorable,
         // whatever backup.verify_on_create currently reads). On any failure, discard
         // the artifact — never hand back an unencrypted or unrestorable full-DB backup.
+        $this->progress($onProgress); // before the mandatory second whole-DB probe-restore
         $failure = $this->lockedPostconditionFailure($id);
         if ($failure !== null) {
             $this->delete($id);
@@ -354,6 +369,22 @@ class BackupService
         }
 
         return $id;
+    }
+
+    /**
+     * Best-effort liveness hook between long backup sub-operations (A3). A throwing
+     * hook never fails the backup — the heartbeat it usually drives is advisory.
+     */
+    private function progress(?callable $onProgress): void
+    {
+        if ($onProgress === null) {
+            return;
+        }
+        try {
+            $onProgress();
+        } catch (Throwable) {
+            // a failed heartbeat must never abort an in-progress backup
+        }
     }
 
     /** @return string|null failure reason, or null when the mandatory backup is sound */

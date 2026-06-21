@@ -106,6 +106,27 @@ class CriticalActionRunnerTest extends TestCase
         $this->assertNotNull($row['backup_id']);
     }
 
+    public function testBackupHeartbeatHookIsWiredDuringDrive(): void
+    {
+        $session = $this->engage();
+        $action = (new CriticalActionService())->enqueue('stub.test', $session, self::ACTOR, []);
+        $handler = new StubActionHandler();
+        $backup = new StubBackupService();
+        $runner = new CriticalActionRunner(
+            new CriticalActionService(),
+            new CriticalActionRegistry([$handler]),
+            null,
+            null,
+            $backup,
+        );
+
+        $this->assertSame($action['id'], $runner->tick());
+        // The runner supplied a WORKING intra-phase heartbeat hook to the backup (A3):
+        // the stub fired it per sub-operation and it ran against the live action with
+        // no error (a broken/absent wiring would leave this at 0).
+        $this->assertSame(2, $backup->progressCalls);
+    }
+
     public function testRollsBackOnExecuteFailure(): void
     {
         $session = $this->engage();
@@ -196,13 +217,26 @@ class StubActionHandler implements CriticalActionHandler
 /** Backup stub: no real pg_dump — returns a fixed id. */
 class StubBackupService extends BackupService
 {
+    /**
+     * How often the runner-supplied intra-phase heartbeat hook (A3) was fired.
+     */
+    public int $progressCalls = 0;
+
     public function context(string $source, ?string $actor = null): static
     {
         return $this;
     }
 
-    public function createLocked(?string $note, ?string $actorId): string
+    public function createLocked(?string $note, ?string $actorId, ?callable $onProgress = null): string
     {
+        // Stand in for the long whole-DB sub-operations: ping the runner's heartbeat
+        // hook twice (which must execute against the live action without error).
+        if ($onProgress !== null) {
+            $onProgress();
+            $onProgress();
+            $this->progressCalls = 2;
+        }
+
         return '019ebbbb-bbbb-7bbb-8bbb-bbbbbbbbbbbb';
     }
 }
