@@ -61,6 +61,8 @@ class UsersControllerTest extends TestCase
             . "(SELECT id FROM users WHERE email LIKE '%@zzusers.local')",
         );
         $conn->execute("DELETE FROM users WHERE email LIKE '%@zzusers.local'");
+        // Foreign tenants seeded by the cross-tenant isolation test (after their users).
+        $conn->execute("DELETE FROM tenants WHERE key LIKE 'zzt_other_%'");
     }
 
     private function makeUser(string $prefix, string $status, ?string $passwordHash = null): string
@@ -247,6 +249,88 @@ class UsersControllerTest extends TestCase
         $this->post('/admin/users/setPassword/' . $invited, ['password' => 'correct-horse-battery']);
         $this->assertSame('active', $this->userCol($invited, 'status'));
         $this->assertNotNull($this->userCol($invited, 'password_hash'));
+    }
+
+    public function testCrossTenantUsersAreInvisibleAndUnreachable(): void
+    {
+        $conn = ConnectionManager::get('default');
+        // A user in a DIFFERENT tenant must be invisible AND unreachable by every
+        // action — `users` has no RLS, so the controller's explicit tenant filter is
+        // the only isolation. The headline vector is setPassword (account takeover).
+        $otherTenant = (string)$conn->execute(
+            "INSERT INTO tenants (key, name) VALUES ('zzt_other_' || substr(md5(random()::text), 1, 8), 'Other') RETURNING id",
+        )->fetch('assoc')['id'];
+        $foreign = (string)$conn->execute(
+            "INSERT INTO users (username, email, status, tenant_id) VALUES (:u, :e, 'active', :t) RETURNING id",
+            [
+                'u' => 'zztest_foreign_' . bin2hex(random_bytes(3)),
+                'e' => 'foreign_' . bin2hex(random_bytes(3)) . '@zzusers.local',
+                't' => $otherTenant,
+            ],
+        )->fetch('assoc')['id'];
+
+        $this->login();
+
+        // Invisible in the list.
+        $this->get('/admin/users');
+        $this->assertResponseOk();
+        $this->assertResponseNotContains($foreign);
+
+        // view -> treated as unknown (redirect, not rendered).
+        $this->get('/admin/users/view/' . $foreign);
+        $this->assertRedirect(['action' => 'index']);
+
+        // setPassword (account takeover) -> NO effect.
+        $this->post('/admin/users/setPassword/' . $foreign, ['password' => 'attacker-chosen-pass']);
+        $this->assertNull($this->userCol($foreign, 'password_hash'));
+
+        // setStatus + anonymize -> NO effect.
+        $this->post('/admin/users/setStatus/' . $foreign . '/disabled');
+        $this->assertSame('active', $this->userCol($foreign, 'status'));
+        $this->post('/admin/users/anonymize/' . $foreign);
+        $this->assertSame('active', $this->userCol($foreign, 'status'));
+
+        // toggleArea -> NO admin-area grant created on the foreign user.
+        $this->post('/admin/users/toggleArea/' . $foreign . '/user_group_admin');
+        $this->assertFalse(
+            $conn->execute('SELECT 1 FROM user_admin_areas WHERE user_id = :u', ['u' => $foreign])->fetch(),
+        );
+
+        // edit -> NO effect.
+        $this->post('/admin/users/edit/' . $foreign, ['username' => 'zztest_hijacked', 'email' => 'x_' . bin2hex(random_bytes(3)) . '@zzusers.local']);
+        $this->assertNotSame('zztest_hijacked', $this->userCol($foreign, 'username'));
+    }
+
+    public function testLastAdminProtectionIsPerTenant(): void
+    {
+        $conn = ConnectionManager::get('default');
+        // Another tenant's OWN active user_group_admin must NOT count toward THIS
+        // tenant's last-admin protection — otherwise a tenant could strip its own last
+        // admin merely because a different tenant still has one.
+        $otherTenant = (string)$conn->execute(
+            "INSERT INTO tenants (key, name) VALUES ('zzt_other_' || substr(md5(random()::text), 1, 8), 'Other') RETURNING id",
+        )->fetch('assoc')['id'];
+        $otherAdmin = (string)$conn->execute(
+            "INSERT INTO users (username, email, status, tenant_id) VALUES (:u, :e, 'active', :t) RETURNING id",
+            ['u' => 'zztest_oadmin_' . bin2hex(random_bytes(3)), 'e' => 'oadmin_' . bin2hex(random_bytes(3)) . '@zzusers.local', 't' => $otherTenant],
+        )->fetch('assoc')['id'];
+        $conn->execute(
+            'INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a)',
+            ['u' => $otherAdmin, 'a' => 'user_group_admin'],
+        );
+
+        $this->login(); // adminId is the sole user_group_admin of the DEFAULT tenant
+        // Revoking THIS tenant's only admin stays blocked (the other tenant's does not count).
+        $this->post('/admin/users/toggleArea/' . $this->adminId . '/user_group_admin');
+        $held = $conn->execute(
+            "SELECT 1 FROM user_admin_areas WHERE user_id = :u AND admin_area_key = 'user_group_admin'",
+            ['u' => $this->adminId],
+        )->fetch();
+        $this->assertNotFalse($held); // still protected per-tenant
+
+        $conn->execute('DELETE FROM user_admin_areas WHERE user_id = :u', ['u' => $otherAdmin]);
+        $conn->execute('DELETE FROM users WHERE id = :u', ['u' => $otherAdmin]);
+        $conn->execute('DELETE FROM tenants WHERE id = :t', ['t' => $otherTenant]);
     }
 
     public function testAnonymizeSelfBlockedAndMemberWorks(): void

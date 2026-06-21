@@ -32,7 +32,8 @@ class UsersController extends AdminController
     private function renderUserList(EntityInterface $user, bool $openCreate): void
     {
         $users = ConnectionManager::get('default')->execute(
-            'SELECT id, username, email, status, first_name, last_name FROM users ORDER BY username',
+            'SELECT id, username, email, status, first_name, last_name FROM users '
+            . 'WHERE tenant_id = core.current_tenant() ORDER BY username',
         )->fetchAll('assoc');
         $this->set(compact('users', 'user', 'openCreate'));
         $this->viewBuilder()->setTemplate('index');
@@ -46,7 +47,11 @@ class UsersController extends AdminController
             return;
         }
         $conn = ConnectionManager::get('default');
-        $user = $conn->execute('SELECT * FROM users WHERE id = :id', ['id' => $id])->fetch('assoc');
+        // Tenant isolation: only the acting admin's own tenant (users has no RLS).
+        $user = $conn->execute(
+            'SELECT * FROM users WHERE id = :id AND tenant_id = core.current_tenant()',
+            ['id' => $id],
+        )->fetch('assoc');
         if ($user === false) {
             $this->Flash->error(__('flash.user.not_found'));
             $this->redirect(['action' => 'index']);
@@ -76,6 +81,16 @@ class UsersController extends AdminController
         $users = $this->fetchTable('Users');
         $user = $users->patchEntity($users->newEmptyEntity(), $this->request->getData());
         $user->set('status', User::STATUS_INVITED);
+        // Create within the acting admin's OWN tenant. Fail CLOSED: if the tenant
+        // context is somehow unset, refuse rather than silently default the user into
+        // the default (operator) tenant.
+        $tid = $this->currentTenantId();
+        if ($tid === '') {
+            $this->Flash->error(__('flash.user.create_failed'));
+
+            return $this->redirect(['action' => 'index']);
+        }
+        $user->set('tenant_id', $tid);
         if ($users->save($user)) {
             $this->audit()->log('user.create', 'user', (string)$user->id, ['newValue' => ['status' => $user->status]]);
             $this->Flash->success(__('flash.user.created'));
@@ -92,8 +107,8 @@ class UsersController extends AdminController
     public function setStatus(string $id, string $status): ?Response
     {
         $this->request->allowMethod('post');
-        if (!$this->isUuid($id)) {
-            return $this->notFound();
+        if (($deny = $this->denyCrossTenant($id)) !== null) {
+            return $deny;
         }
         if (!in_array($status, [User::STATUS_ACTIVE, User::STATUS_DISABLED], true)) {
             $this->Flash->error(__('flash.user.invalid_status'));
@@ -134,8 +149,8 @@ class UsersController extends AdminController
     public function toggleArea(string $id, string $area): ?Response
     {
         $this->request->allowMethod('post');
-        if (!$this->isUuid($id)) {
-            return $this->notFound();
+        if (($deny = $this->denyCrossTenant($id)) !== null) {
+            return $deny;
         }
         $conn = ConnectionManager::get('default');
         $exists = $conn->execute('SELECT 1 FROM user_admin_areas WHERE user_id = :u AND admin_area_key = :a', ['u' => $id, 'a' => $area])->fetch();
@@ -159,6 +174,9 @@ class UsersController extends AdminController
 
     public function edit(string $id): ?Response
     {
+        if (($deny = $this->denyCrossTenant($id)) !== null) {
+            return $deny;
+        }
         $users = $this->fetchTable('Users');
         $user = $users->find()->where(['id' => $id])->first();
         if ($user === null || $user->get('status') === User::STATUS_ANONYMIZED) {
@@ -191,8 +209,8 @@ class UsersController extends AdminController
     public function invite(string $id): ?Response
     {
         $this->request->allowMethod('post');
-        if (!$this->isUuid($id)) {
-            return $this->notFound();
+        if (($deny = $this->denyCrossTenant($id)) !== null) {
+            return $deny;
         }
         $conn = ConnectionManager::get('default');
         $row = $conn->execute('SELECT username, email, status FROM users WHERE id = :id', ['id' => $id])->fetch('assoc');
@@ -219,6 +237,9 @@ class UsersController extends AdminController
     public function setPassword(string $id): ?Response
     {
         $this->request->allowMethod('post');
+        if (($deny = $this->denyCrossTenant($id)) !== null) {
+            return $deny;
+        }
         $password = (string)$this->request->getData('password');
         $service = new PasswordResetService();
         $min = $service->minPasswordLength();
@@ -248,8 +269,8 @@ class UsersController extends AdminController
     public function anonymize(string $id): ?Response
     {
         $this->request->allowMethod('post');
-        if (!$this->isUuid($id)) {
-            return $this->notFound();
+        if (($deny = $this->denyCrossTenant($id)) !== null) {
+            return $deny;
         }
         if ($id === $this->currentUserId()) {
             $this->Flash->error(__('flash.user.self_anonymize'));
@@ -278,6 +299,45 @@ class UsersController extends AdminController
         $this->Flash->error(__('flash.user.not_found'));
 
         return $this->redirect(['action' => 'index']);
+    }
+
+    /** The acting admin's own tenant (RLS context); '' when unset (fail-closed). */
+    private function currentTenantId(): string
+    {
+        /** @var \Cake\Database\Connection $conn */
+        $conn = ConnectionManager::get('default');
+        $row = $conn->execute('SELECT core.current_tenant() AS t')->fetch('assoc');
+
+        return $row !== false ? (string)($row['t'] ?? '') : '';
+    }
+
+    /** Whether $id is a user of the acting admin's OWN tenant (cross-tenant guard). */
+    private function userInTenant(string $id): bool
+    {
+        /** @var \Cake\Database\Connection $conn */
+        $conn = ConnectionManager::get('default');
+
+        return $conn->execute(
+            'SELECT 1 FROM users WHERE id = :id AND tenant_id = core.current_tenant()',
+            ['id' => $id],
+        )->fetch() !== false;
+    }
+
+    /**
+     * Per-user-action guard (tenant isolation): a tenant admin may act ONLY on users
+     * of their OWN tenant. A malformed OR out-of-tenant id is treated like an unknown
+     * user (redirect) — this prevents both a 22P02 and any cross-tenant mutation, e.g.
+     * setting another tenant's (or an operator's) user's password. Returns the
+     * redirect response to abort, or null to proceed. `users` has no RLS (pre-auth
+     * exception), so this explicit filter — not RLS — is what isolates the table.
+     */
+    private function denyCrossTenant(string $id): ?Response
+    {
+        if (!$this->isUuid($id) || !$this->userInTenant($id)) {
+            return $this->notFound();
+        }
+
+        return null;
     }
 
     private function currentUserId(): ?string
@@ -311,9 +371,13 @@ class UsersController extends AdminController
         if ($holds === false) {
             return false;
         }
+        // Count holders WITHIN the acting admin's tenant only: with per-tenant user
+        // administration, "last admin" is a per-tenant property — a global count would
+        // let a tenant remove its own last admin merely because ANOTHER tenant has one.
         $others = (int)$conn->execute(
             'SELECT count(DISTINCT ua.user_id) FROM user_admin_areas ua JOIN users u ON u.id = ua.user_id '
-            . "WHERE ua.admin_area_key = 'user_group_admin' AND u.status = 'active' AND ua.user_id <> :id",
+            . "WHERE ua.admin_area_key = 'user_group_admin' AND u.status = 'active' "
+            . 'AND u.tenant_id = core.current_tenant() AND ua.user_id <> :id',
             ['id' => $id],
         )->fetch()[0];
 

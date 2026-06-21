@@ -122,18 +122,27 @@ class GroupsController extends AdminController
     public function addMember(string $id): ?Response
     {
         $this->request->allowMethod('post');
-        if (!$this->isUuid($id)) {
+        // Tenant isolation (both sides): the group AND the referenced user must belong
+        // to the acting admin's tenant. `users` has NO RLS and the groups_users WITH
+        // CHECK policy only validates the new row's OWN tenant_id — not the referenced
+        // user's or group's — so without these explicit checks a POSTed foreign user_id
+        // would be pulled into this tenant's group (inheriting its permissions), or the
+        // admin's user could be slipped into a foreign group.
+        if (!$this->isUuid($id) || !$this->groupInTenant($id)) {
             return $this->notFound();
         }
         $userId = (string)$this->request->getData('user_id');
-        if ($this->isUuid($userId)) {
-            ConnectionManager::get('default')->execute(
-                'INSERT INTO groups_users (group_id, user_id) VALUES (:g, :u) ON CONFLICT DO NOTHING',
-                ['g' => $id, 'u' => $userId],
-            );
-            (new AuditLogger())->log('group.member_add', 'group', $id, ['newValue' => ['user' => $userId]]);
-            $this->Flash->success(__('flash.group.member_added'));
+        if (!$this->isUuid($userId) || !$this->userInTenant($userId)) {
+            $this->Flash->error(__('flash.user.not_found'));
+
+            return $this->redirect(['action' => 'view', $id]);
         }
+        ConnectionManager::get('default')->execute(
+            'INSERT INTO groups_users (group_id, user_id) VALUES (:g, :u) ON CONFLICT DO NOTHING',
+            ['g' => $id, 'u' => $userId],
+        );
+        (new AuditLogger())->log('group.member_add', 'group', $id, ['newValue' => ['user' => $userId]]);
+        $this->Flash->success(__('flash.group.member_added'));
 
         return $this->redirect(['action' => 'view', $id]);
     }
@@ -203,5 +212,29 @@ class GroupsController extends AdminController
         $this->Flash->error(__('flash.group.not_found'));
 
         return $this->redirect(['action' => 'index']);
+    }
+
+    /** Whether $id is a group of the acting admin's OWN tenant (explicit, not via RLS). */
+    private function groupInTenant(string $id): bool
+    {
+        /** @var \Cake\Database\Connection $conn */
+        $conn = ConnectionManager::get('default');
+
+        return $conn->execute(
+            'SELECT 1 FROM "groups" WHERE id = :id AND tenant_id = core.current_tenant()',
+            ['id' => $id],
+        )->fetch() !== false;
+    }
+
+    /** Whether $userId is a user of the acting admin's OWN tenant (users has no RLS). */
+    private function userInTenant(string $userId): bool
+    {
+        /** @var \Cake\Database\Connection $conn */
+        $conn = ConnectionManager::get('default');
+
+        return $conn->execute(
+            'SELECT 1 FROM users WHERE id = :u AND tenant_id = core.current_tenant()',
+            ['u' => $userId],
+        )->fetch() !== false;
     }
 }

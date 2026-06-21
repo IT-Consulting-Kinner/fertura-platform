@@ -62,6 +62,8 @@ class GroupsControllerTest extends TestCase
         );
         $conn->execute("DELETE FROM \"groups\" WHERE name LIKE 'zztest-grp-%'");
         $conn->execute("DELETE FROM users WHERE email LIKE '%@zzgroup.local'");
+        // Foreign tenants from the cross-tenant isolation test (after their groups/users).
+        $conn->execute("DELETE FROM tenants WHERE key LIKE 'zzt_grp_other_%'");
     }
 
     private function login(): void
@@ -73,9 +75,17 @@ class GroupsControllerTest extends TestCase
 
     private function makeGroup(string $suffix = ''): string
     {
+        // Stamp the default tenant explicitly: the raw fixture insert runs outside a
+        // request, where groups.tenant_id's DEFAULT core.current_tenant() is NULL — the
+        // GUI (which creates groups inside the request) always lands the acting admin's
+        // tenant, which here is the default tenant the gadmin belongs to.
         return (string)ConnectionManager::get('default')->execute(
-            'INSERT INTO "groups" (name, description) VALUES (:n, :d) RETURNING id',
-            ['n' => 'zztest-grp-' . $suffix . bin2hex(random_bytes(2)), 'd' => 'fixture'],
+            'INSERT INTO "groups" (name, description, tenant_id) VALUES (:n, :d, :t) RETURNING id',
+            [
+                'n' => 'zztest-grp-' . $suffix . bin2hex(random_bytes(2)),
+                'd' => 'fixture',
+                't' => '00000000-0000-0000-0000-000000000001',
+            ],
         )->fetch('assoc')['id'];
     }
 
@@ -146,6 +156,42 @@ class GroupsControllerTest extends TestCase
         $this->post('/admin/groups/addMember/' . $gid, ['user_id' => 'garbage']);
         $this->assertRedirect(['action' => 'view', $gid]);
         $this->assertSame(0, $this->memberCount($gid));
+    }
+
+    public function testAddMemberRejectsCrossTenantUserAndGroup(): void
+    {
+        $conn = ConnectionManager::get('default');
+        // A foreign tenant with its own user + group.
+        $otherTenant = (string)$conn->execute(
+            "INSERT INTO tenants (key, name) VALUES ('zzt_grp_other_' || substr(md5(random()::text), 1, 8), 'Other') RETURNING id",
+        )->fetch('assoc')['id'];
+        $foreignUser = (string)$conn->execute(
+            "INSERT INTO users (username, email, status, tenant_id) VALUES (:u, :e, 'active', :t) RETURNING id",
+            ['u' => 'zztest_fuser_' . bin2hex(random_bytes(3)), 'e' => 'fuser_' . bin2hex(random_bytes(3)) . '@zzgroup.local', 't' => $otherTenant],
+        )->fetch('assoc')['id'];
+        $foreignGroup = (string)$conn->execute(
+            'INSERT INTO "groups" (name, description, tenant_id) VALUES (:n, :d, :t) RETURNING id',
+            ['n' => 'zztest-grp-foreign-' . bin2hex(random_bytes(2)), 'd' => 'f', 't' => $otherTenant],
+        )->fetch('assoc')['id'];
+
+        $ownGroup = $this->makeGroup('own-'); // default tenant (the gadmin's)
+        $this->login();
+
+        // 1. The HIGH leak: a FOREIGN user must NOT be addable to the OWN group.
+        $this->post('/admin/groups/addMember/' . $ownGroup, ['user_id' => $foreignUser]);
+        $this->assertSame(0, $this->memberCount($ownGroup));
+        $this->assertFalse(
+            $conn->execute('SELECT 1 FROM groups_users WHERE user_id = :u', ['u' => $foreignUser])->fetch(),
+        );
+
+        // 2. The own user must NOT be addable to a FOREIGN group (group not in tenant).
+        $this->post('/admin/groups/addMember/' . $foreignGroup, ['user_id' => $this->memberId]);
+        $this->assertSame(0, $this->memberCount($foreignGroup));
+
+        $conn->execute('DELETE FROM groups_users WHERE group_id = :g', ['g' => $foreignGroup]);
+        $conn->execute('DELETE FROM "groups" WHERE id = :g', ['g' => $foreignGroup]);
+        $conn->execute('DELETE FROM users WHERE id = :u', ['u' => $foreignUser]);
+        $conn->execute('DELETE FROM tenants WHERE id = :t', ['t' => $otherTenant]);
     }
 
     public function testViewRendersMembersAndCandidates(): void
