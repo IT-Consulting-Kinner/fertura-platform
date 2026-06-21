@@ -231,9 +231,12 @@ ENTER_MAINTENANCE ─→ QUIESCE ─→ PRE_ACTION_BACKUP ─→ ACTION ─→ V
     sessionlose Primitiv (kein Prod-Aufrufer mit Session).
 
 #### Offene Review-Punkte (bewusst nach Phase 3 / Follow-up deferred)
-- **Quiesce-aware Health**: ein pausierter Worker skippt `ScheduledTaskRunner.tick()`, daher können
-  `sched:*`-Heartbeats während einer (≤120s) Quiesce kurz `stale→degraded` zeigen → `checkWorkers`
-  während aktiver Pause nicht herabstufen (besser zusammen mit der Phase-3-Health/Maintenance-GUI).
+- **Quiesce-aware Health** ✅ (A4): `checkWorkers()` unterdrückt jetzt die `stale→degraded`-Wertung
+  für `sched:*`-Heartbeats, **solange Maintenance aktiv ist** — der Worker skippt während der Pause
+  bewusst `ScheduledTaskRunner::tick()`, also ist deren Staleness erwartbar, kein Fehler. Der
+  worker-eigene Heartbeat bleibt während der Pause frisch (state=paused), ein echter Crash (stale
+  non-`sched:`-Worker) **und** ein prior `error` schlagen weiterhin auf `degraded`/`down` durch.
+  Sichtbar via `pause_suppressed`/`paused` je Worker.
 - **job_queue-Reclaim**: `webhook_deliveries` hat jetzt einen Reclaim-Sweep; das generische
   `job_queue` (DB-Treiber) noch nicht — heute kein Produzent (dormant), bei Anbindung nachziehen.
 - **Zusatztests (Hardening)**: Inner-Drain-Pause-Break (braucht Gate-Injection-Seam),

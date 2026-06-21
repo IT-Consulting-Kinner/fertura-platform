@@ -12,6 +12,7 @@ use App\Service\Module\ContributionRuntime;
 use App\Service\Registry\ContractRegistry;
 use App\Service\Settings\SettingsManager;
 use App\Service\System\FeatureFlags;
+use App\Service\System\MaintenanceService;
 use Cake\Datasource\ConnectionManager;
 use FilesystemIterator;
 use RecursiveDirectoryIterator;
@@ -168,7 +169,16 @@ class HealthService
         }
         $workers = [];
         $status = 'up';
+        // Quiesce-aware health (A4): during an active maintenance window the worker
+        // intentionally skips ScheduledTaskRunner::tick(), so the per-task `sched:*`
+        // heartbeats go stale BY DESIGN for the length of the window. That staleness
+        // must not drag health to "degraded". The worker's OWN heartbeat keeps
+        // refreshing while paused (state='paused'), so a real worker crash still
+        // surfaces as stale; only scheduled-task staleness is suppressed, and only
+        // while maintenance is active. A prior `error` still surfaces as "down".
+        $inMaintenance = (new MaintenanceService())->isActive();
         foreach ($beats as $b) {
+            $workerKey = (string)$b['worker_key'];
             $age = (int)$b['age_seconds'];
             $detail = is_string($b['detail'] ?? null) ? (json_decode((string)$b['detail'], true) ?: []) : (array)($b['detail'] ?? []);
             $interval = (int)($detail['interval_seconds'] ?? 0);
@@ -177,24 +187,24 @@ class HealthService
             // threshold applies.
             $threshold = $interval > 0 ? 2 * $interval : $maxAge;
             $stale = $age > $threshold;
-            $wStatus = $b['last_status'] === 'error' ? 'down' : ($stale ? 'degraded' : 'up');
+            // Scheduled-task staleness during maintenance is expected, not a fault.
+            $pauseExpectedStale = $inMaintenance && str_starts_with($workerKey, 'sched:');
+            $degradedByStale = $stale && !$pauseExpectedStale;
+            $wStatus = $b['last_status'] === 'error' ? 'down' : ($degradedByStale ? 'degraded' : 'up');
             if ($wStatus !== 'up') {
                 $status = $wStatus === 'down' ? 'down' : ($status === 'down' ? 'down' : 'degraded');
             }
-            // Quiesce handshake (Phase 2): a worker paused for maintenance keeps
-            // refreshing its heartbeat, so a healthy paused worker stays fresh
-            // (up) while a crash still surfaces via staleness — no special-casing
-            // of the up/degraded decision needed, only visibility of the state.
             $workerState = (string)($b['state'] ?? 'running');
-            $workers[(string)$b['worker_key']] = [
+            $workers[$workerKey] = [
                 'age_seconds' => $age,
                 'last_status' => $b['last_status'],
                 'state' => $workerState,
-                'paused' => $workerState === 'paused',
+                'paused' => $workerState === 'paused' || $pauseExpectedStale,
                 'interval_seconds' => $interval ?: null,
                 'overdue_threshold_seconds' => $threshold,
                 'last_duration_ms' => isset($detail['duration_ms']) ? (int)$detail['duration_ms'] : null,
                 'stale' => $stale,
+                'pause_suppressed' => $pauseExpectedStale && $stale,
                 'overdue' => $interval > 0 && $age > 2 * $interval,
             ];
         }
