@@ -221,9 +221,14 @@ umgestellt; `AdminController::NAV` bekommt je Area den `scope`.
      typ-coerct, Audit) + „Konfigurieren"-Link für freigeschaltete, konfigurierbare Module. Tests:
      `TenantModuleRlsTest`, `ManifestLinterTest`, `ModuleWebTest`, `TenantModulesControllerTest`.
    - **Damit ist Inc 5 vollständig:** Tabelle + Web/API-Gates + Enable/Disable-GUI + Contribution-Gating
-     (Phase 2) + Per-Tenant-Config (Phase 3). **Noch offen (eigene Punkte):** Konsistenz-Refinement
-     `OpenApiGenerator` listet weiterhin alle aktiven Modul-Routen tenant-unabhängig (Metadaten, kein
-     Datenleck); der Integration-Harness (separates Repo) muss das Enablement im Setup setzen → Korrektur-Prompt.
+     (Phase 2) + Per-Tenant-Config (Phase 3).
+   - **Refinement ✅** — `OpenApiGenerator` ist jetzt per-Mandant: die Spec listet Modul-`user`-Routen nur
+     für freigeschaltete Module (öffentliche Routen immer); `TenantModuleService` injizierbar; ein
+     bestehender phpstan-Baseline-Eintrag (ApiRouteRegistry|null) entfiel dabei.
+   - **Noch offen:** Der **Integration-Harness** (separates Repo) muss seine Modul-Tests anpassen — nach
+     `ModuleLifecycle::activate($key)` das Modul pro Test-Mandant freischalten
+     (`TenantModuleService::enable($tenantId, $key)`), sonst greifen die fail-closed Gates (Web/API/Nav/
+     Listener) für tenant-scoped Zugriffe/Events. Korrektur-Prompt ist erstellt/übergeben.
 6. **Tenant-Daten-Backup/Restore** (Mandant) + **System-Backup/Restore** (Operator) sauber getrennt;
    knüpft an das Per-Tenant-Backup-Design an.
 
