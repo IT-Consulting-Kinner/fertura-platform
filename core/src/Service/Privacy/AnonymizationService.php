@@ -37,7 +37,11 @@ class AnonymizationService
     {
         $runtime = new ContributionRuntime($this->registry);
         try {
-            $contribs = $runtime->collectors(self::COLLECTOR);
+            // Privacy erasure must reach EVERY module that may hold the user's data,
+            // regardless of the acting context's tenant or per-tenant enablement
+            // (un-gated, Phase 2); runs RLS-bypassed below. A module with no data
+            // for the user is a harmless no-op.
+            $contribs = $runtime->collectors(self::COLLECTOR, false);
         } catch (Throwable) {
             // Contract not (yet) present -> no module contributions.
             return 0;

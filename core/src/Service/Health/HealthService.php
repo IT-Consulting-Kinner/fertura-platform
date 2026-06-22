@@ -472,7 +472,9 @@ class HealthService
         $contributions = [];
         $status = 'up';
         try {
-            $contribs = (new ContributionRuntime($this->registry))->collectors(self::HEALTH_COLLECTOR);
+            // Platform health is operator/system-wide: collect across ALL modules
+            // regardless of per-tenant enablement (un-gated, Phase 2).
+            $contribs = (new ContributionRuntime($this->registry))->collectors(self::HEALTH_COLLECTOR, false);
         } catch (Throwable) {
             $contribs = [];
         }

@@ -124,7 +124,7 @@ class FakeRuntime extends ContributionRuntime
      */
     public array $delivered = [];
 
-    public function collectors(string $contract): array
+    public function collectors(string $contract, bool $tenantScoped = true): array
     {
         return [['class' => 'Fake\\Slack', 'module_key' => 'fake', 'isolation' => 'in_process']];
     }

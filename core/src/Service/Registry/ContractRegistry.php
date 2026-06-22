@@ -282,7 +282,7 @@ class ContractRegistry
      *
      * @return array{class:string, module_key:string}|null
      */
-    public function resolveProvider(string $contractName): ?array
+    public function resolveProvider(string $contractName, bool $tenantScoped = true): ?array
     {
         $c = $this->findContract($contractName);
         if ($c === null || !$c->active) {
@@ -298,20 +298,26 @@ class ContractRegistry
         if ($r === null || $r->implementation_class === null) {
             return null;
         }
+        $contrib = ['class' => (string)$r->implementation_class, 'module_key' => (string)$r->module_key];
+        // The providing module must be enabled for the current tenant (Phase 2);
+        // fail-open with no tenant context, and core/platform providers always pass.
+        if ($tenantScoped && $this->gateByTenantModules([$contrib]) === []) {
+            return null;
+        }
 
-        return ['class' => (string)$r->implementation_class, 'module_key' => (string)$r->module_key];
+        return $contrib;
     }
 
     /** @return list<string> */
-    public function collectContributionClasses(string $contractName): array
+    public function collectContributionClasses(string $contractName, bool $tenantScoped = true): array
     {
-        return $this->activeImplClasses($contractName, ContractRegistration::TYPE_COLLECTOR);
+        return $this->activeImplClasses($contractName, ContractRegistration::TYPE_COLLECTOR, $tenantScoped);
     }
 
     /** @return list<string> */
-    public function listenerClasses(string $contractName): array
+    public function listenerClasses(string $contractName, bool $tenantScoped = true): array
     {
-        return $this->activeImplClasses($contractName, ContractRegistration::TYPE_LISTENER);
+        return $this->activeImplClasses($contractName, ContractRegistration::TYPE_LISTENER, $tenantScoped);
     }
 
     /**
@@ -320,19 +326,19 @@ class ContractRegistry
      *
      * @return list<array{class: string, module_key: string}>
      */
-    public function collectContributions(string $contractName): array
+    public function collectContributions(string $contractName, bool $tenantScoped = true): array
     {
-        return $this->activeContributions($contractName, ContractRegistration::TYPE_COLLECTOR);
+        return $this->activeContributions($contractName, ContractRegistration::TYPE_COLLECTOR, $tenantScoped);
     }
 
     /** @return list<array{class: string, module_key: string}> */
-    public function listenerContributions(string $contractName): array
+    public function listenerContributions(string $contractName, bool $tenantScoped = true): array
     {
-        return $this->activeContributions($contractName, ContractRegistration::TYPE_LISTENER);
+        return $this->activeContributions($contractName, ContractRegistration::TYPE_LISTENER, $tenantScoped);
     }
 
     /** @return list<array{class: string, module_key: string}> */
-    private function activeContributions(string $contractName, string $registrationType): array
+    private function activeContributions(string $contractName, string $registrationType, bool $tenantScoped = true): array
     {
         $c = $this->findContract($contractName);
         if ($c === null || !$c->active) {
@@ -349,29 +355,72 @@ class ContractRegistry
             }
         }
 
-        return $out;
+        return $tenantScoped ? $this->gateByTenantModules($out) : $out;
+    }
+
+    /**
+     * Per-tenant module enablement gate (operator/tenant authz §5, Increment 5
+     * Phase 2): drops contributions whose owning module is an INSTALLED module that
+     * is NOT enabled for the current request tenant — so a module a tenant disabled
+     * stops processing that tenant's events / collectors / provider resolutions.
+     *
+     * Fail-OPEN by design: with no tenant context (system events with tenant_id
+     * NULL, CLI, platform/worker jobs) the predicate is empty and nothing is
+     * filtered, so those keep running exactly as before; any tenant data such a
+     * contribution touches is still isolated by RLS. Core/platform contributions (a
+     * `module_key` that is not an installed module, e.g. 'core') always pass.
+     * Platform/privacy consumers that must see ALL modules regardless of tenant
+     * (health, search reindex, anonymization) opt out via `$tenantScoped = false`.
+     * One indexed query per resolution.
+     *
+     * @param list<array{class:string, module_key:string}> $contribs
+     * @return list<array{class:string, module_key:string}>
+     */
+    private function gateByTenantModules(array $contribs): array
+    {
+        if ($contribs === []) {
+            return $contribs;
+        }
+        $keys = array_values(array_unique(array_map(static fn($c): string => (string)$c['module_key'], $contribs)));
+        $names = [];
+        $params = [];
+        foreach ($keys as $i => $k) {
+            $names[] = ":k$i";
+            $params["k$i"] = $k;
+        }
+        /** @var \Cake\Database\Connection $conn */
+        $conn = $this->registrations()->getConnection();
+        // The keys that ARE installed modules but are NOT enabled for the current
+        // tenant = the ones to drop. The `current_tenant() IS NOT NULL` guard makes
+        // the whole predicate empty (no rows -> drop nothing) when no tenant is set.
+        $rows = $conn->execute(
+            'SELECT m.module_key FROM modules m '
+            . 'WHERE m.module_key IN (' . implode(',', $names) . ') '
+            . 'AND core.current_tenant() IS NOT NULL '
+            . 'AND NOT EXISTS (SELECT 1 FROM tenant_modules tm '
+            . 'WHERE tm.module_key = m.module_key AND tm.tenant_id = core.current_tenant() AND tm.enabled)',
+            $params,
+        )->fetchAll('assoc');
+        if ($rows === []) {
+            return $contribs;
+        }
+        $disallowed = array_fill_keys(array_map(static fn($r): string => (string)$r['module_key'], $rows), true);
+
+        return array_values(array_filter(
+            $contribs,
+            static fn(array $c): bool => !isset($disallowed[(string)$c['module_key']]),
+        ));
     }
 
     /** @return list<string> */
-    private function activeImplClasses(string $contractName, string $registrationType): array
+    private function activeImplClasses(string $contractName, string $registrationType, bool $tenantScoped = true): array
     {
-        $c = $this->findContract($contractName);
-        if ($c === null || !$c->active) {
-            return [];
-        }
-        $rows = $this->registrations()->find()
-            ->where(['contract_id' => $c->id, 'registration_type' => $registrationType, 'active' => true])
-            ->orderBy(['priority' => 'DESC', 'created_at' => 'ASC'])
-            ->all();
-
-        $classes = [];
-        foreach ($rows as $row) {
-            if ($row->implementation_class !== null) {
-                $classes[] = $row->implementation_class;
-            }
-        }
-
-        return $classes;
+        // Delegates to activeContributions so the per-tenant gate applies uniformly
+        // (the class list is the contribution list projected to its `class`).
+        return array_map(
+            static fn(array $c): string => $c['class'],
+            $this->activeContributions($contractName, $registrationType, $tenantScoped),
+        );
     }
 
     // ---- Capability-Bindings -------------------------------------------------

@@ -25,16 +25,30 @@ class ContributionRuntime
         $this->registry ??= new ContractRegistry();
     }
 
-    /** @return list<array{class:string, module_key:string, isolation:string}> */
-    public function collectors(string $contract): array
+    /**
+     * Collector contributions for a contract. Per-tenant gated by default
+     * (operator/tenant authz §5 Phase 2): only modules enabled for the current
+     * tenant contribute; with no tenant context nothing is filtered (fail-open).
+     * Platform/privacy consumers (health, search reindex, anonymization) pass
+     * `$tenantScoped = false` to collect across ALL modules.
+     *
+     * @return list<array{class:string, module_key:string, isolation:string}>
+     */
+    public function collectors(string $contract, bool $tenantScoped = true): array
     {
-        return $this->withIsolation($this->registry->collectContributions($contract));
+        return $this->withIsolation($this->registry->collectContributions($contract, $tenantScoped));
     }
 
-    /** @return list<array{class:string, module_key:string, isolation:string}> */
-    public function listeners(string $contract): array
+    /**
+     * Event listeners for a contract. Per-tenant gated by default: a module the
+     * firing tenant disabled does not handle that tenant's events (system events
+     * with no tenant fire all listeners — fail-open).
+     *
+     * @return list<array{class:string, module_key:string, isolation:string}>
+     */
+    public function listeners(string $contract, bool $tenantScoped = true): array
     {
-        return $this->withIsolation($this->registry->listenerContributions($contract));
+        return $this->withIsolation($this->registry->listenerContributions($contract, $tenantScoped));
     }
 
     /**
