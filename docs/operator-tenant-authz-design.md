@@ -192,11 +192,22 @@ umgestellt; `AdminController::NAV` bekommt je Area den `scope`.
      gesetzt) als authentifiziert, und der `ManifestLinter` weist `area`+`auth!='user'` schon beim
      Install ab (Defense-in-Depth). Tests: `TenantModuleRlsTest` (Service + RLS-Leak-Proof via
      NOBYPASSRLS-Rolle), `ModuleWebTest` (+Negativ-Gate, Guest bleibt erreichbar), `ManifestLinterTest`.
-   - **Noch offen:** **5.2** API-Gate (`ApiRouteRegistry`/`Api/V1/ModuleController`, public-Routen
-     beachten), **5.3** Mandanten-GUI (Tenant-Area `tenant_modules`, enable/disable + Audit),
-     **Phase 2** Listener/Collector-Tenant-Gating (`ContractRegistry::activeContributions`,
-     Worker-Kontext — HARD), **Phase 3** Per-Tenant-Config-Contract. Der Integration-Harness
-     (separates Repo) muss das Enablement im Setup setzen → Korrektur-Prompt.
+   - **5.2 ✅** — API-Gate: `Api/V1/ModuleController::dispatch` prüft für `auth='user'`-Routen das
+     Enablement (404 vor dem Scope-Check); `public`-Routen ausgenommen (kein Core-Auth/Tenant-Kontext).
+     Tenant-Kontext gesichert (ApiAuthMiddleware → identity → TransactionRlsMiddleware); einziger
+     Laufzeit-Dispatch-Eintrittspunkt verifiziert. Test in `ModuleWebTest`.
+   - **5.3 ✅** — Mandanten-GUI: Tenant-Area `tenant_modules` (in `TENANT_AREAS` → kein Operator-Tor),
+     `TenantModulesController` (`index`/`enable`/`disable`, current-tenant-scoped, `isActiveModule`-Guard,
+     Audit), `TenantModuleService::listForTenant`, Template (UiKit, `confirmPost`), i18n de/en;
+     `createAdmin` vergibt jetzt beide Tenant-Admin-Areas atomar. Adversarial reviewed → 2 Befunde:
+     `confirmPost`-Escaping (False Positive — FormHelper escaped Attribute; Regressionstest gegen Doppel-
+     Escape), `createAdmin`-Grant-Atomarität (Multi-Row-INSERT). Tests: `TenantModulesControllerTest`,
+     `TenantsControllerTest`, `UiKitHelperTest`.
+   - **Noch offen:** **Phase 2** Listener/Collector-Tenant-Gating (`ContractRegistry::activeContributions`,
+     Worker-Kontext — HARD), **Phase 3** Per-Tenant-Config-Contract (`tenant_modules.config`).
+     Konsistenz-Refinement: `OpenApiGenerator` listet weiterhin alle aktiven Modul-Routen tenant-unabhängig
+     (Metadaten, kein Datenleck). Der Integration-Harness (separates Repo) muss das Enablement im Setup
+     setzen → Korrektur-Prompt. **Damit ist Inc 5 als nutzbares MVP komplett (Tabelle + Web/API-Gates + GUI).**
 6. **Tenant-Daten-Backup/Restore** (Mandant) + **System-Backup/Restore** (Operator) sauber getrennt;
    knüpft an das Per-Tenant-Backup-Design an.
 

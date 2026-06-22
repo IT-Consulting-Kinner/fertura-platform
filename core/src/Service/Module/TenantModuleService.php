@@ -64,6 +64,43 @@ class TenantModuleService
     }
 
     /**
+     * The installed (active) modules plus whether each is enabled for $tenantId —
+     * the row model for the tenant-facing enable/disable GUI (Increment 5.3). A
+     * module the tenant has never configured appears with enabled=false (fail-closed).
+     *
+     * @return list<array{module_key:string, name:string, version:string, enabled:bool}>
+     */
+    public function listForTenant(string $tenantId): array
+    {
+        $rows = $this->conn()->execute(
+            'SELECT m.module_key, m.name, m.version, COALESCE(tm.enabled, false) AS enabled '
+            . 'FROM modules m '
+            . 'LEFT JOIN tenant_modules tm ON tm.module_key = m.module_key AND tm.tenant_id = :t '
+            . "WHERE m.status = 'active' "
+            . 'ORDER BY m.name',
+            ['t' => $tenantId],
+        )->fetchAll('assoc');
+
+        return array_values(array_map(static fn(array $r): array => [
+            'module_key' => (string)$r['module_key'],
+            'name' => (string)$r['name'],
+            'version' => (string)$r['version'],
+            'enabled' => $r['enabled'] === true || $r['enabled'] === 't',
+        ], $rows));
+    }
+
+    /** Whether $moduleKey is an installed, active module (guards enable against stale keys). */
+    public function isActiveModule(string $moduleKey): bool
+    {
+        $row = $this->conn()->execute(
+            "SELECT EXISTS (SELECT 1 FROM modules WHERE module_key = :k AND status = 'active') AS ok",
+            ['k' => $moduleKey],
+        )->fetch('assoc');
+
+        return $row !== false && ($row['ok'] === true || $row['ok'] === 't');
+    }
+
+    /**
      * Grants (enables) $moduleKey for $tenantId — idempotent upsert. A previously
      * disabled grant is re-enabled while keeping its stored `config`.
      *

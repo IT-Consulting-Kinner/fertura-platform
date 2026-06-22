@@ -69,6 +69,12 @@ msgstr "Abmelden"
 msgid "admin.nav.users_groups"
 msgstr "Benutzer & Gruppen"
 
+msgid "admin.nav.tenant_modules"
+msgstr "Module"
+
+msgid "admin.nav.tenant_modules_item"
+msgstr "Module verwalten"
+
 msgid "admin.nav.modules"
 msgstr "Mandant"
 
@@ -1290,6 +1296,48 @@ msgstr "Benutzername und E-Mail sind erforderlich."
 
 msgid "flash.tenants.admin_created"
 msgstr "Mandanten-Admin angelegt und eingeladen. Einladungs-Link: %s"
+
+msgid "admin.tenant_modules.title"
+msgstr "Module"
+
+msgid "admin.tenant_modules.hint"
+msgstr "Schalten Sie installierte Module für Ihren Mandanten frei oder deaktivieren Sie sie."
+
+msgid "admin.tenant_modules.col_module"
+msgstr "Modul"
+
+msgid "admin.tenant_modules.col_version"
+msgstr "Version"
+
+msgid "admin.tenant_modules.col_status"
+msgstr "Status"
+
+msgid "admin.tenant_modules.col_action"
+msgstr "Aktion"
+
+msgid "admin.tenant_modules.enable"
+msgstr "Freischalten"
+
+msgid "admin.tenant_modules.disable"
+msgstr "Deaktivieren"
+
+msgid "admin.tenant_modules.disable_confirm"
+msgstr "Modul „%s“ für diesen Mandanten deaktivieren? Benutzer dieses Mandanten verlieren den Zugang."
+
+msgid "admin.tenant_modules.empty"
+msgstr "Keine Module installiert."
+
+msgid "flash.tenant_modules.enabled"
+msgstr "Modul freigeschaltet."
+
+msgid "flash.tenant_modules.disabled"
+msgstr "Modul deaktiviert."
+
+msgid "flash.tenant_modules.no_tenant"
+msgstr "Kein Mandantenkontext."
+
+msgid "flash.tenant_modules.unknown_module"
+msgstr "Unbekanntes oder inaktives Modul."
 
 msgid "flash.tenants.assigned"
 msgstr "Benutzer dem Mandanten zugeordnet."

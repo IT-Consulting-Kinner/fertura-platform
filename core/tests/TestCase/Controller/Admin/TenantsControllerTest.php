@@ -23,9 +23,10 @@ class TenantsControllerTest extends TestCase
         parent::setUp();
         $this->cleanup();
         $conn = ConnectionManager::get('default');
-        foreach ([['core_config', 'Core', 60], ['user_group_admin', 'Users', 10]] as [$key, $label, $sort]) {
-            // user_group_admin is the area createAdmin grants the new tenant admin
-            // (FK target of user_admin_areas); in prod the area set is seeded.
+        foreach ([['core_config', 'Core', 60], ['user_group_admin', 'Users', 10], ['tenant_modules', 'Modules', 25]] as [$key, $label, $sort]) {
+            // user_group_admin + tenant_modules are the areas createAdmin grants the
+            // new tenant admin (FK target of user_admin_areas); in prod the area set
+            // is seeded.
             $conn->execute(
                 'INSERT INTO admin_areas (area_key, label, sort_order) VALUES (:k, :l, :s) ON CONFLICT (area_key) DO NOTHING',
                 ['k' => $key, 'l' => $label, 's' => $sort],
@@ -180,11 +181,14 @@ class TenantsControllerTest extends TestCase
         $this->assertNotFalse($row);
         $this->assertSame($tid, $row['tenant_id']);
         $this->assertSame('invited', $row['status']);
-        $this->assertNotFalse(
-            $conn->execute(
-                "SELECT 1 FROM user_admin_areas WHERE user_id = :u AND admin_area_key = 'user_group_admin'",
+        // Holds BOTH tenant-admin areas (user/group admin + per-tenant module enablement).
+        $this->assertSame(
+            2,
+            (int)$conn->execute(
+                'SELECT count(*) AS c FROM user_admin_areas WHERE user_id = :u '
+                . "AND admin_area_key IN ('user_group_admin', 'tenant_modules')",
                 ['u' => $row['id']],
-            )->fetch(),
+            )->fetch('assoc')['c'],
         );
         $this->assertSame(
             1,

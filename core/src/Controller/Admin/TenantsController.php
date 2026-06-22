@@ -144,12 +144,17 @@ class TenantsController extends AdminController
                 throw new RuntimeException(__('flash.user.create_failed'));
             }
             $userId = (string)$user->id;
-            // Grant the tenant user/group-admin area (held within the new tenant).
+            // Grant the tenant-admin areas (held within the new tenant): user/group
+            // administration AND per-tenant module enablement (Increment 5.3). Both
+            // are tenant-scoped, so the grant never crosses the operator boundary. A
+            // single multi-row INSERT keeps the two grants atomic — they are applied
+            // together or (e.g. on an unseeded area FK) not at all, never half.
             /** @var \Cake\Database\Connection $conn */
             $conn = ConnectionManager::get('default');
             $conn->execute(
-                'INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a) ON CONFLICT DO NOTHING',
-                ['u' => $userId, 'a' => 'user_group_admin'],
+                'INSERT INTO user_admin_areas (user_id, admin_area_key) '
+                . 'VALUES (:u, :a1), (:u, :a2) ON CONFLICT DO NOTHING',
+                ['u' => $userId, 'a1' => 'user_group_admin', 'a2' => 'tenant_modules'],
             );
             // Invitation / password-set link (like UsersController::invite).
             $actor = $this->identity()?->getIdentifier();

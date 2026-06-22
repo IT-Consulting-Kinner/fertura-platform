@@ -42,6 +42,22 @@ class UiKitHelperTest extends TestCase
         $this->assertStringContainsString('text-bg-secondary', $html);
     }
 
+    public function testConfirmPostEscapesConfirmTextInDataAttribute(): void
+    {
+        // The confirm text may carry caller data (e.g. a module display name). It
+        // must be HTML-escaped inside the data-confirm attribute so a quote cannot
+        // break out of the attribute and inject markup. The FormHelper escapes
+        // attribute values; this locks that in. It also guards the inverse: an extra
+        // h() in confirmPost would DOUBLE-escape (the &amp;quot; assertion catches that).
+        $html = $this->ui->confirmPost('Delete', '/admin/things/delete', 'Drop "<b>x</b>"?');
+
+        $this->assertStringContainsString('data-confirm', $html);
+        $this->assertStringNotContainsString('<b>x</b>', $html); // not raw markup
+        $this->assertStringContainsString('&lt;b&gt;', $html); // escaped exactly once
+        $this->assertStringContainsString('&quot;', $html); // quote encoded -> cannot break out
+        $this->assertStringNotContainsString('&amp;quot;', $html); // NOT double-escaped
+    }
+
     public function testIndexEmptyState(): void
     {
         $html = $this->ui->index([], [['key' => 'a', 'label' => 'A']], ['empty' => 'Nichts da']);

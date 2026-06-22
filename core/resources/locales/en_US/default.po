@@ -73,6 +73,12 @@ msgstr "Sign out"
 msgid "admin.nav.users_groups"
 msgstr "Users & groups"
 
+msgid "admin.nav.tenant_modules"
+msgstr "Modules"
+
+msgid "admin.nav.tenant_modules_item"
+msgstr "Manage modules"
+
 msgid "admin.nav.modules"
 msgstr "Tenant"
 
@@ -1294,6 +1300,48 @@ msgstr "Username and email are required."
 
 msgid "flash.tenants.admin_created"
 msgstr "Tenant admin created and invited. Invitation link: %s"
+
+msgid "admin.tenant_modules.title"
+msgstr "Modules"
+
+msgid "admin.tenant_modules.hint"
+msgstr "Enable or disable the installed modules for your tenant."
+
+msgid "admin.tenant_modules.col_module"
+msgstr "Module"
+
+msgid "admin.tenant_modules.col_version"
+msgstr "Version"
+
+msgid "admin.tenant_modules.col_status"
+msgstr "Status"
+
+msgid "admin.tenant_modules.col_action"
+msgstr "Action"
+
+msgid "admin.tenant_modules.enable"
+msgstr "Enable"
+
+msgid "admin.tenant_modules.disable"
+msgstr "Disable"
+
+msgid "admin.tenant_modules.disable_confirm"
+msgstr "Disable module \"%s\" for this tenant? Users of this tenant will lose access."
+
+msgid "admin.tenant_modules.empty"
+msgstr "No modules installed."
+
+msgid "flash.tenant_modules.enabled"
+msgstr "Module enabled."
+
+msgid "flash.tenant_modules.disabled"
+msgstr "Module disabled."
+
+msgid "flash.tenant_modules.no_tenant"
+msgstr "No tenant context."
+
+msgid "flash.tenant_modules.unknown_module"
+msgstr "Unknown or inactive module."
 
 msgid "flash.tenants.assigned"
 msgstr "User assigned to tenant."
