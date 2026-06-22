@@ -71,15 +71,24 @@ der destruktive cross-tenant Full-Restore bleibt CLI-only (`BackupService`). Upl
 hochgeladenem Archiv) validiert, dass das Archiv-`tenant_id` zum aktuellen Mandanten passt
 (sonst Ablehnung — kein Einspielen fremder Daten).
 
-## 4. Dateien (Mandanten-Dateien)
+## 4. Dateien (Mandanten-Dateien) — Datei-Scoping-Contract (entschieden: Teil von Inc 6)
 
 **Befund:** Es gibt **kein** konsistentes Per-Tenant-Datei-Pfadschema — der Core legt Dateien
-generisch (path-basiert) ab; Modul-Dateipfade sind modul-definiert. Eine saubere Per-Tenant-
-Datei-Sicherung erfordert daher zuerst eine **Datei-Scoping-Konvention/Contract** (Module
-deklarieren ihren Mandanten-Dateipfad, oder ein einheitliches `tenant/<id>/`-Präfix). **Vorschlag:
-Inc 6 startet DB-only**; Per-Tenant-Dateien als eigener späterer Schritt (Contract). Zu klären
-(Entscheidung C). *(Die DR-Schiene sichert Dateien ohnehin vollständig — nur nicht mandanten-
-selektiv.)*
+generisch (path-basiert) ab; Modul-Dateipfade sind modul-definiert. **Entscheidung (C):** Inc 6
+etabliert daher eine **Per-Tenant-Datei-Konvention** und sichert/restauriert die Dateien des
+Mandanten mit.
+
+**Konvention:** Alle mandanten-eigenen Dateien liegen unter dem Präfix `tenant/<tenant_id>/…`
+im StorageManager-Root. Der Core stellt dafür einen **tenant-aware Storage-Helfer** bereit
+(z. B. `TenantStorage`/`StorageManager::tenantPath()`), der `tenant/<core.current_tenant()>/…`
+auflöst. Module **übernehmen** die Konvention deklarativ, indem sie ihre Mandanten-Dateien über
+den Helfer/das Präfix ablegen — kein Eingriff in Modulcode durch den Core. Bestandsdateien
+außerhalb des Präfixes sind nicht per-Tenant sicherbar (dokumentiert; Migration der Module ist
+deren Sache).
+
+**Backup/Restore:** das Per-Tenant-Archiv enthält den Teilbaum `tenant/<tenant_id>/` (tar);
+Restore ersetzt **nur** diesen Teilbaum (andere Mandanten unberührt). *(Die DR-Schiene sichert
+Dateien ohnehin vollständig — nur nicht mandanten-selektiv.)*
 
 ## 5. Oberfläche
 
@@ -92,26 +101,27 @@ Migration seedet die Area, NAV-Eintrag, i18n. `TenantBackupController` (required
 
 ## 6. Increment-Plan
 
-- **6a** — Fundament + Export: `TenantBackupService` (Tabellen-Discovery Core-Liste; Scoped-
-  Export NDJSON+Manifest, ZIP/AES via `BackupService`-Bausteinen), `tenant_backups`-Metadaten,
-  Tenant-Area + `TenantBackupController` (index/create/download), Tests (Isolation: A sieht/
-  exportiert nie B). **DB-only, Core-Tabellen.**
+- **6a** — Fundament + DB-Export: `TenantBackupService` (Tabellen-Discovery Core-Liste; Scoped-
+  Export NDJSON+Manifest, ZIP/AES via `BackupService`-Bausteinen), `tenant_backups`-Metadaten
+  (neue RLS-Tabelle), Tenant-Area `tenant_backup` + `TenantBackupController` (index/create/
+  download), Tests (Isolation: A sieht/exportiert nie B). **DB-only, Core-Tabellen** (`users`
+  backup-only).
 - **6b** — Scoped Restore: transaktionaler scoped Delete+Reinsert, FK-Reihenfolge, `audit_log`-
-  Sonderfall, Upload-Restore mit tenant-Match, Confirm-GUI, Tests (Restore stellt nur den eigenen
-  Mandanten wieder her; andere unberührt; Rollback bei Fehler).
-- **6c** — Modul-Daten: RLS-Introspektion der Modul-Schemas (tenant-scoped Tabellen) in Export +
+  Sonderfall, `users` NICHT zurückgeschrieben, Upload-Restore mit tenant-Match, Confirm-GUI,
+  Tests (Restore stellt nur den eigenen Mandanten wieder her; andere unberührt; Rollback bei Fehler).
+- **6c** — Datei-Scoping-Contract + Per-Tenant-Dateien: Core-Konvention `tenant/<id>/` + Storage-
+  Helfer; Backup tar't den Teilbaum, Restore ersetzt nur ihn; Tests.
+- **6d** — Modul-Daten: RLS-Introspektion der Modul-Schemas (tenant-scoped Tabellen) in Export +
   Restore aufnehmen, Tests mit einem Fixture-Modul.
-- **6d** (optional/später) — Per-Tenant-Dateien (Datei-Scoping-Contract) + ggf. `users`-Restore.
 
 Jeder Increment: phpstan + phpcs + Tests grün, adversarial review (sicherheits-/datenkritisch).
 
-## 7. Offene Entscheidungen (für die Freigabe)
+## 7. Entscheidungen (freigegeben)
 
-- **A — `users`:** Im Per-Tenant-Restore zurückschreiben? Vorschlag: **nein** in Inc 6 (Identität/
-  Auth-Risiko; Backup-only), späterer vorsichtiger Schritt.
-- **B — Modul-Daten:** Per RLS-Introspektion automatisch einbeziehen (6c). Vorschlag: **ja**,
-  introspektiv (kein Modulcode).
-- **C — Dateien:** Inc 6 **DB-only** starten, Per-Tenant-Dateien später per Contract. Vorschlag: **ja**.
-- **D — Metadaten:** `tenant_backups`-Tabelle (neu, RLS) vs. `core.backups` + `tenant_id`.
-  Vorschlag: **neue `tenant_backups`-Tabelle** (saubere Trennung System- vs. Mandanten-Backups,
-  RLS-scoped).
+- **A — `users`:** **backup-only, kein Restore** in Inc 6 (Identitäts-/Auth-Risiko; im Export für
+  Vollständigkeit, Restore-Schritt später vorsichtig).
+- **B — Modul-Daten:** **ja**, per RLS-Introspektion automatisch (6d), kein Modulcode-Eingriff.
+- **C — Dateien:** **Datei-Scoping-Contract Teil von Inc 6** (6c) — Core-Konvention `tenant/<id>/`
+  + Helfer, Module übernehmen sie deklarativ.
+- **D — Metadaten:** **neue `tenant_backups`-Tabelle** (RLS-scoped; saubere Trennung System- vs.
+  Mandanten-Backups).
