@@ -1327,6 +1327,21 @@ msgstr "Modul „%s“ für diesen Mandanten deaktivieren? Benutzer dieses Manda
 msgid "admin.tenant_modules.empty"
 msgstr "Keine Module installiert."
 
+msgid "admin.tenant_modules.configure"
+msgstr "Konfigurieren"
+
+msgid "admin.tenant_modules.configure_title"
+msgstr "Modul konfigurieren"
+
+msgid "admin.tenant_modules.configure_hint"
+msgstr "Einstellungen dieses Moduls für Ihren Mandanten."
+
+msgid "admin.tenant_modules.configure_save"
+msgstr "Speichern"
+
+msgid "admin.tenant_modules.configure_cancel"
+msgstr "Abbrechen"
+
 msgid "flash.tenant_modules.enabled"
 msgstr "Modul freigeschaltet."
 
@@ -1338,6 +1353,12 @@ msgstr "Kein Mandantenkontext."
 
 msgid "flash.tenant_modules.unknown_module"
 msgstr "Unbekanntes oder inaktives Modul."
+
+msgid "flash.tenant_modules.configured"
+msgstr "Konfiguration gespeichert."
+
+msgid "flash.tenant_modules.no_config"
+msgstr "Dieses Modul hat keine Konfiguration oder ist nicht freigeschaltet."
 
 msgid "flash.tenants.assigned"
 msgstr "Benutzer dem Mandanten zugeordnet."

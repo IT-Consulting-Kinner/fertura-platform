@@ -68,12 +68,14 @@ class TenantModuleService
      * the row model for the tenant-facing enable/disable GUI (Increment 5.3). A
      * module the tenant has never configured appears with enabled=false (fail-closed).
      *
-     * @return list<array{module_key:string, name:string, version:string, enabled:bool}>
+     * @return list<array{module_key:string, name:string, version:string, enabled:bool, has_config:bool}>
      */
     public function listForTenant(string $tenantId): array
     {
         $rows = $this->conn()->execute(
-            'SELECT m.module_key, m.name, m.version, COALESCE(tm.enabled, false) AS enabled '
+            'SELECT m.module_key, m.name, m.version, COALESCE(tm.enabled, false) AS enabled, '
+            . "CASE WHEN jsonb_typeof(m.manifest->'config_schema') = 'array' "
+            . "AND jsonb_array_length(m.manifest->'config_schema') > 0 THEN true ELSE false END AS has_config "
             . 'FROM modules m '
             . 'LEFT JOIN tenant_modules tm ON tm.module_key = m.module_key AND tm.tenant_id = :t '
             . "WHERE m.status = 'active' "
@@ -86,6 +88,7 @@ class TenantModuleService
             'name' => (string)$r['name'],
             'version' => (string)$r['version'],
             'enabled' => $r['enabled'] === true || $r['enabled'] === 't',
+            'has_config' => $r['has_config'] === true || $r['has_config'] === 't',
         ], $rows));
     }
 

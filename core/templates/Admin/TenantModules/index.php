@@ -21,6 +21,13 @@
             <td class="small"><?= h($m['version']) ?></td>
             <td><?= $this->UiKit->value($m['enabled'], 'bool') ?></td>
             <td class="text-end">
+                <?php if ($m['enabled'] && !empty($m['has_config'])): ?>
+                    <?= $this->Html->link(
+                        __('admin.tenant_modules.configure'),
+                        ['action' => 'configure', $m['module_key']],
+                        ['class' => 'btn btn-sm btn-outline-secondary'],
+                    ) ?>
+                <?php endif; ?>
                 <?php if ($m['enabled']): ?>
                     <?= $this->UiKit->confirmPost(
                         __('admin.tenant_modules.disable'),

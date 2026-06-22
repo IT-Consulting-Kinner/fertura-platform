@@ -77,6 +77,111 @@ class TenantModulesController extends AdminController
         return $this->redirect(['action' => 'index']);
     }
 
+    /**
+     * Per-tenant module configuration (Increment 5 Phase 3): GET renders a form
+     * built from the module's manifest `config_schema` with the tenant's current
+     * values; POST coerces the inputs to the declared types and stores them. Only
+     * reachable for a module that is enabled for this tenant AND declares a schema.
+     */
+    public function configure(string $moduleKey): ?Response
+    {
+        $svc = new TenantModuleService();
+        $schema = $svc->configSchema($moduleKey);
+        if ($schema === [] || !$svc->isEnabled($moduleKey)) {
+            $this->Flash->error(__('flash.tenant_modules.no_config'));
+
+            return $this->redirect(['action' => 'index']);
+        }
+        if ($this->request->is('post')) {
+            $tenantId = $this->currentTenantId();
+            try {
+                if ($tenantId === '') {
+                    throw new RuntimeException(__('flash.tenant_modules.no_tenant'));
+                }
+                $svc->setConfig($tenantId, $moduleKey, $this->coerceConfig($schema, (array)$this->request->getData()));
+                (new AuditLogger())->log('tenant.module.configure', 'tenant_module', null, [
+                    'component' => 'core',
+                    'moduleKey' => $moduleKey,
+                    'newValue' => ['tenant_id' => $tenantId],
+                ]);
+                $this->Flash->success(__('flash.tenant_modules.configured'));
+            } catch (Throwable $e) {
+                $this->Flash->error($e->getMessage());
+            }
+
+            return $this->redirect(['action' => 'index']);
+        }
+
+        // GET: build form fields from the schema (labels/help/options resolved in
+        // the contributing module's i18n domain) + the tenant's current values.
+        $current = $svc->config($moduleKey);
+        $fields = [];
+        foreach ($schema as $f) {
+            $key = (string)($f['key'] ?? '');
+            if ($key === '') {
+                continue;
+            }
+            $type = (string)($f['type'] ?? 'string');
+            $spec = [
+                'key' => $key,
+                'label' => __d($moduleKey, (string)($f['label'] ?? $key)),
+                'input' => match ($type) {
+                    'bool' => 'checkbox',
+                    'int' => 'number',
+                    'text' => 'textarea',
+                    'select' => 'select',
+                    default => 'text',
+                },
+                'value' => $current[$key] ?? ($f['default'] ?? null),
+            ];
+            if (isset($f['help'])) {
+                $spec['help'] = __d($moduleKey, (string)$f['help']);
+            }
+            if (!empty($f['required'])) {
+                $spec['required'] = true;
+            }
+            if ($type === 'select' && isset($f['options']) && is_array($f['options'])) {
+                $opts = [];
+                foreach ($f['options'] as $ov => $ol) {
+                    $opts[(string)$ov] = __d($moduleKey, (string)$ol);
+                }
+                $spec['options'] = $opts;
+            }
+            $fields[] = $spec;
+        }
+        $this->set(compact('moduleKey', 'fields'));
+
+        return null;
+    }
+
+    /**
+     * Coerces posted form values to the types declared in $schema (bool from a
+     * checkbox, int, otherwise string); only declared keys are produced. The
+     * service additionally drops anything outside the schema.
+     *
+     * @param list<array<string,mixed>> $schema
+     * @param array<string,mixed> $data
+     * @return array<string,mixed>
+     */
+    private function coerceConfig(array $schema, array $data): array
+    {
+        $out = [];
+        foreach ($schema as $f) {
+            $key = (string)($f['key'] ?? '');
+            if ($key === '') {
+                continue;
+            }
+            $raw = $data[$key] ?? null;
+            $out[$key] = match ((string)($f['type'] ?? 'string')) {
+                'bool' => (bool)$raw,
+                'int' => (int)$raw,
+                default => is_scalar($raw) ? (string)$raw : '',
+            };
+        }
+
+        return $out;
+    }
+
     /** The request's tenant from the RLS context; '' when unset (fail-closed). */
     private function currentTenantId(): string
     {

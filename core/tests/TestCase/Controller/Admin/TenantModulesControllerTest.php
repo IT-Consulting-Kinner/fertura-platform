@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Test\TestCase\Controller\Admin;
 
+use App\Service\Module\TenantModuleService;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
@@ -32,12 +33,16 @@ class TenantModulesControllerTest extends TestCase
             "INSERT INTO admin_areas (area_key, label, sort_order) VALUES ('tenant_modules', 'Modules', 25) "
             . 'ON CONFLICT (area_key) DO NOTHING',
         );
-        // An installed, active module to list and toggle.
+        // An installed, active module to list and toggle; its manifest declares a
+        // config_schema (Phase 3) so the configure GUI has fields to render.
+        $manifest = (string)json_encode(['config_schema' => [
+            ['key' => 'theme', 'label' => 'l.theme', 'type' => 'string', 'default' => 'light'],
+        ]]);
         $conn->execute(
             'INSERT INTO modules (module_key, name, version, type, core_compatibility, manifest, status) '
-            . "VALUES (:k, 'ZZ Ctrl Module', '1.0.0', 'extension', '^1.0.0', '{}'::jsonb, 'active') "
+            . "VALUES (:k, 'ZZ Ctrl Module', '1.0.0', 'extension', '^1.0.0', CAST(:m AS jsonb), 'active') "
             . 'ON CONFLICT (module_key) DO NOTHING',
-            ['k' => self::MOD],
+            ['k' => self::MOD, 'm' => $manifest],
         );
         // A tenant admin (default tenant) holding the tenant_modules area.
         $this->userId = (string)$conn->execute(
@@ -150,5 +155,60 @@ class TenantModulesControllerTest extends TestCase
         $this->session(['Auth' => ['id' => $uid, 'username' => 'zztmctrl_t', 'email' => 'tt@zztmctrl.local']]);
         $this->get('/admin/tenant-modules');
         $this->assertResponseOk();
+    }
+
+    public function testConfigureRendersFormAndSavesConfig(): void
+    {
+        $conn = ConnectionManager::get('default');
+        $tenantId = (string)$conn->execute(
+            'SELECT tenant_id FROM users WHERE id = :id',
+            ['id' => $this->userId],
+        )->fetch('assoc')['tenant_id'];
+        (new TenantModuleService())->enable($tenantId, self::MOD); // configure needs a grant row
+
+        $this->login();
+        $this->enableCsrfToken();
+        $this->enableSecurityToken();
+
+        // GET renders the form built from the module's config_schema.
+        $this->get('/admin/tenant-modules/configure/' . self::MOD);
+        $this->assertResponseOk();
+        $this->assertResponseContains('name="theme"');
+
+        // POST stores the (coerced) value in tenant_modules.config and audits it.
+        $this->post('/admin/tenant-modules/configure/' . self::MOD, ['theme' => 'dark']);
+        $this->assertRedirect(['action' => 'index']);
+        $cfg = (string)$conn->execute(
+            'SELECT config FROM tenant_modules WHERE module_key = :k',
+            ['k' => self::MOD],
+        )->fetch('assoc')['config'];
+        $this->assertStringContainsString('dark', $cfg);
+        $this->assertGreaterThanOrEqual(1, (int)$conn->execute(
+            "SELECT count(*) c FROM audit_log WHERE action = 'tenant.module.configure' AND module_key = :k",
+            ['k' => self::MOD],
+        )->fetch('assoc')['c'], 'configure is audited');
+    }
+
+    public function testConfigureRedirectsWhenModuleNotEnabled(): void
+    {
+        // The module has a schema but is not enabled for this tenant -> redirect.
+        $this->login();
+        $this->get('/admin/tenant-modules/configure/' . self::MOD);
+        $this->assertRedirect(['action' => 'index']);
+    }
+
+    public function testIndexShowsConfigureLinkForEnabledConfigurableModule(): void
+    {
+        $conn = ConnectionManager::get('default');
+        $tenantId = (string)$conn->execute(
+            'SELECT tenant_id FROM users WHERE id = :id',
+            ['id' => $this->userId],
+        )->fetch('assoc')['tenant_id'];
+        (new TenantModuleService())->enable($tenantId, self::MOD);
+
+        $this->login();
+        $this->get('/admin/tenant-modules');
+        $this->assertResponseOk();
+        $this->assertResponseContains('/admin/tenant-modules/configure/' . self::MOD);
     }
 }
