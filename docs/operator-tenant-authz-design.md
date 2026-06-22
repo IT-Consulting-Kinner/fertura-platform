@@ -203,11 +203,18 @@ umgestellt; `AdminController::NAV` bekommt je Area den `scope`.
      `confirmPost`-Escaping (False Positive — FormHelper escaped Attribute; Regressionstest gegen Doppel-
      Escape), `createAdmin`-Grant-Atomarität (Multi-Row-INSERT). Tests: `TenantModulesControllerTest`,
      `TenantsControllerTest`, `UiKitHelperTest`.
-   - **Noch offen:** **Phase 2** Listener/Collector-Tenant-Gating (`ContractRegistry::activeContributions`,
-     Worker-Kontext — HARD), **Phase 3** Per-Tenant-Config-Contract (`tenant_modules.config`).
-     Konsistenz-Refinement: `OpenApiGenerator` listet weiterhin alle aktiven Modul-Routen tenant-unabhängig
-     (Metadaten, kein Datenleck). Der Integration-Harness (separates Repo) muss das Enablement im Setup
-     setzen → Korrektur-Prompt. **Damit ist Inc 5 als nutzbares MVP komplett (Tabelle + Web/API-Gates + GUI).**
+   - **Phase 2 ✅** — Contribution-Gating: `ContractRegistry::gateByTenantModules` verwirft Beiträge
+     (Listener/Collector/Provider), deren `module_key` ein installiertes, für `core.current_tenant()`
+     **nicht** freigeschaltetes Modul ist (ein indizierter Query in `activeContributions`/`resolveProvider`;
+     `activeImplClasses` delegiert). **fail-OPEN bei NULL-Tenant** (System-Events/CLI/Plattform-Jobs laufen
+     weiter; RLS schützt die Daten), **Core-exempt** (`module_key` nicht in `modules`). Greift automatisch im
+     OutboxWorker (Event-Tenant gesetzt = Ziel), Notification (per-User), CapabilityHandle (Provider). Opt-out
+     `tenantScoped=false` für Plattform-/Privacy-Consumer (Health, Search-Reindex, Anonymisierung).
+     Test: `TenantModuleContributionGateTest`. **Damit ist Inc 5 vollständig (Tabelle + Web/API-Gates + GUI +
+     Contribution-Gating).**
+   - **Noch offen:** **Phase 3** Per-Tenant-Config-Contract (`tenant_modules.config`). Konsistenz-Refinement:
+     `OpenApiGenerator` listet weiterhin alle aktiven Modul-Routen tenant-unabhängig (Metadaten, kein
+     Datenleck). Der Integration-Harness (separates Repo) muss das Enablement im Setup setzen → Korrektur-Prompt.
 6. **Tenant-Daten-Backup/Restore** (Mandant) + **System-Backup/Restore** (Operator) sauber getrennt;
    knüpft an das Per-Tenant-Backup-Design an.
 
