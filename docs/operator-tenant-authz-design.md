@@ -210,11 +210,20 @@ umgestellt; `AdminController::NAV` bekommt je Area den `scope`.
      weiter; RLS schützt die Daten), **Core-exempt** (`module_key` nicht in `modules`). Greift automatisch im
      OutboxWorker (Event-Tenant gesetzt = Ziel), Notification (per-User), CapabilityHandle (Provider). Opt-out
      `tenantScoped=false` für Plattform-/Privacy-Consumer (Health, Search-Reindex, Anonymisierung).
-     Test: `TenantModuleContributionGateTest`. **Damit ist Inc 5 vollständig (Tabelle + Web/API-Gates + GUI +
-     Contribution-Gating).**
-   - **Noch offen:** **Phase 3** Per-Tenant-Config-Contract (`tenant_modules.config`). Konsistenz-Refinement:
+     Test: `TenantModuleContributionGateTest`.
+   - **Phase 3 ✅** — Per-Tenant-Config-Contract: ein Modul deklariert seine konfigurierbaren Felder
+     deklarativ im Manifest (`config_schema`: key/label/type bool|int|string|text|select/default/help/
+     options/required; `ModuleManifest::configSchema`, `ManifestLinter`-Validierung). Werte in
+     `tenant_modules.config` (`TenantModuleService::config`/`setConfig`/`configSchema`; setConfig filtert
+     auf Schema-Keys). **Runtime-Injection** als `module_config` in Web-/API-Request + Listener-Context
+     (OutboxWorker, je Listener seine Modul-Config für den Event-Tenant) — Module lesen ihre Config ohne
+     Core-Aufruf. **Mandanten-GUI** `TenantModulesController::configure` (Formular aus dem Schema,
+     typ-coerct, Audit) + „Konfigurieren"-Link für freigeschaltete, konfigurierbare Module. Tests:
+     `TenantModuleRlsTest`, `ManifestLinterTest`, `ModuleWebTest`, `TenantModulesControllerTest`.
+   - **Damit ist Inc 5 vollständig:** Tabelle + Web/API-Gates + Enable/Disable-GUI + Contribution-Gating
+     (Phase 2) + Per-Tenant-Config (Phase 3). **Noch offen (eigene Punkte):** Konsistenz-Refinement
      `OpenApiGenerator` listet weiterhin alle aktiven Modul-Routen tenant-unabhängig (Metadaten, kein
-     Datenleck). Der Integration-Harness (separates Repo) muss das Enablement im Setup setzen → Korrektur-Prompt.
+     Datenleck); der Integration-Harness (separates Repo) muss das Enablement im Setup setzen → Korrektur-Prompt.
 6. **Tenant-Daten-Backup/Restore** (Mandant) + **System-Backup/Restore** (Operator) sauber getrennt;
    knüpft an das Per-Tenant-Backup-Design an.
 
