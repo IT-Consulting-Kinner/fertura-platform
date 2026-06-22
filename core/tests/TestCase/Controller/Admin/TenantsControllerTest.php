@@ -199,6 +199,41 @@ class TenantsControllerTest extends TestCase
         );
     }
 
+    public function testCreateAdminRejectsDuplicateEmail(): void
+    {
+        // Onboarding a tenant admin with an email that already exists (globally,
+        // any case) fails cleanly (error flash + redirect, no 500) and creates no
+        // second user — the global email uniqueness rule applies cross-tenant too.
+        $conn = ConnectionManager::get('default');
+        $tid = (string)$conn->execute(
+            "INSERT INTO tenants (key, name) VALUES ('zztest-dupadmin', 'DupAdmin') RETURNING id",
+        )->fetch('assoc')['id'];
+        $email = 'existing_' . bin2hex(random_bytes(3)) . '@zztenant.local';
+        $conn->execute(
+            "INSERT INTO users (username, email, status) VALUES (:u, :e, 'active')",
+            ['u' => 'zztest_existing_' . bin2hex(random_bytes(3)), 'e' => $email],
+        );
+
+        $this->login();
+        $this->enableCsrfToken();
+        $this->enableSecurityToken();
+        $this->post('/admin/tenants/create-admin', [
+            'tenant_id' => $tid,
+            'username' => 'zztest_dupadmin_' . bin2hex(random_bytes(3)),
+            'email' => strtoupper($email),
+        ]);
+        $this->assertRedirect(['action' => 'index']);
+
+        // Still exactly one user with that email, and it was NOT moved into the
+        // onboarding target tenant (i.e. the existing row was left untouched).
+        $rows = $conn->execute(
+            'SELECT tenant_id FROM users WHERE lower(email) = lower(:e)',
+            ['e' => $email],
+        )->fetchAll('assoc');
+        $this->assertCount(1, $rows, 'No second user must be created for a duplicate email.');
+        $this->assertNotSame($tid, $rows[0]['tenant_id']);
+    }
+
     public function testCreateAdminRefusesOperatorTenant(): void
     {
         $this->login();

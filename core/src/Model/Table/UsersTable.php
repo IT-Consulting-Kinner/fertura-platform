@@ -8,6 +8,7 @@ use App\Model\Entity\User;
 use App\Service\Privacy\AnonymizationService;
 use Cake\I18n\DateTime;
 use Cake\ORM\Query\SelectQuery;
+use Cake\ORM\RulesChecker;
 use Cake\Validation\Validator;
 
 /**
@@ -62,6 +63,84 @@ class UsersTable extends AppTable
             ->allowEmptyString('last_name');
 
         return $validator;
+    }
+
+    /**
+     * Application rules. Mirrors the DB indexes uq_users_email_lower /
+     * uq_users_username_lower (CoreIdentity migration): email AND username are
+     * unique case-insensitively (on lower(value)).
+     *
+     * GLOBAL scope (no tenant filter), NOT per tenant: the pre-auth resolution
+     * path looks users up by lower(email)/lower(username) WITHOUT a tenant
+     * predicate and expects a single match — AuthController::forgotPassword,
+     * SsoService (email link / username collision), TenantsController::assign,
+     * the LocalAuthProvider resolver. A per-tenant uniqueness would let two
+     * tenants share an email/username and make those lookups ambiguous (wrong
+     * account, wrong password reset). `core.users` also carries no tenant RLS
+     * (the pre-auth login must read it), consistent with global identity.
+     *
+     * Without these rules a duplicate would only fail at the DB level
+     * (unique-violation -> PDOException -> HTTP 500). The rules let
+     * UsersController::add()/edit() and TenantsController::createAdmin() fail
+     * cleanly with an inline validation error instead. The DB index remains the
+     * authoritative guarantee (race-proof); these rules are the UX mirror.
+     */
+    public function buildRules(RulesChecker $rules): RulesChecker
+    {
+        $rules->add($this->uniqueLowerRule('email'), 'uniqueEmail', [
+            'errorField' => 'email',
+            'message' => __('validation.users.email_unique'),
+        ]);
+        $rules->add($this->uniqueLowerRule('username'), 'uniqueUsername', [
+            'errorField' => 'username',
+            'message' => __('validation.users.username_unique'),
+        ]);
+
+        return $rules;
+    }
+
+    /**
+     * Case-insensitive global uniqueness check for $field, mirroring the
+     * lower($field) DB index. Returns a rule callable for buildRules().
+     *
+     * The comparison is done in SQL as lower($field) = :value (value lowered in
+     * PHP), matching how the index is built and how the login resolves users.
+     */
+    private function uniqueLowerRule(string $field): callable
+    {
+        return function (User $entity) use ($field): bool {
+            $value = $entity->get($field);
+            // Presence/format is validationDefault's job. Skip blank values and,
+            // on update, an unchanged value (it would only ever match the row
+            // itself, which the id filter below additionally excludes).
+            if (!is_string($value) || $value === '' || (!$entity->isNew() && !$entity->isDirty($field))) {
+                return true;
+            }
+            // $field is a fixed column literal ('email'|'username') from buildRules();
+            // guard so the raw LOWER() expression below can never carry any other
+            // identifier (the DB unique index stays the authoritative guarantee).
+            if (!in_array($field, ['email', 'username'], true)) {
+                return true;
+            }
+
+            $query = $this->find();
+            // lower($field) = :value — matches the functional unique indexes
+            // (uq_users_email_lower / uq_users_username_lower). Built as a typed
+            // QueryExpression (newExpr) rather than $query->func()->lower(), which
+            // CakePHP resolves through FunctionsBuilder::__call() and PHPStan cannot
+            // follow; $field is whitelisted just above, so the literal is safe.
+            $conditions = [
+                $query->expr()->eq(
+                    $query->newExpr('LOWER(' . $field . ')'),
+                    mb_strtolower($value),
+                ),
+            ];
+            if (!$entity->isNew()) {
+                $conditions[] = $query->expr()->notEq('id', (string)$entity->get('id'));
+            }
+
+            return !$this->exists($conditions);
+        };
     }
 
     /**

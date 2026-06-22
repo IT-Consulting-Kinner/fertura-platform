@@ -91,7 +91,11 @@ class UsersController extends AdminController
             return $this->redirect(['action' => 'index']);
         }
         $user->set('tenant_id', $tid);
-        if ($users->save($user)) {
+        // atomic=false: the request already runs in a transaction
+        // (TransactionRlsMiddleware), so save needs no nested one. This also keeps
+        // a failing application rule (unique email/username) a clean `false` instead
+        // of a nested-transaction rollback that would poison the request transaction.
+        if ($users->save($user, ['atomic' => false])) {
             $this->audit()->log('user.create', 'user', (string)$user->id, ['newValue' => ['status' => $user->status]]);
             $this->Flash->success(__('flash.user.created'));
 
@@ -188,7 +192,9 @@ class UsersController extends AdminController
             $user = $users->patchEntity($user, $this->request->getData(), [
                 'fields' => ['username', 'email', 'first_name', 'last_name'],
             ]);
-            if ($users->save($user)) {
+            // atomic=false: already inside the request transaction; also keeps a
+            // unique-rule violation a clean validation failure (see add()).
+            if ($users->save($user, ['atomic' => false])) {
                 $this->audit()->log('user.update', 'user', $id, ['newValue' => ['username' => $user->get('username')]]);
                 $this->Flash->success(__('flash.user.updated'));
 

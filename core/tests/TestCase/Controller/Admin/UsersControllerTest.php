@@ -151,6 +151,35 @@ class UsersControllerTest extends TestCase
         $this->assertSame('invited', $row['status']); // invitation instead of directly active
     }
 
+    public function testAddRejectsDuplicateEmailWithCleanError(): void
+    {
+        // A duplicate email must fail with a clean validation error (re-render,
+        // HTTP 200) instead of a DB unique-violation -> 500, and must not insert
+        // a second row. Case-insensitive, mirroring the lower(email) DB index.
+        $this->login();
+        $email = 'taken_' . bin2hex(random_bytes(3)) . '@zzusers.local';
+        $this->makeUser('taken', 'active'); // unrelated existing user
+        ConnectionManager::get('default')->execute(
+            "INSERT INTO users (username, email, status) VALUES (:u, :e, 'active')",
+            ['u' => 'zztest_owner_' . bin2hex(random_bytes(3)), 'e' => $email],
+        );
+
+        $this->post('/admin/users/add', [
+            'username' => 'zztest_dupemail_' . bin2hex(random_bytes(3)),
+            'email' => strtoupper($email), // same email, different case
+        ]);
+
+        $this->assertResponseOk(); // re-render with inline error, NOT a redirect (success) or 500
+        $this->assertSame(
+            1,
+            (int)ConnectionManager::get('default')->execute(
+                'SELECT count(*) AS c FROM users WHERE lower(email) = lower(:e)',
+                ['e' => $email],
+            )->fetch('assoc')['c'],
+            'The duplicate email must not have created a second user.',
+        );
+    }
+
     public function testDeactivateMemberWorksAndReactivateNeedsPassword(): void
     {
         $this->login();

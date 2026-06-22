@@ -92,7 +92,11 @@ class CreateAdminCommand extends Command
             $correlationId,
             $isNew,
         ) {
-            if (!$users->save($user, ['checkRules' => true])) {
+            // atomic=false: already inside this command's transactional(); avoids a
+            // nested transaction whose rollback (e.g. a duplicate email caught by the
+            // unique rule) would otherwise poison the outer one. A failing rule now
+            // returns a clean false, surfaced as the validation error above.
+            if (!$users->save($user, ['atomic' => false, 'checkRules' => true])) {
                 return false;
             }
 

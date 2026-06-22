@@ -140,7 +140,12 @@ class TenantsController extends AdminController
             $user = $users->patchEntity($users->newEmptyEntity(), ['username' => $username, 'email' => $email]);
             $user->set('status', User::STATUS_INVITED);
             $user->set('tenant_id', $tenantId); // the TARGET tenant, not the operator's
-            if (!$users->save($user)) {
+            // atomic=false: the request already runs in a transaction
+            // (TransactionRlsMiddleware), so save needs no nested one. This also keeps
+            // a failing unique rule (email/username already taken) a clean `false`
+            // instead of a nested-transaction rollback that poisons the request
+            // transaction; createAdmin then surfaces it as the create-failed flash.
+            if (!$users->save($user, ['atomic' => false])) {
                 throw new RuntimeException(__('flash.user.create_failed'));
             }
             $userId = (string)$user->id;
