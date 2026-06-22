@@ -129,8 +129,17 @@ Migration seedet die Area, NAV-Eintrag, i18n. `TenantBackupController` (required
   4 Befunde gefixt: HIGH Zip-Slip (explizite Pfad-Validierung statt Verlass auf Flysystem) + Streaming
   (große Dateien), Prune-Fehler nicht mehr verschluckt, Audit vor dem Datei-Restore (Datei-Fehler
   verliert den Record nicht). Tests: Datei-Round-Trip + **Zip-Slip-Regression** (manipuliertes Archiv).
-- **6d** — Modul-Daten: RLS-Introspektion der Modul-Schemas (tenant-scoped Tabellen) in Export +
-  Restore aufnehmen, Tests mit einem Fixture-Modul.
+- **6d ✅** — Modul-Daten: `moduleTableSpecs` introspiziert RLS-Tabellen mit `tenant_id`-Spalte in
+  Nicht-Core-Schemas (Identifier-validiert, FK-topologisch sortiert via `topoSort`); `backupTables`/
+  `restorableSpecs` generalisieren die Tabellen-Iteration (Core + Modul, schema-qualifiziert) — Export
+  + Restore behandeln Core- und Modul-Tabellen einheitlich in **einer** atomaren Transaktion; Schema-/
+  Tabellen- + Spaltennamen identifier-validiert + gequotet. Kein Modulcode-Eingriff. Adversarial
+  reviewed → 0 bestätigte Befunde. Test: Fixture-Modul-Schema (RLS+`tenant_id`) → Round-Trip.
+
+**Damit ist Inc 6 im Kern vollständig:** Per-Tenant-Backup + scoped Restore über Core-Tabellen,
+Modul-Tabellen (introspektiv) und Dateien (`tenant/<id>/`-Contract); strikt mandanten-isoliert,
+transaktional-atomar (DB), zip-slip-sicher (Dateien). **Offen (Zusatz):** Upload-Restore (Archiv
+hochladen, mit Manifest-Tenant-Match — die Validierung steckt bereits in `restoreArchive`).
 
 Jeder Increment: phpstan + phpcs + Tests grün, adversarial review (sicherheits-/datenkritisch).
 

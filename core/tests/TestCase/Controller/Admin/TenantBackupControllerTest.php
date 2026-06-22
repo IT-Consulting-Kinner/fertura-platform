@@ -77,6 +77,8 @@ class TenantBackupControllerTest extends TestCase
         // Tenant-scoped child rows referencing the test tenants (no ON DELETE CASCADE).
         $conn->execute("DELETE FROM automation_rules WHERE name LIKE 'zzrest%'");
         $conn->execute("DELETE FROM tenants WHERE key LIKE 'zztbk-%'");
+        // The fixture module schema (Inc 6d test) — drop so other tests do not discover it.
+        $conn->execute('DROP SCHEMA IF EXISTS zzmod6d CASCADE');
     }
 
     private function login(string $userId): void
@@ -319,6 +321,46 @@ class TenantBackupControllerTest extends TestCase
         $this->assertTrue($storage->exists('tenant/' . $this->tenantId . '/ok.txt'), 'a safe entry is written');
         $this->assertFalse($storage->exists('escape.txt'), 'a traversal entry must not escape to the storage root');
         $this->assertFalse($storage->exists('tenant/escape.txt'), 'a traversal entry must not escape the tenant prefix');
+    }
+
+    public function testRestoreRoundTripIncludesModuleTables(): void
+    {
+        // Increment 6d: a module's tenant-scoped table (RLS + tenant_id in its own
+        // schema) is discovered by introspection and backed up + restored.
+        $this->login($this->userId);
+        $this->enableCsrfToken();
+        $this->enableSecurityToken();
+        $conn = ConnectionManager::get('default');
+
+        $conn->execute('CREATE SCHEMA IF NOT EXISTS zzmod6d');
+        $conn->execute(
+            'CREATE TABLE IF NOT EXISTS zzmod6d.widgets '
+            . '(id uuid PRIMARY KEY DEFAULT core.uuid_generate_v7(), tenant_id uuid NOT NULL, label text)',
+        );
+        $conn->execute('ALTER TABLE zzmod6d.widgets ENABLE ROW LEVEL SECURITY');
+        $conn->execute('DROP POLICY IF EXISTS p_zzmod6d ON zzmod6d.widgets');
+        $conn->execute('CREATE POLICY p_zzmod6d ON zzmod6d.widgets USING (true) WITH CHECK (true)');
+        $conn->execute("INSERT INTO zzmod6d.widgets (tenant_id, label) VALUES (:t, 'ORIG')", ['t' => $this->tenantId]);
+
+        $this->post('/admin/tenant-backup/create', []);
+        $id = (string)$conn->execute(
+            'SELECT id FROM tenant_backups WHERE tenant_id = :t',
+            ['t' => $this->tenantId],
+        )->fetch('assoc')['id'];
+
+        // Diverge: change the module data after the backup.
+        $conn->execute('DELETE FROM zzmod6d.widgets WHERE tenant_id = :t', ['t' => $this->tenantId]);
+        $conn->execute("INSERT INTO zzmod6d.widgets (tenant_id, label) VALUES (:t, 'NEW')", ['t' => $this->tenantId]);
+
+        $this->post('/admin/tenant-backup/restore/' . $id);
+        $this->assertRedirect(['action' => 'index']);
+
+        $labels = array_map(
+            static fn(array $r): string => (string)$r['label'],
+            $conn->execute('SELECT label FROM zzmod6d.widgets WHERE tenant_id = :t', ['t' => $this->tenantId])->fetchAll('assoc'),
+        );
+        $this->assertContains('ORIG', $labels, 'the module table is restored to the backup state');
+        $this->assertNotContains('NEW', $labels, 'a post-backup module change is undone');
     }
 
     private function makeRule(string $name, string $tenantId): void

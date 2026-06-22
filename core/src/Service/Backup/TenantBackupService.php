@@ -184,43 +184,166 @@ class TenantBackupService
     private function exportTables(string $tenantId, string $dir): array
     {
         $counts = [];
-        foreach (self::TABLES as [$table]) {
-            $cols = $this->insertableColumns($table);
+        foreach ($this->backupTables() as $spec) {
+            $cols = $this->insertableColumns($spec['schema'], $spec['table']);
             $select = $cols === []
                 ? '*'
                 : implode(', ', array_map(static fn(string $c): string => '"' . $c . '"', $cols));
             $rows = $this->conn()->execute(
-                "SELECT $select FROM $table WHERE tenant_id = :t",
+                "SELECT $select FROM {$spec['sql']} WHERE tenant_id = :t",
                 ['t' => $tenantId],
             )->fetchAll('assoc');
             $ndjson = '';
             foreach ($rows as $r) {
                 $ndjson .= (string)json_encode($r, JSON_UNESCAPED_SLASHES) . "\n";
             }
-            file_put_contents($dir . DIRECTORY_SEPARATOR . $table . '.ndjson', $ndjson);
-            $counts[$table] = count($rows);
+            file_put_contents($dir . DIRECTORY_SEPARATOR . $spec['key'] . '.ndjson', $ndjson);
+            $counts[$spec['key']] = count($rows);
         }
 
         return $counts;
     }
 
     /**
-     * The INSERT-able columns of a core table (excludes GENERATED ALWAYS columns
-     * such as `search_index.tsv`, which PostgreSQL refuses on INSERT) — so export
-     * and restore stay symmetric and the reinsert never hits a generated column.
+     * The INSERT-able columns of a table (excludes GENERATED ALWAYS columns such as
+     * `search_index.tsv`, which PostgreSQL refuses on INSERT) — so export and restore
+     * stay symmetric and the reinsert never hits a generated column.
      *
      * @return list<string>
      */
-    private function insertableColumns(string $table): array
+    private function insertableColumns(string $schema, string $table): array
     {
         $rows = $this->conn()->execute(
             'SELECT column_name FROM information_schema.columns '
-            . "WHERE table_schema = 'core' AND table_name = :t AND is_generated = 'NEVER' "
+            . "WHERE table_schema = :s AND table_name = :t AND is_generated = 'NEVER' "
             . 'ORDER BY ordinal_position',
-            ['t' => $table],
+            ['s' => $schema, 't' => $table],
         )->fetchAll('assoc');
 
         return array_values(array_map(static fn(array $r): string => (string)$r['column_name'], $rows));
+    }
+
+    /**
+     * All tenant-scoped tables in the backup set as specs, in forward FK order
+     * (parents first): the fixed core list first, then the MODULES' own tenant-scoped
+     * tables discovered by introspection (Increment 6d). `sql` is the ready-to-use
+     * identifier (module tables are schema-qualified + quoted), `key` the archive
+     * NDJSON name, `restorable` whether the scoped restore writes it back.
+     *
+     * @return list<array{key:string,schema:string,table:string,sql:string,restorable:bool}>
+     */
+    private function backupTables(): array
+    {
+        $specs = [];
+        foreach (self::TABLES as [$table, $restorable]) {
+            $specs[] = ['key' => $table, 'schema' => 'core', 'table' => $table, 'sql' => $table, 'restorable' => $restorable];
+        }
+        foreach ($this->moduleTableSpecs() as [$schema, $table]) {
+            $specs[] = [
+                'key' => $schema . '.' . $table,
+                'schema' => $schema,
+                'table' => $table,
+                'sql' => '"' . $schema . '"."' . $table . '"',
+                'restorable' => true,
+            ];
+        }
+
+        return $specs;
+    }
+
+    /**
+     * The restorable subset of {@see self::backupTables} (excludes the backup-only
+     * `users` / `audit_log`).
+     *
+     * @return list<array{key:string,schema:string,table:string,sql:string,restorable:bool}>
+     */
+    private function restorableSpecs(): array
+    {
+        return array_values(array_filter($this->backupTables(), static fn(array $s): bool => $s['restorable']));
+    }
+
+    /**
+     * The modules' tenant-scoped tables — RLS-enabled tables that carry a `tenant_id`
+     * column in a non-core schema — topologically FK-ordered (parents first).
+     * Discovered purely by introspection; no module code is touched.
+     *
+     * @return list<array{0:string,1:string}> [schema, table]
+     */
+    private function moduleTableSpecs(): array
+    {
+        $conn = $this->conn();
+        $rows = $conn->execute(
+            'SELECT n.nspname AS s, c.relname AS t FROM pg_class c '
+            . 'JOIN pg_namespace n ON n.oid = c.relnamespace '
+            . "WHERE c.relkind = 'r' AND c.relrowsecurity "
+            . "AND n.nspname NOT IN ('core', 'public', 'pg_catalog', 'information_schema') "
+            . 'AND EXISTS (SELECT 1 FROM information_schema.columns col '
+            . "WHERE col.table_schema = n.nspname AND col.table_name = c.relname AND col.column_name = 'tenant_id')",
+        )->fetchAll('assoc');
+        $nodes = [];
+        foreach ($rows as $r) {
+            $s = (string)$r['s'];
+            $t = (string)$r['t'];
+            // Defence: only plain identifiers reach the quoted "schema"."table" SQL
+            // (a module schema is the validated module_key; this rejects anything exotic).
+            if (preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $s) !== 1 || preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $t) !== 1) {
+                continue;
+            }
+            $nodes[$s . '.' . $t] = [$s, $t];
+        }
+        if ($nodes === []) {
+            return [];
+        }
+        $edges = [];
+        $fks = $conn->execute(
+            "SELECT (ns.nspname || '.' || cl.relname) AS child, (nps.nspname || '.' || cls.relname) AS parent "
+            . 'FROM pg_constraint con '
+            . 'JOIN pg_class cl ON cl.oid = con.conrelid JOIN pg_namespace ns ON ns.oid = cl.relnamespace '
+            . 'JOIN pg_class cls ON cls.oid = con.confrelid JOIN pg_namespace nps ON nps.oid = cls.relnamespace '
+            . "WHERE con.contype = 'f'",
+        )->fetchAll('assoc');
+        foreach ($fks as $f) {
+            $child = (string)$f['child'];
+            $parent = (string)$f['parent'];
+            if (isset($nodes[$child], $nodes[$parent]) && $child !== $parent) {
+                $edges[$child][] = $parent;
+            }
+        }
+        $out = [];
+        foreach ($this->topoSort(array_keys($nodes), $edges) as $key) {
+            $out[] = $nodes[$key];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Topological sort (parents before children) via DFS post-order; cycles are
+     * broken by the visited set (no infinite recursion).
+     *
+     * @param list<string> $nodes
+     * @param array<string,list<string>> $edges child => parents
+     * @return list<string>
+     */
+    private function topoSort(array $nodes, array $edges): array
+    {
+        $sorted = [];
+        $visited = [];
+        $visit = function (string $n) use (&$visit, &$sorted, &$visited, $edges): void {
+            if (isset($visited[$n])) {
+                return;
+            }
+            $visited[$n] = true;
+            foreach ($edges[$n] ?? [] as $parent) {
+                $visit($parent);
+            }
+            $sorted[] = $n;
+        };
+        foreach ($nodes as $n) {
+            $visit($n);
+        }
+
+        return $sorted;
     }
 
     /**
@@ -425,25 +548,6 @@ class TenantBackupService
     }
 
     /**
-     * The restorable subset of {@see self::TABLES} in forward FK order (parents
-     * first) — the tables the scoped restore deletes (in reverse) and reinserts (in
-     * this order). Excludes the backup-only `users` and `audit_log`.
-     *
-     * @return list<string>
-     */
-    private function restorableTables(): array
-    {
-        $out = [];
-        foreach (self::TABLES as [$table, $restorable]) {
-            if ($restorable) {
-                $out[] = $table;
-            }
-        }
-
-        return $out;
-    }
-
-    /**
      * Restores one of the CURRENT tenant's stored backups (Increment 6b),
      * DESTRUCTIVELY replacing this tenant's restorable rows with the archive's.
      * Only the calling tenant is touched; other tenants stay live. Returns the
@@ -514,13 +618,13 @@ class TenantBackupService
             /** @var array<string,int> $counts */
             $counts = $conn->transactional(function () use ($conn, $tenantId, $za): array {
                 $conn->execute("SELECT set_config('app.current_tenant_id', :t, true)", ['t' => $tenantId]);
-                foreach (array_reverse($this->restorableTables()) as $table) {
-                    $conn->execute("DELETE FROM $table WHERE tenant_id = :t", ['t' => $tenantId]);
+                foreach (array_reverse($this->restorableSpecs()) as $spec) {
+                    $conn->execute("DELETE FROM {$spec['sql']} WHERE tenant_id = :t", ['t' => $tenantId]);
                 }
                 $out = [];
-                foreach ($this->restorableTables() as $table) {
-                    $raw = $za->getFromName($table . '.ndjson');
-                    $out[$table] = is_string($raw) ? $this->importRows($conn, $table, $raw, $tenantId) : 0;
+                foreach ($this->restorableSpecs() as $spec) {
+                    $raw = $za->getFromName($spec['key'] . '.ndjson');
+                    $out[$spec['key']] = is_string($raw) ? $this->importRows($conn, $spec['sql'], $raw, $tenantId) : 0;
                 }
 
                 return $out;
