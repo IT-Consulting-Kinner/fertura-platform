@@ -553,12 +553,6 @@ parameters:
 			path: src/Service/Api/ApiRouteRegistry.php
 
 		-
-			message: '#^Cannot call method all\(\) on App\\Service\\Api\\ApiRouteRegistry\|null\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: src/Service/Api/OpenApiGenerator.php
-
-		-
 			message: '#^Cannot call method log\(\) on App\\Audit\\AuditLogger\|null\.$#'
 			identifier: method.nonObject
 			count: 2

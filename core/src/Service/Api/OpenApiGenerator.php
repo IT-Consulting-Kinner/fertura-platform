@@ -3,17 +3,30 @@ declare(strict_types=1);
 
 namespace App\Service\Api;
 
+use App\Service\Module\TenantModuleService;
+
 /**
  * Generates the OpenAPI 3.1 specification of the external API (P07) from the
  * **actual** set of APIs: fixed core endpoints + the routes registered by active
  * modules ({@see ApiRouteRegistry}). A single source of truth instead of a
  * hand-maintained specification (architectural convention).
+ *
+ * The spec is per-tenant: it advertises only what the requesting token holder can
+ * actually call (operator/tenant authz §5) — a module's `user` routes appear only
+ * when the module is enabled for the current tenant (otherwise the dispatcher
+ * 404s them), while `public` module routes always appear (they carry their own
+ * auth, no tenant scope). `/api/v1/openapi.json` runs authenticated, so a tenant
+ * context is present; with none, only core + public routes are listed.
  */
 class OpenApiGenerator
 {
-    public function __construct(private ?ApiRouteRegistry $routes = null)
+    private ApiRouteRegistry $routes;
+    private TenantModuleService $tenantModules;
+
+    public function __construct(?ApiRouteRegistry $routes = null, ?TenantModuleService $tenantModules = null)
     {
-        $this->routes ??= new ApiRouteRegistry();
+        $this->routes = $routes ?? new ApiRouteRegistry();
+        $this->tenantModules = $tenantModules ?? new TenantModuleService();
     }
 
     /**
@@ -39,8 +52,15 @@ class OpenApiGenerator
             $this->addPath($paths, $method, $path, $summary, $scope, 'core');
         }
 
-        // Endpoints registered by modules.
+        // Endpoints registered by modules — per-tenant: a `user` route appears only
+        // when the module is enabled for the current tenant (else the dispatcher
+        // 404s it); `public` routes always appear (own auth, no tenant scope).
+        $enabled = $this->tenantModules->enabledKeys();
         foreach ($this->routes->all() as $r) {
+            $isPublic = ($r['auth'] ?? 'user') === 'public';
+            if (!$isPublic && !in_array($r['module_key'], $enabled, true)) {
+                continue;
+            }
             $this->addPath(
                 $paths,
                 $r['method'],
