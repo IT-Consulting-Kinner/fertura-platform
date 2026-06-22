@@ -65,6 +65,8 @@ class TenantBackupControllerTest extends TestCase
             . "(SELECT id FROM users WHERE email LIKE '%@zztbk.local')",
         );
         $conn->execute("DELETE FROM users WHERE email LIKE '%@zztbk.local'");
+        // Tenant-scoped child rows referencing the test tenants (no ON DELETE CASCADE).
+        $conn->execute("DELETE FROM automation_rules WHERE name LIKE 'zzrest%'");
         $conn->execute("DELETE FROM tenants WHERE key LIKE 'zztbk-%'");
     }
 
@@ -150,6 +152,109 @@ class TenantBackupControllerTest extends TestCase
         $this->get('/admin/tenant-backup');
         $this->assertResponseOk();
         $this->assertResponseNotContains($aFile, "tenant B must not see tenant A's backup");
+    }
+
+    public function testRestoreRoundTripAndTenantScoped(): void
+    {
+        $this->login($this->userId);
+        $this->enableCsrfToken();
+        $this->enableSecurityToken();
+        $conn = ConnectionManager::get('default');
+
+        // Tenant A has an automation rule "zzrest_orig"; a separate tenant B has its
+        // own rule "zzrest_b" that the restore must never touch.
+        $this->makeRule('zzrest_orig', $this->tenantId);
+        $tidB = (string)$conn->execute(
+            "INSERT INTO tenants (key, name) VALUES ('zztbk-' || substr(md5(random()::text), 1, 8), 'ZZ B') RETURNING id",
+        )->fetch('assoc')['id'];
+        $this->makeRule('zzrest_b', $tidB);
+
+        // Back up tenant A (captures zzrest_orig), then DIVERGE: drop the original
+        // rule and add a new one that is NOT in the backup.
+        $this->post('/admin/tenant-backup/create', []);
+        $id = (string)$conn->execute(
+            'SELECT id FROM tenant_backups WHERE tenant_id = :t',
+            ['t' => $this->tenantId],
+        )->fetch('assoc')['id'];
+        $conn->execute("DELETE FROM automation_rules WHERE name = 'zzrest_orig'");
+        $this->makeRule('zzrest_new', $this->tenantId);
+
+        // Restore -> tenant A is reset to the backup state.
+        $this->post('/admin/tenant-backup/restore/' . $id);
+        $this->assertRedirect(['action' => 'index']);
+
+        $names = array_map(
+            static fn(array $r): string => (string)$r['name'],
+            $conn->execute(
+                "SELECT name FROM automation_rules WHERE tenant_id = :t AND name LIKE 'zzrest%'",
+                ['t' => $this->tenantId],
+            )->fetchAll('assoc'),
+        );
+        $this->assertContains('zzrest_orig', $names, 'the backed-up rule is restored');
+        $this->assertNotContains('zzrest_new', $names, 'a change made after the backup is undone');
+        // Tenant B is untouched.
+        $this->assertSame(1, (int)$conn->execute(
+            "SELECT count(*) c FROM automation_rules WHERE tenant_id = :t AND name = 'zzrest_b'",
+            ['t' => $tidB],
+        )->fetch('assoc')['c'], "another tenant's data is never affected");
+        // The restore is audited.
+        $this->assertGreaterThanOrEqual(1, (int)$conn->execute(
+            "SELECT count(*) c FROM audit_log WHERE action = 'tenant.restore' AND tenant_id = :t",
+            ['t' => $this->tenantId],
+        )->fetch('assoc')['c'], 'restore is audited');
+
+        $conn->execute("DELETE FROM automation_rules WHERE name = 'zzrest_b'");
+    }
+
+    public function testRestoreRollsBackOnFailureNoDataLoss(): void
+    {
+        // Atomicity (review HIGH): a restore that fails mid-way must roll back its
+        // DELETEs too, so the tenant keeps its pre-restore data. Failure is induced
+        // via a notification whose user is deleted after the backup -> the reinsert
+        // hits the notifications.user_id FK.
+        $this->login($this->userId);
+        $this->enableCsrfToken();
+        $this->enableSecurityToken();
+        $conn = ConnectionManager::get('default');
+
+        $xid = (string)$conn->execute(
+            "INSERT INTO users (username, email, status, tenant_id) VALUES (:u, :e, 'active', :t) RETURNING id",
+            ['u' => 'zztbk_x_' . bin2hex(random_bytes(3)), 'e' => 'x_' . bin2hex(random_bytes(3)) . '@zztbk.local', 't' => $this->tenantId],
+        )->fetch('assoc')['id'];
+        $conn->execute(
+            "INSERT INTO notifications (user_id, type, title, body, data, tenant_id) "
+            . "VALUES (:u, 'test', 'T', '', '{}'::jsonb, :t)",
+            ['u' => $xid, 't' => $this->tenantId],
+        );
+
+        $this->post('/admin/tenant-backup/create', []);
+        $id = (string)$conn->execute(
+            'SELECT id FROM tenant_backups WHERE tenant_id = :t',
+            ['t' => $this->tenantId],
+        )->fetch('assoc')['id'];
+
+        // Drop the user (cascades the live notification) -> the backup's notification
+        // now references a missing user -> reinsert FK-fails.
+        $conn->execute('DELETE FROM users WHERE id = :id', ['id' => $xid]);
+        // A marker the restore's DELETE removes — and must restore on rollback.
+        $this->makeRule('zzrest_marker', $this->tenantId);
+
+        $this->post('/admin/tenant-backup/restore/' . $id);
+        $this->assertRedirect(['action' => 'index']);
+
+        $this->assertSame(1, (int)$conn->execute(
+            "SELECT count(*) c FROM automation_rules WHERE tenant_id = :t AND name = 'zzrest_marker'",
+            ['t' => $this->tenantId],
+        )->fetch('assoc')['c'], 'a failed restore must not delete the tenant data (atomic rollback)');
+    }
+
+    private function makeRule(string $name, string $tenantId): void
+    {
+        ConnectionManager::get('default')->execute(
+            'INSERT INTO automation_rules (name, event, condition, actions, active, tenant_id) '
+            . "VALUES (:n, 'zztest.evt', '{}'::jsonb, '[]'::jsonb, true, :t)",
+            ['n' => $name, 't' => $tenantId],
+        );
     }
 
     private function rrmdir(string $dir): void

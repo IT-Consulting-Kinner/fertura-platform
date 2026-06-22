@@ -109,9 +109,18 @@ Migration seedet die Area, NAV-Eintrag, i18n. `TenantBackupController` (required
   Archiv bei fehlgeschlagenem Metadaten-INSERT wird im catch entfernt). **DB-only, Core-Tabellen**
   (`users`/`audit_log` backup-only). *(Self-contained ZIP/Passwort-Logik gespiegelt von
   `BackupService`; DRY-Refactor später.)*
-- **6b** — Scoped Restore: transaktionaler scoped Delete+Reinsert, FK-Reihenfolge, `audit_log`-
-  Sonderfall, `users` NICHT zurückgeschrieben, Upload-Restore mit tenant-Match, Confirm-GUI,
-  Tests (Restore stellt nur den eigenen Mandanten wieder her; andere unberührt; Rollback bei Fehler).
+- **6b ✅** — Scoped Restore: `TenantBackupService::restore` öffnet das Archiv (Einträge per
+  `getFromName` — zip-slip-sicher), prüft **Manifest-Tenant-Match**, dann in **einer** Transaktion
+  auf einer **separaten** `Db::privileged()`-Verbindung (echte Atomarität) Delete (reverse FK) +
+  Reinsert (forward FK) nur der restorable Tabellen; `tenant_id` erzwungen, Spaltennamen
+  identifier-validiert + gequotet; `audit_log`/`users` nie angefasst; `tenant.restore`-Audit nach
+  Commit. Controller `restore(id)` (POST) + destruktiver `confirmPost`-Button, i18n. Adversarial
+  reviewed → **3 Befunde gefixt**: (HIGH) Datenverlust bei fehlgeschlagenem Reinsert → separate
+  Transaktion statt Savepoint-Abhängigkeit; (HIGH) GENERATED-Spalte (`search_index.tsv`) → Export
+  nur nicht-generierte Spalten; (medium) reservierte-Wort-Spaltennamen → gequotet. Tests:
+  Round-Trip (A zurückgesetzt, B unberührt, auditiert) + **Atomarität** (fehlgeschlagener Restore
+  rollt zurück, kein Datenverlust). **Upload-Restore** (aus hochgeladenem Archiv, mit demselben
+  Tenant-Match) ist ein späterer Zusatz.
 - **6c** — Datei-Scoping-Contract + Per-Tenant-Dateien: Core-Konvention `tenant/<id>/` + Storage-
   Helfer; Backup tar't den Teilbaum, Restore ersetzt nur ihn; Tests.
 - **6d** — Modul-Daten: RLS-Introspektion der Modul-Schemas (tenant-scoped Tabellen) in Export +

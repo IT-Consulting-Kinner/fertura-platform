@@ -33,6 +33,12 @@
             <td><?= $this->UiKit->value($b['encrypted'], 'bool') ?></td>
             <td class="small text-muted"><?= h((string)($b['note'] ?? '')) ?></td>
             <td class="text-end">
+                <?= $this->UiKit->confirmPost(
+                    __('admin.tenant_backup.restore'),
+                    ['action' => 'restore', $b['id']],
+                    __('admin.tenant_backup.restore_confirm'),
+                    ['class' => 'btn btn-sm btn-outline-danger', 'variant' => 'btn-danger'],
+                ) ?>
                 <?= $this->Form->create(null, ['url' => ['action' => 'download', $b['id']], 'class' => 'd-inline']) ?>
                 <?= $this->Form->button(
                     __('admin.tenant_backup.download'),

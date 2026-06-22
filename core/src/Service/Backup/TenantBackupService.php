@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace App\Service\Backup;
 
+use App\Audit\AuditLogger;
+use App\Infrastructure\Db;
 use App\Service\Settings\SettingsManager;
 use Cake\Database\Connection;
 use Cake\Datasource\ConnectionManager;
@@ -179,8 +181,12 @@ class TenantBackupService
     {
         $counts = [];
         foreach (self::TABLES as [$table]) {
+            $cols = $this->insertableColumns($table);
+            $select = $cols === []
+                ? '*'
+                : implode(', ', array_map(static fn(string $c): string => '"' . $c . '"', $cols));
             $rows = $this->conn()->execute(
-                "SELECT * FROM $table WHERE tenant_id = :t",
+                "SELECT $select FROM $table WHERE tenant_id = :t",
                 ['t' => $tenantId],
             )->fetchAll('assoc');
             $ndjson = '';
@@ -192,6 +198,25 @@ class TenantBackupService
         }
 
         return $counts;
+    }
+
+    /**
+     * The INSERT-able columns of a core table (excludes GENERATED ALWAYS columns
+     * such as `search_index.tsv`, which PostgreSQL refuses on INSERT) — so export
+     * and restore stay symmetric and the reinsert never hits a generated column.
+     *
+     * @return list<string>
+     */
+    private function insertableColumns(string $table): array
+    {
+        $rows = $this->conn()->execute(
+            'SELECT column_name FROM information_schema.columns '
+            . "WHERE table_schema = 'core' AND table_name = :t AND is_generated = 'NEVER' "
+            . 'ORDER BY ordinal_position',
+            ['t' => $table],
+        )->fetchAll('assoc');
+
+        return array_values(array_map(static fn(array $r): string => (string)$r['column_name'], $rows));
     }
 
     /**
@@ -269,6 +294,158 @@ class TenantBackupService
         }
 
         return (string)$row['storage_path'];
+    }
+
+    /**
+     * The restorable subset of {@see self::TABLES} in forward FK order (parents
+     * first) — the tables the scoped restore deletes (in reverse) and reinserts (in
+     * this order). Excludes the backup-only `users` and `audit_log`.
+     *
+     * @return list<string>
+     */
+    private function restorableTables(): array
+    {
+        $out = [];
+        foreach (self::TABLES as [$table, $restorable]) {
+            if ($restorable) {
+                $out[] = $table;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Restores one of the CURRENT tenant's stored backups (Increment 6b),
+     * DESTRUCTIVELY replacing this tenant's restorable rows with the archive's.
+     * Only the calling tenant is touched; other tenants stay live. Returns the
+     * per-table reinserted row counts.
+     *
+     * @return array<string,int>
+     */
+    public function restore(string $backupId): array
+    {
+        $tenantId = $this->currentTenantId();
+        if ($tenantId === '') {
+            throw new RuntimeException(__('flash.tenant_backup.no_tenant'));
+        }
+        $path = $this->archivePath($backupId);
+        if ($path === null) {
+            throw new RuntimeException(__('flash.tenant_backup.not_found'));
+        }
+
+        return $this->restoreArchive($path, $tenantId);
+    }
+
+    /**
+     * Core scoped restore: opens the archive (entries read by name — no extraction,
+     * so Zip-Slip-safe), verifies the manifest belongs to $tenantId (defence for an
+     * uploaded archive — never import another tenant's data), then in ONE transaction
+     * deletes the tenant's restorable rows (reverse FK order) and reinserts the
+     * archive's (forward FK order). The whole tenant scope is `WHERE tenant_id = :t`,
+     * which RLS additionally enforces for the acting tenant admin (no bypass needed);
+     * `audit_log`/`users` are never touched. A `tenant.restore` event is appended
+     * after a successful commit.
+     *
+     * @return array<string,int>
+     */
+    private function restoreArchive(string $zipPath, string $tenantId): array
+    {
+        $za = new ZipArchive();
+        if ($za->open($zipPath) !== true) {
+            throw new RuntimeException(__('flash.tenant_backup.invalid_archive'));
+        }
+        $pw = $this->password();
+        if ($pw !== '') {
+            $za->setPassword($pw);
+        }
+        $manifestRaw = $za->getFromName('manifest.json');
+        $manifest = is_string($manifestRaw) ? json_decode($manifestRaw, true) : null;
+        if (!is_array($manifest) || ($manifest['format'] ?? '') !== 'fertura-tenant-backup/1') {
+            $za->close();
+
+            throw new RuntimeException(__('flash.tenant_backup.invalid_archive'));
+        }
+        if ((string)($manifest['tenant_id'] ?? '') !== $tenantId) {
+            $za->close();
+
+            throw new RuntimeException(__('flash.tenant_backup.tenant_mismatch'));
+        }
+
+        // A SEPARATE privileged connection (in production an independent superuser
+        // connection) gives the restore its OWN top-level transaction, so a failure
+        // anywhere — e.g. an FK violation on reinsert — rolls back the DELETEs too
+        // (guaranteed atomicity; no dependence on a savepoint inside the request
+        // transaction, which a caught failure could otherwise leave half-applied =
+        // data deleted but not restored). The explicit `WHERE tenant_id = :t` /
+        // forced insert `tenant_id` keep it scoped to the acting tenant even though
+        // this connection bypasses RLS.
+        $conn = Db::privileged();
+        $conn->enableSavePoints(true);
+        try {
+            /** @var array<string,int> $counts */
+            $counts = $conn->transactional(function () use ($conn, $tenantId, $za): array {
+                $conn->execute("SELECT set_config('app.current_tenant_id', :t, true)", ['t' => $tenantId]);
+                foreach (array_reverse($this->restorableTables()) as $table) {
+                    $conn->execute("DELETE FROM $table WHERE tenant_id = :t", ['t' => $tenantId]);
+                }
+                $out = [];
+                foreach ($this->restorableTables() as $table) {
+                    $raw = $za->getFromName($table . '.ndjson');
+                    $out[$table] = is_string($raw) ? $this->importRows($conn, $table, $raw, $tenantId) : 0;
+                }
+
+                return $out;
+            });
+        } finally {
+            $za->close();
+        }
+
+        (new AuditLogger())->log('tenant.restore', 'tenant', $tenantId, [
+            'component' => 'core',
+            'newValue' => ['row_counts' => $counts],
+        ]);
+
+        return $counts;
+    }
+
+    /**
+     * Inserts the NDJSON rows of one table for $tenantId. `tenant_id` is forced to
+     * $tenantId (defence against a tampered archive), and every column name is
+     * validated as a plain identifier before it reaches the (non-parameterizable)
+     * column list — so a crafted archive cannot inject SQL.
+     */
+    private function importRows(Connection $conn, string $table, string $ndjson, string $tenantId): int
+    {
+        $n = 0;
+        foreach (explode("\n", $ndjson) as $line) {
+            $line = trim($line);
+            if ($line === '') {
+                continue;
+            }
+            $row = json_decode($line, true);
+            if (!is_array($row)) {
+                continue;
+            }
+            $row['tenant_id'] = $tenantId;
+            $cols = array_map('strval', array_keys($row));
+            foreach ($cols as $c) {
+                if (preg_match('/^[a-z_][a-z0-9_]*$/', $c) !== 1) {
+                    throw new RuntimeException(__('flash.tenant_backup.invalid_archive'));
+                }
+            }
+            $names = array_map(static fn(string $c): string => ':' . $c, $cols);
+            // Quote the (regex-validated, lowercase) column names so a column that
+            // is a PostgreSQL reserved word (e.g. "order", "group") is still valid.
+            $quoted = array_map(static fn(string $c): string => '"' . $c . '"', $cols);
+            $conn->execute(
+                "INSERT INTO $table (" . implode(', ', $quoted) . ') VALUES (' . implode(', ', $names) . ')',
+                $row,
+            );
+            $n++;
+        }
+
+        return $n;
     }
 
     private function isUuid(string $v): bool

@@ -60,4 +60,22 @@ class TenantBackupController extends AdminController
 
         return $this->response->withFile($path, ['download' => true, 'name' => basename($path)]);
     }
+
+    /**
+     * DESTRUCTIVE per-tenant restore (Increment 6b): replaces THIS tenant's
+     * restorable data with the chosen backup's. Scoped to `core.current_tenant()`
+     * + RLS, so only the calling tenant is affected; the service audits the event.
+     */
+    public function restore(string $id): ?Response
+    {
+        $this->request->allowMethod('post');
+        try {
+            (new TenantBackupService())->restore($id);
+            $this->Flash->success(__('flash.tenant_backup.restored'));
+        } catch (Throwable $e) {
+            $this->Flash->error($e->getMessage());
+        }
+
+        return $this->redirect(['action' => 'index']);
+    }
 }

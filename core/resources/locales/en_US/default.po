@@ -1407,6 +1407,12 @@ msgstr "Action"
 msgid "admin.tenant_backup.download"
 msgstr "Download"
 
+msgid "admin.tenant_backup.restore"
+msgstr "Restore"
+
+msgid "admin.tenant_backup.restore_confirm"
+msgstr "Restore this backup? Your tenant's current data will be replaced."
+
 msgid "admin.tenant_backup.empty"
 msgstr "No backups yet."
 
@@ -1418,6 +1424,15 @@ msgstr "Backup not found."
 
 msgid "flash.tenant_backup.no_tenant"
 msgstr "No tenant context."
+
+msgid "flash.tenant_backup.restored"
+msgstr "Backup restored."
+
+msgid "flash.tenant_backup.invalid_archive"
+msgstr "Invalid or corrupt archive."
+
+msgid "flash.tenant_backup.tenant_mismatch"
+msgstr "The archive belongs to a different tenant."
 
 msgid "flash.tenants.assigned"
 msgstr "User assigned to tenant."

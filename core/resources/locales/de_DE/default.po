@@ -1403,6 +1403,12 @@ msgstr "Aktion"
 msgid "admin.tenant_backup.download"
 msgstr "Herunterladen"
 
+msgid "admin.tenant_backup.restore"
+msgstr "Wiederherstellen"
+
+msgid "admin.tenant_backup.restore_confirm"
+msgstr "Diese Sicherung wiederherstellen? Die aktuellen Daten dieses Mandanten werden ersetzt."
+
 msgid "admin.tenant_backup.empty"
 msgstr "Noch keine Sicherungen."
 
@@ -1414,6 +1420,15 @@ msgstr "Sicherung nicht gefunden."
 
 msgid "flash.tenant_backup.no_tenant"
 msgstr "Kein Mandantenkontext."
+
+msgid "flash.tenant_backup.restored"
+msgstr "Sicherung wiederhergestellt."
+
+msgid "flash.tenant_backup.invalid_archive"
+msgstr "Ungültiges oder beschädigtes Archiv."
+
+msgid "flash.tenant_backup.tenant_mismatch"
+msgstr "Das Archiv gehört zu einem anderen Mandanten."
 
 msgid "flash.tenants.assigned"
 msgstr "Benutzer dem Mandanten zugeordnet."
