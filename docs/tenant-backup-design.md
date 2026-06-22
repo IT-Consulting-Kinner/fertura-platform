@@ -121,8 +121,14 @@ Migration seedet die Area, NAV-Eintrag, i18n. `TenantBackupController` (required
   Round-Trip (A zurückgesetzt, B unberührt, auditiert) + **Atomarität** (fehlgeschlagener Restore
   rollt zurück, kein Datenverlust). **Upload-Restore** (aus hochgeladenem Archiv, mit demselben
   Tenant-Match) ist ein späterer Zusatz.
-- **6c** — Datei-Scoping-Contract + Per-Tenant-Dateien: Core-Konvention `tenant/<id>/` + Storage-
-  Helfer; Backup tar't den Teilbaum, Restore ersetzt nur ihn; Tests.
+- **6c ✅** — Datei-Scoping-Contract + Per-Tenant-Dateien: `TenantStorage` (Konvention `tenant/<id>/`
+  + `prefix`/`tenantPath`/write/read/list — Module übernehmen sie deklarativ); `create` staget den
+  Datei-Teilbaum (`files/<rel>`-Einträge, buildZip rekursiv + per-Eintrag-AES, gestreamt via
+  readStream), `restore` ersetzt ihn write-then-prune (gestreamt; kein Delete-first-Verlust);
+  Pfad-Validierung `isSafeRelPath` (kein `..`/absolut/Backslash/Drive-Letter). Adversarial reviewed →
+  4 Befunde gefixt: HIGH Zip-Slip (explizite Pfad-Validierung statt Verlass auf Flysystem) + Streaming
+  (große Dateien), Prune-Fehler nicht mehr verschluckt, Audit vor dem Datei-Restore (Datei-Fehler
+  verliert den Record nicht). Tests: Datei-Round-Trip + **Zip-Slip-Regression** (manipuliertes Archiv).
 - **6d** — Modul-Daten: RLS-Introspektion der Modul-Schemas (tenant-scoped Tabellen) in Export +
   Restore aufnehmen, Tests mit einem Fixture-Modul.
 

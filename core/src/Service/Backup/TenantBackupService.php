@@ -6,6 +6,8 @@ namespace App\Service\Backup;
 use App\Audit\AuditLogger;
 use App\Infrastructure\Db;
 use App\Service\Settings\SettingsManager;
+use App\Service\Storage\StorageManager;
+use App\Service\Storage\TenantStorage;
 use Cake\Database\Connection;
 use Cake\Datasource\ConnectionManager;
 use RuntimeException;
@@ -129,12 +131,14 @@ class TenantBackupService
         $zipPath = null;
         try {
             $rowCounts = $this->exportTables($tenantId, $tmp);
+            $fileCount = $this->stageTenantFiles($tenantId, $tmp . DIRECTORY_SEPARATOR . 'files');
             $manifest = (string)json_encode([
                 'format' => 'fertura-tenant-backup/1',
                 'tenant_id' => $tenantId,
                 'created_at' => date('c'),
                 'tables' => array_map(static fn(array $t): string => $t[0], self::TABLES),
                 'row_counts' => $rowCounts,
+                'file_count' => $fileCount,
             ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
             file_put_contents($tmp . DIRECTORY_SEPARATOR . 'manifest.json', $manifest);
 
@@ -239,14 +243,7 @@ class TenantBackupService
         if ($pw !== '') {
             $za->setPassword($pw);
         }
-        $entries = [];
-        foreach ((array)scandir($srcDir) as $f) {
-            if ($f === '.' || $f === '..') {
-                continue;
-            }
-            $za->addFile($srcDir . DIRECTORY_SEPARATOR . $f, (string)$f);
-            $entries[] = (string)$f;
-        }
+        $entries = $this->addDir($za, $srcDir, '');
         if ($pw !== '') {
             foreach ($entries as $e) {
                 if (!$za->setEncryptionName($e, ZipArchive::EM_AES_256)) {
@@ -258,6 +255,137 @@ class TenantBackupService
             }
         }
         $za->close();
+    }
+
+    /**
+     * Recursively adds every file under $dir, the entry name being the path relative
+     * to the export root — so the per-tenant `files/<...>` subtree is preserved.
+     * Returns the entry names (for per-entry AES).
+     *
+     * @return list<string>
+     */
+    private function addDir(ZipArchive $za, string $dir, string $prefix): array
+    {
+        $entries = [];
+        foreach ((array)scandir($dir) as $f) {
+            if ($f === '.' || $f === '..') {
+                continue;
+            }
+            $path = $dir . DIRECTORY_SEPARATOR . $f;
+            $entry = $prefix === '' ? (string)$f : $prefix . '/' . $f;
+            if (is_dir($path)) {
+                $entries = array_merge($entries, $this->addDir($za, $path, $entry));
+            } else {
+                $za->addFile($path, $entry);
+                $entries[] = $entry;
+            }
+        }
+
+        return $entries;
+    }
+
+    /**
+     * Copies the current tenant's files (the `tenant/<id>/…` storage subtree) into
+     * $destDir preserving their relative paths, so {@see self::buildZip} packs them
+     * as `files/<relative>` entries. Returns the file count (0 when the tenant has none).
+     */
+    private function stageTenantFiles(string $tenantId, string $destDir): int
+    {
+        $storage = new StorageManager();
+        $prefix = TenantStorage::prefix($tenantId);
+        try {
+            $files = $storage->list($prefix, true);
+        } catch (Throwable) {
+            return 0;
+        }
+        $n = 0;
+        foreach ($files as $path) {
+            $rel = ltrim(substr((string)$path, strlen($prefix)), '/');
+            if (!$this->isSafeRelPath($rel)) {
+                continue;
+            }
+            $target = $destDir . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
+            @mkdir(dirname($target), 0700, true);
+            // Stream — do not load the whole (possibly large) file into memory.
+            $in = $storage->readStream((string)$path);
+            file_put_contents($target, $in);
+            if (is_resource($in)) {
+                fclose($in);
+            }
+            $n++;
+        }
+
+        return $n;
+    }
+
+    /**
+     * Replaces the current tenant's file subtree with the archive's `files/<...>`
+     * entries: writes (overwrites) each archived file, THEN prunes any tenant file
+     * not in the archive — write-then-prune, so a write failure never leaves the
+     * tenant with FEWER files than the backup (no delete-first gap). Returns the
+     * number of files written.
+     */
+    private function restoreTenantFiles(ZipArchive $za, string $tenantId): int
+    {
+        $storage = new StorageManager();
+        $prefix = TenantStorage::prefix($tenantId);
+        $restored = [];
+        for ($i = 0; $i < $za->numFiles; $i++) {
+            $name = (string)$za->getNameIndex($i);
+            if (!str_starts_with($name, 'files/')) {
+                continue;
+            }
+            $rel = ltrim(substr($name, strlen('files/')), '/');
+            if (!$this->isSafeRelPath($rel)) {
+                continue;
+            }
+            $target = $prefix . $rel;
+            // Stream the entry to storage where possible (unencrypted); fall back to
+            // an in-memory read for an encrypted entry (getStream cannot decrypt).
+            $stream = @$za->getStream($name);
+            if (is_resource($stream)) {
+                $storage->writeStream($target, $stream);
+                fclose($stream);
+            } else {
+                $content = $za->getFromIndex($i);
+                if ($content === false) {
+                    continue;
+                }
+                $storage->write($target, $content);
+            }
+            $restored[$target] = true;
+        }
+        // Prune files no longer in the backup. A missing subtree (nothing to list) is
+        // fine; a real delete failure must NOT be swallowed.
+        $existing = [];
+        try {
+            $existing = $storage->list($prefix, true);
+        } catch (Throwable) {
+            $existing = [];
+        }
+        foreach ($existing as $path) {
+            if (!isset($restored[(string)$path])) {
+                $storage->delete((string)$path);
+            }
+        }
+
+        return count($restored);
+    }
+
+    /**
+     * A per-tenant file relative path is safe iff it is non-empty and cannot escape
+     * the `tenant/<id>/` prefix: no `..`, not absolute, no backslash, no drive
+     * letter / scheme. Explicit defence in depth — it does NOT rely on the storage
+     * layer's path normalization (guards a crafted/uploaded archive on the write side
+     * and an unexpected storage listing on the read side).
+     */
+    private function isSafeRelPath(string $rel): bool
+    {
+        return $rel !== ''
+            && !str_contains($rel, '..')
+            && !str_starts_with($rel, '/')
+            && !str_contains($rel, '\\')
+            && !str_contains($rel, ':');
     }
 
     /**
@@ -397,14 +525,18 @@ class TenantBackupService
 
                 return $out;
             });
+            // The DB restore is atomic + committed; audit it NOW so a later file
+            // error cannot lose the record.
+            (new AuditLogger())->log('tenant.restore', 'tenant', $tenantId, [
+                'component' => 'core',
+                'newValue' => ['row_counts' => $counts],
+            ]);
+            // Files are replaced AFTER the DB transaction commits (the filesystem is
+            // not transactional); write-then-prune keeps it loss-safe.
+            $counts['_files'] = $this->restoreTenantFiles($za, $tenantId);
         } finally {
             $za->close();
         }
-
-        (new AuditLogger())->log('tenant.restore', 'tenant', $tenantId, [
-            'component' => 'core',
-            'newValue' => ['row_counts' => $counts],
-        ]);
 
         return $counts;
     }

@@ -3,9 +3,12 @@ declare(strict_types=1);
 
 namespace App\Test\TestCase\Controller\Admin;
 
+use App\Service\Storage\StorageManager;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
+use Throwable;
+use ZipArchive;
 
 /**
  * Integration test for the tenant-facing backup GUI (tenant-backup design §5,
@@ -57,8 +60,14 @@ class TenantBackupControllerTest extends TestCase
         $conn = ConnectionManager::get('default');
         // Remove the archive files of the test tenants, then the DB rows (tenant_backups
         // cascades with the tenant).
+        $storage = new StorageManager();
         foreach ($conn->execute("SELECT id FROM tenants WHERE key LIKE 'zztbk-%'")->fetchAll('assoc') as $t) {
             $this->rrmdir(ROOT . '/backups/tenant/' . (string)$t['id']);
+            try {
+                $storage->deleteDirectory('tenant/' . (string)$t['id']);
+            } catch (Throwable) {
+                // No file subtree for this tenant.
+            }
         }
         $conn->execute(
             'DELETE FROM user_admin_areas WHERE user_id IN '
@@ -222,7 +231,7 @@ class TenantBackupControllerTest extends TestCase
             ['u' => 'zztbk_x_' . bin2hex(random_bytes(3)), 'e' => 'x_' . bin2hex(random_bytes(3)) . '@zztbk.local', 't' => $this->tenantId],
         )->fetch('assoc')['id'];
         $conn->execute(
-            "INSERT INTO notifications (user_id, type, title, body, data, tenant_id) "
+            'INSERT INTO notifications (user_id, type, title, body, data, tenant_id) '
             . "VALUES (:u, 'test', 'T', '', '{}'::jsonb, :t)",
             ['u' => $xid, 't' => $this->tenantId],
         );
@@ -246,6 +255,70 @@ class TenantBackupControllerTest extends TestCase
             "SELECT count(*) c FROM automation_rules WHERE tenant_id = :t AND name = 'zzrest_marker'",
             ['t' => $this->tenantId],
         )->fetch('assoc')['c'], 'a failed restore must not delete the tenant data (atomic rollback)');
+    }
+
+    public function testRestoreReplacesTenantFiles(): void
+    {
+        // Increment 6c: a tenant's files (tenant/<id>/...) are backed up + restored.
+        $this->login($this->userId);
+        $this->enableCsrfToken();
+        $this->enableSecurityToken();
+        $conn = ConnectionManager::get('default');
+        $storage = new StorageManager();
+        $prefix = 'tenant/' . $this->tenantId . '/';
+
+        $storage->write($prefix . 'docs/orig.txt', 'ORIGINAL');
+        $this->post('/admin/tenant-backup/create', []);
+        $id = (string)$conn->execute(
+            'SELECT id FROM tenant_backups WHERE tenant_id = :t',
+            ['t' => $this->tenantId],
+        )->fetch('assoc')['id'];
+
+        // Diverge: change the backed-up file and add one that is NOT in the backup.
+        $storage->write($prefix . 'docs/orig.txt', 'CHANGED');
+        $storage->write($prefix . 'docs/extra.txt', 'EXTRA');
+
+        $this->post('/admin/tenant-backup/restore/' . $id);
+        $this->assertRedirect(['action' => 'index']);
+
+        $this->assertSame('ORIGINAL', $storage->read($prefix . 'docs/orig.txt'), 'the backed-up file content is restored');
+        $this->assertFalse($storage->exists($prefix . 'docs/extra.txt'), 'a file added after the backup is pruned');
+    }
+
+    public function testRestoreRejectsPathTraversalEntries(): void
+    {
+        // Zip-slip defence (review HIGH): a crafted archive with a "files/../escape"
+        // entry must NOT write outside the tenant's prefix; safe entries still apply.
+        $this->login($this->userId);
+        $this->enableCsrfToken();
+        $this->enableSecurityToken();
+        $conn = ConnectionManager::get('default');
+
+        $dir = ROOT . '/backups/tenant/' . $this->tenantId;
+        @mkdir($dir, 0775, true);
+        $zipPath = $dir . '/crafted_' . bin2hex(random_bytes(3)) . '.zip';
+        $za = new ZipArchive();
+        $za->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+        $za->addFromString('manifest.json', (string)json_encode([
+            'format' => 'fertura-tenant-backup/1',
+            'tenant_id' => $this->tenantId,
+        ]));
+        $za->addFromString('files/../escape.txt', 'EVIL');
+        $za->addFromString('files/ok.txt', 'GOOD');
+        $za->close();
+
+        $id = (string)$conn->execute(
+            'INSERT INTO tenant_backups (tenant_id, filename, storage_path) VALUES (:t, :f, :p) RETURNING id',
+            ['t' => $this->tenantId, 'f' => basename($zipPath), 'p' => $zipPath],
+        )->fetch('assoc')['id'];
+
+        $this->post('/admin/tenant-backup/restore/' . $id);
+        $this->assertRedirect(['action' => 'index']);
+
+        $storage = new StorageManager();
+        $this->assertTrue($storage->exists('tenant/' . $this->tenantId . '/ok.txt'), 'a safe entry is written');
+        $this->assertFalse($storage->exists('escape.txt'), 'a traversal entry must not escape to the storage root');
+        $this->assertFalse($storage->exists('tenant/escape.txt'), 'a traversal entry must not escape the tenant prefix');
     }
 
     private function makeRule(string $name, string $tenantId): void
