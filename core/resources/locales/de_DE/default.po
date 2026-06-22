@@ -75,6 +75,12 @@ msgstr "Module"
 msgid "admin.nav.tenant_modules_item"
 msgstr "Module verwalten"
 
+msgid "admin.nav.tenant_backup"
+msgstr "Datensicherung"
+
+msgid "admin.nav.tenant_backup_item"
+msgstr "Sicherung & Wiederherstellung"
+
 msgid "admin.nav.modules"
 msgstr "Mandant"
 
@@ -1363,6 +1369,51 @@ msgstr "Konfiguration gespeichert."
 
 msgid "flash.tenant_modules.no_config"
 msgstr "Dieses Modul hat keine Konfiguration oder ist nicht freigeschaltet."
+
+msgid "admin.tenant_backup.title"
+msgstr "Datensicherung"
+
+msgid "admin.tenant_backup.hint"
+msgstr "Sichern Sie die Daten Ihres Mandanten und laden Sie das Archiv herunter."
+
+msgid "admin.tenant_backup.note"
+msgstr "Notiz (optional)"
+
+msgid "admin.tenant_backup.create"
+msgstr "Sicherung erstellen"
+
+msgid "admin.tenant_backup.col_created"
+msgstr "Erstellt"
+
+msgid "admin.tenant_backup.col_file"
+msgstr "Datei"
+
+msgid "admin.tenant_backup.col_size"
+msgstr "Größe"
+
+msgid "admin.tenant_backup.col_encrypted"
+msgstr "Verschlüsselt"
+
+msgid "admin.tenant_backup.col_note"
+msgstr "Notiz"
+
+msgid "admin.tenant_backup.col_action"
+msgstr "Aktion"
+
+msgid "admin.tenant_backup.download"
+msgstr "Herunterladen"
+
+msgid "admin.tenant_backup.empty"
+msgstr "Noch keine Sicherungen."
+
+msgid "flash.tenant_backup.created"
+msgstr "Sicherung erstellt."
+
+msgid "flash.tenant_backup.not_found"
+msgstr "Sicherung nicht gefunden."
+
+msgid "flash.tenant_backup.no_tenant"
+msgstr "Kein Mandantenkontext."
 
 msgid "flash.tenants.assigned"
 msgstr "Benutzer dem Mandanten zugeordnet."

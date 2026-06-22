@@ -79,6 +79,12 @@ msgstr "Modules"
 msgid "admin.nav.tenant_modules_item"
 msgstr "Manage modules"
 
+msgid "admin.nav.tenant_backup"
+msgstr "Backup"
+
+msgid "admin.nav.tenant_backup_item"
+msgstr "Backup & restore"
+
 msgid "admin.nav.modules"
 msgstr "Tenant"
 
@@ -1367,6 +1373,51 @@ msgstr "Configuration saved."
 
 msgid "flash.tenant_modules.no_config"
 msgstr "This module has no configuration, or is not enabled."
+
+msgid "admin.tenant_backup.title"
+msgstr "Backup"
+
+msgid "admin.tenant_backup.hint"
+msgstr "Back up your tenant's data and download the archive."
+
+msgid "admin.tenant_backup.note"
+msgstr "Note (optional)"
+
+msgid "admin.tenant_backup.create"
+msgstr "Create backup"
+
+msgid "admin.tenant_backup.col_created"
+msgstr "Created"
+
+msgid "admin.tenant_backup.col_file"
+msgstr "File"
+
+msgid "admin.tenant_backup.col_size"
+msgstr "Size"
+
+msgid "admin.tenant_backup.col_encrypted"
+msgstr "Encrypted"
+
+msgid "admin.tenant_backup.col_note"
+msgstr "Note"
+
+msgid "admin.tenant_backup.col_action"
+msgstr "Action"
+
+msgid "admin.tenant_backup.download"
+msgstr "Download"
+
+msgid "admin.tenant_backup.empty"
+msgstr "No backups yet."
+
+msgid "flash.tenant_backup.created"
+msgstr "Backup created."
+
+msgid "flash.tenant_backup.not_found"
+msgstr "Backup not found."
+
+msgid "flash.tenant_backup.no_tenant"
+msgstr "No tenant context."
 
 msgid "flash.tenants.assigned"
 msgstr "User assigned to tenant."

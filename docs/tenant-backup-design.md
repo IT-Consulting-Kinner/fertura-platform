@@ -101,11 +101,14 @@ Migration seedet die Area, NAV-Eintrag, i18n. `TenantBackupController` (required
 
 ## 6. Increment-Plan
 
-- **6a** — Fundament + DB-Export: `TenantBackupService` (Tabellen-Discovery Core-Liste; Scoped-
-  Export NDJSON+Manifest, ZIP/AES via `BackupService`-Bausteinen), `tenant_backups`-Metadaten
-  (neue RLS-Tabelle), Tenant-Area `tenant_backup` + `TenantBackupController` (index/create/
-  download), Tests (Isolation: A sieht/exportiert nie B). **DB-only, Core-Tabellen** (`users`
-  backup-only).
+- **6a ✅** — Fundament + DB-Export: `TenantBackupService` (feste FK-geordnete Core-Tabellen-Liste;
+  scoped NDJSON-Export `WHERE tenant_id=:t` + Manifest, ZIP mit AES-256 fail-closed),
+  `core.tenant_backups` (neue RLS-Tabelle), Tenant-Area `tenant_backup` + `TenantBackupController`
+  (index/create/download), i18n de/en. Tests `TenantBackupControllerTest` (Index, Create+Datei+Audit,
+  Download, Cross-Tenant-Isolation). Adversarial reviewed → ein medium-Befund gefixt (verwaistes
+  Archiv bei fehlgeschlagenem Metadaten-INSERT wird im catch entfernt). **DB-only, Core-Tabellen**
+  (`users`/`audit_log` backup-only). *(Self-contained ZIP/Passwort-Logik gespiegelt von
+  `BackupService`; DRY-Refactor später.)*
 - **6b** — Scoped Restore: transaktionaler scoped Delete+Reinsert, FK-Reihenfolge, `audit_log`-
   Sonderfall, `users` NICHT zurückgeschrieben, Upload-Restore mit tenant-Match, Confirm-GUI,
   Tests (Restore stellt nur den eigenen Mandanten wieder her; andere unberührt; Rollback bei Fehler).
