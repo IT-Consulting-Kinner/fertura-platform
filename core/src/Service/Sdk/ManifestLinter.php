@@ -119,6 +119,14 @@ class ManifestLinter
             if (isset($route['auth']) && !in_array($route['auth'], ['user', 'guest'], true)) {
                 $errors[] = "web_routes [$i]: 'auth' ungültig (user|guest)";
             }
+            if (!empty($route['area']) && (string)($route['auth'] ?? 'user') !== 'user') {
+                // An admin page (declares an `area`) must be authenticated: a guest
+                // admin page would bypass login, the per-tenant module-enablement
+                // gate and the area check in the web-mount dispatcher, yet render in
+                // the admin shell. Reject it here; the dispatcher also hardens
+                // against it (defense in depth).
+                $errors[] = "web_routes [$i]: 'area' erfordert auth='user' (Admin-Seiten müssen authentifiziert sein)";
+            }
             if (!empty($route['nav']) && empty($route['area'])) {
                 $warnings[] = "web_routes [$i]: 'nav' ohne 'area' erscheint nicht in der Admin-Navigation";
             }

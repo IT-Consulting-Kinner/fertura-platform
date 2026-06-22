@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Test\TestCase\Controller;
 
 use App\Service\Module\ModuleLifecycle;
+use App\Service\Module\TenantModuleService;
 use App\Service\Settings\SettingsManager;
 use App\Service\Storage\StorageManager;
 use Cake\Core\Configure;
@@ -51,6 +52,16 @@ class ModuleWebTest extends TestCase
         $lc = new ModuleLifecycle();
         $lc->install(ROOT . '/tests/Fixture/zztest_web');
         $lc->activate(self::KEY);
+
+        // Per-tenant module enablement (Increment 5.1) is strict opt-in / fail-closed:
+        // a freshly-activated module has no grant row, so its authenticated pages
+        // would 404 for this tenant. Grant it to the test user's tenant so the
+        // web-mount pages under test are reachable (guest pages are never gated).
+        $tenantId = (string)$conn->execute(
+            'SELECT tenant_id FROM users WHERE id = :id',
+            ['id' => $this->userId],
+        )->fetch('assoc')['tenant_id'];
+        (new TenantModuleService())->enable($tenantId, self::KEY);
     }
 
     protected function tearDown(): void
@@ -81,6 +92,28 @@ class ModuleWebTest extends TestCase
         $this->assertResponseContains($this->userId); // handler received the user id
         $this->assertResponseContains('/dashboard'); // handler received the path
         $this->assertResponseContains('Fertura'); // Core layout wraps the page
+    }
+
+    public function testDisabledModuleHidesAuthenticatedPageButNotGuestPage(): void
+    {
+        // Fail-closed per-tenant gate (Increment 5.1): with the module DISABLED for
+        // this tenant, an authenticated module page is 404 — indistinguishable from
+        // a module that does not exist on the platform. A public/guest page stays
+        // reachable, because the gate applies only to authenticated tenant use, not
+        // to public entry points (e.g. a KB/ticket portal).
+        $tenantId = (string)ConnectionManager::get('default')->execute(
+            'SELECT tenant_id FROM users WHERE id = :id',
+            ['id' => $this->userId],
+        )->fetch('assoc')['tenant_id'];
+        (new TenantModuleService())->disable($tenantId, self::KEY);
+
+        $this->session(['Auth' => ['id' => $this->userId, 'username' => 'zztest_web', 'email' => 'w@zztest.local']]);
+        $this->get('/m/zztest_web/dashboard');
+        $this->assertResponseCode(404);
+
+        $this->get('/m/zztest_web/public');
+        $this->assertResponseOk();
+        $this->assertResponseContains('Oeffentliche Modulseite');
     }
 
     public function testModuleShellShipsSharedConfirmWiring(): void

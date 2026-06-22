@@ -105,9 +105,14 @@ class WebRouteRegistry
      */
     public function adminNav(): array
     {
+        // Fail-closed per-tenant gate (operator/tenant authz §5): a module's
+        // admin-nav entries only appear for tenants that have the module enabled —
+        // the same allow-list the dispatch gate enforces, so the sidebar never
+        // links to a page this tenant would get a 404 on.
+        $enabled = (new TenantModuleService())->enabledKeys();
         $out = [];
         foreach ($this->all() as $r) {
-            if ($r['area'] === null || $r['nav'] === '') {
+            if ($r['area'] === null || $r['nav'] === '' || !in_array($r['module_key'], $enabled, true)) {
                 continue;
             }
             $area = $r['area'];

@@ -97,6 +97,34 @@ class ManifestLinterTest extends TestCase
     }
 
     /**
+     * An admin web page (declares an `area`) must be authenticated: pairing `area`
+     * with `auth='guest'` would bypass login, the per-tenant module-enablement gate
+     * AND the area check in the web-mount dispatcher, yet still render in the admin
+     * shell (Increment 5.1, adversarial-review HIGH). The linter rejects it; a
+     * `user` (or default-auth) admin page is fine.
+     */
+    public function testGuestAdminWebRouteIsRejected(): void
+    {
+        $m = $this->valid();
+        $m['web_routes'] = [
+            ['path' => '/admin', 'class' => 'Acme\\Demo\\AdminPage', 'template' => 'admin', 'area' => 'demo_admin', 'auth' => 'guest'],
+        ];
+        $errs = (new ManifestLinter())->lint($m)['errors'];
+        $this->assertTrue(
+            (bool)array_filter($errs, fn($e) => str_contains($e, "'area' erfordert auth='user'")),
+            'a guest admin web_route must be rejected',
+        );
+
+        // The same admin page with the default auth (= user) is accepted.
+        $ok = $this->valid();
+        $ok['web_routes'] = [
+            ['path' => '/admin', 'class' => 'Acme\\Demo\\AdminPage', 'template' => 'admin', 'area' => 'demo_admin'],
+        ];
+        $errs = (new ManifestLinter())->lint($ok)['errors'];
+        $this->assertSame([], array_values(array_filter($errs, fn($e) => str_contains($e, "erfordert auth='user'"))));
+    }
+
+    /**
      * Enhancing-not-gating (ch. 26.19, Decision 184): a provided resolver/service
      * contract without error_behavior is an error; collector/event are exempt
      * (additive by nature); a declared error_behavior clears the error.

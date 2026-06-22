@@ -5,6 +5,7 @@ namespace App\Controller;
 
 use App\Service\Admin\AdminNavBuilder;
 use App\Service\Module\ContributionRuntime;
+use App\Service\Module\TenantModuleService;
 use App\Service\Module\WebRouteRegistry;
 use App\Service\Storage\StorageManager;
 use Cake\Core\Configure;
@@ -62,14 +63,29 @@ class ModuleWebController extends AppController
         $isAdmin = $route['area'] !== null;
 
         // Authentication: guest pages are public; every other page requires a
-        // logged-in user (and, for admin pages, the declared area).
+        // logged-in user (and, for admin pages, the declared area). An ADMIN page
+        // (declares an `area`) is treated as authenticated REGARDLESS of its
+        // declared `auth` — defense in depth against a malformed manifest that
+        // pairs `area` with `auth='guest'`, which would otherwise skip login, the
+        // per-tenant enablement gate AND the area check yet still render in the
+        // admin shell. (The ManifestLinter also rejects that combination at install
+        // time, so this is the belt to the linter's braces.)
         $identity = $this->identity();
         $rawId = $identity?->getIdentifier();
         $userId = is_scalar($rawId) ? (string)$rawId : null;
         $userAreas = [];
-        if ($route['auth'] === 'user') {
+        if ($route['auth'] === 'user' || $isAdmin) {
             if ($userId === null) {
                 return $this->redirect('/login');
+            }
+            // Fail-closed per-tenant module enablement (operator/tenant authz §5):
+            // an authenticated module page is only reachable when the module is
+            // enabled for the user's tenant. Guest pages (auth !== 'user') are
+            // public and intentionally NOT gated here. A 404 (not 403) is returned
+            // so a module not provisioned to this tenant is indistinguishable from
+            // one that does not exist on the platform.
+            if (!(new TenantModuleService())->isEnabled($moduleKey)) {
+                throw new NotFoundException();
             }
             if ($isAdmin) {
                 $userAreas = $this->loadUserAreas($userId);

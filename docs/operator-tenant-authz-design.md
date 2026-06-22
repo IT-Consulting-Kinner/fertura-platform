@@ -177,8 +177,26 @@ umgestellt; `AdminController::NAV` bekommt je Area den `scope`.
    `core_config`→`op_tenants`/`op_system`) + `toggleArea`-Scoping (Tenant-Admin darf nur Tenant-Areas
    vergeben). E-Mail-Eindeutigkeit (per-Tenant vs. global) ist ein vorbestehender, davon unabhängiger
    Punkt.
-5. **Per-Tenant-Modul-Enable + -Config** (`tenant_modules`, Dispatch/Nav/Listener tenant-aware,
-   Core/Modul-Config-Contract).
+5. **Per-Tenant-Modul-Enable + -Config** — Modell **strikt opt-in / fail-closed** (entschieden):
+   ein Mandant nutzt ein installiertes Modul nur mit explizitem Grant.
+   - **5.1 ✅** — `core.tenant_modules` (RLS tenant-scoped, FK-CASCADE auf tenants+modules,
+     `UNIQUE(tenant_id,module_key)`, `config jsonb` für Phase 3) + Backward-Compat-Backfill
+     (aktive Module × bestehende Mandanten, damit bestehende/Single-Org-Installs nichts verlieren);
+     `TenantModuleService` (fail-closed `isEnabled`/`enabledKeys` mit explizitem
+     `tenant_id = core.current_tenant()`; `enable`/`disable`); zwei **Web-Gates** —
+     `ModuleWebController::dispatch` (authentifizierte Modul-Seite → 404 wenn nicht freigeschaltet;
+     Guest-Seiten bleiben ungated) und `WebRouteRegistry::adminNav` (Modul-Nav nur für
+     freigeschaltete Mandanten). Adversarial reviewed → ein **HIGH** abgedichtet: ein Web-Route mit
+     `area` **und** `auth='guest'` umging den gesamten Auth-/Enablement-/Area-Block und rendete
+     trotzdem in der Admin-Shell — jetzt behandelt der Dispatcher **jede** Admin-Seite (`area`
+     gesetzt) als authentifiziert, und der `ManifestLinter` weist `area`+`auth!='user'` schon beim
+     Install ab (Defense-in-Depth). Tests: `TenantModuleRlsTest` (Service + RLS-Leak-Proof via
+     NOBYPASSRLS-Rolle), `ModuleWebTest` (+Negativ-Gate, Guest bleibt erreichbar), `ManifestLinterTest`.
+   - **Noch offen:** **5.2** API-Gate (`ApiRouteRegistry`/`Api/V1/ModuleController`, public-Routen
+     beachten), **5.3** Mandanten-GUI (Tenant-Area `tenant_modules`, enable/disable + Audit),
+     **Phase 2** Listener/Collector-Tenant-Gating (`ContractRegistry::activeContributions`,
+     Worker-Kontext — HARD), **Phase 3** Per-Tenant-Config-Contract. Der Integration-Harness
+     (separates Repo) muss das Enablement im Setup setzen → Korrektur-Prompt.
 6. **Tenant-Daten-Backup/Restore** (Mandant) + **System-Backup/Restore** (Operator) sauber getrennt;
    knüpft an das Per-Tenant-Backup-Design an.
 
