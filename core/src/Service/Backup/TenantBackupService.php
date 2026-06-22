@@ -95,6 +95,10 @@ class TenantBackupService
         try {
             return (string)(new SettingsManager())->get('core', 'backup.password', '');
         } catch (Throwable) {
+            // Only the settings tier is best-effort: the file + env tiers above already
+            // ran and found nothing, so a DB/settings read failure here legitimately
+            // means "no password configured" rather than a swallowed fail-closed error.
+            // (When a password IS set, buildZip aborts hard if AES is unavailable.)
             return '';
         }
     }
