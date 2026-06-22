@@ -78,4 +78,42 @@ class TenantBackupController extends AdminController
 
         return $this->redirect(['action' => 'index']);
     }
+
+    /**
+     * DESTRUCTIVE restore from an UPLOADED archive (Increment 6, upload-restore):
+     * the tenant admin restores from a backup file they downloaded earlier, rather
+     * than from a server-stored backup. Same safety as {@see self::restore} — the
+     * service verifies the archive's manifest tenant matches the current tenant, so
+     * an archive belonging to another tenant is rejected before any data is touched.
+     */
+    public function upload(): ?Response
+    {
+        $this->request->allowMethod('post');
+        $file = $this->request->getUploadedFile('archive');
+        if ($file === null || $file->getError() !== UPLOAD_ERR_OK) {
+            $this->Flash->error(__('flash.tenant_backup.upload_failed'));
+
+            return $this->redirect(['action' => 'index']);
+        }
+
+        // Stage the upload to a scratch path the service can open; the @unlink in the
+        // finally block removes it whether the restore succeeds or throws.
+        $dir = TMP . 'tenant_backup_uploads';
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0o775, true);
+        }
+        $tmp = $dir . DIRECTORY_SEPARATOR . bin2hex(random_bytes(16)) . '.zip';
+        try {
+            $file->moveTo($tmp);
+            (new TenantBackupService())->restoreFromUpload($tmp);
+            (new AuditLogger())->log('tenant.backup.upload', 'tenant_backup', null, ['component' => 'core']);
+            $this->Flash->success(__('flash.tenant_backup.restored'));
+        } catch (Throwable $e) {
+            $this->Flash->error($e->getMessage());
+        } finally {
+            @unlink($tmp);
+        }
+
+        return $this->redirect(['action' => 'index']);
+    }
 }

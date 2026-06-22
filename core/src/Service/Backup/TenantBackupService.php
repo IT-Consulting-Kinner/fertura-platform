@@ -570,6 +570,27 @@ class TenantBackupService
     }
 
     /**
+     * Restores from an UPLOADED archive at $uploadPath (Increment 6, upload-restore).
+     * Identical safety to {@see self::restore}: `restoreArchive` verifies the archive
+     * format and that its manifest tenant matches the CURRENT tenant, so an archive
+     * belonging to another tenant is rejected — never importing foreign data.
+     *
+     * @return array<string,int>
+     */
+    public function restoreFromUpload(string $uploadPath): array
+    {
+        $tenantId = $this->currentTenantId();
+        if ($tenantId === '') {
+            throw new RuntimeException(__('flash.tenant_backup.no_tenant'));
+        }
+        if (!is_file($uploadPath)) {
+            throw new RuntimeException(__('flash.tenant_backup.invalid_archive'));
+        }
+
+        return $this->restoreArchive($uploadPath, $tenantId);
+    }
+
+    /**
      * Core scoped restore: opens the archive (entries read by name — no extraction,
      * so Zip-Slip-safe), verifies the manifest belongs to $tenantId (defence for an
      * uploaded archive — never import another tenant's data), then in ONE transaction

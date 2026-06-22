@@ -53,3 +53,28 @@
     <?php endif; ?>
     </tbody>
 </table>
+
+<hr class="my-4">
+
+<h2 class="h5 mb-1"><?= h(__('admin.tenant_backup.upload_title')) ?></h2>
+<p class="text-muted small"><?= h(__('admin.tenant_backup.upload_hint')) ?></p>
+
+<?= $this->Form->create(null, ['url' => ['action' => 'upload'], 'type' => 'file', 'class' => 'row g-2 align-items-end col-md-9']) ?>
+    <div class="col">
+        <label class="form-label small mb-0"><?= h(__('admin.tenant_backup.upload_file')) ?></label>
+        <?= $this->Form->control('archive', [
+            'type' => 'file',
+            'label' => false,
+            'accept' => '.zip',
+            'class' => 'form-control form-control-sm',
+        ]) ?>
+    </div>
+    <div class="col-auto">
+        <?= $this->Form->button(__('admin.tenant_backup.upload'), [
+            'class' => 'btn btn-sm btn-outline-danger',
+            'type' => 'submit',
+            'data-confirm' => __('admin.tenant_backup.upload_confirm'),
+            'data-confirm-variant' => 'btn-danger',
+        ]) ?>
+    </div>
+<?= $this->Form->end() ?>

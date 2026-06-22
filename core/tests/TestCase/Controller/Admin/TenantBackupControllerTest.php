@@ -7,6 +7,7 @@ use App\Service\Storage\StorageManager;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
+use Laminas\Diactoros\UploadedFile;
 use Throwable;
 use ZipArchive;
 
@@ -361,6 +362,103 @@ class TenantBackupControllerTest extends TestCase
         );
         $this->assertContains('ORIG', $labels, 'the module table is restored to the backup state');
         $this->assertNotContains('NEW', $labels, 'a post-backup module change is undone');
+    }
+
+    public function testUploadRestoreRoundTrip(): void
+    {
+        // Increment 6 (upload-restore): a tenant admin restores from an UPLOADED
+        // backup file (one they downloaded earlier) rather than a server-stored one.
+        $this->login($this->userId);
+        $this->enableCsrfToken();
+        $this->enableSecurityToken();
+        $conn = ConnectionManager::get('default');
+
+        // Back up tenant A (captures zzrest_orig), copy the archive to act as the
+        // upload, then DIVERGE the live data.
+        $this->makeRule('zzrest_orig', $this->tenantId);
+        $this->post('/admin/tenant-backup/create', []);
+        $archive = (string)$conn->execute(
+            'SELECT storage_path FROM tenant_backups WHERE tenant_id = :t',
+            ['t' => $this->tenantId],
+        )->fetch('assoc')['storage_path'];
+
+        // The copy lives under the tenant's backup dir so cleanup removes it.
+        $upload = ROOT . '/backups/tenant/' . $this->tenantId . '/upload_' . bin2hex(random_bytes(3)) . '.zip';
+        copy($archive, $upload);
+        $conn->execute("DELETE FROM automation_rules WHERE name = 'zzrest_orig'");
+        $this->makeRule('zzrest_new', $this->tenantId);
+
+        // Upload the copy -> tenant A is reset to the backup state.
+        $this->configRequest(['files' => [
+            'archive' => new UploadedFile($upload, (int)filesize($upload), UPLOAD_ERR_OK, 'backup.zip', 'application/zip'),
+        ]]);
+        $this->post('/admin/tenant-backup/upload', []);
+        $this->assertRedirect(['action' => 'index']);
+
+        $names = array_map(
+            static fn(array $r): string => (string)$r['name'],
+            $conn->execute(
+                "SELECT name FROM automation_rules WHERE tenant_id = :t AND name LIKE 'zzrest%'",
+                ['t' => $this->tenantId],
+            )->fetchAll('assoc'),
+        );
+        $this->assertContains('zzrest_orig', $names, 'the uploaded backup is restored');
+        $this->assertNotContains('zzrest_new', $names, 'a change made after the backup is undone');
+        $this->assertGreaterThanOrEqual(1, (int)$conn->execute(
+            "SELECT count(*) c FROM audit_log WHERE action = 'tenant.backup.upload' AND tenant_id = :t",
+            ['t' => $this->tenantId],
+        )->fetch('assoc')['c'], 'upload-restore is audited');
+    }
+
+    public function testUploadRejectsForeignTenantArchive(): void
+    {
+        // Security: uploading ANOTHER tenant's archive must be rejected (manifest
+        // tenant mismatch) and must not modify the uploading tenant's data.
+        $this->login($this->userId);
+        $this->enableCsrfToken();
+        $this->enableSecurityToken();
+        $conn = ConnectionManager::get('default');
+
+        // Tenant A makes a backup; capture its archive path.
+        $this->makeRule('zzrest_a', $this->tenantId);
+        $this->post('/admin/tenant-backup/create', []);
+        $archiveA = (string)$conn->execute(
+            'SELECT storage_path FROM tenant_backups WHERE tenant_id = :t',
+            ['t' => $this->tenantId],
+        )->fetch('assoc')['storage_path'];
+
+        // Tenant B (own admin) keeps its own rule and tries to upload A's archive.
+        $tidB = (string)$conn->execute(
+            "INSERT INTO tenants (key, name) VALUES ('zztbk-' || substr(md5(random()::text), 1, 8), 'ZZ B') RETURNING id",
+        )->fetch('assoc')['id'];
+        $uidB = (string)$conn->execute(
+            "INSERT INTO users (username, email, status, tenant_id) VALUES (:u, :e, 'active', :t) RETURNING id",
+            ['u' => 'zztbk_b_' . bin2hex(random_bytes(3)), 'e' => 'tbkb_' . bin2hex(random_bytes(3)) . '@zztbk.local', 't' => $tidB],
+        )->fetch('assoc')['id'];
+        $conn->execute('INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a)', ['u' => $uidB, 'a' => 'tenant_backup']);
+        $this->makeRule('zzrest_b_keep', $tidB);
+
+        $dirB = ROOT . '/backups/tenant/' . $tidB;
+        @mkdir($dirB, 0o775, true);
+        $foreign = $dirB . '/foreign_' . bin2hex(random_bytes(3)) . '.zip';
+        copy($archiveA, $foreign);
+
+        $this->login($uidB);
+        $this->configRequest(['files' => [
+            'archive' => new UploadedFile($foreign, (int)filesize($foreign), UPLOAD_ERR_OK, 'foreign.zip', 'application/zip'),
+        ]]);
+        $this->post('/admin/tenant-backup/upload', []);
+        $this->assertRedirect(['action' => 'index']);
+
+        // B's data is untouched and the rejected upload performed no restore.
+        $this->assertSame(1, (int)$conn->execute(
+            "SELECT count(*) c FROM automation_rules WHERE tenant_id = :t AND name = 'zzrest_b_keep'",
+            ['t' => $tidB],
+        )->fetch('assoc')['c'], "a foreign archive must not modify the uploading tenant's data");
+        $this->assertSame(0, (int)$conn->execute(
+            "SELECT count(*) c FROM audit_log WHERE action = 'tenant.restore' AND tenant_id = :t",
+            ['t' => $tidB],
+        )->fetch('assoc')['c'], 'a rejected upload performs no restore');
     }
 
     private function makeRule(string $name, string $tenantId): void

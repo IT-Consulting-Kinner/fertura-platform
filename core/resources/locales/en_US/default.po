@@ -1434,6 +1434,24 @@ msgstr "Invalid or corrupt archive."
 msgid "flash.tenant_backup.tenant_mismatch"
 msgstr "The archive belongs to a different tenant."
 
+msgid "flash.tenant_backup.upload_failed"
+msgstr "No valid archive file was uploaded."
+
+msgid "admin.tenant_backup.upload_title"
+msgstr "Restore from uploaded archive"
+
+msgid "admin.tenant_backup.upload_hint"
+msgstr "Restore this tenant's data from a previously downloaded backup file. Only archives belonging to this tenant are accepted."
+
+msgid "admin.tenant_backup.upload_file"
+msgstr "Backup file (.zip)"
+
+msgid "admin.tenant_backup.upload"
+msgstr "Upload & restore"
+
+msgid "admin.tenant_backup.upload_confirm"
+msgstr "Restore from this file? This tenant's current data will be replaced."
+
 msgid "flash.tenants.assigned"
 msgstr "User assigned to tenant."
 

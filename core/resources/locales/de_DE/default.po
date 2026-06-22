@@ -1430,6 +1430,24 @@ msgstr "Ungültiges oder beschädigtes Archiv."
 msgid "flash.tenant_backup.tenant_mismatch"
 msgstr "Das Archiv gehört zu einem anderen Mandanten."
 
+msgid "flash.tenant_backup.upload_failed"
+msgstr "Keine gültige Archivdatei hochgeladen."
+
+msgid "admin.tenant_backup.upload_title"
+msgstr "Aus hochgeladenem Archiv wiederherstellen"
+
+msgid "admin.tenant_backup.upload_hint"
+msgstr "Stellen Sie die Daten dieses Mandanten aus einer zuvor heruntergeladenen Sicherungsdatei wieder her. Nur Archive dieses Mandanten werden akzeptiert."
+
+msgid "admin.tenant_backup.upload_file"
+msgstr "Sicherungsdatei (.zip)"
+
+msgid "admin.tenant_backup.upload"
+msgstr "Hochladen & wiederherstellen"
+
+msgid "admin.tenant_backup.upload_confirm"
+msgstr "Aus dieser Datei wiederherstellen? Die aktuellen Daten dieses Mandanten werden ersetzt."
+
 msgid "flash.tenants.assigned"
 msgstr "Benutzer dem Mandanten zugeordnet."
 

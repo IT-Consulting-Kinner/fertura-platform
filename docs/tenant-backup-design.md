@@ -136,10 +136,22 @@ Migration seedet die Area, NAV-Eintrag, i18n. `TenantBackupController` (required
   Tabellen- + Spaltennamen identifier-validiert + gequotet. Kein Modulcode-Eingriff. Adversarial
   reviewed → 0 bestätigte Befunde. Test: Fixture-Modul-Schema (RLS+`tenant_id`) → Round-Trip.
 
-**Damit ist Inc 6 im Kern vollständig:** Per-Tenant-Backup + scoped Restore über Core-Tabellen,
-Modul-Tabellen (introspektiv) und Dateien (`tenant/<id>/`-Contract); strikt mandanten-isoliert,
-transaktional-atomar (DB), zip-slip-sicher (Dateien). **Offen (Zusatz):** Upload-Restore (Archiv
-hochladen, mit Manifest-Tenant-Match — die Validierung steckt bereits in `restoreArchive`).
+- **Upload-Restore ✅** (Zusatz) — Wiederherstellung aus einem **hochgeladenen** Archiv statt aus
+  einer server-gespeicherten Sicherung: `TenantBackupController::upload` nimmt die Datei entgegen
+  (`getUploadedFile('archive')`, fail-closed bei fehlender/fehlerhafter Datei), legt sie in einem
+  Scratch-Verzeichnis (`TMP/tenant_backup_uploads`, 128-bit-Zufallsname, außerhalb des Webroots) ab
+  und ruft `TenantBackupService::restoreFromUpload`, das an dasselbe `restoreArchive` delegiert —
+  also identische Sicherheit: Manifest-Tenant-Match (Fremd-Archiv wird abgewiesen, bevor Daten
+  berührt werden), zip-slip-sicher, atomarer transaktionaler DB-Restore, server-introspizierte
+  `restorableSpecs` (nicht archiv-gesteuert), `tenant_id` erzwungen. Der Scratch wird im `finally`
+  immer entfernt; Erfolg wird als `tenant.backup.upload` auditiert (zusätzlich zum `tenant.restore`
+  aus dem Service). GUI: Upload-Form mit `data-confirm` (destruktiv) unter der Sicherungstabelle.
+  Adversarial reviewed → 0 bestätigte Befunde. Tests: Upload-Round-Trip + Fremd-Mandant-Abweisung.
+
+**Damit ist Inc 6 vollständig:** Per-Tenant-Backup + scoped Restore (aus gespeicherter Sicherung
+**und** aus hochgeladenem Archiv) über Core-Tabellen, Modul-Tabellen (introspektiv) und Dateien
+(`tenant/<id>/`-Contract); strikt mandanten-isoliert, transaktional-atomar (DB), zip-slip-sicher
+(Dateien).
 
 Jeder Increment: phpstan + phpcs + Tests grün, adversarial review (sicherheits-/datenkritisch).
 
