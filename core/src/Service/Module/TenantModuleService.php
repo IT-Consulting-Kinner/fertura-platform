@@ -129,4 +129,73 @@ class TenantModuleService
             ['t' => $tenantId, 'k' => $moduleKey],
         );
     }
+
+    /**
+     * The per-tenant config-field schema the (active) module declares in its
+     * manifest (Increment 5 Phase 3); empty list if it declares none. Read from the
+     * stored `modules.manifest` jsonb, so no module file access is needed.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function configSchema(string $moduleKey): array
+    {
+        $row = $this->conn()->execute(
+            "SELECT manifest FROM modules WHERE module_key = :k AND status = 'active'",
+            ['k' => $moduleKey],
+        )->fetch('assoc');
+        if ($row === false || !is_string($row['manifest'])) {
+            return [];
+        }
+
+        return (new ModuleManifest((array)(json_decode($row['manifest'], true) ?: [])))->configSchema();
+    }
+
+    /**
+     * The module's stored per-tenant config (the `tenant_modules.config` jsonb) for
+     * $tenantId, or — when '' — the current request tenant. Empty array when there
+     * is no grant row (or no tenant context). This is what the Core injects as
+     * `module_config` into a module's web/API request and listener context.
+     *
+     * @return array<string, mixed>
+     */
+    public function config(string $moduleKey, string $tenantId = ''): array
+    {
+        $tenantExpr = $tenantId === '' ? 'core.current_tenant()' : ':t';
+        $params = ['k' => $moduleKey];
+        if ($tenantId !== '') {
+            $params['t'] = $tenantId;
+        }
+        $row = $this->conn()->execute(
+            "SELECT config FROM tenant_modules WHERE module_key = :k AND tenant_id = $tenantExpr",
+            $params,
+        )->fetch('assoc');
+        if ($row === false || !is_string($row['config'])) {
+            return [];
+        }
+        $decoded = json_decode($row['config'], true);
+
+        return is_array($decoded) ? $decoded : [];
+    }
+
+    /**
+     * Replaces the stored per-tenant config for a module, keeping ONLY keys the
+     * module declares in its config_schema (unknown keys are dropped — defence
+     * against a crafted POST). A no-op when the tenant has no grant row (enable
+     * first). The caller (the tenant GUI) coerces form values to the declared types
+     * and audits the change.
+     *
+     * @param array<string, mixed> $config
+     */
+    public function setConfig(string $tenantId, string $moduleKey, array $config): void
+    {
+        $allowed = array_map(
+            static fn(array $f): string => (string)($f['key'] ?? ''),
+            $this->configSchema($moduleKey),
+        );
+        $filtered = array_intersect_key($config, array_fill_keys($allowed, true));
+        $this->conn()->execute(
+            'UPDATE tenant_modules SET config = CAST(:c AS jsonb) WHERE tenant_id = :t AND module_key = :k',
+            ['c' => json_encode($filtered) ?: '{}', 't' => $tenantId, 'k' => $moduleKey],
+        );
+    }
 }

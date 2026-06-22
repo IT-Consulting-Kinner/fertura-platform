@@ -10,6 +10,15 @@
     "core_compatibility": ">=1.0.0 <2.0.0",
     "requires_license": false,
     "dependencies": [],
+    "config_schema": [
+        {
+            "key": "greeting_suffix",
+            "label": "zztest.config.greeting_suffix",
+            "type": "string",
+            "default": "",
+            "help": "zztest.config.greeting_suffix_help"
+        }
+    ],
     "web_routes": [
         {
             "path": "/dashboard",

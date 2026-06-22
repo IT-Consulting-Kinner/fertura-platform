@@ -108,6 +108,9 @@ class ModuleWebController extends AppController
             // (same source the Core LoginThrottle keys on).
             'client_ip' => $this->request->clientIp() ?: null,
         ];
+        // Per-tenant module config (Increment 5 Phase 3): the handler reads its
+        // tenant's settings via $request['module_config'] without calling the Core.
+        $request['module_config'] = (new TenantModuleService())->config($moduleKey);
 
         try {
             $result = (array)(new ContributionRuntime())->call(

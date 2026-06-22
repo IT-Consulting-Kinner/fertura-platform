@@ -11,6 +11,7 @@ use App\Service\Module\ContributionRuntime;
 use App\Service\Module\ModuleAutoloader;
 use App\Service\Module\ModuleHostSupervisor;
 use App\Service\Module\ModuleInstallRunner;
+use App\Service\Module\TenantModuleService;
 use App\Service\Observability\HealthAlertService;
 use App\Service\Observability\OtlpMetricsExporter;
 use App\Service\Queue\DbQueueTransport;
@@ -244,11 +245,18 @@ class OutboxWorker
             });
         }
         $runtime = new ContributionRuntime($this->registry);
+        $tenantId = (string)($event['tenant_id'] ?? '');
+        $tenantModules = new TenantModuleService();
         foreach ($runtime->listeners((string)$event['contract_name']) as $listener) {
             try {
                 // In-process locally, out_of_process via the isolated host (RPC).
                 // Worker context has no active user -> bypass for the listener.
-                $runtime->call($listener, 'handle', [$payload, $context], ['bypass' => true]);
+                // Per-tenant module config (Increment 5 Phase 3): each listener gets
+                // its OWN module's config for the firing tenant (empty for a system
+                // event with no tenant).
+                $ctx = $context;
+                $ctx['module_config'] = $tenantModules->config((string)$listener['module_key'], $tenantId);
+                $runtime->call($listener, 'handle', [$payload, $ctx], ['bypass' => true]);
             } catch (Throwable $e) {
                 // Isolation: a failure in one listener does not stop the others.
                 $errors[] = $listener['class'] . ': ' . $e->getMessage();

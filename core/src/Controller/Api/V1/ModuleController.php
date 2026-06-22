@@ -58,6 +58,9 @@ class ModuleController extends ApiController
                 $this->request->getHeaders(),
             ),
         ];
+        // Per-tenant module config (Increment 5 Phase 3); empty for public routes
+        // (no tenant context) — the module reads it via $request['module_config'].
+        $request['module_config'] = (new TenantModuleService())->config($moduleKey);
 
         try {
             $result = (array)(new ContributionRuntime())->call(

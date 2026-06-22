@@ -5,9 +5,11 @@
  * @var ?string $userId
  * @var string $echoedPath
  * @var ?string $echoedId
+ * @var string $configSuffix
  */
 ?>
 <h1><?= h($greeting) ?></h1>
 <p data-test="user"><?= h((string)$userId) ?></p>
 <p data-test="path"><?= h($echoedPath) ?></p>
 <p data-test="id"><?= h((string)$echoedId) ?></p>
+<p data-test="config"><?= h($configSuffix) ?></p>

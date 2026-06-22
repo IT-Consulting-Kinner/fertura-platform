@@ -19,6 +19,8 @@ final class DashboardPage implements ModuleWebInterface
                 'userId' => $request['user_id'],
                 'echoedPath' => $request['path'],
                 'echoedId' => $request['params']['id'] ?? null,
+                // Increment 5 Phase 3: the per-tenant module config the Core injected.
+                'configSuffix' => $request['module_config']['greeting_suffix'] ?? '',
             ],
         ];
     }

@@ -95,6 +95,23 @@ class ModuleWebTest extends TestCase
         $this->assertResponseContains('Fertura'); // Core layout wraps the page
     }
 
+    public function testWebHandlerReceivesPerTenantConfig(): void
+    {
+        // Increment 5 Phase 3: the Core injects the tenant's stored module config
+        // into the handler request; the dashboard fixture echoes greeting_suffix.
+        $tenantId = (string)ConnectionManager::get('default')->execute(
+            'SELECT tenant_id FROM users WHERE id = :id',
+            ['id' => $this->userId],
+        )->fetch('assoc')['tenant_id'];
+        (new TenantModuleService())->setConfig($tenantId, self::KEY, ['greeting_suffix' => 'XYZ-CONF']);
+
+        $this->session(['Auth' => ['id' => $this->userId, 'username' => 'zztest_web', 'email' => 'w@zztest.local']]);
+        $this->get('/m/zztest_web/dashboard');
+
+        $this->assertResponseOk();
+        $this->assertResponseContains('data-test="config">XYZ-CONF<');
+    }
+
     public function testDisabledModuleHidesAuthenticatedPageButNotGuestPage(): void
     {
         // Fail-closed per-tenant gate (Increment 5.1): with the module DISABLED for

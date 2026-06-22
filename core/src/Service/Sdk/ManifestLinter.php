@@ -132,6 +132,27 @@ class ManifestLinter
             }
         }
 
+        // Per-tenant config schema (Increment 5 Phase 3): each field needs a
+        // snake_case key, an i18n label and a known input type; a select must ship
+        // its options. The Core renders these into the tenant config form.
+        $configTypes = ['bool', 'int', 'string', 'text', 'select'];
+        foreach ((array)($m['config_schema'] ?? []) as $i => $field) {
+            $field = (array)$field;
+            if (empty($field['key']) || !preg_match('/^[a-z][a-z0-9_]*$/', (string)$field['key'])) {
+                $errors[] = "config_schema [$i]: 'key' fehlt oder ungültig ([a-z][a-z0-9_]*)";
+            }
+            if (empty($field['label'])) {
+                $errors[] = "config_schema [$i]: 'label' fehlt";
+            }
+            $type = (string)($field['type'] ?? '');
+            if (!in_array($type, $configTypes, true)) {
+                $errors[] = "config_schema [$i]: 'type' ungültig (bool|int|string|text|select)";
+            }
+            if ($type === 'select' && empty($field['options'])) {
+                $errors[] = "config_schema [$i]: 'select' erfordert nicht-leere 'options'";
+            }
+        }
+
         foreach ((array)($m['contracts_provided'] ?? []) as $i => $contract) {
             $contract = (array)$contract;
             if (empty($contract['name'])) {

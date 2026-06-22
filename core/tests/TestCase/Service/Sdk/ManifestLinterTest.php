@@ -125,6 +125,34 @@ class ManifestLinterTest extends TestCase
     }
 
     /**
+     * Per-tenant config schema (Increment 5 Phase 3): valid fields pass; a bad key,
+     * an unknown type, and a select without options are each flagged.
+     */
+    public function testConfigSchemaValidation(): void
+    {
+        $ok = $this->valid();
+        $ok['config_schema'] = [
+            ['key' => 'retries', 'label' => 'm.retries', 'type' => 'int'],
+            ['key' => 'mode', 'label' => 'm.mode', 'type' => 'select', 'options' => ['a' => 'A']],
+        ];
+        $this->assertSame([], array_values(array_filter(
+            (new ManifestLinter())->lint($ok)['errors'],
+            fn($e) => str_contains($e, 'config_schema'),
+        )), 'a valid config_schema produces no errors');
+
+        $bad = $this->valid();
+        $bad['config_schema'] = [
+            ['key' => 'Bad-Key', 'label' => 'x', 'type' => 'string'],
+            ['key' => 'k2', 'label' => 'y', 'type' => 'frobnicate'],
+            ['key' => 'k3', 'label' => 'z', 'type' => 'select'],
+        ];
+        $errs = (new ManifestLinter())->lint($bad)['errors'];
+        $this->assertTrue((bool)array_filter($errs, fn($e) => str_contains($e, "config_schema [0]: 'key'")));
+        $this->assertTrue((bool)array_filter($errs, fn($e) => str_contains($e, "config_schema [1]: 'type'")));
+        $this->assertTrue((bool)array_filter($errs, fn($e) => str_contains($e, "config_schema [2]: 'select'")));
+    }
+
+    /**
      * Enhancing-not-gating (ch. 26.19, Decision 184): a provided resolver/service
      * contract without error_behavior is an error; collector/event are exempt
      * (additive by nature); a declared error_behavior clears the error.

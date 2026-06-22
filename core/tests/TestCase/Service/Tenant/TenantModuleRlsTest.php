@@ -39,12 +39,17 @@ class TenantModuleRlsTest extends TestCase
     {
         parent::setUp();
         $this->cleanup();
-        // A real (active) module row so the tenant_modules.module_key FK is satisfied.
+        // A real (active) module row so the tenant_modules.module_key FK is satisfied;
+        // its manifest declares a config_schema (Phase 3) for the config tests.
+        $manifest = (string)json_encode(['config_schema' => [
+            ['key' => 'foo', 'label' => 'l.foo', 'type' => 'string'],
+            ['key' => 'num', 'label' => 'l.num', 'type' => 'int'],
+        ]]);
         $this->conn()->execute(
             'INSERT INTO modules (module_key, name, version, type, core_compatibility, manifest, status) '
-            . "VALUES (:k, 'ZZ TenantModule', '1.0.0', 'extension', '^1.0.0', '{}'::jsonb, 'active') "
+            . "VALUES (:k, 'ZZ TenantModule', '1.0.0', 'extension', '^1.0.0', CAST(:m AS jsonb), 'active') "
             . 'ON CONFLICT (module_key) DO NOTHING',
-            ['k' => self::MOD],
+            ['k' => self::MOD, 'm' => $manifest],
         );
     }
 
@@ -130,6 +135,39 @@ class TenantModuleRlsTest extends TestCase
             . "WHERE table_schema = 'core' AND table_name = 'tenant_modules' AND column_name = 'tenant_id'",
         )->fetch('assoc');
         $this->assertNotFalse($col, 'tenant_modules must have a tenant_id column');
+    }
+
+    public function testConfigSchemaIsReadFromManifest(): void
+    {
+        $schema = (new TenantModuleService())->configSchema(self::MOD);
+        $this->assertCount(2, $schema);
+        $this->assertSame('foo', $schema[0]['key'] ?? null);
+        $this->assertSame('int', $schema[1]['type'] ?? null);
+    }
+
+    public function testConfigRoundTripKeepsOnlySchemaKeysAndSurvivesDisable(): void
+    {
+        $a = $this->makeTenant('zztm_a');
+        $svc = new TenantModuleService();
+        $conn = $this->conn();
+        $conn->begin();
+        try {
+            $conn->execute("SELECT set_config('app.current_tenant_id', :t, true)", ['t' => $a]);
+            // setConfig requires a grant row (enable first); unknown keys are dropped.
+            $svc->enable($a, self::MOD);
+            $svc->setConfig($a, self::MOD, ['foo' => 'bar', 'num' => 7, 'unknown' => 'x']);
+
+            $cfg = $svc->config(self::MOD); // current tenant = A
+            $this->assertSame('bar', $cfg['foo'] ?? null);
+            $this->assertSame(7, $cfg['num'] ?? null);
+            $this->assertArrayNotHasKey('unknown', $cfg, 'keys outside config_schema are dropped');
+
+            // Disabling keeps the stored config (a later re-enable preserves it).
+            $svc->disable($a, self::MOD);
+            $this->assertSame('bar', $svc->config(self::MOD)['foo'] ?? null);
+        } finally {
+            $conn->rollback();
+        }
     }
 
     /** Inserts an (enabled) grant for $tenantId as the owner role (explicit tenant_id). */

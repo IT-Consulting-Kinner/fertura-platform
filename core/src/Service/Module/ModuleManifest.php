@@ -151,6 +151,21 @@ class ModuleManifest
     }
 
     /**
+     * Per-tenant configurable settings the module exposes (Increment 5 Phase 3).
+     * Each entry: `key` (snake_case), `label` (i18n key), `type`
+     * (bool|int|string|text|select); optional `default`, `help` (i18n), `required`,
+     * `options` (for select: value => i18n label), `min`/`max` (for int). The Core
+     * renders these as a per-tenant form ({@see \App\Controller\Admin\TenantModulesController})
+     * and stores the values in `core.tenant_modules.config`.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function configSchema(): array
+    {
+        return array_values($this->data['config_schema'] ?? []);
+    }
+
+    /**
      * Server-rendered web pages (ch. 23.16.3, web-mount). Each entry: path,
      * class ({@see ModuleWebInterface}), template; optional area/auth/title/
      * nav/nav_group.
