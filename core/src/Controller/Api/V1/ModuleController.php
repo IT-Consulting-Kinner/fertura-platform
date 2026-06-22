@@ -5,6 +5,7 @@ namespace App\Controller\Api\V1;
 
 use App\Service\Api\ApiRouteRegistry;
 use App\Service\Module\ContributionRuntime;
+use App\Service\Module\TenantModuleService;
 use Cake\Http\Response;
 use Cake\Log\Log;
 use Throwable;
@@ -29,6 +30,15 @@ class ModuleController extends ApiController
         // `public` routes carry no Core scope check (the module owns its own auth,
         // Decision D1/D2); `user` routes enforce the declared scope.
         $isPublic = ($route['auth'] ?? 'user') === 'public';
+        // Fail-closed per-tenant module enablement (operator/tenant authz §5): an
+        // authenticated module API endpoint is only reachable when the module is
+        // enabled for the caller's tenant. `public` routes are exempt — they carry
+        // no Core auth and run with no tenant context. Checked before the scope
+        // gate so a 404 (not 403) uniformly hides a module not provisioned to this
+        // tenant, mirroring the web-mount dispatcher.
+        if (!$isPublic && !(new TenantModuleService())->isEnabled($moduleKey)) {
+            return $this->json(['error' => 'not_found', 'message' => 'Kein passender Modul-Endpunkt.'], 404);
+        }
         if (!$isPublic && !empty($route['scope']) && ($denied = $this->requireScope((string)$route['scope'])) !== null) {
             return $denied;
         }

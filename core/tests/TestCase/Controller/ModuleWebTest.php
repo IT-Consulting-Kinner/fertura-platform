@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Test\TestCase\Controller;
 
+use App\Service\Api\TokenService;
 use App\Service\Module\ModuleLifecycle;
 use App\Service\Module\TenantModuleService;
 use App\Service\Settings\SettingsManager;
@@ -212,6 +213,38 @@ class ModuleWebTest extends TestCase
 
         $this->assertResponseCode(401);
         $this->assertResponseContains('missing_token');
+    }
+
+    public function testUserApiEndpointGatedByTenantEnablement(): void
+    {
+        // Increment 5.2: an authenticated ('user') module API endpoint is reachable
+        // only when the module is enabled for the caller's tenant; a public endpoint
+        // stays reachable regardless. The token's tenant is the user's tenant (set
+        // by the API auth + RLS middleware), which setUp() enabled the module for.
+        $token = (new TokenService())->create($this->userId, 'gate', ['me:read'], null, null)['token'];
+        $authJson = ['Authorization' => 'Bearer ' . $token, 'Accept' => 'application/json'];
+
+        // (a) module enabled (setUp) -> the secure endpoint is reached.
+        $this->configRequest(['headers' => $authJson]);
+        $this->get('/api/v1/m/zztest_web/secure');
+        $this->assertResponseOk();
+        $this->assertResponseContains('"auth":"user"');
+
+        // (b) disable the module for this tenant -> the same endpoint is now 404.
+        $tenantId = (string)ConnectionManager::get('default')->execute(
+            'SELECT tenant_id FROM users WHERE id = :id',
+            ['id' => $this->userId],
+        )->fetch('assoc')['tenant_id'];
+        (new TenantModuleService())->disable($tenantId, self::KEY);
+        $this->configRequest(['headers' => $authJson]);
+        $this->get('/api/v1/m/zztest_web/secure');
+        $this->assertResponseCode(404);
+
+        // (c) the public endpoint is still served while the module is disabled.
+        $this->configRequest(['headers' => ['Accept' => 'application/json', 'X-Module-Token' => 'queue-tok-123']]);
+        $this->get('/api/v1/m/zztest_web/status');
+        $this->assertResponseOk();
+        $this->assertResponseContains('"ok":true');
     }
 
     public function testPublicApiCacheHeadersPassThroughButNotSetCookie(): void
