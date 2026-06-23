@@ -28,10 +28,8 @@ class OperatorTenantGateTest extends TestCase
         parent::setUp();
         $this->cleanup();
         $conn = ConnectionManager::get('default');
-        foreach (
-            [['system_maintenance', 'Wartung', 80], ['user_group_admin', 'Users', 10], ['core_config', 'Core', 60]]
-            as [$key, $label, $sort]
-        ) {
+        $areas = [['system_maintenance', 'Wartung', 80], ['user_group_admin', 'Users', 10], ['core_config', 'Core', 60]];
+        foreach ($areas as [$key, $label, $sort]) {
             $conn->execute(
                 'INSERT INTO admin_areas (area_key, label, sort_order) VALUES (:k, :l, :s) ON CONFLICT (area_key) DO NOTHING',
                 ['k' => $key, 'l' => $label, 's' => $sort],
@@ -131,6 +129,57 @@ class OperatorTenantGateTest extends TestCase
         $this->login($this->operatorAdminId);
         $this->get('/admin/health');
         $this->assertResponseOk();
+    }
+
+    public function testDashboardHidesOperatorDataFromTenantAdmin(): void
+    {
+        // F16: the /admin landing is reachable by a tenant admin, but must not surface
+        // operator/platform-wide inventory (here the "Modules by status" section).
+        $this->login($this->tenantAdminId);
+        $this->get('/admin');
+        $this->assertResponseOk();
+        $this->assertResponseNotContains('Modules by status', 'tenant admin must not see operator module inventory');
+    }
+
+    public function testDashboardShowsOperatorDataToOperatorAdmin(): void
+    {
+        $this->login($this->operatorAdminId);
+        $this->get('/admin');
+        $this->assertResponseOk();
+        $this->assertResponseContains('Modules by status');
+    }
+
+    public function testHealthDetailDeniedForTenantAdmin(): void
+    {
+        // F14: /health/detail exposes infra internals -> operator admins only.
+        $this->login($this->tenantAdminId);
+        $this->get('/health/detail');
+        $this->assertResponseCode(401);
+    }
+
+    public function testHealthDetailAllowedForOperatorAdmin(): void
+    {
+        $this->login($this->operatorAdminId);
+        $this->get('/health/detail');
+        // Authorized -> the real report (status may be up/degraded/down), never the
+        // 401 "unauthorized" payload.
+        $this->assertResponseNotContains('unauthorized');
+    }
+
+    public function testMetricsDeniedForTenantAdmin(): void
+    {
+        // F14: /metrics exposes platform-wide gauges -> operator admins only.
+        $this->login($this->tenantAdminId);
+        $this->get('/metrics');
+        $this->assertResponseCode(401);
+    }
+
+    public function testMetricsAllowedForOperatorAdmin(): void
+    {
+        $this->login($this->operatorAdminId);
+        $this->get('/metrics');
+        $this->assertResponseOk();
+        $this->assertResponseNotContains('unauthorized');
     }
 
     public function testReindexDeniedForTenantAdminDespiteGrant(): void

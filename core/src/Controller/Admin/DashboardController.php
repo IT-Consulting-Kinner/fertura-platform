@@ -20,21 +20,33 @@ class DashboardController extends AdminController
             return (int)($row['c'] ?? 0);
         };
 
+        // The /admin landing is reachable by EVERY admin (incl. tenant admins), so it
+        // must not surface operator/platform-wide data. Tenant-relevant figures only:
+        // users has no RLS -> scope explicitly to the current tenant; groups is
+        // RLS-scoped to the current tenant already.
+        $isOperator = $this->isOperatorTenant();
         $stats = [
-            'users_active' => $scalar("SELECT count(*) c FROM users WHERE status = 'active'"),
+            'users_active' => $scalar("SELECT count(*) c FROM users WHERE status = 'active' AND tenant_id = core.current_tenant()"),
             'groups_active' => $scalar('SELECT count(*) c FROM "groups" WHERE active'),
-            'modules_active' => $scalar("SELECT count(*) c FROM modules WHERE status = 'active'"),
-            'modules_total' => $scalar('SELECT count(*) c FROM modules'),
-            'contracts' => $scalar('SELECT count(*) c FROM contracts WHERE active'),
-            'outbox_pending' => $scalar("SELECT count(*) c FROM event_outbox WHERE status = 'pending'"),
-            'outbox_deadletter' => $scalar("SELECT count(*) c FROM event_outbox WHERE status = 'dead_letter'"),
-            'licenses' => $scalar('SELECT count(*) c FROM licenses'),
         ];
 
-        $modulesByStatus = $conn->execute(
-            'SELECT status, count(*) AS c FROM modules GROUP BY status ORDER BY status',
-        )->fetchAll('assoc');
+        // Platform-wide inventory (modules/contracts/outbox/licenses are NOT
+        // tenant-scoped): operator admins only.
+        $modulesByStatus = [];
+        if ($isOperator) {
+            $stats += [
+                'modules_active' => $scalar("SELECT count(*) c FROM modules WHERE status = 'active'"),
+                'modules_total' => $scalar('SELECT count(*) c FROM modules'),
+                'contracts' => $scalar('SELECT count(*) c FROM contracts WHERE active'),
+                'outbox_pending' => $scalar("SELECT count(*) c FROM event_outbox WHERE status = 'pending'"),
+                'outbox_deadletter' => $scalar("SELECT count(*) c FROM event_outbox WHERE status = 'dead_letter'"),
+                'licenses' => $scalar('SELECT count(*) c FROM licenses'),
+            ];
+            $modulesByStatus = $conn->execute(
+                'SELECT status, count(*) AS c FROM modules GROUP BY status ORDER BY status',
+            )->fetchAll('assoc');
+        }
 
-        $this->set(compact('stats', 'modulesByStatus'));
+        $this->set(compact('stats', 'modulesByStatus', 'isOperator'));
     }
 }

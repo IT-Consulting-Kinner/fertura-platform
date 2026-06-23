@@ -40,7 +40,10 @@ class MetricsController extends AppController
 
     private function authorized(): bool
     {
-        if ($this->request->getAttribute('identity') !== null) {
+        // Operator admins only — not every authenticated user. The metrics expose
+        // platform-wide operational internals (worker/outbox/module gauges read via
+        // the BYPASSRLS connection), which a tenant user must not see.
+        if ($this->isOperatorAdmin()) {
             return true;
         }
         $configured = (string)(new SettingsManager())->get('core', 'health_token', '');

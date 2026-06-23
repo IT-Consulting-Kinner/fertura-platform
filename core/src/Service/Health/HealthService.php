@@ -14,6 +14,7 @@ use App\Service\Settings\SettingsManager;
 use App\Service\System\FeatureFlags;
 use App\Service\System\MaintenanceService;
 use Cake\Datasource\ConnectionManager;
+use Cake\Log\Log;
 use FilesystemIterator;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
@@ -39,6 +40,19 @@ class HealthService
         $this->settings ??= new SettingsManager();
         $this->registry ??= new ContractRegistry();
         $this->license ??= new LicenseService();
+    }
+
+    /**
+     * Generic failure detail for a subsystem check. The raw exception message can
+     * carry infrastructure internals (DSN fragments, filesystem paths, SQL/PG
+     * errors), so it is LOGGED server-side and only a stable, non-sensitive marker
+     * is returned in the report — even to operator admins.
+     */
+    private function failDetail(Throwable $e): string
+    {
+        Log::error('health check failed: ' . $e->getMessage());
+
+        return 'check failed';
     }
 
     /** Minimal liveness check (ch. 20.2.1): only up/down, no detail. */
@@ -132,7 +146,7 @@ class HealthService
                 ],
             ];
         } catch (Throwable $e) {
-            return ['status' => 'down', 'detail' => $e->getMessage()];
+            return ['status' => 'down', 'detail' => $this->failDetail($e)];
         }
     }
 
@@ -154,7 +168,7 @@ class HealthService
         } catch (Throwable $e) {
             @unlink($file);
 
-            return ['status' => 'down', 'detail' => $e->getMessage()];
+            return ['status' => 'down', 'detail' => $this->failDetail($e)];
         }
     }
 
@@ -228,7 +242,7 @@ class HealthService
                 'detail' => ['active_contracts' => $contracts, 'orphan_bindings' => $orphanBindings],
             ];
         } catch (Throwable $e) {
-            return ['status' => 'down', 'detail' => $e->getMessage()];
+            return ['status' => 'down', 'detail' => $this->failDetail($e)];
         }
     }
 
@@ -255,7 +269,7 @@ class HealthService
                 'detail' => ['by_status' => $byStatus, 'error_modules' => $errors, 'revoked_signature' => $revoked],
             ];
         } catch (Throwable $e) {
-            return ['status' => 'down', 'detail' => $e->getMessage()];
+            return ['status' => 'down', 'detail' => $this->failDetail($e)];
         }
     }
 
@@ -278,7 +292,7 @@ class HealthService
                 ],
             ];
         } catch (Throwable $e) {
-            return ['status' => 'degraded', 'detail' => $e->getMessage()];
+            return ['status' => 'degraded', 'detail' => $this->failDetail($e)];
         }
     }
 
@@ -298,7 +312,7 @@ class HealthService
                 'detail' => ['pending' => $pending, 'deadletter' => $deadletter],
             ];
         } catch (Throwable $e) {
-            return ['status' => 'down', 'detail' => $e->getMessage()];
+            return ['status' => 'down', 'detail' => $this->failDetail($e)];
         }
     }
 
@@ -321,7 +335,7 @@ class HealthService
                 'detail' => ['invalid' => $invalid],
             ];
         } catch (Throwable $e) {
-            return ['status' => 'down', 'detail' => $e->getMessage()];
+            return ['status' => 'down', 'detail' => $this->failDetail($e)];
         }
     }
 
@@ -389,7 +403,7 @@ class HealthService
                 ],
             ];
         } catch (Throwable $e) {
-            return ['status' => 'down', 'detail' => $e->getMessage()];
+            return ['status' => 'down', 'detail' => $this->failDetail($e)];
         }
     }
 
@@ -440,7 +454,7 @@ class HealthService
                 ],
             ];
         } catch (Throwable $e) {
-            return ['status' => 'degraded', 'detail' => $e->getMessage()];
+            return ['status' => 'degraded', 'detail' => $this->failDetail($e)];
         }
     }
 
@@ -487,7 +501,7 @@ class HealthService
                     $status = 'degraded';
                 }
             } catch (Throwable $e) {
-                $contributions[] = ['component' => $contrib['class'], 'status' => 'down', 'detail' => $e->getMessage()];
+                $contributions[] = ['component' => $contrib['class'], 'status' => 'down', 'detail' => $this->failDetail($e)];
                 $status = 'degraded';
             }
         }

@@ -91,9 +91,13 @@ class NavController extends AdminController
         $count = static fn(string $sql): int => (int)($conn->execute($sql)->fetch('assoc')['c'] ?? 0);
 
         // Users by status: the headline is the active count, the detail spells out
-        // the full breakdown (active · invited · disabled · anonymized).
+        // the full breakdown (active · invited · disabled · anonymized). Scoped to
+        // the current tenant — users has no RLS, so without this predicate the tile
+        // would aggregate every tenant's users for a tenant admin.
         $byUserStatus = [];
-        foreach ($conn->execute('SELECT status, count(*) c FROM users GROUP BY status')->fetchAll('assoc') as $r) {
+        foreach ($conn->execute(
+            'SELECT status, count(*) c FROM users WHERE tenant_id = core.current_tenant() GROUP BY status',
+        )->fetchAll('assoc') as $r) {
             $byUserStatus[(string)$r['status']] = (int)$r['c'];
         }
         $userDetail = [];
@@ -105,16 +109,27 @@ class NavController extends AdminController
 
         $simple = static fn(string $sql): array => ['badge' => (string)$count($sql), 'detail' => ''];
 
-        return [
+        $metrics = [
             '/admin/users' => [
                 'badge' => (string)($byUserStatus['active'] ?? 0),
                 'detail' => implode(' · ', $userDetail),
             ],
+            // groups is RLS-scoped to the current tenant already.
             '/admin/groups' => $simple('SELECT count(*) c FROM "groups" WHERE active'),
-            '/admin/modules' => $simple("SELECT count(*) c FROM modules WHERE status = 'active'"),
-            '/admin/registry' => $simple('SELECT count(*) c FROM contracts WHERE active'),
-            '/admin/marketplace/licenses' => $simple('SELECT count(*) c FROM licenses'),
-            '/admin/outbox' => $simple("SELECT count(*) c FROM event_outbox WHERE status = 'pending'"),
         ];
+
+        // Operator-domain tiles count platform-wide, non-tenant-scoped tables. Tenant
+        // admins do not hold these areas (so the tiles aren't rendered for them); only
+        // compute them for operators, so the counts are neither leaked nor wasted.
+        if ($this->isOperatorTenant()) {
+            $metrics += [
+                '/admin/modules' => $simple("SELECT count(*) c FROM modules WHERE status = 'active'"),
+                '/admin/registry' => $simple('SELECT count(*) c FROM contracts WHERE active'),
+                '/admin/marketplace/licenses' => $simple('SELECT count(*) c FROM licenses'),
+                '/admin/outbox' => $simple("SELECT count(*) c FROM event_outbox WHERE status = 'pending'"),
+            ];
+        }
+
+        return $metrics;
     }
 }

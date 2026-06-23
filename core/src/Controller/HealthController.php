@@ -60,7 +60,10 @@ class HealthController extends AppController
 
     private function authorizedForDetail(): bool
     {
-        if ($this->request->getAttribute('identity') !== null) {
+        // Operator admins only — not every authenticated user. The detail report
+        // exposes platform-wide infrastructure internals (DB role, storage paths,
+        // module/license inventory), which a tenant user must not see.
+        if ($this->isOperatorAdmin()) {
             return true;
         }
         $configured = (string)(new SettingsManager())->get('core', 'health_token', '');

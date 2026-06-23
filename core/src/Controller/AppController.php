@@ -17,7 +17,9 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Service\Security\MfaService;
+use App\Service\Tenant\TenantService;
 use Cake\Controller\Controller;
+use Cake\Datasource\ConnectionManager;
 use Cake\Event\EventInterface;
 use Throwable;
 
@@ -89,5 +91,31 @@ class AppController extends Controller
     protected function identity()
     {
         return $this->request->getAttribute('identity');
+    }
+
+    /**
+     * Whether the caller is an OPERATOR admin: authenticated, in the operator
+     * (default) tenant per the request RLS context, AND holding at least one
+     * administration area. The gate for platform-wide/operator-only data exposed
+     * outside the AdminController hierarchy (e.g. /health/detail, /metrics) so a
+     * mere authenticated tenant user cannot read platform internals. Fail-closed:
+     * a NULL/foreign tenant or a user without any admin area yields false.
+     */
+    protected function isOperatorAdmin(): bool
+    {
+        $identity = $this->identity();
+        $userId = $identity?->getIdentifier();
+        if (!is_string($userId)) {
+            return false;
+        }
+        /** @var \Cake\Database\Connection $conn */
+        $conn = ConnectionManager::get('default');
+        $row = $conn->execute(
+            'SELECT (core.current_tenant() = :op) '
+            . 'AND EXISTS (SELECT 1 FROM user_admin_areas WHERE user_id = :u) AS ok',
+            ['op' => TenantService::DEFAULT_TENANT_ID, 'u' => $userId],
+        )->fetch('assoc');
+
+        return $row !== false && ($row['ok'] === true || $row['ok'] === 't');
     }
 }
