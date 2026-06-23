@@ -39,12 +39,43 @@ class LanguagePackStore
 
     public function dir(string $componentKey, string $version, string $locale): string
     {
+        // Path components flow from request data (admin localization import) into a
+        // filesystem path; validate each so a crafted value (e.g. component=../..)
+        // cannot escape the store and write/delete an arbitrary .po (peer-review F8).
+        $this->assertSafeComponent($componentKey, 'component');
+        $this->assertSafeComponent($version, 'version');
+        $this->assertSafeComponent($locale, 'locale');
+
         return $this->base . '/' . $componentKey . '/' . $version . '/' . $locale;
     }
 
     public function filePath(string $componentKey, string $version, string $locale, string $domain): string
     {
+        $this->assertSafeComponent($domain, 'domain');
+
         return $this->dir($componentKey, $version, $locale) . '/' . $domain . '.po';
+    }
+
+    /**
+     * Rejects a path component that could escape the store: empty, a traversal
+     * sequence (`..`), a path separator (`/`, `\`), a drive/ADS marker (`:`), a NUL
+     * byte, or a leading dot. Allows legitimate values (`core`, `1.0.0`, `de_DE`,
+     * `default`, `kebab-case`). Authoritative chokepoint — every read/write/delete
+     * resolves its path through dir()/filePath().
+     */
+    private function assertSafeComponent(string $value, string $what): void
+    {
+        if (
+            $value === ''
+            || str_contains($value, '..')
+            || str_contains($value, '/')
+            || str_contains($value, '\\')
+            || str_contains($value, ':')
+            || str_contains($value, "\0")
+            || str_starts_with($value, '.')
+        ) {
+            throw new RuntimeException("Ungültiger Pfadbestandteil ($what).");
+        }
     }
 
     private function conn(): Connection
