@@ -17,6 +17,8 @@ use Cake\TestSuite\TestCase;
  */
 class AuditExportServiceTest extends TestCase
 {
+    private const ROLE = 'fertura_rls_audtest';
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -34,10 +36,13 @@ class AuditExportServiceTest extends TestCase
         // audit_log is append-only (trigger); test cleanup goes through the
         // documented bypass (only within a transaction via SET LOCAL).
         $conn = ConnectionManager::get('default');
+        $conn->execute("SELECT set_config('app.current_tenant_id', '', false)");
         $conn->begin();
         $conn->execute("SET LOCAL app.allow_audit_mutation = 'on'");
         $conn->execute("DELETE FROM audit_log WHERE action LIKE 'zztest.%'");
         $conn->commit();
+        // The audit rows referencing the test tenants are gone (above), so the FK is free.
+        $conn->execute("DELETE FROM tenants WHERE key LIKE 'zzaud_%'");
     }
 
     private function seed(string $action, ?array $newValue = null): void
@@ -100,6 +105,72 @@ class AuditExportServiceTest extends TestCase
             'action' => 'zztest.window', 'to' => date('c', time() - 86400),
         ]));
         $this->assertCount(0, $past);
+    }
+
+    public function testExportReappliesTenantContextUnderRls(): void
+    {
+        // Peer-review F11/F15: the export streams AFTER the request tx commits, when
+        // core.current_tenant() is NULL. Under a NOBYPASSRLS role this means the
+        // audit_log RLS policy (tenant_id = core.current_tenant()) matches nothing —
+        // so the export was silently empty. The fix: the controller captures the
+        // tenant and stream($filters, $tenantId) re-applies it. This test reproduces
+        // the post-commit condition (role + no ambient context) and proves the fix.
+        $a = $this->makeTenant('zzaud_a');
+        $b = $this->makeTenant('zzaud_b');
+        $this->seedForTenant('zztest.scoped', $a);
+        $this->seedForTenant('zztest.scoped', $b);
+        $this->ensureRole();
+
+        // Without a re-applied tenant (the bug): RLS sees no context -> empty.
+        $this->assertSame(0, $this->exportCountAsRole('zztest.scoped', null), 'no tenant context -> fail-closed empty');
+        // With the captured tenant re-applied (the fix): exactly that tenant's row.
+        $this->assertSame(1, $this->exportCountAsRole('zztest.scoped', $a), 'tenant A sees only its own audit row');
+        $this->assertSame(1, $this->exportCountAsRole('zztest.scoped', $b), 'tenant B sees only its own audit row');
+    }
+
+    private function makeTenant(string $key): string
+    {
+        return (string)ConnectionManager::get('default')->execute(
+            "INSERT INTO tenants (key, name) VALUES (:k || '_' || substr(md5(random()::text), 1, 6), :n) RETURNING id",
+            ['k' => $key, 'n' => 'ZZ Audit'],
+        )->fetch('assoc')['id'];
+    }
+
+    private function seedForTenant(string $action, string $tenantId): void
+    {
+        // AuditLogger does not set tenant_id explicitly — it defaults to
+        // core.current_tenant(); set that context for the duration of the insert.
+        $conn = ConnectionManager::get('default');
+        $conn->execute("SELECT set_config('app.current_tenant_id', :t, false)", ['t' => $tenantId]);
+        (new AuditLogger())->log($action, 'zztest_entity', '019eb000-0000-7000-8000-0000000000aa', ['component' => 'core']);
+        $conn->execute("SELECT set_config('app.current_tenant_id', '', false)");
+    }
+
+    private function ensureRole(): void
+    {
+        $conn = ConnectionManager::get('default');
+        $conn->execute(
+            "DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='" . self::ROLE . "') THEN "
+            . 'CREATE ROLE ' . self::ROLE . ' NOLOGIN NOBYPASSRLS; END IF; END $$;',
+        );
+        $conn->execute('GRANT USAGE ON SCHEMA core TO ' . self::ROLE);
+        $conn->execute('GRANT SELECT ON core.audit_log TO ' . self::ROLE);
+    }
+
+    private function exportCountAsRole(string $action, ?string $tenantId): int
+    {
+        $conn = ConnectionManager::get('default');
+        // Clean ambient context (session) so the null case truly has no tenant.
+        $conn->execute("SELECT set_config('app.current_tenant_id', '', false)");
+        $conn->begin();
+        try {
+            $conn->execute("SELECT set_config('app.bypass_rls', 'false', true)");
+            $conn->execute('SET LOCAL ROLE ' . self::ROLE);
+            // The export itself re-applies $tenantId (the fix); we set nothing here.
+            return count(iterator_to_array((new AuditExportService())->stream(['action' => $action], $tenantId)));
+        } finally {
+            $conn->rollback();
+        }
     }
 
     public function testAuditLoggerEmitsStructuredSiemLine(): void

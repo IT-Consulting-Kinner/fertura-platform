@@ -35,10 +35,22 @@ class AuditExportService
     /**
      * @param array{from?:?string,to?:?string,action?:?string,entity_type?:?string,
      *     entity_id?:?string,module_key?:?string,actor_user_id?:?string,with_values?:bool} $filters
+     * @param ?string $tenantId The caller's tenant, captured by the controller while
+     *   the request transaction (and its tenant context) is still live.
      * @return \Generator<int, array<string,mixed>>
      */
-    public function stream(array $filters): Generator
+    public function stream(array $filters, ?string $tenantId = null): Generator
     {
+        // The export body is emitted via a CallbackStream AFTER the request
+        // transaction has committed, so the request's SET LOCAL app.current_tenant_id
+        // is already gone — core.current_tenant() would be NULL and audit_log's RLS
+        // policy (tenant_id = core.current_tenant()) would match ZERO rows. Re-apply
+        // the captured tenant on this (post-commit, autocommit) connection so the
+        // export is correctly scoped to the caller's tenant (peer-review F11/F15).
+        if ($tenantId !== null && $tenantId !== '') {
+            $this->conn()->execute("SELECT set_config('app.current_tenant_id', :t, false)", ['t' => $tenantId]);
+        }
+
         $withValues = (bool)($filters['with_values'] ?? true);
         $cols = 'id, created_at, actor_user_id, action, entity_type, entity_id, entity_label, '
             . 'module_key, module_name, module_version, component, correlation_id'

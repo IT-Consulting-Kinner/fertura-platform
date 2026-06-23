@@ -85,8 +85,13 @@ class AuditController extends AdminController
             'with_values' => true,
         ];
         $stamp = date('Ymd_His');
-        $body = new CallbackStream(static function () use ($filters): void {
-            foreach ((new AuditExportService())->stream($filters) as $row) {
+        // Capture the tenant NOW (request tx + context live); the CallbackStream
+        // body runs after the tx commits, when core.current_tenant() is NULL.
+        /** @var \Cake\Database\Connection $conn */
+        $conn = ConnectionManager::get('default');
+        $tenantId = (string)($conn->execute('SELECT core.current_tenant() AS t')->fetch('assoc')['t'] ?? '');
+        $body = new CallbackStream(static function () use ($filters, $tenantId): void {
+            foreach ((new AuditExportService())->stream($filters, $tenantId) as $row) {
                 echo json_encode($row, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n";
             }
         });

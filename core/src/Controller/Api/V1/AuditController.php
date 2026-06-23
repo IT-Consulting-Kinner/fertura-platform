@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Controller\Api\V1;
 
 use App\Service\Audit\AuditExportService;
+use Cake\Datasource\ConnectionManager;
 use Cake\Http\CallbackStream;
 use Cake\Http\Response;
 
@@ -32,8 +33,13 @@ class AuditController extends ApiController
             'actor_user_id' => (string)$this->request->getQuery('actor_user_id', ''),
             'with_values' => $this->request->getQuery('with_values') === '1',
         ];
-        $body = new CallbackStream(static function () use ($filters): void {
-            foreach ((new AuditExportService())->stream($filters) as $row) {
+        // Capture the tenant NOW (request tx + context live); the CallbackStream
+        // body runs after the tx commits, when core.current_tenant() is NULL.
+        /** @var \Cake\Database\Connection $conn */
+        $conn = ConnectionManager::get('default');
+        $tenantId = (string)($conn->execute('SELECT core.current_tenant() AS t')->fetch('assoc')['t'] ?? '');
+        $body = new CallbackStream(static function () use ($filters, $tenantId): void {
+            foreach ((new AuditExportService())->stream($filters, $tenantId) as $row) {
                 echo json_encode($row, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n";
             }
         });
