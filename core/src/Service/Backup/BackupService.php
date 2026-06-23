@@ -623,11 +623,15 @@ class BackupService
     }
 
     /**
-     * Throws if the tar.gz contains unsafe entries (absolute paths or `..`
-     * traversal). Checked before extracting into ROOT (Zip-Slip protection).
+     * Throws if the tar.gz contains unsafe entries. Checked before extracting into
+     * ROOT (Zip-Slip protection): rejects absolute paths or `..` traversal in entry
+     * NAMES, AND any entry that is not a regular file or directory — a symlink/
+     * hardlink/device entry with a benign name could otherwise redirect a later
+     * regular-file write outside ROOT even though every name looks safe (F18).
      */
     private function assertSafeTar(string $tarGz): void
     {
+        // 1. Names: no absolute paths, no `..` traversal.
         $entries = [];
         @exec('tar tzf ' . escapeshellarg($tarGz) . ' 2>/dev/null', $entries, $rc);
         if ($rc !== 0) {
@@ -641,6 +645,27 @@ class BackupService
             if (str_starts_with($entry, '/') || preg_match('#(^|/)\.\.(/|$)#', $entry) === 1) {
                 throw new RuntimeException(
                     'Backup-Archiv enthält unsicheren Pfad — Wiederherstellung abgebrochen: ' . $entry,
+                );
+            }
+        }
+
+        // 2. Types: only regular files (`-`) and directories (`d`). The leading char
+        //    of each `tar tzvf` line is the entry type; reject l (symlink), h
+        //    (hardlink), b/c (device), p (FIFO), s (socket).
+        $verbose = [];
+        @exec('tar tzvf ' . escapeshellarg($tarGz) . ' 2>/dev/null', $verbose, $rcv);
+        if ($rcv !== 0) {
+            throw new RuntimeException('Backup-Archiv (files.tar.gz) nicht lesbar — Wiederherstellung abgebrochen.');
+        }
+        foreach ($verbose as $line) {
+            $line = ltrim((string)$line);
+            if ($line === '') {
+                continue;
+            }
+            if ($line[0] !== '-' && $line[0] !== 'd') {
+                throw new RuntimeException(
+                    'Backup-Archiv enthält einen nicht-regulären Eintrag (Symlink/Hardlink/Gerät) — '
+                    . 'Wiederherstellung abgebrochen.',
                 );
             }
         }

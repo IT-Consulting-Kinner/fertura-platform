@@ -155,6 +155,31 @@ class UsersTableTest extends TestCase
         $this->assertArrayHasKey('uniqueEmail', $user->getError('email'));
     }
 
+    public function testSalutationLengthIsValidated(): void
+    {
+        // F22: salutation is mass-assignable + self-service editable and the column
+        // is unbounded PG text — a validation cap prevents storing an oversized value.
+        // maxLength is a validationDefault rule, applied at marshal time (newEntity).
+        $users = $this->fetchTable('Users');
+        $bad = $users->newEntity([
+            'username' => $this->rand('sal'),
+            'email' => $this->rand('sal') . self::DOMAIN,
+            'salutation' => str_repeat('x', 101),
+        ]);
+        $this->assertNotEmpty($bad->getError('salutation'), 'an over-long salutation must fail validation');
+
+        // A normal salutation passes validation and saves.
+        $ok = $users->newEntity([
+            'username' => $this->rand('sal2'),
+            'email' => $this->rand('sal2') . self::DOMAIN,
+            'salutation' => 'Frau Dr.',
+        ]);
+        $ok->set('status', User::STATUS_INVITED);
+        $this->assertEmpty($ok->getError('salutation'));
+        $this->assertNotFalse($users->save($ok), 'a normal salutation saves');
+        $this->assertSame('Frau Dr.', $ok->get('salutation'));
+    }
+
     private function countEmail(string $email): int
     {
         return (int)ConnectionManager::get('default')->execute(

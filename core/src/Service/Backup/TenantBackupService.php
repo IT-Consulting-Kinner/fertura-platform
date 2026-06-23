@@ -193,16 +193,28 @@ class TenantBackupService
             $select = $cols === []
                 ? '*'
                 : implode(', ', array_map(static fn(string $c): string => '"' . $c . '"', $cols));
-            $rows = $this->conn()->execute(
-                "SELECT $select FROM {$spec['sql']} WHERE tenant_id = :t",
-                ['t' => $tenantId],
-            )->fetchAll('assoc');
-            $ndjson = '';
-            foreach ($rows as $r) {
-                $ndjson .= (string)json_encode($r, JSON_UNESCAPED_SLASHES) . "\n";
+            // Stream row-by-row straight into the NDJSON file so a large tenant table
+            // is never held in memory twice (a PHP array of all rows AND one giant
+            // concatenated string) (peer-review F19).
+            $path = $dir . DIRECTORY_SEPARATOR . $spec['key'] . '.ndjson';
+            $fh = fopen($path, 'wb');
+            if ($fh === false) {
+                throw new RuntimeException('Export-Datei nicht schreibbar: ' . $path);
             }
-            file_put_contents($dir . DIRECTORY_SEPARATOR . $spec['key'] . '.ndjson', $ndjson);
-            $counts[$spec['key']] = count($rows);
+            $n = 0;
+            try {
+                $stmt = $this->conn()->execute(
+                    "SELECT $select FROM {$spec['sql']} WHERE tenant_id = :t",
+                    ['t' => $tenantId],
+                );
+                while (($r = $stmt->fetch('assoc')) !== false) {
+                    fwrite($fh, (string)json_encode($r, JSON_UNESCAPED_SLASHES) . "\n");
+                    $n++;
+                }
+            } finally {
+                fclose($fh);
+            }
+            $counts[$spec['key']] = $n;
         }
 
         return $counts;
@@ -679,7 +691,12 @@ class TenantBackupService
     private function importRows(Connection $conn, string $table, string $ndjson, string $tenantId): int
     {
         $n = 0;
-        foreach (explode("\n", $ndjson) as $line) {
+        // Iterate lines via strtok rather than explode(): the (already in-memory)
+        // NDJSON is not copied a second time into a full array of lines (peer-review
+        // F19). json_encode escapes newlines inside values, so "\n" only ever
+        // separates records.
+        $line = strtok($ndjson, "\n");
+        for (; $line !== false; $line = strtok("\n")) {
             $line = trim($line);
             if ($line === '') {
                 continue;

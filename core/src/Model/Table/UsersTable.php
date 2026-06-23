@@ -62,6 +62,14 @@ class UsersTable extends AppTable
             ->maxLength('last_name', 100)
             ->allowEmptyString('last_name');
 
+        // salutation is mass-assignable and self-service editable via /account; cap
+        // it like the name fields so an unbounded text value cannot be stored
+        // (the column is PG `text`, peer-review F22).
+        $validator
+            ->scalar('salutation')
+            ->maxLength('salutation', 100)
+            ->allowEmptyString('salutation');
+
         return $validator;
     }
 

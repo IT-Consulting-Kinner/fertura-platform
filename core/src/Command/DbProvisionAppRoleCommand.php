@@ -47,13 +47,19 @@ class DbProvisionAppRoleCommand extends Command
         }
 
         $conn = Db::privileged();
+        // Single-quoted literal with doubled quotes. NOT placed inside the dollar-
+        // quoted DO block below: a password containing the tag `$do$` would otherwise
+        // close the block early and run the trailing bytes as top-level SQL on the
+        // superuser connection (peer-review F21). The password is set only via the
+        // ALTER ROLE statement, which is NOT dollar-quoted, so this escaping suffices.
         $pwLiteral = "'" . str_replace("'", "''", $password) . "'";
 
-        // 1. Create/update the role (NOBYPASSRLS, login only).
+        // 1. Create the role WITHOUT a password (NOBYPASSRLS, login only); the
+        //    password is applied by the ALTER ROLE immediately afterwards.
         $conn->execute(
             'DO $do$ BEGIN '
             . "IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '$role') THEN "
-            . "CREATE ROLE $role LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS PASSWORD $pwLiteral; "
+            . "CREATE ROLE $role LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS; "
             . 'END IF; END $do$;',
         );
         $conn->execute("ALTER ROLE $role WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS PASSWORD $pwLiteral");
