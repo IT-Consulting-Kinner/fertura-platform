@@ -5,7 +5,7 @@ namespace App\Service\Auth\Sso;
 
 use App\Audit\AuditLogger;
 use App\Service\Settings\SecretCipher;
-use Cake\Datasource\ConnectionInterface;
+use Cake\Database\Connection;
 use Cake\Datasource\ConnectionManager;
 use RuntimeException;
 use Symfony\Component\Uid\Uuid;
@@ -31,9 +31,12 @@ class SsoService
     {
     }
 
-    private function conn(): ConnectionInterface
+    private function conn(): Connection
     {
-        return ConnectionManager::get('default');
+        /** @var \Cake\Database\Connection $conn */
+        $conn = ConnectionManager::get('default');
+
+        return $conn;
     }
 
     private function cipher(): SecretCipher
@@ -58,11 +61,11 @@ class SsoService
         // tenant isolation is an application filter instead. The login page resolves
         // its tenant from the host (TransactionRlsMiddleware, pre-auth path); in
         // single-org the host maps to no tenant -> fall back to the default tenant.
-        return $this->conn()->execute(
+        return array_values($this->conn()->execute(
             'SELECT id, type, name, button_label FROM sso_providers '
             . "WHERE active AND tenant_id = coalesce(core.current_tenant(), '"
             . self::DEFAULT_TENANT_ID . "'::uuid) ORDER BY name",
-        )->fetchAll('assoc');
+        )->fetchAll('assoc'));
     }
 
     /**
@@ -72,11 +75,11 @@ class SsoService
     {
         // Admin listing -> scoped to the current tenant (same pre-auth-safe app
         // filter as activeProviders(); an authenticated admin always has a tenant).
-        return $this->conn()->execute(
+        return array_values($this->conn()->execute(
             'SELECT id, type, name, button_label, active, config, created_at FROM sso_providers '
             . "WHERE tenant_id = coalesce(core.current_tenant(), '"
             . self::DEFAULT_TENANT_ID . "'::uuid) ORDER BY created_at",
-        )->fetchAll('assoc');
+        )->fetchAll('assoc'));
     }
 
     /**
@@ -93,8 +96,13 @@ class SsoService
         if (!Uuid::isValid($id)) {
             return null;
         }
+        // Tenant-scoped like the listings (same pre-auth-safe filter): a foreign
+        // tenant's provider id resolves to null, so the login flow on tenant A's
+        // host cannot load (and drive an SSO flow with) tenant B's provider config.
         $row = $this->conn()->execute(
-            'SELECT id, type, name, button_label, active, config, secret_encrypted FROM sso_providers WHERE id = :id',
+            'SELECT id, type, name, button_label, active, config, secret_encrypted FROM sso_providers '
+            . "WHERE id = :id AND coalesce(tenant_id, '" . self::DEFAULT_TENANT_ID . "'::uuid) "
+            . "= coalesce(core.current_tenant(), '" . self::DEFAULT_TENANT_ID . "'::uuid)",
             ['id' => $id],
         )->fetch('assoc');
         if ($row === false) {
@@ -139,8 +147,11 @@ class SsoService
         if (!\App\Infrastructure\Uuid::isValid($id)) {
             return;
         }
+        // Tenant-scoped: an admin only toggles a provider of their own tenant.
         $this->conn()->execute(
-            'UPDATE sso_providers SET active = :a WHERE id = :id',
+            'UPDATE sso_providers SET active = :a WHERE id = :id '
+            . "AND coalesce(tenant_id, '" . self::DEFAULT_TENANT_ID . "'::uuid) "
+            . "= coalesce(core.current_tenant(), '" . self::DEFAULT_TENANT_ID . "'::uuid)",
             ['a' => $active ? 'true' : 'false', 'id' => $id],
         );
     }
@@ -150,7 +161,13 @@ class SsoService
         if (!\App\Infrastructure\Uuid::isValid($id)) {
             return;
         }
-        $this->conn()->execute('DELETE FROM sso_providers WHERE id = :id', ['id' => $id]);
+        // Tenant-scoped: an admin only deletes a provider of their own tenant.
+        $this->conn()->execute(
+            'DELETE FROM sso_providers WHERE id = :id '
+            . "AND coalesce(tenant_id, '" . self::DEFAULT_TENANT_ID . "'::uuid) "
+            . "= coalesce(core.current_tenant(), '" . self::DEFAULT_TENANT_ID . "'::uuid)",
+            ['id' => $id],
+        );
         $this->audit()->log('sso.provider.delete', 'sso_provider', $id, []);
     }
 
@@ -161,9 +178,29 @@ class SsoService
     public function loginExternalUser(string $providerId, string $subject, string $email, ?string $first, ?string $last, ?bool $emailVerified = null): string
     {
         $conn = $this->conn();
+        // The provider belongs to exactly ONE tenant; ALL identity resolution and
+        // JIT provisioning are bound to it (core.users has no RLS, so this explicit
+        // tenant scope is what stops one tenant's IdP from authenticating as another
+        // tenant's user). sso_providers has no RLS, so this by-id read is unscoped
+        // on purpose — it yields the authoritative tenant for everything below.
+        $prov = $conn->execute(
+            "SELECT coalesce(tenant_id, '" . self::DEFAULT_TENANT_ID . "'::uuid) AS tenant_id "
+            . 'FROM sso_providers WHERE id = :p',
+            ['p' => $providerId],
+        )->fetch('assoc');
+        if ($prov === false) {
+            throw new RuntimeException('Unbekannter SSO-Provider.');
+        }
+        // A NULL provider tenant means the default tenant (the migration backfilled
+        // NULL -> default; the column DEFAULT is core.current_tenant()).
+        $providerTenant = (string)$prov['tenant_id'];
+
+        // Follow an existing link only to a user IN the provider's tenant; a stray
+        // cross-tenant link never resolves and falls through to the guarded email path.
         $link = $conn->execute(
-            'SELECT user_id FROM identity_links WHERE provider_id = :p AND subject = :s',
-            ['p' => $providerId, 's' => $subject],
+            'SELECT il.user_id FROM identity_links il JOIN users u ON u.id = il.user_id '
+            . 'WHERE il.provider_id = :p AND il.subject = :s AND u.tenant_id = :t',
+            ['p' => $providerId, 's' => $subject, 't' => $providerTenant],
         )->fetch('assoc');
         if ($link !== false) {
             return $this->assertUsable((string)$link['user_id']);
@@ -178,16 +215,23 @@ class SsoService
         if ($emailVerified === false) {
             throw new RuntimeException('SSO-Antwort mit unverifizierter E-Mail — Zuordnung abgelehnt.');
         }
+        // Email is globally unique, so the lookup is global — but the matched user
+        // MUST belong to the provider's tenant. A match in a different tenant means
+        // the IdP is asserting a foreign tenant's email: reject (never link, never
+        // provision), instead of silently linking or hitting the global unique index.
         $user = $conn->execute(
-            'SELECT id, status, password_hash FROM users WHERE lower(email) = lower(:e)',
+            'SELECT id, status, password_hash, tenant_id FROM users WHERE lower(email) = lower(:e)',
             ['e' => $email],
         )->fetch('assoc');
+        if ($user !== false && (string)$user['tenant_id'] !== $providerTenant) {
+            throw new RuntimeException('Diese E-Mail gehört zu einem anderen Mandanten — SSO-Zuordnung abgelehnt.');
+        }
 
         if ($user === false) {
             $id = $conn->execute(
-                'INSERT INTO users (username, email, first_name, last_name, status, password_hash) '
-                . "VALUES (:u, :e, :f, :l, 'active', NULL) RETURNING id",
-                ['u' => $this->uniqueUsername($email), 'e' => $email, 'f' => $first, 'l' => $last],
+                'INSERT INTO users (username, email, first_name, last_name, status, password_hash, tenant_id) '
+                . "VALUES (:u, :e, :f, :l, 'active', NULL, :t) RETURNING id",
+                ['u' => $this->uniqueUsername($email), 'e' => $email, 'f' => $first, 'l' => $last, 't' => $providerTenant],
             )->fetch('assoc')['id'];
             $this->audit()->log('sso.provision', 'user', (string)$id, ['email' => $email, 'provider_id' => $providerId]);
             $userId = (string)$id;

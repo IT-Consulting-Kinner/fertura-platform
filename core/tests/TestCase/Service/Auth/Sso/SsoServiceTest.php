@@ -40,6 +40,7 @@ class SsoServiceTest extends TestCase
         $conn->execute("DELETE FROM saml_auth_requests WHERE relay_state LIKE 'zz_%'");
         $conn->execute("DELETE FROM users WHERE email LIKE '%@zztest.local'");
         $conn->execute("DELETE FROM sso_providers WHERE name LIKE 'zztest_%'");
+        $conn->execute("DELETE FROM tenants WHERE key LIKE 'zzsso-%'");
     }
 
     public function testSecretIsEncryptedAndDecryptable(): void
@@ -100,6 +101,50 @@ class SsoServiceTest extends TestCase
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessageMatches('/lokal/');
         (new SsoService())->loginExternalUser($this->providerId, 'ext-4', 'local@zztest.local', null, null);
+    }
+
+    public function testRejectsCrossTenantEmailMatch(): void
+    {
+        // Peer-review F1: an IdP (here the default-tenant provider) must not log in
+        // as a user that belongs to ANOTHER tenant just because it asserts that
+        // user's email. The match is rejected, never linked or provisioned.
+        $conn = ConnectionManager::get('default');
+        $tenantB = (string)$conn->execute(
+            "INSERT INTO tenants (key, name) VALUES ('zzsso-' || substr(md5(random()::text), 1, 8), 'ZZ SSO B') RETURNING id",
+        )->fetch('assoc')['id'];
+        $victim = (string)$conn->execute(
+            "INSERT INTO users (username, email, status, tenant_id) VALUES ('zztest_vicb', 'vic@zztest.local', 'active', :t) RETURNING id",
+            ['t' => $tenantB],
+        )->fetch('assoc')['id'];
+
+        try {
+            (new SsoService())->loginExternalUser($this->providerId, 'ext-x', 'vic@zztest.local', null, null, true);
+            $this->fail('cross-tenant email match must be rejected');
+        } catch (RuntimeException $e) {
+            $this->assertMatchesRegularExpression('/anderen Mandanten/', $e->getMessage());
+        }
+        $this->assertSame(0, (int)$conn->execute(
+            'SELECT count(*) c FROM identity_links WHERE user_id = :u',
+            ['u' => $victim],
+        )->fetch('assoc')['c'], 'no identity link is created to a foreign-tenant user');
+    }
+
+    public function testProvisionsIntoProviderTenant(): void
+    {
+        // Peer-review F4: a JIT-provisioned user lands in the AUTHENTICATING
+        // provider's tenant, not the users.tenant_id column default (operator tenant).
+        $conn = ConnectionManager::get('default');
+        $tenantB = (string)$conn->execute(
+            "INSERT INTO tenants (key, name) VALUES ('zzsso-' || substr(md5(random()::text), 1, 8), 'ZZ SSO B') RETURNING id",
+        )->fetch('assoc')['id'];
+        $providerB = (new SsoService())->createProvider('oidc', 'zztest_idp_b', [], null, 'B')['id'];
+        $conn->execute('UPDATE sso_providers SET tenant_id = :t WHERE id = :id', ['t' => $tenantB, 'id' => $providerB]);
+
+        $userId = (new SsoService())->loginExternalUser($providerB, 'ext-b', 'newb@zztest.local', null, null, true);
+        $this->assertSame($tenantB, (string)$conn->execute(
+            'SELECT tenant_id FROM users WHERE id = :id',
+            ['id' => $userId],
+        )->fetch('assoc')['tenant_id'], 'JIT user is provisioned into the provider tenant');
     }
 
     public function testRefusesUnverifiedEmail(): void
