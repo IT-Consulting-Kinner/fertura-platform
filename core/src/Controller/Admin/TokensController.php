@@ -15,6 +15,20 @@ class TokensController extends AdminController
 {
     protected ?string $requiredArea = null;
 
+    /**
+     * Admin areas a user must hold to MINT a privileged scope (the token's
+     * capability must not exceed the minting user's own permissions). A token
+     * authenticates as its user, but the API endpoints check only the scope, so
+     * an ungated scope would let any admin grant themselves a capability they do
+     * not otherwise have. `scim:manage` performs directory provisioning, which is
+     * the user-management area; the cross-tenant risk is already closed by the
+     * per-tenant scoping in ScimUsersController, this bounds the WITHIN-tenant
+     * privilege. Scopes absent from this map are self-service (read-only).
+     *
+     * @var array<string,string>
+     */
+    private const SCOPE_AREA_REQUIREMENTS = ['scim:manage' => 'user_group_admin'];
+
     public function index(): void
     {
         $this->renderTokenList(false);
@@ -25,7 +39,8 @@ class TokensController extends AdminController
     {
         $userId = (string)$this->identity()->getIdentifier();
         $this->set('tokens', (new TokenService())->listForUser($userId));
-        $this->set('knownScopes', TokenService::KNOWN_SCOPES);
+        // Only offer scopes the user may actually mint (see SCOPE_AREA_REQUIREMENTS).
+        $this->set('knownScopes', $this->mintableScopes());
         // Plaintext token (shown once) handed over via the session by create().
         $this->set('newToken', $this->request->getSession()->consume('newApiToken'));
         $this->set('openCreate', $openCreate);
@@ -48,12 +63,36 @@ class TokensController extends AdminController
             return null;
         }
 
+        // Server-side guard: reject any requested scope the user is not allowed to
+        // mint (the form already hides them, but never trust the submitted list).
+        if (array_diff($scopes, $this->mintableScopes()) !== []) {
+            $this->Flash->error(__('flash.token.scope_forbidden'));
+            $this->renderTokenList(true);
+
+            return null;
+        }
+
         $result = (new TokenService())->create($userId, $label, $scopes, $expiresAt, $userId);
         // Pass the plaintext to the index page once, via the session.
         $this->request->getSession()->write('newApiToken', $result['token']);
         $this->Flash->success(__('flash.token.created'));
 
         return $this->redirect(['action' => 'index']);
+    }
+
+    /**
+     * The scopes the current admin may mint: every known scope without an area
+     * requirement, plus those whose required area the user holds.
+     *
+     * @return list<string>
+     */
+    private function mintableScopes(): array
+    {
+        return array_values(array_filter(
+            TokenService::KNOWN_SCOPES,
+            fn(string $scope): bool => !isset(self::SCOPE_AREA_REQUIREMENTS[$scope])
+                || in_array(self::SCOPE_AREA_REQUIREMENTS[$scope], $this->userAreaKeys, true),
+        ));
     }
 
     public function revoke(string $id): ?Response

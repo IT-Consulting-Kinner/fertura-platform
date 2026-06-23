@@ -50,7 +50,12 @@ class ScimUsersController extends ApiController
         $startIndex = max(1, (int)$this->request->getQuery('startIndex', 1));
         $count = min(200, max(0, (int)$this->request->getQuery('count', 100)));
 
-        $where = "status <> 'anonymized'";
+        // Tenant isolation: core.users deliberately has NO RLS policy (so the
+        // pre-auth login can read it), therefore EVERY SCIM query must add the
+        // tenant predicate explicitly. core.current_tenant() is the caller's
+        // tenant (set per-request from the token's user); NULL matches nothing
+        // (fail-closed), so a token never sees another tenant's directory.
+        $where = "status <> 'anonymized' AND tenant_id = core.current_tenant()";
         $params = [];
         if ($filter !== '') {
             if (!preg_match('/^userName\s+eq\s+"([^"]*)"$/i', $filter, $m)) {
@@ -114,9 +119,13 @@ class ScimUsersController extends ApiController
         }
 
         $active = !isset($data['active']) || filter_var($data['active'], FILTER_VALIDATE_BOOLEAN);
+        // Attribute the new user to the CALLER's tenant (core.current_tenant()),
+        // not the users.tenant_id column default (which is the operator tenant).
+        // The uniqueness probe above stays global because username/email are
+        // globally unique (uq_users_*_lower), matching the DB constraint.
         $row = $this->conn()->execute(
-            'INSERT INTO users (username, email, first_name, last_name, status) '
-            . 'VALUES (:u, :e, :f, :l, :s) RETURNING *',
+            'INSERT INTO users (username, email, first_name, last_name, status, tenant_id) '
+            . 'VALUES (:u, :e, :f, :l, :s, core.current_tenant()) RETURNING *',
             [
                 'u' => $userName,
                 'e' => $email,
@@ -143,7 +152,8 @@ class ScimUsersController extends ApiController
         $data = (array)$this->request->getData();
 
         $this->conn()->execute(
-            'UPDATE users SET username = :u, email = :e, first_name = :f, last_name = :l WHERE id = :id',
+            'UPDATE users SET username = :u, email = :e, first_name = :f, last_name = :l '
+            . 'WHERE id = :id AND tenant_id = core.current_tenant()',
             [
                 'u' => trim((string)($data['userName'] ?? $row['username'])),
                 'e' => trim((string)($data['emails'][0]['value'] ?? $row['email'])),
@@ -189,13 +199,13 @@ class ScimUsersController extends ApiController
                         $this->setActive($id, filter_var($v, FILTER_VALIDATE_BOOLEAN));
                         break;
                     case 'username':
-                        $this->conn()->execute('UPDATE users SET username = :u WHERE id = :id', ['u' => trim((string)$v), 'id' => $id]);
+                        $this->conn()->execute('UPDATE users SET username = :u WHERE id = :id AND tenant_id = core.current_tenant()', ['u' => trim((string)$v), 'id' => $id]);
                         break;
                     case 'name.givenname':
-                        $this->conn()->execute('UPDATE users SET first_name = :v WHERE id = :id', ['v' => trim((string)$v) ?: null, 'id' => $id]);
+                        $this->conn()->execute('UPDATE users SET first_name = :v WHERE id = :id AND tenant_id = core.current_tenant()', ['v' => trim((string)$v) ?: null, 'id' => $id]);
                         break;
                     case 'name.familyname':
-                        $this->conn()->execute('UPDATE users SET last_name = :v WHERE id = :id', ['v' => trim((string)$v) ?: null, 'id' => $id]);
+                        $this->conn()->execute('UPDATE users SET last_name = :v WHERE id = :id AND tenant_id = core.current_tenant()', ['v' => trim((string)$v) ?: null, 'id' => $id]);
                         break;
                     default:
                         // Unknown attributes are ignored (as is customary in SCIM).
@@ -249,8 +259,10 @@ class ScimUsersController extends ApiController
         if (!Uuid::isValid($id)) {
             return null;
         }
+        // Tenant-scoped: a foreign tenant's user resolves to null here, so every
+        // by-id action (view/replace/patch/delete) 404s instead of touching it.
         $row = $this->conn()->execute(
-            "SELECT * FROM users WHERE id = :id AND status <> 'anonymized'",
+            "SELECT * FROM users WHERE id = :id AND status <> 'anonymized' AND tenant_id = core.current_tenant()",
             ['id' => $id],
         )->fetch('assoc');
 
@@ -264,7 +276,7 @@ class ScimUsersController extends ApiController
         $status = $active ? 'active' : 'disabled';
         if ($active) {
             $row = $this->conn()->execute(
-                'SELECT password_hash, status FROM users WHERE id = :id',
+                'SELECT password_hash, status FROM users WHERE id = :id AND tenant_id = core.current_tenant()',
                 ['id' => $id],
             )->fetch('assoc');
             if ($row !== false && $row['password_hash'] === null && $row['status'] === 'invited') {
@@ -272,7 +284,8 @@ class ScimUsersController extends ApiController
             }
         }
         $this->conn()->execute(
-            "UPDATE users SET status = :s, deactivated_at = CASE WHEN :s = 'disabled' THEN now() ELSE NULL END WHERE id = :id",
+            "UPDATE users SET status = :s, deactivated_at = CASE WHEN :s = 'disabled' THEN now() ELSE NULL END "
+            . 'WHERE id = :id AND tenant_id = core.current_tenant()',
             ['s' => $status, 'id' => $id],
         );
     }

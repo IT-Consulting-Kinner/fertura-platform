@@ -42,7 +42,9 @@ class ScimUsersTest extends TestCase
 
     private function cleanup(): void
     {
-        ConnectionManager::get('default')->execute("DELETE FROM users WHERE email LIKE '%@zzscim.local'");
+        $conn = ConnectionManager::get('default');
+        $conn->execute("DELETE FROM users WHERE email LIKE '%@zzscim.local'");
+        $conn->execute("DELETE FROM tenants WHERE key LIKE 'zzscim-%'");
     }
 
     /** @param array<string,mixed> $body */
@@ -185,6 +187,73 @@ class ScimUsersTest extends TestCase
         ]);
         $this->assertResponseOk();
         $this->assertSame('Neu', $this->body()['name']['givenName']);
+    }
+
+    public function testCrossTenantIsolation(): void
+    {
+        // Peer-review F2/F3/F6: a scim:manage token from tenant B must neither read
+        // nor mutate another tenant's users, and POSTs must land in the caller tenant.
+        // core.users has no RLS, so isolation is the explicit tenant predicate the
+        // SCIM controller now applies on every query.
+        $conn = ConnectionManager::get('default');
+
+        // Victim in tenant A (the operator/default tenant = $this->adminId's tenant).
+        $victimName = 'zztest_scimvic_' . bin2hex(random_bytes(3));
+        $victimId = (string)$conn->execute(
+            "INSERT INTO users (username, email, status) VALUES (:u, :e, 'active') RETURNING id",
+            ['u' => $victimName, 'e' => $victimName . '@zzscim.local'],
+        )->fetch('assoc')['id'];
+
+        // Tenant B with its own admin + scim:manage token (the token's user tenant
+        // becomes core.current_tenant() for the request).
+        $tenantB = (string)$conn->execute(
+            "INSERT INTO tenants (key, name) VALUES ('zzscim-' || substr(md5(random()::text), 1, 8), 'ZZ Scim B') RETURNING id",
+        )->fetch('assoc')['id'];
+        $adminB = (string)$conn->execute(
+            "INSERT INTO users (username, email, status, tenant_id) VALUES (:u, :e, 'active', :t) RETURNING id",
+            ['u' => 'zztest_scimadmb_' . bin2hex(random_bytes(3)), 'e' => 'scimadmb_' . bin2hex(random_bytes(3)) . '@zzscim.local', 't' => $tenantB],
+        )->fetch('assoc')['id'];
+        $this->token = (new TokenService())->create($adminB, 'SCIM-B', ['scim:manage'], null, null)['token'];
+
+        // Not in the list...
+        $this->scim('GET', '/api/scim/v2/Users');
+        $this->assertResponseOk();
+        $ids = array_map(static fn(array $r): string => (string)$r['id'], $this->body()['Resources']);
+        $this->assertNotContains($victimId, $ids, "tenant B must not list tenant A's user");
+
+        // ...not findable by filter...
+        $this->scim('GET', '/api/scim/v2/Users?filter=' . urlencode('userName eq "' . $victimName . '"'));
+        $this->assertSame(0, $this->body()['totalResults']);
+
+        // ...not gettable by id...
+        $this->scim('GET', '/api/scim/v2/Users/' . $victimId);
+        $this->assertResponseCode(404);
+
+        // ...not mutable / deactivatable.
+        $this->scim('PATCH', '/api/scim/v2/Users/' . $victimId, [
+            'schemas' => ['urn:ietf:params:scim:api:messages:2.0:PatchOp'],
+            'Operations' => [['op' => 'replace', 'value' => ['active' => false]]],
+        ]);
+        $this->assertResponseCode(404);
+        $this->scim('DELETE', '/api/scim/v2/Users/' . $victimId);
+        $this->assertResponseCode(404);
+        $this->assertSame('active', (string)$conn->execute(
+            'SELECT status FROM users WHERE id = :id',
+            ['id' => $victimId],
+        )->fetch('assoc')['status'], "tenant A's user must be untouched");
+
+        // A POST by B attributes the new user to tenant B, not the operator default.
+        $newName = 'zztest_scimnew_' . bin2hex(random_bytes(3));
+        $this->scim('POST', '/api/scim/v2/Users', [
+            'userName' => $newName,
+            'emails' => [['value' => $newName . '@zzscim.local']],
+        ]);
+        $this->assertResponseCode(201);
+        $newId = (string)$this->body()['id'];
+        $this->assertSame($tenantB, (string)$conn->execute(
+            'SELECT tenant_id FROM users WHERE id = :id',
+            ['id' => $newId],
+        )->fetch('assoc')['tenant_id'], 'POST attributes the new user to the caller tenant');
     }
 
     public function testDuplicateRejected(): void
