@@ -76,6 +76,24 @@ class MfaServiceTest extends TestCase
         $this->assertFalse($mfa->verify($this->userId, '000000'));
     }
 
+    public function testReplayStepIsPersistedDurablyInDb(): void
+    {
+        // F12: the accepted time step is persisted on the user row (durable, atomic
+        // conditional UPDATE), not in a best-effort cache — so a cache outage can no
+        // longer silently re-enable replay of an intercepted code.
+        $mfa = new MfaService();
+        $secret = Totp::generateSecret();
+        $mfa->confirmEnrollment($this->userId, $secret, Totp::code($secret));
+
+        $this->assertTrue($mfa->verify($this->userId, Totp::code($secret)));
+        $step = ConnectionManager::get('default')->execute(
+            'SELECT totp_last_step FROM users WHERE id = :id',
+            ['id' => $this->userId],
+        )->fetch('assoc')['totp_last_step'];
+        $this->assertNotNull($step, 'the accepted TOTP time step is persisted in the DB');
+        $this->assertGreaterThan(0, (int)$step);
+    }
+
     public function testRecoveryCodeIsSingleUse(): void
     {
         $mfa = new MfaService();

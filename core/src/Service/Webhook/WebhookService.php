@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Service\Webhook;
 
 use App\Audit\AuditLogger;
+use App\Infrastructure\Db;
 use App\Infrastructure\Uuid;
 use App\Service\Http\EgressClient;
 use App\Service\Tenant\TenantIterator;
@@ -114,17 +115,18 @@ class WebhookService
      * claim commit and the terminal status write (the claim auto-commits before the
      * slow HTTP attempt, so no transaction protects that window). Resets them to
      * 'pending' for redelivery — so a maintenance quiesce can actually reach
-     * in-flight=0 instead of only timing out. Mirrors the outbox reclaimStuck()
-     * sweep; the worker runs privileged, so this one pass recovers all tenants. The
-     * threshold is generous (far beyond any egress timeout) so a delivery that is
-     * genuinely still in flight is never reclaimed.
+     * in-flight=0 instead of only timing out. The threshold is generous (far beyond
+     * any egress timeout) so a delivery that is genuinely still in flight is never
+     * reclaimed.
+     *
+     * webhook_deliveries is RLS-protected and this is a cross-tenant recovery sweep,
+     * so it runs on the PRIVILEGED (BYPASSRLS) connection. On the default
+     * NOBYPASSRLS connection without a tenant context the RLS predicate would match
+     * zero rows and the sweep would silently no-op (peer-review F13).
      */
     public function reclaimStuckDeliveries(int $olderThanSeconds = 300): int
     {
-        /** @var \Cake\Database\Connection $conn */
-        $conn = $this->conn();
-
-        return $conn->execute(
+        return Db::privileged()->execute(
             "UPDATE webhook_deliveries SET status = 'pending', locked_at = NULL "
             . "WHERE status = 'delivering' AND locked_at < now() - (:secs || ' seconds')::interval",
             ['secs' => (string)max(1, $olderThanSeconds)],

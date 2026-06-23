@@ -5,11 +5,11 @@ namespace App\Service\Security;
 
 use App\Audit\AuditLogger;
 use App\Infrastructure\Uuid;
-use App\Service\Cache\CacheStore;
 use App\Service\Settings\SecretCipher;
 use App\Service\Settings\SettingsManager;
 use Cake\Database\Connection;
 use Cake\Datasource\ConnectionManager;
+use Cake\Log\Log;
 use Throwable;
 
 /**
@@ -31,15 +31,11 @@ class MfaService
 
     private SecretCipher $cipher;
     private AuditLogger $audit;
-    private CacheStore $replay;
 
-    public function __construct(?SecretCipher $cipher = null, ?AuditLogger $audit = null, ?CacheStore $replay = null)
+    public function __construct(?SecretCipher $cipher = null, ?AuditLogger $audit = null)
     {
         $this->cipher = $cipher ?? new SecretCipher();
         $this->audit = $audit ?? new AuditLogger();
-        // Short-lived "last accepted time step" state (replay protection);
-        // _app_ is sufficient (TTL >> 2 time steps of 30 s each).
-        $this->replay = $replay ?? new CacheStore('_app_');
     }
 
     private function conn(): Connection
@@ -69,7 +65,14 @@ class MfaService
     {
         try {
             return (bool)(new SettingsManager())->get('core', 'security.mfa.required', false);
-        } catch (Throwable) {
+        } catch (Throwable $e) {
+            // Availability choice (mirrors AppController::beforeFilter): a settings/DB
+            // outage must not lock the whole UI into MFA setup, so enforcement degrades
+            // to "not required". But LOG it (peer-review F20) — silently dropping a
+            // configured security policy must be detectable/alertable. Enrolled users'
+            // second factor is unaffected (verify() is independent + fails closed).
+            Log::error('MFA-required setting unreadable, enforcement skipped: ' . $e->getMessage());
+
             return false;
         }
     }
@@ -142,16 +145,19 @@ class MfaService
         if ($step === null) {
             return false;
         }
-        // Replay protection: do not accept the same (or an older) time step
-        // again — an intercepted code is therefore not reusable.
-        $key = 'mfa.last_step.' . $userId;
-        $last = (int)$this->replay->get($key, 0);
-        if ($step <= $last) {
-            return false;
-        }
-        $this->replay->set($key, $step);
+        // Replay protection (durable + atomic): accept the code only if its time step
+        // is strictly newer than the last accepted one, persisted on the user row.
+        // A single conditional UPDATE makes the check-and-set atomic, so two
+        // concurrent reuses of the same step cannot both win; and storing it in the
+        // DB (not a best-effort cache) means a cache outage can no longer silently
+        // re-enable replay of an intercepted code (peer-review F12).
+        $accepted = $this->conn()->execute(
+            'UPDATE users SET totp_last_step = :step '
+            . 'WHERE id = :id AND coalesce(totp_last_step, 0) < :step',
+            ['step' => $step, 'id' => $userId],
+        )->rowCount();
 
-        return true;
+        return $accepted > 0;
     }
 
     /** Disables MFA (the caller has already re-authenticated the user). */
