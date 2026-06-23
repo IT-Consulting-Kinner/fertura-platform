@@ -168,6 +168,45 @@ class MarketplaceClientTest extends TestCase
         $this->assertNull((new TrustStore())->getAnchor($this->pubId));
     }
 
+    public function testRejectsPublisherSignedMarketplaceDocument(): void
+    {
+        // F7: marketplace documents (crl/anchors/metadata) must be ROOT-signed. A
+        // publisher key — held by third-party vendors — must not be able to sign one
+        // (else it could revoke keys or inject a root anchor).
+        $pub = Signer::generateKeypair();
+        (new TrustStore())->addAnchor($this->pubId, $pub['public'], 'publisher', self::PUBLISHER);
+
+        $payload = ['revoked' => [['key_id' => $this->victimId, 'reason' => 'evil']]];
+        $doc = (string)json_encode([
+            'payload' => $payload,
+            'key_id' => $this->pubId,
+            'signature' => (new Signer())->sign(MarketplaceClient::canonical($payload), $pub['secret']),
+        ]);
+
+        $result = $this->client(['crl.json' => $doc])->sync();
+
+        $this->assertSame(0, $result['revoked'], 'a publisher-signed CRL must be rejected');
+        $this->assertFalse((new TrustStore())->isRevoked($this->victimId));
+    }
+
+    public function testSyncRejectsRootAnchorInjection(): void
+    {
+        // F7: even a validly root-SIGNED anchors.json must not install a new ROOT
+        // anchor; a type!='publisher' entry is rejected outright (the chain check is
+        // never skipped), so an attacker root cannot be injected.
+        $attacker = Signer::generateKeypair();
+        $client = $this->client([
+            'anchors.json' => $this->signedDoc(['anchors' => [[
+                'key_id' => $this->victimId, 'public_key' => $attacker['public'], 'type' => 'root',
+            ]]]),
+        ]);
+
+        $result = $client->sync();
+
+        $this->assertSame(0, $result['anchors'], 'a type=root entry must not be installed via sync');
+        $this->assertNull((new TrustStore())->getAnchor($this->victimId), 'no attacker root anchor was added');
+    }
+
     public function testMetadataReturnsVerifiedPayloadOrNull(): void
     {
         $signed = $this->client(['metadata.json' => $this->signedDoc(['packages' => ['a' => '1.0.0']])]);

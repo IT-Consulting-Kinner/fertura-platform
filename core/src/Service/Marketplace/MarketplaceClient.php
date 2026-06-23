@@ -97,6 +97,14 @@ class MarketplaceClient
         if (!TrustStore::validity($anchor)['ok']) {
             return null;
         }
+        // Marketplace documents (crl/anchors/metadata) are ROOT-signed (operator
+        // tooling, MpToolCommand). Publisher keys are operational and held by
+        // third-party vendors — they sign packages/licenses, NEVER these documents.
+        // Without this check a publisher key could sign a crafted anchors.json/crl
+        // to inject a root anchor or revoke keys (peer-review F7). Require root.
+        if ((string)($anchor['key_type'] ?? '') !== 'root') {
+            return null;
+        }
         if (!$this->signer->verify(self::canonical($doc['payload']), (string)$doc['signature'], (string)$anchor['public_key'])) {
             return null;
         }
@@ -129,22 +137,28 @@ class MarketplaceClient
             $chain = new TrustChain($this->signer, $this->trust);
             foreach ($anchorDoc['anchors'] ?? [] as $a) {
                 $type = (string)($a['type'] ?? 'publisher');
-                // Only accept publisher anchors with a valid root signature
-                // (chain Root -> Publisher, ch. 24.9.2) – defense-in-depth
-                // beyond the document signature.
-                if ($type === 'publisher') {
-                    $check = $chain->verifyPublisherCert($a);
-                    if (!$check['ok']) {
-                        $this->audit->log('trust_anchor.rejected', 'trust_anchor', (string)($a['key_id'] ?? ''), [
-                            'newValue' => ['reason' => $check['reason'] ?? 'Kette ungültig'],
-                        ]);
-                        continue;
-                    }
+                // Only PUBLISHER anchors may be added via a fetched document, and
+                // each must chain to a trusted root (Root -> Publisher, ch. 24.9.2).
+                // Root anchors are bootstrapped out-of-band and are NEVER installed
+                // from a sync: a crafted type!='publisher' entry must not skip the
+                // chain check and inject an attacker-controlled root (peer-review F7).
+                if ($type !== 'publisher') {
+                    $this->audit->log('trust_anchor.rejected', 'trust_anchor', (string)($a['key_id'] ?? ''), [
+                        'newValue' => ['reason' => 'Nur Publisher-Anker per Sync erlaubt (type=' . $type . ')'],
+                    ]);
+                    continue;
+                }
+                $check = $chain->verifyPublisherCert($a);
+                if (!$check['ok']) {
+                    $this->audit->log('trust_anchor.rejected', 'trust_anchor', (string)($a['key_id'] ?? ''), [
+                        'newValue' => ['reason' => $check['reason'] ?? 'Kette ungültig'],
+                    ]);
+                    continue;
                 }
                 $this->trust->addAnchor(
                     (string)$a['key_id'],
                     (string)$a['public_key'],
-                    $type,
+                    'publisher', // force publisher; never trust the document's declared type
                     $a['publisher'] ?? null,
                     $a['signed_by'] ?? null,
                     $a['key_signature'] ?? null,
