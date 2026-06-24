@@ -9,7 +9,10 @@ use App\Service\Http\EgressClient;
 
 /**
  * Google Gemini provider (P11). Roles are mapped to `user`/`model`, system
- * messages to `systemInstruction`; the key is passed as a query parameter.
+ * messages to `systemInstruction`; the (operator-global) API key is sent in the
+ * `x-goog-api-key` header — NOT as a URL query parameter — so it cannot leak via
+ * proxy/CDN access logs or HTTP-client exception messages that echo the URL
+ * (peer-review U2; mirrors the header-based secret handling of the other providers).
  */
 class GoogleProvider implements LlmProviderInterface
 {
@@ -40,10 +43,10 @@ class GoogleProvider implements LlmProviderInterface
             $body['systemInstruction'] = ['parts' => [['text' => trim($system)]]];
         }
         $model = $this->model ?: 'gemini-1.5-flash';
-        $url = $this->endpoint . '/models/' . rawurlencode($model) . ':generateContent?key=' . urlencode($this->apiKey);
+        $url = $this->endpoint . '/models/' . rawurlencode($model) . ':generateContent';
 
         $resp = $this->egress->request('POST', $url, [
-            'headers' => ['Content-Type' => 'application/json'],
+            'headers' => ['Content-Type' => 'application/json', 'x-goog-api-key' => $this->apiKey],
             'data' => (string)json_encode($body),
         ]);
         if (!$resp->isSuccess()) {
@@ -57,9 +60,9 @@ class GoogleProvider implements LlmProviderInterface
     public function embed(string $text, ?string $model = null): array
     {
         $model = $model ?: 'text-embedding-004';
-        $url = $this->endpoint . '/models/' . rawurlencode($model) . ':embedContent?key=' . urlencode($this->apiKey);
+        $url = $this->endpoint . '/models/' . rawurlencode($model) . ':embedContent';
         $resp = $this->egress->request('POST', $url, [
-            'headers' => ['Content-Type' => 'application/json'],
+            'headers' => ['Content-Type' => 'application/json', 'x-goog-api-key' => $this->apiKey],
             'data' => (string)json_encode(['content' => ['parts' => [['text' => $text]]]]),
         ]);
         if (!$resp->isSuccess()) {

@@ -11,6 +11,17 @@ use stdClass;
  * Default driver of the job-queue transport: Postgres table `job_queue`,
  * reserved with `FOR UPDATE SKIP LOCKED` (multiple consumers without collisions).
  * No external infrastructure required.
+ *
+ * CONTRACT — OPERATOR-GLOBAL, NOT TENANT-ISOLATED (peer-review U1). This is a
+ * high-throughput broker primitive distinct from the tenant-aware event outbox.
+ * `job_queue` deliberately carries no `tenant_id` and no RLS: the worker reserves
+ * jobs WITHOUT any tenant context, so RLS would (correctly) hide every row and the
+ * queue could never drain. Therefore consumers are NOT scoped to a tenant.
+ * **Never enqueue tenant-scoped/personal data here** — a consumer running in any
+ * tenant's context could read it (cross-tenant leak). Tenant-scoped background work
+ * MUST use the tenant-aware event outbox (which iterates per tenant under RLS). If a
+ * future use genuinely needs a tenant-scoped queue, first add a `tenant_id` column +
+ * RLS policy (mirroring the E166/E167 pattern) and scope reserve()/size() by tenant.
  */
 class DbQueueTransport implements QueueTransportInterface
 {

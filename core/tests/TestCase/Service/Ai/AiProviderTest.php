@@ -75,7 +75,10 @@ class AiProviderTest extends TestCase
         $r = $p->chat([['role' => 'user', 'content' => 'Hi']]);
 
         $this->assertSame('Gemini antwortet', $r['text']);
-        $this->assertStringContainsString(':generateContent?key=gk', $e->calls[0]['url']);
+        // U2: the key travels in the x-goog-api-key header, never in the URL.
+        $this->assertStringContainsString(':generateContent', $e->calls[0]['url']);
+        $this->assertStringNotContainsString('key=', $e->calls[0]['url']);
+        $this->assertSame('gk', $e->calls[0]['options']['headers']['x-goog-api-key']);
     }
 
     public function testGatewayDisabledWithoutConfig(): void
