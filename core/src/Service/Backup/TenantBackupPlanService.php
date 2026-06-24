@@ -7,6 +7,7 @@ use Cake\Database\Connection;
 use Cake\Datasource\ConnectionManager;
 use DateTimeImmutable;
 use RuntimeException;
+use Throwable;
 
 /**
  * Per-tenant backup PLANS (Inc 7b): a tenant admin schedules recurring scoped
@@ -81,6 +82,48 @@ class TenantBackupPlanService
         )->fetch('assoc');
 
         return (string)$row['id'];
+    }
+
+    /**
+     * Runs every DUE plan of the CURRENT tenant (Inc 7c): creates each plan's scoped
+     * backup, prunes to its retention, and advances last/next_run_at. Must be called
+     * with the tenant's RLS context already set (the scheduler iterates tenants and
+     * sets the context per tenant). One plan's failure is isolated from the others.
+     * Returns the number of plans run.
+     */
+    public function runDuePlans(): int
+    {
+        $conn = $this->conn();
+        $due = $conn->execute(
+            'SELECT id, name, scope, cadence, hour, weekday, day_of_month, retention_keep '
+            . 'FROM tenant_backup_plans WHERE tenant_id = core.current_tenant() '
+            . 'AND active AND next_run_at IS NOT NULL AND next_run_at <= now() ORDER BY next_run_at',
+        )->fetchAll('assoc');
+
+        $ran = 0;
+        foreach ($due as $plan) {
+            try {
+                $svc = new TenantBackupService();
+                $svc->create((string)$plan['scope'], 'plan: ' . (string)$plan['name'], null, (string)$plan['id']);
+                $svc->pruneForPlan((string)$plan['id'], (int)$plan['retention_keep']);
+                $next = $this->computeNextRun(
+                    (string)$plan['cadence'],
+                    (int)$plan['hour'],
+                    $plan['weekday'] !== null ? (int)$plan['weekday'] : null,
+                    $plan['day_of_month'] !== null ? (int)$plan['day_of_month'] : null,
+                );
+                $conn->execute(
+                    'UPDATE tenant_backup_plans SET last_run_at = now(), next_run_at = :nr '
+                    . 'WHERE id = :id AND tenant_id = core.current_tenant()',
+                    ['nr' => $next->format('c'), 'id' => $plan['id']],
+                );
+                $ran++;
+            } catch (Throwable) {
+                // Isolate one plan's failure; the next cycle retries it (next_run unchanged).
+            }
+        }
+
+        return $ran;
     }
 
     /** Deletes one of the current tenant's plans (its past backups are kept, unlinked). */

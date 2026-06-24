@@ -631,6 +631,38 @@ class TenantBackupService
     }
 
     /**
+     * Retention prune for a plan (Inc 7c): keeps the newest $keep backups created by
+     * the plan, deleting the older ones (archive file + metadata row). RLS-scoped to
+     * the current tenant, so it can only ever touch this tenant's backups. Returns
+     * the number pruned.
+     */
+    public function pruneForPlan(string $planId, int $keep): int
+    {
+        if (!$this->isUuid($planId)) {
+            return 0;
+        }
+        $keep = max(0, $keep);
+        // OFFSET is an int-cast literal (PG rejects a text-bound LIMIT/OFFSET).
+        $old = $this->conn()->execute(
+            'SELECT id, storage_path FROM tenant_backups '
+            . 'WHERE plan_id = :p AND tenant_id = core.current_tenant() '
+            . 'ORDER BY created_at DESC OFFSET ' . $keep,
+            ['p' => $planId],
+        )->fetchAll('assoc');
+        $n = 0;
+        foreach ($old as $row) {
+            @unlink((string)$row['storage_path']);
+            $this->conn()->execute(
+                'DELETE FROM tenant_backups WHERE id = :id AND tenant_id = core.current_tenant()',
+                ['id' => $row['id']],
+            );
+            $n++;
+        }
+
+        return $n;
+    }
+
+    /**
      * Restores one of the CURRENT tenant's stored backups (Increment 6b),
      * DESTRUCTIVELY replacing this tenant's restorable rows with the archive's.
      * Only the calling tenant is touched; other tenants stay live. Returns the

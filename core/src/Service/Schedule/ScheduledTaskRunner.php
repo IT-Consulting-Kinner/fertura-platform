@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Service\Schedule;
 
 use App\Service\Backup\BackupScheduledTask;
+use App\Service\Backup\TenantBackupScheduledTask;
 use App\Service\Health\WorkerHeartbeat;
 use App\Service\Module\ContributionRuntime;
 use App\Service\Registry\ContractRegistry;
@@ -32,6 +33,7 @@ class ScheduledTaskRunner
     /** @var list<class-string> Periodic tasks shipped with the core. */
     private const CORE_TASKS = [
         BackupScheduledTask::class,
+        TenantBackupScheduledTask::class,
     ];
 
     public function __construct(private ?ContractRegistry $registry = null)

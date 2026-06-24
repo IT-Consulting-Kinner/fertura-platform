@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Test\TestCase\Controller\Admin;
 
+use App\Service\Backup\TenantBackupPlanService;
 use App\Service\Storage\StorageManager;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\IntegrationTestTrait;
@@ -545,6 +546,50 @@ class TenantBackupControllerTest extends TestCase
             "SELECT count(*) c FROM tenant_backup_plans WHERE tenant_id = :t AND name = 'zzplan_daily'",
             ['t' => $this->tenantId],
         )->fetch('assoc')['c'], 'the plan is deleted');
+    }
+
+    public function testSchedulerRunsDuePlanWithRetention(): void
+    {
+        // Inc 7c: a due plan creates a scoped, plan-linked backup, advances next_run,
+        // and prunes to its retention. runDuePlans is RLS-scoped, so set the context.
+        $conn = ConnectionManager::get('default');
+        $conn->execute("SELECT set_config('app.current_tenant_id', :t, false)", ['t' => $this->tenantId]);
+        try {
+            $planId = (string)$conn->execute(
+                'INSERT INTO tenant_backup_plans '
+                . '(tenant_id, name, scope, cadence, hour, retention_keep, active, next_run_at) '
+                . "VALUES (:t, 'zzplan_due', 'core', 'daily', 2, 1, true, now() - interval '1 hour') RETURNING id",
+                ['t' => $this->tenantId],
+            )->fetch('assoc')['id'];
+
+            $svc = new TenantBackupPlanService();
+            $this->assertSame(1, $svc->runDuePlans(), 'the due plan ran');
+
+            $bk = $conn->execute(
+                'SELECT scope FROM tenant_backups WHERE tenant_id = :t AND plan_id = :p',
+                ['t' => $this->tenantId, 'p' => $planId],
+            )->fetch('assoc');
+            $this->assertNotFalse($bk, 'a plan-linked backup was created');
+            $this->assertSame('core', $bk['scope']);
+
+            $adv = $conn->execute(
+                'SELECT (next_run_at > now()) AS f, (last_run_at IS NOT NULL) AS l '
+                . 'FROM tenant_backup_plans WHERE id = :id',
+                ['id' => $planId],
+            )->fetch('assoc');
+            $this->assertTrue($adv['f'] === true || $adv['f'] === 't', 'next_run advanced to the future');
+            $this->assertTrue($adv['l'] === true || $adv['l'] === 't', 'last_run recorded');
+
+            // Force due again -> a second backup is created, then pruned to keep=1.
+            $conn->execute("UPDATE tenant_backup_plans SET next_run_at = now() - interval '1 hour' WHERE id = :id", ['id' => $planId]);
+            $this->assertSame(1, $svc->runDuePlans());
+            $this->assertSame(1, (int)$conn->execute(
+                'SELECT count(*) c FROM tenant_backups WHERE tenant_id = :t AND plan_id = :p',
+                ['t' => $this->tenantId, 'p' => $planId],
+            )->fetch('assoc')['c'], 'retention_keep=1 keeps only the newest plan backup');
+        } finally {
+            $conn->execute("SELECT set_config('app.current_tenant_id', '', false)");
+        }
     }
 
     private function makeRule(string $name, string $tenantId): void
