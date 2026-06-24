@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Controller\Admin;
 
 use App\Audit\AuditLogger;
+use App\Service\Backup\TenantBackupPlanService;
 use App\Service\Backup\TenantBackupService;
 use Cake\Http\Response;
 use Throwable;
@@ -27,8 +28,60 @@ class TenantBackupController extends AdminController
         $svc = new TenantBackupService();
         $backups = $svc->listForTenant();
         $this->set('backups', $backups);
-        // Scope choices for the ad-hoc backup form: full + core + each module key.
+        // Scope choices for the ad-hoc backup form + the plan form.
         $this->set('scopes', $svc->availableScopes());
+        // Scheduled backup plans (Inc 7b).
+        $this->set('plans', (new TenantBackupPlanService())->listPlans());
+    }
+
+    /** Creates a scheduled backup plan (Inc 7b). */
+    public function createPlan(): ?Response
+    {
+        $this->request->allowMethod('post');
+        try {
+            $r = $this->request;
+            $wd = (string)$r->getData('weekday');
+            $dom = (string)$r->getData('day_of_month');
+            $id = (new TenantBackupPlanService())->createPlan(
+                (string)$r->getData('name'),
+                (string)$r->getData('scope') ?: 'full',
+                (string)$r->getData('cadence') ?: 'daily',
+                (int)$r->getData('hour'),
+                $wd !== '' ? (int)$wd : null,
+                $dom !== '' ? (int)$dom : null,
+                (int)($r->getData('retention_keep') ?: 7),
+                (bool)$r->getData('active'),
+            );
+            (new AuditLogger())->log('tenant.backup.plan_create', 'tenant_backup_plan', $id, ['component' => 'core']);
+            $this->Flash->success(__('flash.tenant_backup.plan_created'));
+        } catch (Throwable $e) {
+            $this->Flash->error($e->getMessage());
+        }
+
+        return $this->redirect(['action' => 'index']);
+    }
+
+    /** Deletes a scheduled backup plan (its past backups are kept, unlinked). */
+    public function deletePlan(string $id): ?Response
+    {
+        $this->request->allowMethod('post');
+        if ((new TenantBackupPlanService())->deletePlan($id)) {
+            (new AuditLogger())->log('tenant.backup.plan_delete', 'tenant_backup_plan', $id, ['component' => 'core']);
+            $this->Flash->success(__('flash.tenant_backup.plan_deleted'));
+        } else {
+            $this->Flash->error(__('flash.tenant_backup.not_found'));
+        }
+
+        return $this->redirect(['action' => 'index']);
+    }
+
+    /** Enables/disables a scheduled backup plan (posts the target active state). */
+    public function togglePlan(string $id): ?Response
+    {
+        $this->request->allowMethod('post');
+        (new TenantBackupPlanService())->setActive($id, (string)$this->request->getData('active') === '1');
+
+        return $this->redirect(['action' => 'index']);
     }
 
     public function create(): ?Response

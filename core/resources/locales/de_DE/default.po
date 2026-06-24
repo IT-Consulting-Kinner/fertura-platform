@@ -1426,6 +1426,105 @@ msgstr "Ad-hoc"
 msgid "flash.tenant_backup.invalid_scope"
 msgstr "Ungültiger Backup-Umfang."
 
+msgid "admin.tenant_backup.plans_title"
+msgstr "Backup-Pläne"
+
+msgid "admin.tenant_backup.plans_hint"
+msgstr "Geplante, automatische Sicherungen zur definierten Zeit (z. B. Ticketing täglich, Wissensdatenbank wöchentlich)."
+
+msgid "admin.tenant_backup.plan_name"
+msgstr "Name"
+
+msgid "admin.tenant_backup.plan_cadence"
+msgstr "Rhythmus"
+
+msgid "admin.tenant_backup.plan_hour"
+msgstr "Stunde"
+
+msgid "admin.tenant_backup.plan_weekday"
+msgstr "Wochentag"
+
+msgid "admin.tenant_backup.plan_day"
+msgstr "Tag"
+
+msgid "admin.tenant_backup.plan_retention"
+msgstr "Aufbewahren"
+
+msgid "admin.tenant_backup.plan_active"
+msgstr "Aktiv"
+
+msgid "admin.tenant_backup.plan_add"
+msgstr "Plan anlegen"
+
+msgid "admin.tenant_backup.cadence_daily"
+msgstr "Täglich"
+
+msgid "admin.tenant_backup.cadence_weekly"
+msgstr "Wöchentlich"
+
+msgid "admin.tenant_backup.cadence_monthly"
+msgstr "Monatlich"
+
+msgid "admin.tenant_backup.col_plan_schedule"
+msgstr "Zeitplan"
+
+msgid "admin.tenant_backup.plan_next_run"
+msgstr "Nächster Lauf"
+
+msgid "admin.tenant_backup.plan_none"
+msgstr "Noch keine Pläne."
+
+msgid "admin.tenant_backup.plan_activate"
+msgstr "Aktivieren"
+
+msgid "admin.tenant_backup.plan_deactivate"
+msgstr "Deaktivieren"
+
+msgid "admin.tenant_backup.plan_delete"
+msgstr "Löschen"
+
+msgid "admin.tenant_backup.plan_delete_confirm"
+msgstr "Diesen Plan löschen? Bereits erstellte Backups bleiben erhalten."
+
+msgid "admin.tenant_backup.sched_daily"
+msgstr "Täglich um %s"
+
+msgid "admin.tenant_backup.sched_weekly"
+msgstr "Wöchentlich %s um %s"
+
+msgid "admin.tenant_backup.sched_monthly"
+msgstr "Monatlich am %s. um %s"
+
+msgid "admin.tenant_backup.dow_0"
+msgstr "Sonntag"
+
+msgid "admin.tenant_backup.dow_1"
+msgstr "Montag"
+
+msgid "admin.tenant_backup.dow_2"
+msgstr "Dienstag"
+
+msgid "admin.tenant_backup.dow_3"
+msgstr "Mittwoch"
+
+msgid "admin.tenant_backup.dow_4"
+msgstr "Donnerstag"
+
+msgid "admin.tenant_backup.dow_5"
+msgstr "Freitag"
+
+msgid "admin.tenant_backup.dow_6"
+msgstr "Samstag"
+
+msgid "flash.tenant_backup.plan_created"
+msgstr "Backup-Plan angelegt."
+
+msgid "flash.tenant_backup.plan_deleted"
+msgstr "Backup-Plan gelöscht."
+
+msgid "flash.tenant_backup.plan_name_required"
+msgstr "Bitte einen Plannamen angeben."
+
 msgid "admin.tenant_backup.download"
 msgstr "Herunterladen"
 

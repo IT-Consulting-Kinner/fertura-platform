@@ -508,6 +508,45 @@ class TenantBackupControllerTest extends TestCase
         $this->assertFlashElement('flash/error');
     }
 
+    public function testPlanCreateToggleDelete(): void
+    {
+        // Inc 7b: create a scheduled plan, toggle it inactive, delete it — all under
+        // the tenant's RLS context (DashedRoute -> create-plan/toggle-plan/delete-plan).
+        $this->login($this->userId);
+        $this->enableCsrfToken();
+        $this->enableSecurityToken();
+        $conn = ConnectionManager::get('default');
+
+        $this->post('/admin/tenant-backup/create-plan', [
+            'name' => 'zzplan_daily', 'scope' => 'core', 'cadence' => 'daily', 'hour' => 3,
+            'weekday' => 1, 'day_of_month' => 1, 'retention_keep' => 5, 'active' => '1',
+        ]);
+        $this->assertRedirect(['action' => 'index']);
+        $plan = $conn->execute(
+            'SELECT id, scope, cadence, retention_keep, next_run_at FROM tenant_backup_plans '
+            . "WHERE tenant_id = :t AND name = 'zzplan_daily'",
+            ['t' => $this->tenantId],
+        )->fetch('assoc');
+        $this->assertNotFalse($plan, 'the plan row is created');
+        $this->assertSame('core', $plan['scope']);
+        $this->assertSame('daily', $plan['cadence']);
+        $this->assertNotNull($plan['next_run_at'], 'next_run_at is computed on create');
+
+        // Toggle inactive.
+        $this->post('/admin/tenant-backup/toggle-plan/' . $plan['id'], ['active' => '0']);
+        $this->assertSame(0, (int)$conn->execute(
+            'SELECT active::int a FROM tenant_backup_plans WHERE id = :id',
+            ['id' => $plan['id']],
+        )->fetch('assoc')['a'], 'the plan is toggled inactive');
+
+        // Delete.
+        $this->post('/admin/tenant-backup/delete-plan/' . $plan['id']);
+        $this->assertSame(0, (int)$conn->execute(
+            "SELECT count(*) c FROM tenant_backup_plans WHERE tenant_id = :t AND name = 'zzplan_daily'",
+            ['t' => $this->tenantId],
+        )->fetch('assoc')['c'], 'the plan is deleted');
+    }
+
     private function makeRule(string $name, string $tenantId): void
     {
         ConnectionManager::get('default')->execute(
