@@ -24,7 +24,9 @@ Alle bestätigten Befunde wurden behoben — jeweils mit Regressionstest + adver
 | G — Fail-open-Härtung | F12, F13, F20 | `30e6987` |
 | H — Low-Befunde | F18, F19, F21, F22 | `069205a` |
 
-Endstand: **631 Tests grün**, PHPStan + PHPCS sauber, ein phpstan-Baseline-Eintrag entfernt (Netto-Verbesserung). **Offen (optional, NICHT Teil der 22):** U1 (Job-Queue, latent — kein Producer) + U2 (Gemini-API-Key im URL-Query → Header-Härtung).
+Endstand: **631 Tests grün**, PHPStan + PHPCS sauber, ein phpstan-Baseline-Eintrag entfernt (Netto-Verbesserung).
+
+Die zwei optionalen Punkte (nicht Teil der 22) wurden **ebenfalls bearbeitet** (`119850f`): **U2** — Gemini-API-Key wandert in den `x-goog-api-key`-Header (kein Leak via URL/Logs); **U1** — `DbQueueTransport`-Contract explizit gemacht (job_queue ist operator-globaler Broker, bewusst ohne tenant_id/RLS; nie tenant-scoped Daten einreihen — RLS würde den kontextlosen Worker blocken; für künftigen tenant-scoped Bedarf zuerst tenant_id+RLS nachrüsten).
 
 ---
 
