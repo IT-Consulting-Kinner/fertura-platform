@@ -1406,6 +1406,30 @@ msgstr "Note"
 msgid "admin.tenant_backup.col_action"
 msgstr "Action"
 
+msgid "admin.tenant_backup.scope"
+msgstr "Content"
+
+msgid "admin.tenant_backup.scope_full"
+msgstr "Full (whole tenant)"
+
+msgid "admin.tenant_backup.scope_core"
+msgstr "Core data"
+
+msgid "admin.tenant_backup.col_scope"
+msgstr "Content"
+
+msgid "admin.tenant_backup.col_source"
+msgstr "Source"
+
+msgid "admin.tenant_backup.source_plan"
+msgstr "Plan"
+
+msgid "admin.tenant_backup.source_adhoc"
+msgstr "Ad-hoc"
+
+msgid "flash.tenant_backup.invalid_scope"
+msgstr "Invalid backup scope."
+
 msgid "admin.tenant_backup.download"
 msgstr "Download"
 

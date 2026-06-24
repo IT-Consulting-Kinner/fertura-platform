@@ -2,12 +2,38 @@
 /**
  * @var \App\View\AppView $this
  * @var list<array<string,mixed>> $backups
+ * @var list<string> $scopes
  */
+// Human label for a backup scope: full/core are translated, a module key shows as-is.
+$scopeLabel = static function (string $s): string {
+    if ($s === 'full') {
+        return (string)__('admin.tenant_backup.scope_full');
+    }
+    if ($s === 'core') {
+        return (string)__('admin.tenant_backup.scope_core');
+    }
+
+    return ucfirst($s);
+};
+$scopeOptions = [];
+foreach ($scopes as $s) {
+    $scopeOptions[$s] = $scopeLabel($s);
+}
 ?>
 <h1 class="h3 mb-1"><?= h(__('admin.tenant_backup.title')) ?></h1>
 <p class="text-muted small"><?= h(__('admin.tenant_backup.hint')) ?></p>
 
 <?= $this->Form->create(null, ['url' => ['action' => 'create'], 'class' => 'row g-2 align-items-end col-md-9 mb-4']) ?>
+    <div class="col-auto">
+        <label class="form-label small mb-0"><?= h(__('admin.tenant_backup.scope')) ?></label>
+        <?= $this->Form->control('scope', [
+            'type' => 'select',
+            'options' => $scopeOptions,
+            'default' => 'full',
+            'label' => false,
+            'class' => 'form-select form-select-sm',
+        ]) ?>
+    </div>
     <div class="col">
         <label class="form-label small mb-0"><?= h(__('admin.tenant_backup.note')) ?></label>
         <?= $this->Form->control('note', ['label' => false, 'class' => 'form-control form-control-sm']) ?>
@@ -18,7 +44,8 @@
 <table class="table table-sm table-hover align-middle">
     <thead><tr>
         <th scope="col"><?= h(__('admin.tenant_backup.col_created')) ?></th>
-        <th scope="col"><?= h(__('admin.tenant_backup.col_file')) ?></th>
+        <th scope="col"><?= h(__('admin.tenant_backup.col_scope')) ?></th>
+        <th scope="col"><?= h(__('admin.tenant_backup.col_source')) ?></th>
         <th scope="col"><?= h(__('admin.tenant_backup.col_size')) ?></th>
         <th scope="col"><?= h(__('admin.tenant_backup.col_encrypted')) ?></th>
         <th scope="col"><?= h(__('admin.tenant_backup.col_note')) ?></th>
@@ -28,7 +55,8 @@
     <?php foreach ($backups as $b): ?>
         <tr>
             <td class="small"><?= $this->UiKit->value($b['created_at'], 'datetime') ?></td>
-            <td><code class="small"><?= h((string)$b['filename']) ?></code></td>
+            <td class="small"><span class="badge text-bg-light"><?= h($scopeLabel((string)($b['scope'] ?? 'full'))) ?></span></td>
+            <td class="small text-muted"><?= h((string)(($b['plan_id'] ?? null) !== null ? __('admin.tenant_backup.source_plan') : __('admin.tenant_backup.source_adhoc'))) ?></td>
             <td class="small"><?= h((string)(int)round(((int)$b['bytes']) / 1024)) ?> KB</td>
             <td><?= $this->UiKit->value($b['encrypted'], 'bool') ?></td>
             <td class="small text-muted"><?= h((string)($b['note'] ?? '')) ?></td>
@@ -49,7 +77,7 @@
         </tr>
     <?php endforeach; ?>
     <?php if ($backups === []): ?>
-        <tr><td colspan="6" class="text-muted"><?= h(__('admin.tenant_backup.empty')) ?></td></tr>
+        <tr><td colspan="7" class="text-muted"><?= h(__('admin.tenant_backup.empty')) ?></td></tr>
     <?php endif; ?>
     </tbody>
 </table>

@@ -1402,6 +1402,30 @@ msgstr "Notiz"
 msgid "admin.tenant_backup.col_action"
 msgstr "Aktion"
 
+msgid "admin.tenant_backup.scope"
+msgstr "Inhalt"
+
+msgid "admin.tenant_backup.scope_full"
+msgstr "Voll (ganzer Mandant)"
+
+msgid "admin.tenant_backup.scope_core"
+msgstr "Kerndaten"
+
+msgid "admin.tenant_backup.col_scope"
+msgstr "Inhalt"
+
+msgid "admin.tenant_backup.col_source"
+msgstr "Quelle"
+
+msgid "admin.tenant_backup.source_plan"
+msgstr "Plan"
+
+msgid "admin.tenant_backup.source_adhoc"
+msgstr "Ad-hoc"
+
+msgid "flash.tenant_backup.invalid_scope"
+msgstr "Ungültiger Backup-Umfang."
+
 msgid "admin.tenant_backup.download"
 msgstr "Herunterladen"
 

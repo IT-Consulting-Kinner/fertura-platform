@@ -122,32 +122,36 @@ class TenantBackupService
      * manifest, packs the ZIP (encrypted when a password is set) and records the
      * metadata row.
      */
-    public function create(?string $note, ?string $actorId): string
+    public function create(string $scope, ?string $note, ?string $actorId, ?string $planId = null): string
     {
         $tenantId = $this->currentTenantId();
         if ($tenantId === '') {
             throw new RuntimeException(__('flash.tenant_backup.no_tenant'));
         }
+        // Scope = full | core | a module key (Inc 7a). An unknown scope yields no
+        // tables and would silently produce an empty backup, so reject it.
+        $scope = $this->normalizeScope($scope);
         $tmp = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'zztb_' . bin2hex(random_bytes(6));
         if (!@mkdir($tmp, 0700, true)) {
             throw new RuntimeException('Temp-Verzeichnis nicht erstellbar.');
         }
         $zipPath = null;
         try {
-            $rowCounts = $this->exportTables($tenantId, $tmp);
-            $fileCount = $this->stageTenantFiles($tenantId, $tmp . DIRECTORY_SEPARATOR . 'files');
+            $rowCounts = $this->exportTables($tenantId, $tmp, $scope);
+            $fileCount = $this->stageTenantFiles($tenantId, $tmp . DIRECTORY_SEPARATOR . 'files', $scope);
             $manifest = (string)json_encode([
                 'format' => 'fertura-tenant-backup/1',
                 'tenant_id' => $tenantId,
+                'scope' => $scope,
                 'created_at' => date('c'),
-                'tables' => array_map(static fn(array $t): string => $t[0], self::TABLES),
+                'tables' => array_map(static fn(array $s): string => $s['key'], $this->backupTables($scope)),
                 'row_counts' => $rowCounts,
                 'file_count' => $fileCount,
             ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
             file_put_contents($tmp . DIRECTORY_SEPARATOR . 'manifest.json', $manifest);
 
             $pw = $this->password();
-            $filename = 'tenant_' . substr($tenantId, 0, 8) . '_' . date('Ymd-His')
+            $filename = 'tenant_' . substr($tenantId, 0, 8) . '_' . $scope . '_' . date('Ymd-His')
                 . '_' . bin2hex(random_bytes(3)) . '.zip';
             $zipPath = $this->tenantDir($tenantId) . DIRECTORY_SEPARATOR . $filename;
             $this->buildZip($zipPath, $tmp, $pw);
@@ -156,12 +160,13 @@ class TenantBackupService
             $sha = (string)hash_file('sha256', $zipPath);
             $row = $this->conn()->execute(
                 'INSERT INTO tenant_backups '
-                . '(tenant_id, filename, storage_path, bytes, sha256, encrypted, row_counts, note, created_by) '
-                . 'VALUES (:t, :f, :p, :b, :s, :e, CAST(:rc AS jsonb), :n, :cb) RETURNING id',
+                . '(tenant_id, filename, storage_path, bytes, sha256, encrypted, row_counts, note, created_by, scope, plan_id) '
+                . 'VALUES (:t, :f, :p, :b, :s, :e, CAST(:rc AS jsonb), :n, :cb, :sc, :pl) RETURNING id',
                 [
                     't' => $tenantId, 'f' => $filename, 'p' => $zipPath, 'b' => $bytes, 's' => $sha,
                     'e' => $pw !== '' ? 'true' : 'false', 'rc' => (string)json_encode($rowCounts),
                     'n' => $note !== null && $note !== '' ? $note : null, 'cb' => $actorId,
+                    'sc' => $scope, 'pl' => $planId,
                 ],
             )->fetch('assoc');
 
@@ -185,10 +190,10 @@ class TenantBackupService
      *
      * @return array<string,int>
      */
-    private function exportTables(string $tenantId, string $dir): array
+    private function exportTables(string $tenantId, string $dir, string $scope): array
     {
         $counts = [];
-        foreach ($this->backupTables() as $spec) {
+        foreach ($this->backupTables($scope) as $spec) {
             $cols = $this->insertableColumns($spec['schema'], $spec['table']);
             $select = $cols === []
                 ? '*'
@@ -248,7 +253,7 @@ class TenantBackupService
      *
      * @return list<array{key:string,schema:string,table:string,sql:string,restorable:bool}>
      */
-    private function backupTables(): array
+    private function backupTables(string $scope = 'full'): array
     {
         $specs = [];
         foreach (self::TABLES as [$table, $restorable]) {
@@ -263,19 +268,65 @@ class TenantBackupService
                 'restorable' => true,
             ];
         }
+        if ($scope === 'full') {
+            return $specs;
+        }
+        // 'core' = the tenant's own core tables; '<key>' = exactly the module schema
+        // mod_<key>. Filtering the full spec list keeps FK ordering + the
+        // backup-only flags intact within the scope.
+        $wantSchema = $scope === 'core' ? 'core' : 'mod_' . $scope;
 
-        return $specs;
+        return array_values(array_filter($specs, static fn(array $s): bool => $s['schema'] === $wantSchema));
     }
 
     /**
      * The restorable subset of {@see self::backupTables} (excludes the backup-only
-     * `users` / `audit_log`).
+     * `users` / `audit_log`) for the given scope.
      *
      * @return list<array{key:string,schema:string,table:string,sql:string,restorable:bool}>
      */
-    private function restorableSpecs(): array
+    private function restorableSpecs(string $scope = 'full'): array
     {
-        return array_values(array_filter($this->backupTables(), static fn(array $s): bool => $s['restorable']));
+        return array_values(array_filter($this->backupTables($scope), static fn(array $s): bool => $s['restorable']));
+    }
+
+    /**
+     * The module scope keys available to this tenant: each `mod_<key>` schema with a
+     * tenant-scoped table, stripped to the bare `<key>`.
+     *
+     * @return list<string>
+     */
+    public function moduleScopes(): array
+    {
+        $keys = [];
+        foreach ($this->moduleTableSpecs() as [$schema]) {
+            if (str_starts_with($schema, 'mod_')) {
+                $keys[substr($schema, 4)] = true;
+            }
+        }
+
+        return array_keys($keys);
+    }
+
+    /**
+     * The valid scope values for a backup: full + core + each module key.
+     *
+     * @return list<string>
+     */
+    public function availableScopes(): array
+    {
+        return array_merge(['full', 'core'], $this->moduleScopes());
+    }
+
+    /** Validates a scope, throwing on an unknown one (which would back up nothing). */
+    private function normalizeScope(string $scope): string
+    {
+        $scope = trim($scope) !== '' ? trim($scope) : 'full';
+        if (!in_array($scope, $this->availableScopes(), true)) {
+            throw new RuntimeException(__('flash.tenant_backup.invalid_scope'));
+        }
+
+        return $scope;
     }
 
     /**
@@ -428,18 +479,26 @@ class TenantBackupService
      * $destDir preserving their relative paths, so {@see self::buildZip} packs them
      * as `files/<relative>` entries. Returns the file count (0 when the tenant has none).
      */
-    private function stageTenantFiles(string $tenantId, string $destDir): int
+    private function stageTenantFiles(string $tenantId, string $destDir, string $scope): int
     {
+        // Core data has no per-tenant file store; module scope = only that module's
+        // file subtree (tenant/<id>/<key>/); full = all of the tenant's files. The
+        // archived relative path stays relative to tenant/<id>/ so a scoped restore
+        // puts each file back where it belongs.
+        if ($scope === 'core') {
+            return 0;
+        }
         $storage = new StorageManager();
-        $prefix = TenantStorage::prefix($tenantId);
+        $base = TenantStorage::prefix($tenantId);
+        $listPrefix = $scope === 'full' ? $base : $base . $scope . '/';
         try {
-            $files = $storage->list($prefix, true);
+            $files = $storage->list($listPrefix, true);
         } catch (Throwable) {
             return 0;
         }
         $n = 0;
         foreach ($files as $path) {
-            $rel = ltrim(substr((string)$path, strlen($prefix)), '/');
+            $rel = ltrim(substr((string)$path, strlen($base)), '/');
             if (!$this->isSafeRelPath($rel)) {
                 continue;
             }
@@ -464,10 +523,17 @@ class TenantBackupService
      * tenant with FEWER files than the backup (no delete-first gap). Returns the
      * number of files written.
      */
-    private function restoreTenantFiles(ZipArchive $za, string $tenantId): int
+    private function restoreTenantFiles(ZipArchive $za, string $tenantId, string $scope): int
     {
+        // Core scope has no files; a module scope only ever owns + prunes its own
+        // tenant/<id>/<key>/ subtree, so restoring one module never deletes another's
+        // files. Full prunes the whole tenant file tree.
+        if ($scope === 'core') {
+            return 0;
+        }
         $storage = new StorageManager();
         $prefix = TenantStorage::prefix($tenantId);
+        $prunePrefix = $scope === 'full' ? $prefix : $prefix . $scope . '/';
         $restored = [];
         for ($i = 0; $i < $za->numFiles; $i++) {
             $name = (string)$za->getNameIndex($i);
@@ -494,11 +560,12 @@ class TenantBackupService
             }
             $restored[$target] = true;
         }
-        // Prune files no longer in the backup. A missing subtree (nothing to list) is
-        // fine; a real delete failure must NOT be swallowed.
+        // Prune files no longer in the backup, within the scope's subtree only. A
+        // missing subtree (nothing to list) is fine; a real delete failure must NOT
+        // be swallowed.
         $existing = [];
         try {
-            $existing = $storage->list($prefix, true);
+            $existing = $storage->list($prunePrefix, true);
         } catch (Throwable) {
             $existing = [];
         }
@@ -535,7 +602,7 @@ class TenantBackupService
     public function listForTenant(): array
     {
         $rows = $this->conn()->execute(
-            'SELECT id, filename, bytes, sha256, encrypted, row_counts, note, status, created_at '
+            'SELECT id, filename, bytes, sha256, encrypted, row_counts, note, status, scope, plan_id, created_at '
             . 'FROM tenant_backups WHERE tenant_id = core.current_tenant() ORDER BY created_at DESC',
         )->fetchAll('assoc');
 
@@ -640,6 +707,14 @@ class TenantBackupService
 
             throw new RuntimeException(__('flash.tenant_backup.tenant_mismatch'));
         }
+        // Scope from the manifest controls WHICH tables/files the restore replaces
+        // (Inc 7a). Legacy archives without a scope are full backups. An unknown/
+        // uninstalled module scope yields an empty restorableSpecs() -> a safe no-op
+        // (nothing deleted, nothing reinserted), never a cross-scope wipe.
+        $scope = (string)($manifest['scope'] ?? 'full');
+        if ($scope === '') {
+            $scope = 'full';
+        }
 
         // A SEPARATE privileged connection (in production an independent superuser
         // connection) gives the restore its OWN top-level transaction, so a failure
@@ -653,13 +728,13 @@ class TenantBackupService
         $conn->enableSavePoints(true);
         try {
             /** @var array<string,int> $counts */
-            $counts = $conn->transactional(function () use ($conn, $tenantId, $za): array {
+            $counts = $conn->transactional(function () use ($conn, $tenantId, $za, $scope): array {
                 $conn->execute("SELECT set_config('app.current_tenant_id', :t, true)", ['t' => $tenantId]);
-                foreach (array_reverse($this->restorableSpecs()) as $spec) {
+                foreach (array_reverse($this->restorableSpecs($scope)) as $spec) {
                     $conn->execute("DELETE FROM {$spec['sql']} WHERE tenant_id = :t", ['t' => $tenantId]);
                 }
                 $out = [];
-                foreach ($this->restorableSpecs() as $spec) {
+                foreach ($this->restorableSpecs($scope) as $spec) {
                     $raw = $za->getFromName($spec['key'] . '.ndjson');
                     $out[$spec['key']] = is_string($raw) ? $this->importRows($conn, $spec['sql'], $raw, $tenantId) : 0;
                 }
@@ -674,7 +749,7 @@ class TenantBackupService
             ]);
             // Files are replaced AFTER the DB transaction commits (the filesystem is
             // not transactional); write-then-prune keeps it loss-safe.
-            $counts['_files'] = $this->restoreTenantFiles($za, $tenantId);
+            $counts['_files'] = $this->restoreTenantFiles($za, $tenantId, $scope);
         } finally {
             $za->close();
         }

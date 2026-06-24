@@ -78,8 +78,9 @@ class TenantBackupControllerTest extends TestCase
         // Tenant-scoped child rows referencing the test tenants (no ON DELETE CASCADE).
         $conn->execute("DELETE FROM automation_rules WHERE name LIKE 'zzrest%'");
         $conn->execute("DELETE FROM tenants WHERE key LIKE 'zztbk-%'");
-        // The fixture module schema (Inc 6d test) — drop so other tests do not discover it.
+        // The fixture module schemas — drop so other tests do not discover them.
         $conn->execute('DROP SCHEMA IF EXISTS zzmod6d CASCADE');
+        $conn->execute('DROP SCHEMA IF EXISTS mod_zztest7a CASCADE');
     }
 
     private function login(string $userId): void
@@ -459,6 +460,52 @@ class TenantBackupControllerTest extends TestCase
             "SELECT count(*) c FROM audit_log WHERE action = 'tenant.restore' AND tenant_id = :t",
             ['t' => $tidB],
         )->fetch('assoc')['c'], 'a rejected upload performs no restore');
+    }
+
+    public function testScopedBackupCoversOnlyItsScope(): void
+    {
+        // Inc 7a: a 'core' backup contains only the tenant's core tables; a module
+        // scope contains only that module's table — never the other's.
+        $this->login($this->userId);
+        $this->enableCsrfToken();
+        $this->enableSecurityToken();
+        $conn = ConnectionManager::get('default');
+
+        // Module fixture in a mod_<key> schema -> valid module scope 'zztest7a'.
+        $conn->execute('CREATE SCHEMA IF NOT EXISTS mod_zztest7a');
+        $conn->execute(
+            'CREATE TABLE IF NOT EXISTS mod_zztest7a.widgets '
+            . '(id uuid PRIMARY KEY DEFAULT core.uuid_generate_v7(), tenant_id uuid NOT NULL, label text)',
+        );
+        $conn->execute('ALTER TABLE mod_zztest7a.widgets ENABLE ROW LEVEL SECURITY');
+        $conn->execute('DROP POLICY IF EXISTS p_zztest7a ON mod_zztest7a.widgets');
+        $conn->execute('CREATE POLICY p_zztest7a ON mod_zztest7a.widgets USING (true) WITH CHECK (true)');
+        $conn->execute("INSERT INTO mod_zztest7a.widgets (tenant_id, label) VALUES (:t, 'W')", ['t' => $this->tenantId]);
+        $this->makeRule('zzrest_scope', $this->tenantId); // core data
+
+        $latest = fn(): array => (array)$conn->execute(
+            'SELECT scope, row_counts FROM tenant_backups WHERE tenant_id = :t ORDER BY created_at DESC LIMIT 1',
+            ['t' => $this->tenantId],
+        )->fetch('assoc');
+
+        // 'core' scope -> core tables only, no module table.
+        $this->post('/admin/tenant-backup/create', ['scope' => 'core']);
+        $this->assertRedirect(['action' => 'index']);
+        $core = $latest();
+        $this->assertSame('core', $core['scope']);
+        $this->assertStringContainsString('automation_rules', (string)$core['row_counts']);
+        $this->assertStringNotContainsString('mod_zztest7a', (string)$core['row_counts'], 'core scope excludes module tables');
+
+        // module scope -> only that module's table, no core table.
+        $this->post('/admin/tenant-backup/create', ['scope' => 'zztest7a']);
+        $mod = $latest();
+        $this->assertSame('zztest7a', $mod['scope']);
+        $this->assertStringContainsString('mod_zztest7a.widgets', (string)$mod['row_counts']);
+        $this->assertStringNotContainsString('automation_rules', (string)$mod['row_counts'], 'module scope excludes core tables');
+
+        // An unknown scope is rejected (would otherwise back up nothing).
+        $this->post('/admin/tenant-backup/create', ['scope' => 'does_not_exist']);
+        $this->assertFlashElement('flash/error');
     }
 
     private function makeRule(string $name, string $tenantId): void

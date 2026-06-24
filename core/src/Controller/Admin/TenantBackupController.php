@@ -24,17 +24,22 @@ class TenantBackupController extends AdminController
 
     public function index(): void
     {
-        $backups = (new TenantBackupService())->listForTenant();
-        $this->set(compact('backups'));
+        $svc = new TenantBackupService();
+        $backups = $svc->listForTenant();
+        $this->set('backups', $backups);
+        // Scope choices for the ad-hoc backup form: full + core + each module key.
+        $this->set('scopes', $svc->availableScopes());
     }
 
     public function create(): ?Response
     {
         $this->request->allowMethod('post');
         $note = trim((string)$this->request->getData('note'));
+        $scope = trim((string)$this->request->getData('scope')) ?: 'full';
         try {
             $actor = $this->identity()?->getIdentifier();
             $id = (new TenantBackupService())->create(
+                $scope,
                 $note !== '' ? $note : null,
                 is_scalar($actor) ? (string)$actor : null,
             );
