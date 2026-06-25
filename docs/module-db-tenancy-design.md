@@ -1,0 +1,57 @@
+# Inc 9 — Erzwungene Mandanten-Konformität von Modul-DB-Tabellen (Design)
+
+**Problem (DB-Analogon zu Inc 8 / `docs/module-storage-convention-design.md`):** Eine
+mandanten-tragende Modul-Tabelle muss `tenant_id` + RLS + eine fail-closed Tenant-Policy
+führen — sonst ist sie (a) **nicht isoliert** = Cross-Tenant-Leak und (b) unsichtbar für
+Backup-Scope + Verbrauchs-Footprint (beide entdecken Modul-Tabellen per Introspektion
+über `tenant_id` + RLS). Bis Inc 9 war das **Konvention**; das alte Install-Gate prüfte
+nur „≥1 RLS-Tabelle + ≥1 Policy im Schema".
+
+**Hebel ≠ wie bei Dateien:** Es gibt keinen einzelnen Query-Chokepoint — aber **Postgres-RLS
+erzwingt die Trennung bei jeder Query von selbst, sobald die Tabelle korrekt aufgesetzt
+ist** (NOBYPASSRLS-App-Rolle, `Db::privileged()` für Module unerreichbar, FORCE RLS). Die
+ungeschützte Fläche ist also nur die **Form der Tabelle zur Erstellungszeit**. Deshalb
+**kein** Runtime-Query-Wrapper, sondern Schema-/Install-/Autoren-Zeit.
+
+## Stufen (alle Core; Module adoptieren per Hand-off — Boundary)
+
+- **9a — Helfer.** `core.create_tenant_table()` / `core.add_tenant_unique()` (SECURITY
+  INVOKER, EXECUTE an PUBLIC) bauen die kanonische Form per Konstruktion: `tenant_id uuid
+  NOT NULL DEFAULT core.current_tenant()`, ENABLE+FORCE RLS, Policy
+  `core.rls_bypass() OR tenant_id = core.current_tenant()` (USING+WITH CHECK), tenant-first
+  UNIQUE.
+- **9b — Manifest `tables`.** Nur AUSNAHMEN deklarieren: undeklariert = tenant-scoped (muss
+  konform sein); eine echte modul-globale Tabelle wird per `scope: global` + `reason`
+  ausgeklinkt (die auditierbare Ausnahmeliste des Gates).
+- **9c — Install-Gate (die Wall, scharf).** `assertTenantTablesConform()` prüft pro
+  Tabelle im `mod_<key>`-Schema gegen den Live-Katalog: `tenant_id` uuid NOT NULL DEFAULT
+  current_tenant, RLS enabled **und** forced, eine Policy die `tenant_id` an
+  `current_tenant()` bindet in USING **und** WITH CHECK, UNIQUEs mit `tenant_id` zuerst.
+  Verstoß → Aktivierung verweigert (Rollback). `forceRls` läuft jetzt für **alle** Module
+  vor dem Gate (essenziell für out_of_process). `core.current_tenant()` zu
+  `ModuleDbRole::CORE_FUNCTIONS` hinzugefügt (out_of_process-Migrationen laufen unter der
+  Modul-Rolle). **Strukturelles** Gate — Policy-*Logik* ist per Leak-Tests gedeckt.
+- **9d — module_lint Migrations-Scan (advisory).** Warnt aggregiert bei einer erstellten
+  Tabelle ohne RLS, die nicht als global deklariert ist. Bewusst Warnung (nicht CI-Error):
+  Module bauen Tenancy retrofit; das Gate ist die autoritative Prüfung.
+
+## Bekannte Grenzen / Reste (adversarial reviewt)
+- **Policy-Logik:** Das Gate beweist die tenant-Form *strukturell*, nicht die Korrektheit
+  der Policy-Logik (z. B. `tenant_id <> current_tenant()` oder ein Decoy-`current_tenant`).
+  Gedeckt durch die verpflichtenden NOBYPASSRLS-Leak-Tests der Module (selbst-vereitelnd).
+- **`global`-Ausnahme:** ein Modul kann eine tatsächlich tenant-tragende Tabelle als global
+  ausklinken — bewusst auditierbar (Manifest, signiert), kein stiller Pfad.
+- **`is_scoped`-Trigger:** das Gate greift nur bei is_scoped-Modulen; ein Modul mit
+  Tenant-Daten ohne is_scoped-Ressource wird nicht geprüft (Fehldeklaration → Review).
+- **out_of_process-RPC-Tenant-Propagation:** isolierte Tasks/Collectors laufen im
+  System-Kontext ohne Tenant; ein isoliertes Modul, das eine Tenant-Tabelle SCHREIBT,
+  braucht eine per-Tenant-Iteration/Propagation — eigener Folge-Belang (die Isolations-
+  Test-Fixtures sind daher als `global` deklariert).
+
+## Modul-Adoption (Hand-off, NICHT Core) — Gate ist scharf
+Ticketing + KB müssen VOR der nächsten (Re-)Installation: (1) jede echte globale Tabelle im
+Manifest als `tables[].scope=global` (mit reason) deklarieren — `module_lint` zeigt sie an
+(ticketing: `api_tokens`, `notification_types`; KB: `system_settings` u. a.); (2) bestätigen,
+dass jede tenant-Tabelle konform ist (FORCE liefert Core; tenant-Uniques prüfen);
+insbesondere `api_tokens` (tenant_id ohne bindende Policy) konform machen ODER global
+deklarieren. Neue Tabellen via `core.create_tenant_table()`.
