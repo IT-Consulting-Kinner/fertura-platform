@@ -255,4 +255,53 @@ class ManifestLinter
 
         return ['errors' => $errors, 'warnings' => []];
     }
+
+    /**
+     * Advisory author-time scan of a module's migrations/*.sql for the tenant
+     * convention (Inc 9d). The AUTHORITATIVE check is the install gate
+     * ({@see \App\Service\Module\ModuleLifecycle} — it inspects the LIVE catalog after
+     * ALL migrations); this is only an early best-effort nudge over the raw SQL text,
+     * hence WARNINGS not errors (modules add tenancy in retrofit migrations, which a
+     * per-file scan cannot fully follow). It flags a created table that NEVER gets
+     * `ENABLE ROW LEVEL SECURITY` across the whole migration set and is NOT declared
+     * module-global in the manifest: either a forgotten tenant table (the gate will
+     * refuse it) or a genuine global table that should be declared `scope: global`.
+     *
+     * @param list<string> $globalTables the manifest's declared module-global tables
+     * @return array{errors:list<string>, warnings:list<string>}
+     */
+    public function lintMigrations(string $moduleDir, array $globalTables): array
+    {
+        $dir = rtrim($moduleDir, '/\\') . DIRECTORY_SEPARATOR . 'migrations';
+        if (!is_dir($dir)) {
+            return ['errors' => [], 'warnings' => []];
+        }
+        $sql = '';
+        foreach (glob($dir . DIRECTORY_SEPARATOR . '*.sql') ?: [] as $file) {
+            $sql .= "\n" . (string)file_get_contents($file);
+        }
+        // Tables created in the module schema (unqualified names).
+        preg_match_all('/\bcreate\s+table\s+(?:if\s+not\s+exists\s+)?"?([a-z_][a-z0-9_]*)"?/i', $sql, $cm);
+        $created = array_values(array_unique(array_map('strtolower', $cm[1])));
+        // Tables built via the Core helper are conformant by construction.
+        preg_match_all('/core\.create_tenant_table\s*\(\s*[^,]+,\s*\'([a-z_][a-z0-9_]*)\'/i', $sql, $hm);
+        $helperBuilt = array_map('strtolower', $hm[1]);
+        // Tables that get RLS enabled somewhere in the migration set.
+        preg_match_all('/\balter\s+table\s+"?([a-z_][a-z0-9_]*)"?\s+enable\s+row\s+level\s+security/i', $sql, $em);
+        $rlsEnabled = array_merge($helperBuilt, array_map('strtolower', $em[1]));
+        $global = array_map('strtolower', $globalTables);
+
+        $warnings = [];
+        foreach ($created as $table) {
+            if (in_array($table, $global, true) || in_array($table, $rlsEnabled, true)) {
+                continue;
+            }
+            $warnings[] = "migrations: Tabelle '$table' erhält in keiner Migration RLS und ist nicht als "
+                . 'tables[].scope=global deklariert — entweder tenant-konform machen (das Install-Gate prüft '
+                . 'tenant_id + RLS + Policy + tenant-UNIQUE hart) oder im Manifest als global deklarieren.';
+        }
+        sort($warnings);
+
+        return ['errors' => [], 'warnings' => $warnings];
+    }
 }

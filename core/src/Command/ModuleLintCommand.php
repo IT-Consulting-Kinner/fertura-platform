@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Command;
 
+use App\Service\Module\ModuleManifest;
 use App\Service\Sdk\ManifestLinter;
 use Cake\Command\Command;
 use Cake\Console\Arguments;
@@ -35,8 +36,14 @@ class ModuleLintCommand extends Command
         $manifestResult = $linter->lintFile($manifest);
         // Also scan the module's src/ for the per-module storage convention (Inc 8c).
         $sourceResult = $linter->lintSource($dir);
-        $warnings = array_merge($manifestResult['warnings'], $sourceResult['warnings']);
-        $errors = array_merge($manifestResult['errors'], $sourceResult['errors']);
+        // Advisory scan of migrations/ for the per-tenant table convention (Inc 9d),
+        // using the manifest's declared module-global tables as the exception list.
+        $manifestData = is_file($manifest) ? (json_decode((string)file_get_contents($manifest), true) ?: []) : [];
+        $globalTables = (new ModuleManifest((array)$manifestData))->globalTables();
+        $migrationResult = $linter->lintMigrations($dir, $globalTables);
+
+        $warnings = array_merge($manifestResult['warnings'], $sourceResult['warnings'], $migrationResult['warnings']);
+        $errors = array_merge($manifestResult['errors'], $sourceResult['errors'], $migrationResult['errors']);
 
         foreach ($warnings as $w) {
             $io->warning('WARN: ' . $w);
