@@ -41,3 +41,26 @@ ab, damit Modul-Scope ihre Dateien erfasst. Module, die das (noch) nicht tun, we
 - **7e — Betreiber-Sicht:** operator-gated Seite, pro Mandant Funktionen + Speicher → Abrechnungsbasis.
 
 Jeder Sub-Increment: phpstan + phpcs + Tests grün, adversarial review (daten-/sicherheitskritisch).
+
+## Implementierungsstand
+**Inc 7 vollständig (7a–7e) umgesetzt, getestet, adversarial reviewt, gepusht.**
+- 7a `tenant_backups.scope`/`plan_id` + scoped Create/Restore + GUI-Scope-Auswahl.
+- 7b `core.tenant_backup_plans` (RLS) + `TenantBackupPlanService` (CRUD, `computeNextRun`) + Plan-GUI.
+- 7c `TenantBackupScheduledTask` (in `ScheduledTaskRunner::CORE_TASKS`) → `runDuePlans()` je Mandant
+  unter dessen RLS-Kontext + `pruneForPlan()` (Retention).
+- 7d `TenantConsumptionService::summary()` (Funktionen + Speicher + DB-Footprint), `ConsumptionController`
+  (Tenant-Bereich `consumption`), Dashboard-GUI.
+- 7e `OperatorConsumptionService::perTenant()` (iteriert Mandanten, schaltet je Mandant nur den
+  RLS-Tenant-GUC um, gleicher `summary()`-Codepfad), `OperatorConsumptionController` (operator-gated
+  unter `core_config`).
+
+## Bekannte Grenzen / Folgeaufgaben
+- **Operator-Sicht-Kosten (7e):** `perTenant()` ruft `summary()` je aktivem Mandant; `footprint()`
+  zählt je tenant-scoped Tabelle (N Mandanten × M Tabellen COUNTs) und re-introspiziert die
+  Modul-Tabellen je Mandant. Für eine operator-only Seite akzeptiert; bei sehr vielen Mandanten ggf.
+  cachen (Modul-Tabellen-Set ist mandantenunabhängig) oder asynchron/materialisiert aggregieren.
+- **DB-Footprint ist näherungsweise:** Live-`COUNT(*)` je Tabelle, kein Byte-Maß; abrechnungsrelevant
+  ist der Speicher (`total_bytes` = Archive + Datei-Store).
+- **Scope-Auswahl vs. aktivierte Module:** `availableScopes()` listet alle introspizierten Modul-Schemata,
+  nicht nur die dem Mandanten via `tenant_modules` aktivierten. Harmlos (ein Backup eines nicht genutzten,
+  leeren Modul-Scopes ist leer), aber als UX-Verfeinerung auf `tenant_modules` filterbar.
