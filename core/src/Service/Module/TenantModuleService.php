@@ -64,6 +64,32 @@ class TenantModuleService
     }
 
     /**
+     * The (active) modules ENABLED for the current request tenant, with their display
+     * name + version — the "functions you consume" list of the tenant consumption
+     * dashboard (Inc 7d). RLS-scoped via `core.current_tenant()` plus the explicit
+     * `tenant_id` predicate, so it is correct under both DB roles (cf. the class
+     * docblock) and reusable per-tenant by the operator billing view (Inc 7e), which
+     * sets each tenant's context before calling.
+     *
+     * @return list<array{module_key:string, name:string, version:string}>
+     */
+    public function enabledModules(): array
+    {
+        $rows = $this->conn()->execute(
+            'SELECT m.module_key, m.name, m.version FROM tenant_modules tm '
+            . 'JOIN modules m ON m.module_key = tm.module_key '
+            . "WHERE tm.tenant_id = core.current_tenant() AND tm.enabled AND m.status = 'active' "
+            . 'ORDER BY m.name',
+        )->fetchAll('assoc');
+
+        return array_values(array_map(static fn(array $r): array => [
+            'module_key' => (string)$r['module_key'],
+            'name' => (string)$r['name'],
+            'version' => (string)$r['version'],
+        ], $rows));
+    }
+
+    /**
      * The installed (active) modules plus whether each is enabled for $tenantId —
      * the row model for the tenant-facing enable/disable GUI (Increment 5.3). A
      * module the tenant has never configured appears with enabled=false (fail-closed).

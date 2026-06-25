@@ -610,6 +610,52 @@ class TenantBackupService
     }
 
     /**
+     * Aggregate count + byte size of the current tenant's stored backup archives,
+     * for the consumption dashboard (Inc 7d). RLS-scoped via `core.current_tenant()`;
+     * `bytes` is the recorded archive size (a missing/zero row coalesces to 0).
+     *
+     * @return array{count:int, bytes:int}
+     */
+    public function archiveStats(): array
+    {
+        $row = $this->conn()->execute(
+            'SELECT COUNT(*) AS c, COALESCE(SUM(bytes), 0) AS b FROM tenant_backups '
+            . 'WHERE tenant_id = core.current_tenant()',
+        )->fetch('assoc');
+
+        return [
+            'count' => $row !== false ? (int)$row['c'] : 0,
+            'bytes' => $row !== false ? (int)$row['b'] : 0,
+        ];
+    }
+
+    /**
+     * Approximate DB footprint of the current tenant: the live row count per
+     * tenant-scoped table in the backup set (Inc 7d) — the same fixed core tables +
+     * introspected module tables the backup would capture, so the dashboard mirrors
+     * what a `full` backup contains. The explicit `WHERE tenant_id = core.current_tenant()`
+     * (not only RLS) keeps it correct even for the tables WITHOUT row-level security
+     * (e.g. `users`). The specs come from introspection within this same request, so
+     * every table exists — counted directly, like {@see self::exportTables} (no
+     * per-table try/catch, which inside the request transaction could not recover
+     * from a poisoned transaction anyway).
+     *
+     * @return list<array{key:string, rows:int}>
+     */
+    public function footprint(): array
+    {
+        $out = [];
+        foreach ($this->backupTables('full') as $spec) {
+            $row = $this->conn()->execute(
+                'SELECT COUNT(*) AS c FROM ' . $spec['sql'] . ' WHERE tenant_id = core.current_tenant()',
+            )->fetch('assoc');
+            $out[] = ['key' => (string)$spec['key'], 'rows' => $row !== false ? (int)$row['c'] : 0];
+        }
+
+        return $out;
+    }
+
+    /**
      * The stored archive path of one of the current tenant's backups, or null if it
      * does not belong to this tenant (RLS-scoped) or is missing.
      */

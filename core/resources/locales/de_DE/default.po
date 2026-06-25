@@ -81,6 +81,12 @@ msgstr "Datensicherung"
 msgid "admin.nav.tenant_backup_item"
 msgstr "Sicherung & Wiederherstellung"
 
+msgid "admin.nav.consumption"
+msgstr "Verbrauch"
+
+msgid "admin.nav.consumption_item"
+msgstr "Verbrauchsübersicht"
+
 msgid "admin.nav.modules"
 msgstr "Mandant"
 
@@ -1515,6 +1521,69 @@ msgstr "Freitag"
 
 msgid "admin.tenant_backup.dow_6"
 msgstr "Samstag"
+
+msgid "admin.consumption.title"
+msgstr "Verbrauch"
+
+msgid "admin.consumption.hint"
+msgstr "Überblick über die von diesem Mandanten genutzten Funktionen und den belegten Speicher."
+
+msgid "admin.consumption.no_tenant"
+msgstr "Kein Mandantenkontext – keine Verbrauchsdaten verfügbar."
+
+msgid "admin.consumption.kpi_functions"
+msgstr "Aktive Funktionen"
+
+msgid "admin.consumption.kpi_storage_total"
+msgstr "Speicher gesamt"
+
+msgid "admin.consumption.kpi_backups"
+msgstr "Backup-Archive"
+
+msgid "admin.consumption.kpi_files"
+msgstr "Dateiablage"
+
+msgid "admin.consumption.count_archives"
+msgstr "%s Archiv(e)"
+
+msgid "admin.consumption.count_files"
+msgstr "%s Datei(en)"
+
+msgid "admin.consumption.functions_title"
+msgstr "Genutzte Funktionen"
+
+msgid "admin.consumption.functions_hint"
+msgstr "Die für diesen Mandanten aktivierten Module."
+
+msgid "admin.consumption.col_module"
+msgstr "Modul"
+
+msgid "admin.consumption.col_key"
+msgstr "Schlüssel"
+
+msgid "admin.consumption.col_version"
+msgstr "Version"
+
+msgid "admin.consumption.no_modules"
+msgstr "Keine Module aktiviert."
+
+msgid "admin.consumption.footprint_title"
+msgstr "Datenbestand (näherungsweise)"
+
+msgid "admin.consumption.footprint_hint"
+msgstr "Zeilen je mandantenbezogener Tabelle."
+
+msgid "admin.consumption.total_rows"
+msgstr "Gesamt: %s Zeilen."
+
+msgid "admin.consumption.col_table"
+msgstr "Tabelle"
+
+msgid "admin.consumption.col_rows"
+msgstr "Zeilen"
+
+msgid "admin.consumption.no_data"
+msgstr "Keine Daten."
 
 msgid "flash.tenant_backup.plan_created"
 msgstr "Backup-Plan angelegt."

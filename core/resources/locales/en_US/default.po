@@ -85,6 +85,12 @@ msgstr "Backup"
 msgid "admin.nav.tenant_backup_item"
 msgstr "Backup & restore"
 
+msgid "admin.nav.consumption"
+msgstr "Consumption"
+
+msgid "admin.nav.consumption_item"
+msgstr "Consumption overview"
+
 msgid "admin.nav.modules"
 msgstr "Tenant"
 
@@ -1519,6 +1525,69 @@ msgstr "Friday"
 
 msgid "admin.tenant_backup.dow_6"
 msgstr "Saturday"
+
+msgid "admin.consumption.title"
+msgstr "Consumption"
+
+msgid "admin.consumption.hint"
+msgstr "Overview of the functions this tenant uses and the storage it consumes."
+
+msgid "admin.consumption.no_tenant"
+msgstr "No tenant context — no consumption data available."
+
+msgid "admin.consumption.kpi_functions"
+msgstr "Active functions"
+
+msgid "admin.consumption.kpi_storage_total"
+msgstr "Total storage"
+
+msgid "admin.consumption.kpi_backups"
+msgstr "Backup archives"
+
+msgid "admin.consumption.kpi_files"
+msgstr "File store"
+
+msgid "admin.consumption.count_archives"
+msgstr "%s archive(s)"
+
+msgid "admin.consumption.count_files"
+msgstr "%s file(s)"
+
+msgid "admin.consumption.functions_title"
+msgstr "Functions in use"
+
+msgid "admin.consumption.functions_hint"
+msgstr "The modules enabled for this tenant."
+
+msgid "admin.consumption.col_module"
+msgstr "Module"
+
+msgid "admin.consumption.col_key"
+msgstr "Key"
+
+msgid "admin.consumption.col_version"
+msgstr "Version"
+
+msgid "admin.consumption.no_modules"
+msgstr "No modules enabled."
+
+msgid "admin.consumption.footprint_title"
+msgstr "Data footprint (approximate)"
+
+msgid "admin.consumption.footprint_hint"
+msgstr "Rows per tenant-scoped table."
+
+msgid "admin.consumption.total_rows"
+msgstr "Total: %s rows."
+
+msgid "admin.consumption.col_table"
+msgstr "Table"
+
+msgid "admin.consumption.col_rows"
+msgstr "Rows"
+
+msgid "admin.consumption.no_data"
+msgstr "No data."
 
 msgid "flash.tenant_backup.plan_created"
 msgstr "Backup plan created."

@@ -36,7 +36,7 @@ class AdminController extends AppController
      * here user_group_admin stays one tenant area (the operator's own user mgmt is the
      * operator-tenant slice of it).
      */
-    public const TENANT_AREAS = ['user_group_admin', 'tenant_modules', 'tenant_backup'];
+    public const TENANT_AREAS = ['user_group_admin', 'tenant_modules', 'tenant_backup', 'consumption'];
 
     /**
      * Required administration area (null = any admin).
@@ -69,6 +69,10 @@ class AdminController extends AppController
         'tenant_backup' => [
             'label' => 'admin.nav.tenant_backup',
             'items' => [['admin.nav.tenant_backup_item', '/admin/tenant-backup']],
+        ],
+        'consumption' => [
+            'label' => 'admin.nav.consumption',
+            'items' => [['admin.nav.consumption_item', '/admin/consumption']],
         ],
         'module_lifecycle' => [
             'label' => 'admin.nav.modules',
