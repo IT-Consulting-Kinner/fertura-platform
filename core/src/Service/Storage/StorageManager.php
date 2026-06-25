@@ -23,6 +23,17 @@ use Throwable;
  */
 class StorageManager
 {
+    /**
+     * Non-tenant path prefixes a module MAY still write to while it is dispatching
+     * (Inc 8b allow-list). Core's export-to-storage lands under `reports/` (large
+     * downloads streamed back via the module-download path), which is legitimately
+     * not per-tenant; everything else a module writes must live under its
+     * `tenant/<id>/<key>/` subtree. Keep this list as small as possible.
+     *
+     * @var list<string>
+     */
+    private const MODULE_DISPATCH_ALLOWED_PREFIXES = ['reports/'];
+
     private FilesystemOperator $fs;
 
     public function __construct(?FilesystemOperator $fs = null, ?SettingsManager $settings = null)
@@ -32,6 +43,7 @@ class StorageManager
 
     public function write(string $path, string $contents): void
     {
+        $this->guardModuleScope($path);
         $this->guard(fn() => $this->fs->write($path, $contents), $path);
     }
 
@@ -40,6 +52,7 @@ class StorageManager
      */
     public function writeStream(string $path, $resource): void
     {
+        $this->guardModuleScope($path);
         $this->guard(fn() => $this->fs->writeStream($path, $resource), $path);
     }
 
@@ -58,11 +71,13 @@ class StorageManager
 
     public function delete(string $path): void
     {
+        $this->guardModuleScope($path);
         $this->guard(fn() => $this->fs->delete($path), $path);
     }
 
     public function deleteDirectory(string $path): void
     {
+        $this->guardModuleScope($path);
         $this->guard(fn() => $this->fs->deleteDirectory($path), $path);
     }
 
@@ -103,6 +118,41 @@ class StorageManager
 
             return $out;
         }, $path);
+    }
+
+    /**
+     * Enforces the per-module file convention (Inc 8b): while a module contribution is
+     * dispatching ({@see ModuleStorageScope} is active), a mutating storage op MUST
+     * target that module's per-tenant subtree `tenant/<id>/<module-key>/…` — the path
+     * {@see ModuleStorage} builds. A raw path (e.g. a module writing `ticketing/…` at
+     * the storage root via a bare StorageManager) is REFUSED, so files that the
+     * per-tenant backup would miss and the consumption meter would under-count can
+     * never be written in the first place. A short allow-list covers Core's own
+     * non-tenant writes that may occur while a module runs. Core code (no active scope)
+     * is never restricted; reads are never guarded.
+     */
+    private function guardModuleScope(string $path): void
+    {
+        $moduleKey = ModuleStorageScope::active();
+        if ($moduleKey === null) {
+            return;
+        }
+        // The sanctioned target: tenant/<any-tenant>/<moduleKey>/…. The tenant segment
+        // is not pinned here (a worker may iterate tenants within one dispatch);
+        // ModuleStorage resolves the correct live tenant, this only enforces structure.
+        if (preg_match('#^tenant/[^/]+/' . preg_quote($moduleKey, '#') . '/#', $path) === 1) {
+            return;
+        }
+        foreach (self::MODULE_DISPATCH_ALLOWED_PREFIXES as $allowed) {
+            if (str_starts_with($path, $allowed)) {
+                return;
+            }
+        }
+
+        throw new StorageException(
+            "Modul '$moduleKey' darf per-Tenant-Dateien nur unter tenant/<id>/$moduleKey/ ablegen "
+            . "(verweigerter Pfad: '$path'). Nutze ModuleStorage::for('$moduleKey').",
+        );
     }
 
     /**

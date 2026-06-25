@@ -5,6 +5,7 @@ namespace App\Service\Module;
 
 use App\Infrastructure\Db;
 use App\Service\Registry\ContractRegistry;
+use App\Service\Storage\ModuleStorageScope;
 use RuntimeException;
 
 /**
@@ -68,8 +69,20 @@ class ContributionRuntime
         if (!class_exists($class)) {
             throw new RuntimeException("Beitragsklasse nicht ladbar: $class");
         }
-
-        return (new $class())->$method(...$args);
+        $moduleKey = (string)$contrib['module_key'];
+        // 'core' contributions are Core's own trusted code (its scheduled tasks etc.) —
+        // no storage scope. For a real module, set the storage scope so StorageManager
+        // refuses any write outside tenant/<id>/<moduleKey>/ (Inc 8b); restore the
+        // previous scope afterwards so a module-calls-module capability nests correctly.
+        if ($moduleKey === '' || $moduleKey === 'core') {
+            return (new $class())->$method(...$args);
+        }
+        $previousScope = ModuleStorageScope::enter($moduleKey);
+        try {
+            return (new $class())->$method(...$args);
+        } finally {
+            ModuleStorageScope::leave($previousScope);
+        }
     }
 
     /**
