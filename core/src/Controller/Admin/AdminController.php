@@ -92,7 +92,7 @@ class AdminController extends AppController
         ],
         'core_config' => [
             'label' => 'admin.nav.config',
-            'items' => [['admin.nav.settings', '/admin/config'], ['admin.nav.integrations', '/admin/integrations'], ['admin.nav.tenants', '/admin/tenants'], ['admin.nav.outbox', '/admin/outbox'], ['admin.nav.backup', '/admin/backup'], ['admin.nav.trust', '/admin/trust']],
+            'items' => [['admin.nav.settings', '/admin/config'], ['admin.nav.integrations', '/admin/integrations'], ['admin.nav.tenants', '/admin/tenants'], ['admin.nav.operator_consumption', '/admin/operator-consumption'], ['admin.nav.outbox', '/admin/outbox'], ['admin.nav.backup', '/admin/backup'], ['admin.nav.trust', '/admin/trust']],
         ],
         'localization' => [
             'label' => 'admin.nav.localization',

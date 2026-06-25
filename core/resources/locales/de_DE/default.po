@@ -87,6 +87,9 @@ msgstr "Verbrauch"
 msgid "admin.nav.consumption_item"
 msgstr "Verbrauchsübersicht"
 
+msgid "admin.nav.operator_consumption"
+msgstr "Verbrauch & Abrechnung"
+
 msgid "admin.nav.modules"
 msgstr "Mandant"
 
@@ -1584,6 +1587,36 @@ msgstr "Zeilen"
 
 msgid "admin.consumption.no_data"
 msgstr "Keine Daten."
+
+msgid "admin.operator_consumption.title"
+msgstr "Verbrauch & Abrechnung"
+
+msgid "admin.operator_consumption.hint"
+msgstr "Verbrauch je Mandant über alle aktiven Mandanten – Grundlage für die Abrechnung."
+
+msgid "admin.operator_consumption.col_tenant"
+msgstr "Mandant"
+
+msgid "admin.operator_consumption.col_functions"
+msgstr "Funktionen"
+
+msgid "admin.operator_consumption.col_backups"
+msgstr "Backups"
+
+msgid "admin.operator_consumption.col_files"
+msgstr "Dateien"
+
+msgid "admin.operator_consumption.col_storage"
+msgstr "Speicher gesamt"
+
+msgid "admin.operator_consumption.col_rows"
+msgstr "Zeilen"
+
+msgid "admin.operator_consumption.no_data"
+msgstr "Keine Daten"
+
+msgid "admin.operator_consumption.empty"
+msgstr "Keine aktiven Mandanten."
 
 msgid "flash.tenant_backup.plan_created"
 msgstr "Backup-Plan angelegt."

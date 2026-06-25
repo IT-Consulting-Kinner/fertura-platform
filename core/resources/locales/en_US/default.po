@@ -91,6 +91,9 @@ msgstr "Consumption"
 msgid "admin.nav.consumption_item"
 msgstr "Consumption overview"
 
+msgid "admin.nav.operator_consumption"
+msgstr "Consumption & billing"
+
 msgid "admin.nav.modules"
 msgstr "Tenant"
 
@@ -1588,6 +1591,36 @@ msgstr "Rows"
 
 msgid "admin.consumption.no_data"
 msgstr "No data."
+
+msgid "admin.operator_consumption.title"
+msgstr "Consumption & billing"
+
+msgid "admin.operator_consumption.hint"
+msgstr "Per-tenant consumption across all active tenants — the basis for billing."
+
+msgid "admin.operator_consumption.col_tenant"
+msgstr "Tenant"
+
+msgid "admin.operator_consumption.col_functions"
+msgstr "Functions"
+
+msgid "admin.operator_consumption.col_backups"
+msgstr "Backups"
+
+msgid "admin.operator_consumption.col_files"
+msgstr "Files"
+
+msgid "admin.operator_consumption.col_storage"
+msgstr "Total storage"
+
+msgid "admin.operator_consumption.col_rows"
+msgstr "Rows"
+
+msgid "admin.operator_consumption.no_data"
+msgstr "No data"
+
+msgid "admin.operator_consumption.empty"
+msgstr "No active tenants."
 
 msgid "flash.tenant_backup.plan_created"
 msgstr "Backup plan created."
