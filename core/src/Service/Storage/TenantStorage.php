@@ -30,6 +30,45 @@ class TenantStorage
         return 'tenant/' . $tenantId . '/';
     }
 
+    /**
+     * The storage prefix (with trailing slash) for ONE module's files of $tenantId:
+     * `tenant/<id>/<module-key>/`. This per-module sub-bucket is what lets a
+     * scope=<module-key> backup capture exactly that module's files and a per-tenant
+     * restore put them back — see {@see ModuleStorage}, the handle modules write
+     * through so they cannot accidentally land outside the tenant tree.
+     */
+    public static function prefixForModule(string $tenantId, string $moduleKey): string
+    {
+        return self::prefix($tenantId) . $moduleKey . '/';
+    }
+
+    /**
+     * A storage handle SCOPED to one module's per-tenant subtree
+     * (`tenant/<current-tenant>/<module-key>/…`). The blessed way for a module to
+     * persist per-tenant files: every path it builds is forced under the convention,
+     * so its files are always backup-discoverable and consumption-counted. Fail-closed
+     * — writing with no tenant context throws (see {@see ModuleStorage}).
+     */
+    public function forModule(string $moduleKey): ModuleStorage
+    {
+        return new ModuleStorage($moduleKey, $this->storage, $this);
+    }
+
+    /**
+     * The current request tenant from the RLS context, or throw when there is none
+     * (fail-closed): a per-tenant file write without a tenant context would otherwise
+     * land at `tenant//…` and belong to no tenant. Used by {@see ModuleStorage}.
+     */
+    public function requireTenantId(): string
+    {
+        $tenantId = $this->currentTenantId();
+        if ($tenantId === '') {
+            throw new StorageException('Kein Mandantenkontext — per-Tenant-Datei nicht ablegbar (fail-closed).');
+        }
+
+        return $tenantId;
+    }
+
     private function conn(): Connection
     {
         /** @var \Cake\Database\Connection $conn */
