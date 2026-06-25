@@ -24,6 +24,8 @@ class ModuleLifecycleTest extends TestCase
     private const RLS_ROLE = 'fertura_test_rls';
     private const USER_A = '11111111-1111-7111-8111-111111111111';
     private const USER_B = '22222222-2222-7222-8222-222222222222';
+    // The operator/default tenant (single-org), mirrors CoreTenancy/CliTenantContext.
+    private const TENANT = '00000000-0000-0000-0000-000000000001';
 
     private string $norlsDir = '';
     private bool $prevRequireSig = true;
@@ -46,6 +48,10 @@ class ModuleLifecycleTest extends TestCase
         $this->cleanupModule(self::NORLS_KEY);
         $this->rrmdir($this->norlsDir);
         (new SettingsManager())->set('core', 'require_module_signature', $this->prevRequireSig);
+        // Reset the session-level tenant context this test set for its RLS inserts, so
+        // it does not leak to later tests on the shared connection (a tenant-gated
+        // scheduled-task collector would otherwise filter differently).
+        ConnectionManager::get('default')->execute("SELECT set_config('app.current_tenant_id', '', false)");
         parent::tearDown();
     }
 
@@ -94,6 +100,11 @@ class ModuleLifecycleTest extends TestCase
         $lc->install($this->fixturePath());
         $conn = ConnectionManager::get('default');
 
+        // Insert under the default tenant context so the conformant ping_log
+        // (tenant_id NOT NULL DEFAULT core.current_tenant()) gets a tenant; the rows
+        // all belong to one tenant, so the owner/visibility policy is what the counts
+        // below exercise (the restrictive tenant policy is transparent within a tenant).
+        $conn->execute("SELECT set_config('app.current_tenant_id', :t, false)", ['t' => self::TENANT]);
         // Three rows as superuser (RLS bypassed): A, B, public (NULL).
         $conn->execute('INSERT INTO mod_sample_module.ping_log (owner_id) VALUES (:a)', ['a' => self::USER_A]);
         $conn->execute('INSERT INTO mod_sample_module.ping_log (owner_id) VALUES (:b)', ['b' => self::USER_B]);
@@ -153,6 +164,9 @@ class ModuleLifecycleTest extends TestCase
         try {
             $conn->execute("SELECT set_config('app.current_user_id', :u, true)", ['u' => $userId]);
             $conn->execute("SELECT set_config('app.bypass_rls', :b, true)", ['b' => $bypass ? 'true' : 'false']);
+            // The rows live under the default tenant; set it so the restrictive tenant
+            // policy passes and the owner policy alone determines visibility.
+            $conn->execute("SELECT set_config('app.current_tenant_id', :t, true)", ['t' => self::TENANT]);
             $conn->execute('SET LOCAL ROLE ' . self::RLS_ROLE);
             $n = (int)$conn->execute('SELECT count(*) c FROM mod_sample_module.ping_log')->fetch('assoc')['c'];
         } finally {

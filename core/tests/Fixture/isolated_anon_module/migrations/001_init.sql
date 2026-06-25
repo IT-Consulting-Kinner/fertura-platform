@@ -1,5 +1,6 @@
--- Modul-Tabelle mit personenbezogener Freitextspalte (is_scoped -> RLS-Pflicht).
--- Läuft (out_of_process) UNTER der Modul-Rolle (Kap. 23.16.2).
+-- Modul-Tabelle mit personenbezogener Freitextspalte. Owner-RLS-Fixture; die Tabelle
+-- ist im Manifest als tables[].scope=global deklariert (Isolations-/Anonymisierungs-
+-- Test, Tenancy hier nicht im Fokus). Läuft (out_of_process) UNTER der Modul-Rolle.
 CREATE TABLE user_data (
     id       uuid NOT NULL DEFAULT core.uuid_generate_v7() PRIMARY KEY,
     owner_id uuid NULL,

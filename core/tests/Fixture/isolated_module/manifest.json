@@ -37,5 +37,12 @@
             "description": "Ping-Ressource (scoped)",
             "is_scoped": true
         }
+    ],
+    "tables": [
+        {
+            "table": "ping_log",
+            "scope": "global",
+            "reason": "Isolations-/RPC-Test-Fixture; Tenancy hier nicht im Fokus (out_of_process-RPC propagiert keinen Tenant-Kontext, eigener Belang)."
+        }
     ]
 }

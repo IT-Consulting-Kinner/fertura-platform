@@ -31,6 +31,7 @@ class ModuleDbRole
         'core.set_updated_at()',
         'core.current_user_id()',
         'core.current_group_ids()',
+        'core.current_tenant()',
         'core.rls_bypass()',
     ];
 

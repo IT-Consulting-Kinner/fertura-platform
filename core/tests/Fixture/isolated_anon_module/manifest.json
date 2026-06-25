@@ -45,5 +45,12 @@
             "name": "isolated_anon_module.data",
             "is_scoped": true
         }
+    ],
+    "tables": [
+        {
+            "table": "user_data",
+            "scope": "global",
+            "reason": "Isolations-/Anonymisierungs-Test-Fixture; Tenancy hier nicht im Fokus (out_of_process-RPC propagiert keinen Tenant-Kontext, eigener Belang)."
+        }
     ]
 }

@@ -1,5 +1,7 @@
 -- Modul-Migration (läuft bei out_of_process UNTER der Modul-Rolle, Kap. 23.16.2).
--- is_scoped-Ressource -> RLS-Pflicht (Kap. 30.3).
+-- Owner-RLS-Fixture; die Tabelle ist im Manifest als tables[].scope=global deklariert
+-- (Isolations-/RPC-Test, Tenancy hier nicht im Fokus — out_of_process-RPC propagiert
+-- keinen Tenant-Kontext; das ist ein eigener Belang).
 CREATE TABLE ping_log (
     id          uuid        NOT NULL DEFAULT core.uuid_generate_v7() PRIMARY KEY,
     owner_id    uuid        NULL,

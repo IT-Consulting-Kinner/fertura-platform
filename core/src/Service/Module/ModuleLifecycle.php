@@ -76,33 +76,161 @@ class ModuleLifecycle
      */
 
     /**
-     * Enforces the RLS requirement for is_scoped resources (ch. 30.3, E47). If
-     * the module declares at least one scoped resource, its schema must contain
-     * at least one RLS-enabled table AND at least one policy. Otherwise it throws
-     * a LifecycleException — the manual rollback is handled centrally by the
-     * try/catch in {@see install()} (E69).
+     * Tenant-conformance gate for is_scoped modules (Inc 9c, ch. 24/30.3, E47) —
+     * the DB analog of the per-module file convention (Inc 8). If the module declares
+     * any is_scoped resource, EVERY base table in its schema must be either:
+     *   - tenant-conformant — see {@see self::tenantTableViolation()} — or
+     *   - declared module-global in the manifest `tables` section (`scope: global`),
+     *     the auditable opt-out for genuine reference/lookup data.
+     * Any other table is a forgotten tenant dimension: a cross-tenant leak that is also
+     * invisible to per-tenant backup + consumption (the discovery query keys on the same
+     * tenant_id+RLS shape). On violation it throws a LifecycleException; the manual
+     * rollback is handled centrally by the try/catch in {@see install()} (E69).
+     *
+     * This is a STRUCTURAL gate: it proves a table HAS the tenant shape, not that the
+     * policy's logic is flawless (a policy could reference the wrong column) — that
+     * residual is covered by the modules' mandatory NOBYPASSRLS leak tests.
      */
-    private function assertScopedRls(string $schema, ModuleManifest $manifest): void
+    private function assertTenantTablesConform(string $schema, ModuleManifest $manifest): void
     {
         $scoped = array_filter($manifest->permissions(), static fn($p) => !empty($p['is_scoped']));
         if ($scoped === []) {
             return;
         }
-        $row = $this->conn()->execute(
-            'SELECT '
-            . '(SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace '
-            . "  WHERE n.nspname = :s1 AND c.relkind = 'r' AND c.relrowsecurity) AS rls_tables, "
-            . '(SELECT count(*) FROM pg_policies WHERE schemaname = :s2) AS policies',
-            ['s1' => $schema, 's2' => $schema],
-        )->fetch('assoc');
-        if ((int)$row['rls_tables'] > 0 && (int)$row['policies'] > 0) {
+        $global = $manifest->globalTables();
+        $tables = $this->conn()->execute(
+            'SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace '
+            . "WHERE n.nspname = :s AND c.relkind = 'r' ORDER BY c.relname",
+            ['s' => $schema],
+        )->fetchAll('assoc');
+        if ($tables === []) {
+            throw new LifecycleException(
+                "Modul deklariert is_scoped-Ressourcen, aber Schema $schema enthält keine Tabelle "
+                . '(Kap. 30.3). Installation abgebrochen.',
+            );
+        }
+
+        $violations = [];
+        foreach ($tables as $row) {
+            $table = (string)$row['relname'];
+            if (in_array($table, $global, true)) {
+                continue; // declared module-global exception
+            }
+            $problem = $this->tenantTableViolation($schema, $table);
+            if ($problem !== null) {
+                $violations[] = "$table: $problem";
+            }
+        }
+        if ($violations === []) {
             return;
         }
 
         throw new LifecycleException(
-            "Modul deklariert is_scoped-Ressourcen, aber Schema $schema enthält keine "
-            . 'RLS-geschützte Tabelle mit Policy (Kap. 30.3). Installation abgebrochen.',
+            "Modul-Tabellen verletzen die Mandanten-Konvention (Kap. 24/30.3); Installation abgebrochen:\n- "
+            . implode("\n- ", $violations)
+            . "\n\nEntweder die Tabelle tenant-konform machen (tenant_id uuid NOT NULL DEFAULT core.current_tenant(), "
+            . 'RLS ENABLE+FORCE, Policy "core.rls_bypass() OR tenant_id = core.current_tenant()" in USING und WITH CHECK, '
+            . 'UNIQUEs mit tenant_id) — am einfachsten via core.create_tenant_table()/core.add_tenant_unique() — '
+            . 'oder im Manifest als tables[].scope=global (mit reason) deklarieren.',
         );
+    }
+
+    /**
+     * Returns the FIRST tenant-conformance violation of $schema.$table, or null when it
+     * is fully conformant. Checks the live catalog (so it is correct regardless of which
+     * migration produced the table): (1) a `tenant_id` uuid column, NOT NULL, with a
+     * DEFAULT referencing core.current_tenant(); (2) RLS enabled AND forced; (3) a policy
+     * whose USING and a policy whose WITH CHECK both reference tenant_id together with
+     * core.current_tenant() (rejecting USING(true)/permissive); (4) every secondary
+     * UNIQUE index keyed with tenant_id (a global unique is a cross-tenant existence
+     * oracle). RESTRICTIVE tenant policies layered on top of an area policy satisfy (3)
+     * because the restrictive policy's expression references both tokens.
+     */
+    private function tenantTableViolation(string $schema, string $table): ?string
+    {
+        $conn = $this->conn();
+        $col = $conn->execute(
+            'SELECT a.attnotnull, t.typname, pg_get_expr(d.adbin, d.adrelid) AS dflt '
+            . 'FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid '
+            . 'JOIN pg_namespace n ON n.oid = c.relnamespace JOIN pg_type t ON t.oid = a.atttypid '
+            . 'LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum '
+            . "WHERE n.nspname = :s AND c.relname = :t AND a.attname = 'tenant_id' "
+            . 'AND a.attnum > 0 AND NOT a.attisdropped',
+            ['s' => $schema, 't' => $table],
+        )->fetch('assoc');
+        if ($col === false) {
+            return 'keine tenant_id-Spalte';
+        }
+        if ((string)$col['typname'] !== 'uuid') {
+            return 'tenant_id ist nicht uuid (' . (string)$col['typname'] . ')';
+        }
+        if (!($col['attnotnull'] === true || $col['attnotnull'] === 't')) {
+            return 'tenant_id ist nullable (muss NOT NULL sein)';
+        }
+        if (!str_contains((string)$col['dflt'], 'current_tenant')) {
+            return 'tenant_id ohne DEFAULT core.current_tenant()';
+        }
+
+        $rls = $conn->execute(
+            'SELECT c.relrowsecurity, c.relforcerowsecurity FROM pg_class c '
+            . 'JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = :s AND c.relname = :t',
+            ['s' => $schema, 't' => $table],
+        )->fetch('assoc');
+        if (!($rls['relrowsecurity'] === true || $rls['relrowsecurity'] === 't')) {
+            return 'RLS nicht aktiviert (ENABLE ROW LEVEL SECURITY fehlt)';
+        }
+        if (!($rls['relforcerowsecurity'] === true || $rls['relforcerowsecurity'] === 't')) {
+            return 'RLS nicht erzwungen (FORCE ROW LEVEL SECURITY fehlt)';
+        }
+
+        $policies = $conn->execute(
+            'SELECT qual, with_check FROM pg_policies WHERE schemaname = :s AND tablename = :t',
+            ['s' => $schema, 't' => $table],
+        )->fetchAll('assoc');
+        $hasUsing = false;
+        $hasCheck = false;
+        foreach ($policies as $p) {
+            if ($this->policyRefsTenant((string)($p['qual'] ?? ''))) {
+                $hasUsing = true;
+            }
+            if ($this->policyRefsTenant((string)($p['with_check'] ?? ''))) {
+                $hasCheck = true;
+            }
+        }
+        if (!$hasUsing) {
+            return 'keine Policy, deren USING tenant_id an core.current_tenant() bindet';
+        }
+        if (!$hasCheck) {
+            return 'keine Policy, deren WITH CHECK tenant_id an core.current_tenant() bindet';
+        }
+
+        $uniques = $conn->execute(
+            'SELECT i.relname AS idxname, (SELECT bool_or(att.attname = \'tenant_id\') '
+            . 'FROM unnest(ix.indkey) WITH ORDINALITY k(attnum, ord) '
+            . 'JOIN pg_attribute att ON att.attrelid = ix.indrelid AND att.attnum = k.attnum) AS has_tenant '
+            . 'FROM pg_index ix JOIN pg_class i ON i.oid = ix.indexrelid '
+            . 'JOIN pg_class c ON c.oid = ix.indrelid JOIN pg_namespace n ON n.oid = c.relnamespace '
+            . 'WHERE n.nspname = :s AND c.relname = :t AND ix.indisunique AND NOT ix.indisprimary',
+            ['s' => $schema, 't' => $table],
+        )->fetchAll('assoc');
+        foreach ($uniques as $u) {
+            if (!($u['has_tenant'] === true || $u['has_tenant'] === 't')) {
+                return 'UNIQUE-Index ' . (string)$u['idxname'] . ' enthält tenant_id nicht (Cross-Tenant-Kollision/Orakel)';
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Whether an RLS policy expression actually binds the tenant: it must reference BOTH
+     * `tenant_id` and `current_tenant` (i.e. the canonical `tenant_id = core.current_tenant()`),
+     * so a permissive `USING (true)` or a `current_tenant() IS NOT NULL` that omits the
+     * column does not count.
+     */
+    private function policyRefsTenant(string $expr): bool
+    {
+        return str_contains($expr, 'tenant_id') && str_contains($expr, 'current_tenant');
     }
 
     /**
@@ -399,17 +527,22 @@ class ModuleLifecycle
 
         $this->migrations->runUp($moduleId, $schema, $targetPath . '/migrations', $roleDsn);
 
-        // RLS requirement (ch. 30.3, E47): right after the migrations — anyone
-        // declaring is_scoped resources must provide at least one RLS-protected
-        // table with a policy in the module schema. On failure it throws; the
-        // rollback is handled centrally by the try/catch in install() (E69).
-        $this->assertScopedRls($schema, $manifest);
+        // Force RLS on every RLS-enabled module table BEFORE the conformance gate, for
+        // ALL isolation modes. It is essential for isolated modules (their own role
+        // owns AND queries the tables, so without FORCE the owner bypasses its own
+        // policy = a leak) and harmless for in-process modules (the BYPASSRLS migration
+        // owner bypasses regardless; the NOBYPASSRLS app role is only a grantee and is
+        // already subject to RLS) — running it uniformly lets the gate require FORCE.
+        (new ModuleDbRole())->forceRls($key);
 
-        // Isolated modules: force RLS for the table owner (the module role) too,
-        // otherwise it would bypass its own policy.
-        if ($roleDsn !== null) {
-            (new ModuleDbRole())->forceRls($key);
-        }
+        // Tenant-conformance gate (Inc 9c, ch. 24/30.3, E47): a module declaring
+        // is_scoped resources must have EVERY table in its schema either tenant-conformant
+        // (tenant_id + RLS enabled/forced + a tenant policy + tenant-scoped uniques) or
+        // explicitly declared module-global in the manifest. Otherwise activation is
+        // refused — so a forgotten tenant dimension can never ship as a silent
+        // cross-tenant leak (and a non-discoverable, unbilled table). On failure it
+        // throws; the rollback is handled centrally by the try/catch in install() (E69).
+        $this->assertTenantTablesConform($schema, $manifest);
 
         // Authorize the app role (NOBYPASSRLS) on the new module schema, so the
         // request path can access it after the install (E26).
