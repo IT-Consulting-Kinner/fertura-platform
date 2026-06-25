@@ -3,6 +3,10 @@ declare(strict_types=1);
 
 namespace App\Service\Sdk;
 
+use FilesystemIterator;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
+
 /**
  * Manifest linter (program tier 3, P16): static validation of a module manifest
  * (without DB/core version) — required fields, formats, and the shape of the
@@ -190,5 +194,48 @@ class ManifestLinter
         }
 
         return $this->lint($data);
+    }
+
+    /**
+     * Static source check of a module's `src/` (Inc 8c): a module must NOT instantiate
+     * the Core {@see \App\Service\Storage\StorageManager} (or {@see \App\Service\Storage\TenantStorage})
+     * directly — those write to a caller-chosen path and let a module's per-tenant
+     * files land OUTSIDE the `tenant/<id>/<key>/` convention, where the per-tenant
+     * backup never captures them and the consumption meter never counts them. The
+     * sanctioned handle is {@see \App\Service\Storage\ModuleStorage::for()}. This is the
+     * author/CI fence complementing the runtime guard (Inc 8b): it catches the bug
+     * before it ships and covers the few module entry points the runtime chokepoint
+     * does not (e.g. an auth-provider resolved at bootstrap).
+     *
+     * @return array{errors:list<string>, warnings:list<string>}
+     */
+    public function lintSource(string $moduleDir): array
+    {
+        $srcDir = rtrim($moduleDir, '/\\') . DIRECTORY_SEPARATOR . 'src';
+        if (!is_dir($srcDir)) {
+            return ['errors' => [], 'warnings' => []];
+        }
+        $errors = [];
+        // Matches `new StorageManager(` and `new \App\Service\Storage\TenantStorage(`,
+        // i.e. a direct instantiation regardless of namespace qualification.
+        $pattern = '/\bnew\s+\\\\?(?:[A-Za-z_][A-Za-z0-9_]*\\\\)*(StorageManager|TenantStorage)\b/';
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($srcDir, FilesystemIterator::SKIP_DOTS),
+        );
+        foreach ($iterator as $file) {
+            if (!$file->isFile() || strtolower((string)$file->getExtension()) !== 'php') {
+                continue;
+            }
+            $code = (string)file_get_contents($file->getPathname());
+            if (preg_match($pattern, $code, $hit) === 1) {
+                $rel = ltrim(str_replace($srcDir, '', $file->getPathname()), '/\\');
+                $errors[] = "src/$rel: direkte Storage-Instanziierung (new {$hit[1]}) verboten — "
+                    . "nutze ModuleStorage::for('<modul-key>'), damit per-Tenant-Dateien unter "
+                    . 'tenant/<id>/<key>/ liegen (sonst von Backup + Verbrauch nicht erfasst).';
+            }
+        }
+        sort($errors);
+
+        return ['errors' => $errors, 'warnings' => []];
     }
 }

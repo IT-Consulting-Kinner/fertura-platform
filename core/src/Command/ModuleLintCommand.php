@@ -27,20 +27,25 @@ class ModuleLintCommand extends Command
 
     public function execute(Arguments $args, ConsoleIo $io): int
     {
-        $path = (string)$args->getArgument('path');
-        if (is_dir($path)) {
-            $path = rtrim($path, '/') . '/manifest.json';
-        }
-        $result = (new ManifestLinter())->lintFile($path);
+        $input = (string)$args->getArgument('path');
+        $dir = is_dir($input) ? rtrim($input, '/\\') : dirname($input);
+        $manifest = is_dir($input) ? $dir . '/manifest.json' : $input;
 
-        foreach ($result['warnings'] as $w) {
+        $linter = new ManifestLinter();
+        $manifestResult = $linter->lintFile($manifest);
+        // Also scan the module's src/ for the per-module storage convention (Inc 8c).
+        $sourceResult = $linter->lintSource($dir);
+        $warnings = array_merge($manifestResult['warnings'], $sourceResult['warnings']);
+        $errors = array_merge($manifestResult['errors'], $sourceResult['errors']);
+
+        foreach ($warnings as $w) {
             $io->warning('WARN: ' . $w);
         }
-        foreach ($result['errors'] as $e) {
+        foreach ($errors as $e) {
             $io->error('FEHLER: ' . $e);
         }
-        if ($result['errors'] === []) {
-            $io->success('Manifest ok' . ($result['warnings'] === [] ? '.' : ' (mit Hinweisen).'));
+        if ($errors === []) {
+            $io->success('Modul ok' . ($warnings === [] ? '.' : ' (mit Hinweisen).'));
 
             return self::CODE_SUCCESS;
         }
