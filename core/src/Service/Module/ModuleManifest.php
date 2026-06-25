@@ -151,6 +151,40 @@ class ModuleManifest
     }
 
     /**
+     * Declared DB tables of the module's schema (Inc 9). Only EXCEPTIONS need listing:
+     * an UNdeclared table is treated as tenant-scoped and must conform to the per-tenant
+     * shape (tenant_id + RLS + policy + tenant-scoped uniques) the install gate enforces.
+     * A table that is legitimately module-global (reference/lookup data with no tenant
+     * dimension, e.g. `system_settings`) is opted OUT by declaring it here with
+     * `scope: global` and a `reason`. Each entry: `table` (name), `scope`
+     * (tenant_scoped|global), optional `reason`.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function tables(): array
+    {
+        return array_values($this->data['tables'] ?? []);
+    }
+
+    /**
+     * The names of tables the module declares as module-GLOBAL (the install gate's
+     * auditable exception list — these are NOT required to be tenant-scoped).
+     *
+     * @return list<string>
+     */
+    public function globalTables(): array
+    {
+        $out = [];
+        foreach ($this->tables() as $t) {
+            if (($t['scope'] ?? '') === 'global' && !empty($t['table'])) {
+                $out[] = (string)$t['table'];
+            }
+        }
+
+        return array_values(array_unique($out));
+    }
+
+    /**
      * Per-tenant configurable settings the module exposes (Increment 5 Phase 3).
      * Each entry: `key` (snake_case), `label` (i18n key), `type`
      * (bool|int|string|text|select); optional `default`, `help` (i18n), `required`,

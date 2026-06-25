@@ -157,6 +157,23 @@ class ManifestLinter
             }
         }
 
+        // DB table exceptions (Inc 9): only module-GLOBAL tables need declaring; an
+        // undeclared table is treated as tenant-scoped and must conform at install.
+        foreach ((array)($m['tables'] ?? []) as $i => $table) {
+            $table = (array)$table;
+            if (empty($table['table']) || !preg_match('/^[a-z][a-z0-9_]*$/', (string)$table['table'])) {
+                $errors[] = "tables [$i]: 'table' fehlt oder ungültig ([a-z][a-z0-9_]*)";
+            }
+            $scope = (string)($table['scope'] ?? '');
+            if (!in_array($scope, ['tenant_scoped', 'global'], true)) {
+                $errors[] = "tables [$i]: 'scope' ungültig (tenant_scoped|global)";
+            }
+            if ($scope === 'global' && empty($table['reason'])) {
+                // A global table opts OUT of tenant isolation — make the intent auditable.
+                $warnings[] = "tables [$i]: 'scope'=global ohne 'reason' (bitte begründen, warum modul-global)";
+            }
+        }
+
         foreach ((array)($m['contracts_provided'] ?? []) as $i => $contract) {
             $contract = (array)$contract;
             if (empty($contract['name'])) {
