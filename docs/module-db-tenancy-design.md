@@ -34,6 +34,11 @@ ungeschützte Fläche ist also nur die **Form der Tabelle zur Erstellungszeit**.
 - **9d — module_lint Migrations-Scan (advisory).** Warnt aggregiert bei einer erstellten
   Tabelle ohne RLS, die nicht als global deklariert ist. Bewusst Warnung (nicht CI-Error):
   Module bauen Tenancy retrofit; das Gate ist die autoritative Prüfung.
+- **9e — Gate von `is_scoped` entkoppelt.** Das Gate prüft jetzt JEDE Basistabelle in
+  jedem Modul-Schema (konform oder global), unabhängig von `is_scoped`. Motiviert vom
+  Connector (globale Capability `is_scoped:false`, aber tenant-scoped Daten) — ohne die
+  Entkopplung wäre er übersprungen worden. `is_scoped` fügt nur noch die Regel hinzu: ein
+  Modul mit scoped Ressource muss ≥1 Tabelle besitzen.
 
 ## Bekannte Grenzen / Reste (adversarial reviewt)
 - **Policy-Logik:** Das Gate beweist die tenant-Form *strukturell*, nicht die Korrektheit
@@ -41,8 +46,8 @@ ungeschützte Fläche ist also nur die **Form der Tabelle zur Erstellungszeit**.
   Gedeckt durch die verpflichtenden NOBYPASSRLS-Leak-Tests der Module (selbst-vereitelnd).
 - **`global`-Ausnahme:** ein Modul kann eine tatsächlich tenant-tragende Tabelle als global
   ausklinken — bewusst auditierbar (Manifest, signiert), kein stiller Pfad.
-- **`is_scoped`-Trigger:** das Gate greift nur bei is_scoped-Modulen; ein Modul mit
-  Tenant-Daten ohne is_scoped-Ressource wird nicht geprüft (Fehldeklaration → Review).
+- ~~`is_scoped`-Trigger~~ **GESCHLOSSEN in 9e:** das Gate prüft jede Tabelle unabhängig
+  von `is_scoped` (motiviert vom Connector).
 - **out_of_process-RPC-Tenant-Propagation:** isolierte Tasks/Collectors laufen im
   System-Kontext ohne Tenant; ein isoliertes Modul, das eine Tenant-Tabelle SCHREIBT,
   braucht eine per-Tenant-Iteration/Propagation — eigener Folge-Belang (die Isolations-
