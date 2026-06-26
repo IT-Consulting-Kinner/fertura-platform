@@ -76,9 +76,9 @@ class ModuleLifecycle
      */
 
     /**
-     * Tenant-conformance gate for is_scoped modules (Inc 9c, ch. 24/30.3, E47) —
-     * the DB analog of the per-module file convention (Inc 8). If the module declares
-     * any is_scoped resource, EVERY base table in its schema must be either:
+     * Tenant-conformance gate (Inc 9c/9e, ch. 24/30.3, E47) — the DB analog of the
+     * per-module file convention (Inc 8). EVERY base table in a module's schema must be
+     * either:
      *   - tenant-conformant — see {@see self::tenantTableViolation()} — or
      *   - declared module-global in the manifest `tables` section (`scope: global`),
      *     the auditable opt-out for genuine reference/lookup data.
@@ -87,6 +87,12 @@ class ModuleLifecycle
      * tenant_id+RLS shape). On violation it throws a LifecycleException; the manual
      * rollback is handled centrally by the try/catch in {@see install()} (E69).
      *
+     * The check is NOT gated on the module declaring is_scoped resources (Inc 9e): a
+     * module can own tenant-bearing tables even when its permission is global (e.g. the
+     * ticketing↔KB connector — global capability, tenant-scoped link data), so keying
+     * the gate on is_scoped would silently skip it. is_scoped only adds one extra rule:
+     * a module that DOES declare a scoped resource must own at least one table (E47).
+     *
      * This is a STRUCTURAL gate: it proves a table HAS the tenant shape, not that the
      * policy's logic is flawless (a policy could reference the wrong column) — that
      * residual is covered by the modules' mandatory NOBYPASSRLS leak tests.
@@ -94,16 +100,14 @@ class ModuleLifecycle
     private function assertTenantTablesConform(string $schema, ModuleManifest $manifest): void
     {
         $scoped = array_filter($manifest->permissions(), static fn($p) => !empty($p['is_scoped']));
-        if ($scoped === []) {
-            return;
-        }
         $global = $manifest->globalTables();
         $tables = $this->conn()->execute(
             'SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace '
             . "WHERE n.nspname = :s AND c.relkind = 'r' ORDER BY c.relname",
             ['s' => $schema],
         )->fetchAll('assoc');
-        if ($tables === []) {
+        // A module declaring a scoped resource must own at least one table (E47).
+        if ($scoped !== [] && $tables === []) {
             throw new LifecycleException(
                 "Modul deklariert is_scoped-Ressourcen, aber Schema $schema enthält keine Tabelle "
                 . '(Kap. 30.3). Installation abgebrochen.',

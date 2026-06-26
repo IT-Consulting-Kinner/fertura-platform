@@ -3,7 +3,9 @@ declare(strict_types=1);
 
 namespace App\Test\TestCase\Service\Module;
 
+use App\Service\Module\LifecycleException;
 use App\Service\Module\ModuleLifecycle;
+use App\Service\Module\ModuleManifest;
 use Cake\Database\Connection;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\TestCase;
@@ -134,5 +136,31 @@ class ModuleTenantGateTest extends TestCase
             ['s' => $this->schema],
         );
         $this->assertNull($this->violation('good_unique'), 'a tenant-first unique is fine');
+    }
+
+    public function testGateChecksTablesEvenWithoutIsScoped(): void
+    {
+        // Inc 9e: a module with a GLOBAL capability (is_scoped:false) but tenant-bearing
+        // tables (the ticketing<->KB connector case) must still be checked — keying the
+        // gate on is_scoped would silently skip it.
+        $this->exec("CREATE TABLE {$this->schema}.leaky (id uuid PRIMARY KEY, name text)");
+        $assert = new ReflectionMethod(ModuleLifecycle::class, 'assertTenantTablesConform');
+        $assert->setAccessible(true);
+        $globalCap = new ModuleManifest(['permissions' => [['name' => 'x.cap', 'is_scoped' => false]]]);
+
+        try {
+            $assert->invoke(new ModuleLifecycle(), $this->schema, $globalCap);
+            $this->fail('a non-conformant table must be caught even without is_scoped');
+        } catch (LifecycleException $e) {
+            $this->assertStringContainsString('leaky', $e->getMessage());
+        }
+
+        // Declaring the table module-global lets the gate pass (no throw).
+        $declared = new ModuleManifest([
+            'permissions' => [['name' => 'x.cap', 'is_scoped' => false]],
+            'tables' => [['table' => 'leaky', 'scope' => 'global', 'reason' => 'test']],
+        ]);
+        $assert->invoke(new ModuleLifecycle(), $this->schema, $declared);
+        $this->addToAssertionCount(1);
     }
 }

@@ -182,6 +182,11 @@ class ModuleUpdateTest extends TestCase
             'permissions' => [
                 ['resource_type' => 'widget', 'name' => self::KEY . '.widget', 'is_scoped' => false],
             ],
+            // The throwaway widget table is not tenant data here (this test exercises the
+            // update path, not tenancy) — declare it module-global so the Inc 9 gate skips it.
+            'tables' => [
+                ['table' => 'widget', 'scope' => 'global', 'reason' => 'Update-Pfad-Test-Fixture; keine Tenant-Daten.'],
+            ],
         ]));
         foreach ($migrations as $name => $sql) {
             file_put_contents($dir . '/migrations/' . $name, $sql);
