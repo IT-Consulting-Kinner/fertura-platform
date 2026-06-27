@@ -8,10 +8,9 @@ namespace App\Service\Module;
  * web-mount). A module declares web pages in its manifest `web_routes` section;
  * each `class` implements this interface. The Core's web dispatcher
  * ({@see \App\Controller\Module\DispatchController}) invokes {@see handle()}
- * **in-process** (HTML rendering cannot cross the out-of-process RPC boundary)
- * inside the normal web middleware stack (session auth, CSRF, RLS, security
- * headers), then renders the module-provided template under a Core-controlled
- * layout.
+ * **in-process** inside the normal web middleware stack (session auth, CSRF,
+ * RLS, security headers), then renders the module-provided template under a
+ * Core-controlled layout.
  *
  * The handler does NOT render HTML itself and does NOT touch the response: it
  * returns view variables (and optionally an HTTP status or a template override).

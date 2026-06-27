@@ -93,25 +93,6 @@ class SettingsCatalog
             'backup.min_free_mb' => ['type' => 'int', 'default' => 500, 'min' => 0, 'max' => 10485760],
             // Alert recipient for a failed backup (email). Empty = off.
             'backup.alert_email' => ['type' => 'string', 'default' => null],
-            // Optional launcher prefix for isolated module hosts (ch. 23.16.2):
-            // command(+arguments) placed BEFORE `php` to additionally isolate the
-            // host process from the operating system — e.g.
-            //   "setpriv --reuid=1001 --regid=1001 --clear-groups --"  (dedicated OS user),
-            //   "bwrap --unshare-all --ro-bind / / --proc /proc --dev /dev --die-with-parent"  (FS/kernel sandbox),
-            //   "firejail --quiet --private".
-            // Used verbatim (NOT quoted as a single argument), so it runs in the
-            // already-sanitized `env -i` environment and exec/wraps `php`.
-            // Empty = no prefix (default, in-process UID). The command must be
-            // provided by the image and pass arguments through to `php`.
-            // IMPORTANT: the launcher must replace `php` via **exec** or forward
-            //   SIGTERM to the host and die with the parent process (e.g.
-            //   `setpriv … --`, `bwrap … --die-with-parent`). A launcher that forks
-            //   and detaches (e.g. `firejail` without the corresponding options) can
-            //   leave an orphaned host behind on stop.
-            // SECURITY: anyone allowed to set this setting can run arbitrary code as
-            //   the worker user (shell prefix) — restrict it to the same trust level
-            //   as shell access. See MODULE_DEVELOPMENT / 23.16.2.
-            'module.host.launcher' => ['type' => 'string', 'default' => null],
             // Hardened outbound HTTP (P01): shared egress for webhooks/OIDC/AI.
             'http.egress.enabled' => ['type' => 'bool', 'default' => true],
             'http.egress.timeout_seconds' => ['type' => 'int', 'default' => 10, 'min' => 1, 'max' => 120],

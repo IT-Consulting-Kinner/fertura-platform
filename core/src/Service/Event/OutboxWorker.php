@@ -248,14 +248,14 @@ class OutboxWorker
         $tenantModules = new TenantModuleService();
         foreach ($runtime->listeners((string)$event['contract_name']) as $listener) {
             try {
-                // In-process locally, out_of_process via the isolated host (RPC).
-                // Worker context has no active user -> bypass for the listener.
-                // Per-tenant module config (Increment 5 Phase 3): each listener gets
-                // its OWN module's config for the firing tenant (empty for a system
-                // event with no tenant).
+                // The listener runs in-process in the worker's context: dispatch()
+                // has set app.current_tenant_id (the firing tenant) but no active
+                // user. Per-tenant module config (Increment 5 Phase 3): each listener
+                // gets its OWN module's config for the firing tenant (empty for a
+                // system event with no tenant).
                 $ctx = $context;
                 $ctx['module_config'] = $tenantModules->config((string)$listener['module_key'], $tenantId);
-                $runtime->call($listener, 'handle', [$payload, $ctx], ['bypass' => true]);
+                $runtime->call($listener, 'handle', [$payload, $ctx]);
             } catch (Throwable $e) {
                 // Isolation: a failure in one listener does not stop the others.
                 $errors[] = $listener['class'] . ': ' . $e->getMessage();

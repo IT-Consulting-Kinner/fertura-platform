@@ -50,14 +50,15 @@ class AnonymizationService
             return 0;
         }
 
-        // In-process contributions use the ambient context of this connection ->
-        // set bypass here; out-of-process contributions receive bypass via RPC.
+        // Contributions run in-process and use the ambient context of this
+        // connection, so set the RLS bypass here (and restore it afterwards):
+        // erasure must reach the user's rows in every module regardless of tenant.
         $prev = (string)($conn->execute("SELECT current_setting('app.bypass_rls', true) AS v")->fetch('assoc')['v'] ?? '');
         $conn->execute("SELECT set_config('app.bypass_rls', 'true', true)");
         try {
             $total = 0;
             foreach ($contribs as $contrib) {
-                $total += (int)$runtime->call($contrib, 'anonymizeUser', [$userId], ['bypass' => true]);
+                $total += (int)$runtime->call($contrib, 'anonymizeUser', [$userId]);
             }
 
             return $total;

@@ -32,8 +32,8 @@ use Throwable;
  * its own `templates/` directory; it never registers Core routes or touches the
  * response directly.
  *
- * Web pages are invoked **in-process** only — HTML rendering cannot cross the
- * out-of-process RPC boundary (validated at install time).
+ * Web pages are invoked **in-process** (modules always run in-process; trust is
+ * established at install time by signature + the static capability gate).
  *
  * @property \Authentication\Controller\Component\AuthenticationComponent $Authentication
  */

@@ -86,8 +86,7 @@ class ScheduledTaskRunner
         $runtime = new ContributionRuntime($this->registry);
         $ran = [];
         foreach ($tasks as $task) {
-            // Metadata (key/interval) — local for in-process, via RPC in the host
-            // for out_of_process (like run() itself).
+            // Metadata (key/interval) is read in-process from the task class.
             try {
                 $key = (string)$runtime->call($task, 'key', []);
                 $interval = (int)$runtime->call($task, 'intervalSeconds', []);
@@ -111,8 +110,8 @@ class ScheduledTaskRunner
                     continue; // not yet due
                 }
                 try {
-                    // System context (no active user) -> bypass.
-                    $runtime->call($task, 'run', [], ['bypass' => true]);
+                    // Runs in the worker's system context (no active user/tenant).
+                    $runtime->call($task, 'run', []);
                     WorkerHeartbeat::beat($hbKey, 'ok', ['interval_seconds' => $interval]);
                     $ran[] = $key;
                 } catch (Throwable $e) {

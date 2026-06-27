@@ -14,8 +14,7 @@ use Throwable;
  * Dispatches module-registered API endpoints (P07): `/api/v1/m/<key>/<path>`.
  *
  * Looks up the route declared in the module manifest (`api_routes`) and invokes
- * the handler class via {@see ContributionRuntime} — in-process or
- * (out_of_process) via RPC in the isolated host (ch. 23.16.2). Auth/scopes
+ * the handler class in-process via {@see ContributionRuntime}. Auth/scopes
  * remain a core responsibility (Bearer token via middleware).
  */
 class ModuleController extends ApiController

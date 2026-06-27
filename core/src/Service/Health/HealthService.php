@@ -494,7 +494,7 @@ class HealthService
         }
         foreach ($contribs as $contrib) {
             try {
-                // In-process locally, out_of_process via the isolated host (RPC).
+                // The module's health check runs in-process.
                 $result = (array)(new ContributionRuntime($this->registry))->call($contrib, 'check', []);
                 $contributions[] = $result;
                 if (($result['status'] ?? 'up') !== 'up') {

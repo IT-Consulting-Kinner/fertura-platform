@@ -52,14 +52,14 @@ class ContributionRuntime
 
     /**
      * Invokes a contribution in-process: `$class::$method(...$args)`. The RLS row
-     * context is the connection's ambient context (set by the request/worker), so the
-     * legacy `$rls` argument is accepted for call-site compatibility but unused.
+     * context that applies is whatever the caller already set on the connection
+     * (the request/worker transaction); a contribution that must run RLS-bypassed
+     * sets `app.bypass_rls` ambiently before calling (see AnonymizationService).
      *
      * @param array{class:string, module_key:string} $contrib
      * @param list<mixed> $args
-     * @param array<string,mixed>|null $rls deprecated/ignored (ambient context applies)
      */
-    public function call(array $contrib, string $method, array $args, ?array $rls = null): mixed
+    public function call(array $contrib, string $method, array $args): mixed
     {
         $class = $contrib['class'];
         if (!class_exists($class)) {

@@ -9,8 +9,7 @@ namespace App\Service\Notification;
  *
  * Modules register the contribution in the manifest (`collectors_registered`)
  * and implement this interface (e.g. Slack/Teams/SMS). The core invokes
- * `deliver()` via the {@see \App\Service\Module\ContributionRuntime} —
- * in-process or (out_of_process) over RPC.
+ * `deliver()` in-process via the {@see \App\Service\Module\ContributionRuntime}.
  */
 interface NotificationChannelInterface
 {

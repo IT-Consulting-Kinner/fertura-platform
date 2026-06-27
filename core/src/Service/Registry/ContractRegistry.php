@@ -275,10 +275,10 @@ class ContractRegistry
     }
 
     /**
-     * Active provider (class **and** contributing module) of a contract.
-     * For the out-of-process routing the **providing** module is what counts
-     * (not the contract owner — for resolver/service contracts it may be a
-     * different module).
+     * Active provider (class **and** contributing module) of a contract. The
+     * **providing** module is what counts (not the contract owner — for
+     * resolver/service contracts it may be a different module), e.g. for the
+     * per-tenant enablement gate below.
      *
      * @return array{class:string, module_key:string}|null
      */
@@ -322,7 +322,7 @@ class ContractRegistry
 
     /**
      * Like {@see collectContributionClasses()}, but with the contributing module
-     * per class (for the out-of-process routing, ch. 23.16.2).
+     * per class (used to set the per-module storage scope on dispatch, Inc 8b).
      *
      * @return list<array{class: string, module_key: string}>
      */

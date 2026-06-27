@@ -28,10 +28,9 @@ use Cake\Datasource\ConnectionManager;
  *              admin area (defaults to the area key)
  *
  * Unlike API routes, web pages are matched **by path only** (not by HTTP method):
- * the same handler serves GET (render) and POST (form submit). Web pages are
- * **in-process only** — HTML rendering cannot cross the out-of-process RPC
- * boundary; modules declaring `web_routes` must run in_process (enforced at
- * install-time validation).
+ * the same handler serves GET (render) and POST (form submit). Web pages run
+ * **in-process** (the only module runtime; trust is established at install time
+ * by signature + the static capability gate).
  */
 class WebRouteRegistry
 {

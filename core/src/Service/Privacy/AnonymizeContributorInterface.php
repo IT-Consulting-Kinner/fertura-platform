@@ -13,8 +13,8 @@ namespace App\Service\Privacy;
  * Technical IDs/references should be preserved (as in the core); only personal
  * content is replaced/removed.
  *
- * Runs inside the core's anonymization transaction (atomic). Out-of-process
- * modules execute their contribution in the isolated host (ch. 23.16.2).
+ * Runs in-process inside the core's anonymization transaction (atomic), with
+ * the RLS bypass set by the core so erasure reaches the user's rows.
  */
 interface AnonymizeContributorInterface
 {

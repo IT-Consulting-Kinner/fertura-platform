@@ -17,8 +17,9 @@ use RuntimeException;
  * NOBYPASSRLS grantee already subject to the policy) and essential whenever the owning
  * role is itself NOBYPASSRLS.
  *
- * Extracted from the former per-module DB-role helper so the FORCE-RLS guarantee
- * survives independently of any module isolation mechanism.
+ * Extracted (verbatim) from the former per-module DB-role helper when the
+ * out-of-process module isolation was removed (Inc 10), so the FORCE-RLS
+ * guarantee — which the tenant-conformance gate depends on — keeps working.
  */
 class ModuleTableRls
 {

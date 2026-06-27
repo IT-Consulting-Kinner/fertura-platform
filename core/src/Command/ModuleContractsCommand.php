@@ -26,7 +26,7 @@ class ModuleContractsCommand extends Command
         'core.api.route' => 'App\\Service\\Api\\ApiEndpointInterface',
         'core.ai.complete' => '(Core-Service App\\Service\\Ai\\AiGateway)',
         'core.ai.embed' => '(Core-Service App\\Service\\Ai\\AiGateway)',
-        'core.auth.provider' => 'App\\Service\\Auth\\AuthProviderInterface (nur in-process)',
+        'core.auth.provider' => 'App\\Service\\Auth\\AuthProviderInterface',
     ];
 
     public function execute(Arguments $args, ConsoleIo $io): int

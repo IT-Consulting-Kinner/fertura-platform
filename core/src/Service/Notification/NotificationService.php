@@ -115,7 +115,7 @@ class NotificationService
                 $runtime->call($contrib, 'deliver', [[
                     'user_id' => $userId, 'type' => $type, 'title' => $title,
                     'body' => $body, 'data' => $data, 'email' => $email,
-                ]], ['bypass' => true]);
+                ]]);
             } catch (Throwable) {
             }
         }

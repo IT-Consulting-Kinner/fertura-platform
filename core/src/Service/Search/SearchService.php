@@ -327,12 +327,13 @@ class SearchService
         $runtime = $this->runtime ??= new ContributionRuntime();
         $count = 0;
         try {
-            // A full reindex is an operator/platform rebuild (runs RLS-bypassed):
-            // invoke every module's indexer regardless of per-tenant enablement
-            // (un-gated, Phase 2). Each indexer scopes its own per-tenant content.
+            // A full reindex is an operator/platform rebuild: invoke every module's
+            // indexer regardless of per-tenant enablement (un-gated, Phase 2). Each
+            // indexer scopes its own per-tenant content (it iterates tenants itself),
+            // so it runs in the caller's context.
             foreach ($runtime->collectors(self::COLLECTOR, false) as $contrib) {
                 try {
-                    $runtime->call($contrib, 'reindex', [], ['bypass' => true]);
+                    $runtime->call($contrib, 'reindex', []);
                     $count++;
                 } catch (Throwable) {
                 }

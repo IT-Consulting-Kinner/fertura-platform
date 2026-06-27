@@ -240,11 +240,10 @@ class ModuleLifecycle
 
     /**
      * Manual rollback of all install artifacts created up to a failure (ch. 24,
-     * E69). The install is NOT wrapped in a DB transaction — CREATE ROLE/schema
-     * and copying the package are partly non-transactional — so on any throw
-     * after side effects have begun, {@see install()} explicitly cleans up here:
-     * stop the isolated host, remove the provisioned DB role, drop the schema,
-     * delete the module row together with its
+     * E69). The install is NOT wrapped in a DB transaction — CREATE schema and
+     * copying the package are partly non-transactional — so on any throw after
+     * side effects have begun, {@see install()} explicitly cleans up here: drop
+     * the schema, delete the module row together with its
      * registrations/contracts/resources/language packs, and remove the copied
      * directory (+ language pack files). This leaves no remnant that would make a
      * subsequent install fail with "already installed". Each step is best effort
