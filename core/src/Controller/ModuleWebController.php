@@ -114,7 +114,7 @@ class ModuleWebController extends AppController
 
         try {
             $result = (array)(new ContributionRuntime())->call(
-                ['class' => (string)$route['class'], 'module_key' => $moduleKey, 'isolation' => 'in_process'],
+                ['class' => (string)$route['class'], 'module_key' => $moduleKey],
                 'handle',
                 [$request],
             );

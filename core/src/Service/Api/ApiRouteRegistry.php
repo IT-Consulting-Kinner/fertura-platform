@@ -24,12 +24,12 @@ class ApiRouteRegistry
     /**
      * All endpoints declared by active modules.
      *
-     * @return list<array{module_key:string,isolation:string,method:string,path:string,class:string,summary:string,scope:?string,auth:string}>
+     * @return list<array{module_key:string,method:string,path:string,class:string,summary:string,scope:?string,auth:string}>
      */
     public function all(): array
     {
         $modules = $this->conn()->execute(
-            "SELECT module_key, source_path, isolation FROM modules WHERE status = 'active'",
+            "SELECT module_key, source_path FROM modules WHERE status = 'active'",
         )->fetchAll('assoc');
 
         $out = [];
@@ -46,7 +46,6 @@ class ApiRouteRegistry
                 $auth = (string)($r['auth'] ?? 'user');
                 $out[] = [
                     'module_key' => (string)$m['module_key'],
-                    'isolation' => (string)($m['isolation'] ?: 'in_process'),
                     'method' => strtoupper((string)$r['method']),
                     'path' => '/' . ltrim((string)$r['path'], '/'),
                     'class' => (string)$r['class'],

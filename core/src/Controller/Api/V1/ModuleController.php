@@ -64,7 +64,7 @@ class ModuleController extends ApiController
 
         try {
             $result = (array)(new ContributionRuntime())->call(
-                ['class' => $route['class'], 'module_key' => $moduleKey, 'isolation' => $route['isolation']],
+                ['class' => $route['class'], 'module_key' => $moduleKey],
                 'handle',
                 [$request],
             );

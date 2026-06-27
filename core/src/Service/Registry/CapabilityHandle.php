@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace App\Service\Registry;
 
 use App\Service\Module\ContributionRuntime;
-use Cake\Datasource\ConnectionManager;
 
 /**
  * Runtime handle for a bound capability (Decision 151).
@@ -71,26 +70,7 @@ final class CapabilityHandle
             );
         }
 
-        // Out-of-process provider (ch. 23.16.2): routed transparently via RPC to
-        // the isolated module process; otherwise in-process. The decisive factor
-        // is the **provider** module (not the contract owner).
-        $contrib = $provider + ['isolation' => $this->providerIsolation($provider['module_key'])];
-
-        return (array)(new ContributionRuntime($this->registry))->call($contrib, 'handle', [$input]);
-    }
-
-    /** Isolation mode of the provider module (core/unknown -> in_process). */
-    private function providerIsolation(string $moduleKey): string
-    {
-        if ($moduleKey === '' || $moduleKey === 'core') {
-            return 'in_process';
-        }
-        $row = ConnectionManager::get('default')->execute(
-            "SELECT isolation FROM core.modules WHERE module_key = :k AND status = 'active'",
-            ['k' => $moduleKey],
-        )->fetch('assoc');
-
-        return $row === false ? 'in_process' : (string)$row['isolation'];
+        return (array)(new ContributionRuntime($this->registry))->call($provider, 'handle', [$input]);
     }
 
     /** Active provider (resolver/service) or null (-> default applies). */
