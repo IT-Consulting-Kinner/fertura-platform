@@ -48,10 +48,14 @@ ungeschützte Fläche ist also nur die **Form der Tabelle zur Erstellungszeit**.
   ausklinken — bewusst auditierbar (Manifest, signiert), kein stiller Pfad.
 - ~~`is_scoped`-Trigger~~ **GESCHLOSSEN in 9e:** das Gate prüft jede Tabelle unabhängig
   von `is_scoped` (motiviert vom Connector).
-- **out_of_process-RPC-Tenant-Propagation:** isolierte Tasks/Collectors laufen im
-  System-Kontext ohne Tenant; ein isoliertes Modul, das eine Tenant-Tabelle SCHREIBT,
-  braucht eine per-Tenant-Iteration/Propagation — eigener Folge-Belang (die Isolations-
-  Test-Fixtures sind daher als `global` deklariert).
+- **out_of_process-Tenant-Propagation:** Auf dem **Request-Pfad** (Web/API/Listener) wird
+  der Tenant bereits korrekt propagiert — `RemoteInvoker::currentRls()` liest
+  `app.current_tenant_id` und der Host (`bin/module-host.php`) setzt ihn je RPC-Aufruf; ein
+  isoliertes Modul liest/schreibt seine Tenant-Tabellen also korrekt. Der einzige Rest:
+  `ScheduledTaskRunner` ruft Tasks mit `['bypass'=>true]` (System-Kontext, kein Tenant) —
+  korrekt für system-weite Tasks, aber ein *per-Tenant* out-of-process-Modul-Scheduled-Task
+  bräuchte eine Core-Tenant-Iterations-Fähigkeit (heute kein Konsument, daher zurückgestellt;
+  die Isolations-Test-Fixtures sind als `global` deklariert).
 
 ## Modul-Adoption (Hand-off, NICHT Core) — Gate ist scharf
 Ticketing + KB müssen VOR der nächsten (Re-)Installation: (1) jede echte globale Tabelle im
