@@ -20,6 +20,11 @@ use Throwable;
  * `XAI_API_KEY`, `GOOGLE_API_KEY`), never in the DB. Without a provider/key it is
  * disabled (with a clear {@see AiException}). Exposed to modules as the `core.ai.*`
  * capability.
+ *
+ * LLM calls get their **own** egress timeout (`core.ai.timeout_seconds`, default
+ * 60s) — completions routinely exceed the shared 10s egress default, at which they
+ * would otherwise fail silently. Keeping it separate avoids dilating the egress
+ * timeout for webhooks/OIDC/marketplace.
  */
 class AiGateway
 {
@@ -27,8 +32,27 @@ class AiGateway
         private ?EgressClient $egress = null,
         private ?SettingsManager $settings = null,
     ) {
-        $this->egress ??= new EgressClient();
-        $this->settings ??= new SettingsManager();
+        // Build the egress with the AI-specific timeout (config wins over the
+        // core.http.egress.timeout_seconds setting). An injected egress (tests)
+        // keeps its own timeout.
+        $this->egress ??= new EgressClient(null, ['timeout_seconds' => $this->aiTimeoutSeconds()]);
+    }
+
+    private function settings(): SettingsManager
+    {
+        return $this->settings ??= new SettingsManager();
+    }
+
+    /** Dedicated egress timeout (seconds) for LLM calls; default 60, fail-safe. */
+    private function aiTimeoutSeconds(): int
+    {
+        try {
+            $v = (int)$this->settings()->get('core', 'ai.timeout_seconds', 60);
+
+            return $v > 0 ? $v : 60;
+        } catch (Throwable) {
+            return 60;
+        }
     }
 
     public function enabled(): bool
@@ -121,7 +145,7 @@ class AiGateway
     private function str(string $key): string
     {
         try {
-            return (string)($this->settings->get('core', $key, '') ?? '');
+            return (string)($this->settings()->get('core', $key, '') ?? '');
         } catch (Throwable) {
             return '';
         }

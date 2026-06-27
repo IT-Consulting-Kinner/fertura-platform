@@ -144,6 +144,12 @@ class SettingsCatalog
             'ai.xai.endpoint' => ['type' => 'string', 'default' => null],
             'ai.anthropic.endpoint' => ['type' => 'string', 'default' => null],
             'ai.google.endpoint' => ['type' => 'string', 'default' => null],
+            // Dedicated egress timeout (seconds) for LLM calls. LLM completions can
+            // take far longer than the shared egress default (10s); without this an
+            // AiGateway call would fail silently at that limit. Kept SEPARATE from
+            // core.http.egress.timeout_seconds so a long AI timeout does not dilate
+            // webhooks/OIDC/marketplace. Default 60.
+            'ai.timeout_seconds' => ['type' => 'int', 'default' => 60, 'min' => 1, 'max' => 600],
         ],
     ];
 

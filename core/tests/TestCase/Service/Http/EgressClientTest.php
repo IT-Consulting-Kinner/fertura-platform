@@ -148,6 +148,34 @@ class EgressClientTest extends TestCase
         $c->get('http://127.0.0.1/big');
     }
 
+    public function testTimeoutConfigOverrideAppliedToRequest(): void
+    {
+        // A passed timeout_seconds config wins over settings/defaults and reaches
+        // the request opts — this is the mechanism AiGateway uses to give LLM calls
+        // their own (higher) timeout without dilating the shared egress timeout.
+        $c = new class (new Response(['HTTP/1.1 200 OK'], 'ok')) extends EgressClient {
+            /**
+             * @var array<string,mixed>
+             */
+            public array $lastOpts = [];
+
+            public function __construct(private Response $canned)
+            {
+                parent::__construct(null, ['allow_private' => true, 'timeout_seconds' => 123]);
+            }
+
+            protected function sendRequest(string $method, string $url, mixed $data, array $opts): Response
+            {
+                $this->lastOpts = $opts;
+
+                return $this->canned;
+            }
+        };
+
+        $c->get('http://127.0.0.1/x');
+        $this->assertSame(123, $c->lastOpts['timeout']);
+    }
+
     /**
      * @param array<string, mixed> $config
      */
