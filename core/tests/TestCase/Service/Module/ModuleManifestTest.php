@@ -72,6 +72,21 @@ class ModuleManifestTest extends TestCase
         $this->assertTrue((bool)array_filter($errors, fn(string $e): bool => str_contains($e, 'Blattknoten')));
     }
 
+    public function testIntegrationProvidingWebRouteRejectedAsLeafNode(): void
+    {
+        $m = $this->base();
+        $m['type'] = 'integration';
+        $m['integration_relations'] = [['module' => 'ticketing']];
+        // A connector must not offer an entry point (web_routes) — consumer-only.
+        $m['web_routes'] = [
+            ['path' => '/x', 'class' => 'Acme\\Demo\\Web\\X', 'template' => 'x', 'auth' => 'user'],
+        ];
+
+        $errors = (new ModuleManifest($m))->validate('1.5.0');
+
+        $this->assertTrue((bool)array_filter($errors, fn(string $e): bool => str_contains($e, 'Consumer-only')));
+    }
+
     public function testUnknownTypeRejected(): void
     {
         $m = $this->base();

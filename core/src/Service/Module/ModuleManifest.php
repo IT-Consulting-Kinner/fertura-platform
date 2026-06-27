@@ -332,6 +332,14 @@ class ModuleManifest
                 $errors[] = 'Integrations-Extension-Modul (Blattknoten) darf keine Contracts bereitstellen '
                     . '(contracts_provided/resolvers_registered/services_registered, Kap. 23.5.5).';
             }
+            // A leaf connector is consumer-only (ch. 23.5.5): it must not expose an
+            // entry point either. web_routes are HTTP endpoints (a service surface)
+            // and would give the connector provider character — a consumer reaches
+            // its host modules via events/collectors, never by offering a route.
+            if ($this->webRoutes() !== []) {
+                $errors[] = 'Integrations-Extension-Modul (Blattknoten) darf keine web_routes bereitstellen '
+                    . '(Einstiegspunkt, Consumer-only, Kap. 23.5.5).';
+            }
         }
 
         // Enhancing-not-gating (ch. 26.19, Decision 184): a provided resolver/service

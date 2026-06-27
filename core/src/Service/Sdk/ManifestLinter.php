@@ -59,6 +59,12 @@ class ManifestLinter
                 $errors[] = 'Integrations-Extension-Modul (Blattknoten) darf keine Contracts bereitstellen '
                     . '(contracts_provided/resolvers_registered/services_registered)';
             }
+            // Consumer-only (ch. 23.5.5): a leaf connector must not expose an entry
+            // point — web_routes are an HTTP service surface and are forbidden.
+            if (!empty($m['web_routes'])) {
+                $errors[] = 'Integrations-Extension-Modul (Blattknoten) darf keine web_routes bereitstellen '
+                    . '(Einstiegspunkt, Consumer-only)';
+            }
         }
 
         foreach (self::SECTIONS as $section) {

@@ -85,6 +85,13 @@ class ManifestLinterTest extends TestCase
         $errs = (new ManifestLinter())->lint($m)['errors'];
         $this->assertTrue((bool)array_filter($errs, fn($e) => str_contains($e, 'Blattknoten')));
 
+        // (b2) leaf node: declaring a web_route (entry point) -> error.
+        $mw = $base;
+        $mw['integration_relations'] = [['module' => 'ticketing']];
+        $mw['web_routes'] = [['path' => '/x', 'class' => 'X', 'template' => 'x', 'auth' => 'user']];
+        $errsW = (new ManifestLinter())->lint($mw)['errors'];
+        $this->assertTrue((bool)array_filter($errsW, fn($e) => str_contains($e, 'Consumer-only')));
+
         // (c) valid integration -> no integration/leaf errors (and no type warning).
         $ok = $base;
         $ok['integration_relations'] = [['module' => 'ticketing'], ['module' => 'knowledgebase']];
