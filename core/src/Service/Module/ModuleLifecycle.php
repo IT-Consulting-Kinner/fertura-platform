@@ -13,6 +13,7 @@ use App\Service\Registry\ContractRegistry;
 use App\Service\Registry\RegistryException;
 use App\Service\Registry\SemVer;
 use App\Service\Registry\VersionConstraint;
+use App\Service\Sdk\ManifestLinter;
 use App\Service\Security\PackageVerificationException;
 use App\Service\Security\PackageVerifier;
 use App\Service\Settings\SettingsManager;
@@ -384,6 +385,16 @@ class ModuleLifecycle
             }
             if ($this->findModule($key) !== null) {
                 throw new LifecycleException("Modul bereits installiert: $key");
+            }
+
+            // Capability gate (Inc 10): an in-process module must not use dangerous
+            // primitives (shell/eval/reflection/raw FS/raw DB). Checked BEFORE any side
+            // effect — trust is established at install time (signature + review + this
+            // gate), so a non-conforming package is refused. (The storage-convention
+            // check is enforced separately at runtime + by module_lint, not here.)
+            $capErrors = (new ManifestLinter())->lintCapabilities($sourcePath);
+            if ($capErrors !== []) {
+                throw new LifecycleException('Modul-Quellcode abgelehnt (Capability-Gate): ' . implode(' | ', $capErrors));
             }
 
             // Dependency check.

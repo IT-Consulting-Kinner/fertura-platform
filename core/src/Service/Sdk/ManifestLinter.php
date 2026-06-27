@@ -244,16 +244,113 @@ class ManifestLinter
                 continue;
             }
             $code = (string)file_get_contents($file->getPathname());
+            $rel = ltrim(str_replace($srcDir, '', $file->getPathname()), '/\\');
             if (preg_match($pattern, $code, $hit) === 1) {
-                $rel = ltrim(str_replace($srcDir, '', $file->getPathname()), '/\\');
                 $errors[] = "src/$rel: direkte Storage-Instanziierung (new {$hit[1]}) verboten — "
                     . "nutze ModuleStorage::for('<modul-key>'), damit per-Tenant-Dateien unter "
                     . 'tenant/<id>/<key>/ liegen (sonst von Backup + Verbrauch nicht erfasst).';
+            }
+            foreach ($this->capabilityViolations($code) as $bad) {
+                $errors[] = "src/$rel: verbotenes Primitiv '$bad' (Inc 10 Capability-Gate) — In-Process-Module "
+                    . 'duerfen keine gefaehrlichen Primitive nutzen (Shell/eval/Reflection/eigene DB-Verbindung/'
+                    . 'rohe Dateizugriffe). DB ueber den Modul-Db-Helfer (ConnectionManager::get), Dateien ueber '
+                    . 'ModuleStorage. Sozket-/Stream-I/O ist erlaubt.';
             }
         }
         sort($errors);
 
         return ['errors' => $errors, 'warnings' => []];
+    }
+
+    /**
+     * The capability violations across a module's `src/` (Inc 10), used by the install
+     * gate to REFUSE a module that uses dangerous primitives — a security check distinct
+     * from the storage-convention check in {@see self::lintSource()} (a module that
+     * merely misuses StorageManager is not a sandbox-escape and is handled by the runtime
+     * guard + module_lint, so it must NOT block install).
+     *
+     * @return list<string>
+     */
+    public function lintCapabilities(string $moduleDir): array
+    {
+        $srcDir = rtrim($moduleDir, '/\\') . DIRECTORY_SEPARATOR . 'src';
+        if (!is_dir($srcDir)) {
+            return [];
+        }
+        $errors = [];
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($srcDir, FilesystemIterator::SKIP_DOTS),
+        );
+        foreach ($iterator as $file) {
+            if (!$file->isFile() || strtolower((string)$file->getExtension()) !== 'php') {
+                continue;
+            }
+            $rel = ltrim(str_replace($srcDir, '', $file->getPathname()), '/\\');
+            foreach ($this->capabilityViolations((string)file_get_contents($file->getPathname())) as $bad) {
+                $errors[] = "src/$rel: $bad";
+            }
+        }
+        sort($errors);
+
+        return $errors;
+    }
+
+    /**
+     * Forbidden global functions for an in-process module's src (Inc 10 capability
+     * allowlist): shell/process execution, code eval, raw filesystem (use ModuleStorage),
+     * raw DB connections (use ConnectionManager::get), and config/env mutation. Validated
+     * against the real modules — none use these (legitimate socket/stream I/O like
+     * fwrite/fgets/stream_socket_* stays ALLOWED, it is not a filesystem syscall).
+     *
+     * @var list<string>
+     */
+    private const FORBIDDEN_FUNCTIONS = [
+        'eval', 'exec', 'shell_exec', 'system', 'passthru', 'proc_open', 'popen', 'pcntl_exec',
+        'create_function', 'pg_connect', 'pg_pconnect',
+        'fopen', 'file_get_contents', 'file_put_contents', 'readfile', 'mkdir', 'rmdir', 'unlink',
+        'rename', 'copy', 'scandir', 'opendir', 'readdir', 'glob', 'chmod', 'chown',
+        'extract', 'compact', 'putenv', 'ini_set', 'ini_alter', 'dl',
+    ];
+
+    /** @var list<string> Forbidden `new` classes: raw DB driver + reflection (visibility defeat). */
+    private const FORBIDDEN_NEW = [
+        'PDO', 'ReflectionClass', 'ReflectionMethod', 'ReflectionProperty', 'ReflectionFunction', 'ReflectionObject',
+    ];
+
+    /**
+     * The forbidden capability primitives a single module source file uses (Inc 10).
+     * Matches BARE global calls only — a leading `->`, `::`, `$`, `\` or `function `
+     * excludes method calls/definitions, so `Db::exec()`, `->exec()` and a method named
+     * `exec()` are NOT flagged; `ConnectionManager::get('default')` (the module Db helper)
+     * and `preg_replace(.../u)` stay allowed.
+     *
+     * @return list<string>
+     */
+    private function capabilityViolations(string $code): array
+    {
+        $hits = [];
+        foreach (self::FORBIDDEN_FUNCTIONS as $fn) {
+            if (preg_match('/(?<![\w>:$\\\\])(?<!function )' . preg_quote($fn, '/') . '\s*\(/', $code) === 1) {
+                $hits[] = $fn . '()';
+            }
+        }
+        if (preg_match('/\bnew\s+\\\\?(?:[A-Za-z_][A-Za-z0-9_]*\\\\)*(' . implode('|', self::FORBIDDEN_NEW) . ')\b/', $code, $m) === 1) {
+            $hits[] = 'new ' . $m[1];
+        }
+        if (preg_match('/->\s*setAccessible\s*\(/', $code) === 1) {
+            $hits[] = '->setAccessible()';
+        }
+        if (preg_match('/ConnectionManager::\s*(getConfig|setConfig|drop|alias)\s*\(/', $code) === 1) {
+            $hits[] = 'ConnectionManager config mutation';
+        }
+        if (preg_match('/\$\$[A-Za-z_]/', $code) === 1) {
+            $hits[] = 'variable-variables ($$)';
+        }
+        if (preg_match('/(?<![\w>:$\\\\])assert\s*\(\s*[\'"]/', $code) === 1) {
+            $hits[] = 'assert(string)';
+        }
+
+        return $hits;
     }
 
     /**
