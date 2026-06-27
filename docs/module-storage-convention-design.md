@@ -28,13 +28,11 @@ per Disziplin wird vergessen; Inc 8 erzwingt sie per **Konstruktion + Laufzeit +
 
 ## Bekannte Grenzen / Rest
 
-- **Out-of-process-Module:** laufen in eigenem, isoliertem Prozess (token-gesicherter
-  Socket); ihr Datei-I/O berührt den Core-`StorageManager` nicht — die Konvention wird
-  dort durch Prozess-/Dateisystem-Isolation getragen, nicht durch den in-process-Guard.
-  Kein Loch, sondern bewusst außerhalb des in-process-Mechanismus.
-- **PHP-Restluke (in-process):** ein Modul kann den Core umgehen (eigenes Flysystem /
-  `fwrite`). Unverschließbar ohne Out-of-process-Isolation; der Lint-Zaun fängt den
-  realistischen Fall (`new StorageManager()`).
+- **PHP-Restluke:** ein Modul könnte den Core umgehen (eigenes Flysystem / `fwrite`).
+  Statisch nie vollständig verschließbar — aber das **Capability-Gate** (Inc 10) weist beim
+  Install rohe Dateizugriffe (`fopen`/`file_put_contents`/…) und `new StorageManager()` ab,
+  und der Lint-Zaun meldet sie zur Autorenzeit. Die maßgebliche Grenze bleibt die
+  Signatur-/Vertrauenskette (Review vor Zulassung), nicht ein Laufzeit-Mechanismus.
 - **`reports/`-Allowlist:** nicht tenant-scoped (Core-Exporte, Zufalls-Dateinamen, keine
   gezielte Überschreibung). Bewusst minimal gehalten.
 

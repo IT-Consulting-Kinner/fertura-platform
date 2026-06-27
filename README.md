@@ -33,7 +33,7 @@ Main-Modulen und Extension-Modulen.
 
 Core-Plattform weit ausgebaut: Auth/MFA (TOTP + Passkeys/WebAuthn), SSO (OIDC/
 SAML) und SCIM-Provisioning, BREAD/RLS-Rechtemodell, Modul-Lifecycle mit
-Out-of-Process-Isolation, Contract-/Capability-Registry, Outbox/Events,
+In-Process-Vertrauensmodell (Signatur + Capability-Gate), Contract-/Capability-Registry, Outbox/Events,
 Automatisierung/Workflows, Suche (FTS + Vektor), Backup/Restore inkl. Off-Site,
 Lizenz-/Signaturkette, Audit-Log mit SIEM-Export, Health/Metrics und eine
 vollständige Admin-GUI. Test-/CI-Reife: PHPUnit-Integrationssuite gegen echte

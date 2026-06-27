@@ -1,5 +1,12 @@
 # Inc 10 — Vereinheitlichung auf in_process + Capability-Gate (Plan)
 
+> **Status: UMGESETZT (as-built, 27.06.2026).** Alle 8 Stufen abgeschlossen; volle Suite 663 grün,
+> PHPStan/PHPCS grün. Out-of-Process-Code + Doku entfernt; `forceRls` lebt in `ModuleTableRls`;
+> das Capability-Gate ist über `ManifestLinter::lintCapabilities` + `ModuleLifecycle::install`
+> scharf. Festgehalten als Plattform-**Entscheidung 187** + Changelog **6.117** im
+> Anforderungsdokument (Kap. 23.16.2 neu gefasst). Dieses Dokument bleibt als Entwurfs-/
+> Begründungs-Referenz erhalten.
+
 Plattform-Entscheidung: **Modul-Vertrauen über Signatur + Review (kuratierter Marktplatz)**,
 nicht über Laufzeit-Isolation. Daher: out_of_process-Isolation **vollständig entfernen** und
 in_process durch ein statisches **Capability-Allowlist-Gate** härten. Mandantentrennung kommt

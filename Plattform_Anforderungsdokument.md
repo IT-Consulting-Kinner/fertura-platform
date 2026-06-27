@@ -656,10 +656,10 @@ Empfehlungen (Empfehlung):
     Rechten (Least Privilege).
 -   Begrenzung von Ressourcen (Speicher, Laufzeit, Dateisystemzugriff)
     auf Betriebssystem- oder Webserver-Ebene.
--   Bewusstsein, dass In-Process-Module nicht voneinander isoliert sind.
-    Für eine echte technische Isolationsgrenze kann ein solches Modul auf
-    den Modus `out_of_process` gesetzt werden (eigener Prozess, bereinigte
-    Umgebung, eigene eingeschränkte DB-Rolle; Kapitel 23.16.2).
+-   Bewusstsein, dass Module **in-process** als vertrauenswürdiger Code laufen
+    und nicht voneinander isoliert sind. Die maßgebliche Grenze ist die
+    Signatur-/Vertrauenskette; das Capability-Gate weist beim Installieren
+    Quellcode mit gefährlichen Primitiven ab (Kapitel 23.16.2).
 
 Die Plattform kennzeichnet ungeprüfte, nicht kuratierte Module im
 Admin-Bereich deutlich als solche.
@@ -856,114 +856,46 @@ kuratierte oder betreiber-verantwortete Module installiert werden; das
 Zulassen ungeprüfter Module ist eine bewusste Betreiberentscheidung auf
 eigenes Risiko (Kapitel 23.9.3).
 
-### 23.16.2 Optionale Out-of-Process-Isolation (technische Grenze)
+### 23.16.2 Capability-Gate beim Installieren (Defense in Depth)
 
-Über die Vertrauenskette hinaus kann ein Modul je Installation auf den
-Isolationsmodus **`out_of_process`** gesetzt werden (Standard:
-`in_process`). In diesem Modus stellt die Plattform eine **echte
-technische Isolationsgrenze** bereit:
+Module laufen **immer in-process**; es gibt keine technische Laufzeit-Sandbox
+(eine echte In-Process-Sandbox existiert in PHP nicht). Ergänzend zur
+Vertrauenskette prüft der Core daher den Modul-Quellcode **statisch bei der
+Installation** und **weist ein Paket ab**, das gefährliche PHP-Primitive verwendet
+— geprüft **vor jedem Seiteneffekt** (`ManifestLinter::lintCapabilities` →
+`ModuleLifecycle::install`; dieselbe Prüfung läuft zur Autorenzeit über
+`bin/cake module_lint`). Verboten sind insbesondere:
 
--   **Eigener Prozess.** Der Modulcode läuft nicht im Core-Prozess,
-    sondern in einem vom Core verwalteten **Subprozess** (Managed
-    Subprocess). Nur der Modul-Namespace wird dort geladen.
--   **Bereinigte Umgebung.** Der Modulprozess startet mit einer
-    **gesäuberten Umgebung** ohne die privilegierten Core-Geheimnisse —
-    insbesondere ohne die Superuser-`DATABASE_URL` und ohne das
-    Backup-Verschlüsselungspasswort. Der Modulcode kann diese damit nicht
-    aus der Prozessumgebung lesen.
--   **Eigene, eingeschränkte Datenbankrolle (automatisch).** Der Core legt
-    je isoliertem Modul **automatisch** eine **eigene DB-Rolle**
-    (`mod_<key>`, `LOGIN`, `NOBYPASSRLS`) mit einem zufälligen, **AES-256-
-    GCM-verschlüsselt** abgelegten Passwort an (für die Modul-Rolle selbst
-    unlesbar). Die Rolle hat Rechte **nur auf das eigene Modul-Schema** und
-    EXECUTE auf wenige Core-Hilfsfunktionen; ein Zugriff auf Core-Tabellen
-    (z. B. `core.users`) ist technisch unterbunden, nicht nur per Disziplin.
--   **Modul-Migrationen ohne Superuser-Rechte.** Die Schema-Migrationen
-    eines isolierten Moduls laufen über eine **als die eingeschränkte
-    Login-Rolle authentifizierte Verbindung** (nicht per `SET ROLE` auf einer
-    Superuser-Sitzung) — eine bösartige Migration kann sich daher **nicht**
-    per `RESET ROLE`/`SET ROLE` wieder Superuser verschaffen und den Core
-    beschädigen. Damit die Zeilen-Sicherheit (RLS) auch für die modul-eigenen
-    Tabellen greift, erzwingt der Core anschließend `FORCE ROW LEVEL
-    SECURITY`. Gilt für Installation **und** Update.
--   **Verwalteter Lebenszyklus.** Beim Aktivieren startet der Core den
-    isolierten Host automatisch, beim Deaktivieren/Deinstallieren stoppt er
-    ihn (und entfernt die DB-Rolle). Ein Supervisor im Hintergrundprozess
-    **überwacht** die Hosts und startet abgestürzte neu (Selbstheilung).
--   **Authentifizierter Aufruf über RPC (Pro-Aufruf-Capability-Token).** Der
-    Core ruft die Erweiterungspunkte des Moduls über eine schmale
-    Inter-Prozess-Schnittstelle (Unix-Domain-Socket, JSON-Zeilen) auf. Jede
-    Anfrage trägt ein **aufruf-gebundenes** Token: Das pro Host erzeugte
-    Geheimnis dient ausschließlich als **HMAC-Schlüssel** und reist **nie** über
-    den Socket; mitgeschickt wird ein MAC über die **gesamte kanonisierte
-    Anfrage** (Operation, Klasse/Methode, Argumente, RLS-Kontext) plus Nonce und
-    Ablauf. Damit ist der Aufruf **integritätsgeschützt** (Nutzlast/Kontext nicht
-    manipulierbar, z. B. keine `bypass`-Eskalation), **zeitlich begrenzt** und
-    **einmalig** (der Host weist abgelaufene und wiederholte Nonces ab) — ein am
-    Socket abgefangenes Token lässt sich weder wiederverwenden noch auf einen
-    anderen Aufruf ummünzen. Das Geheimnis liegt ausschließlich in einer
-    **0600-Datei** und wird dem Host als **Pfad** (nicht als Wert) übergeben — es
-    landet damit weder in der Prozess-Umgebung noch in der Kommandozeile. Fehlt
-    das Geheimnis, verweigert der Host den Start (**fail-closed**, keine
-    unauthentifizierte Bedienung). Ein- und Ausgabe sind dieselben
-    serialisierbaren Contract-Strukturen wie beim In-Process-Aufruf (Kapitel
-    29.8); der Aufrufpfad (`CapabilityHandle`) bleibt für das nutzende Modul
-    unverändert. Die Grenze ist damit aufwärtskompatibel zu einer späteren
-    Container- oder Host-getrennten Ausführung. **Geltung (ehrlich):** Das Token
-    authentifiziert die **Prozessgrenze** (Core→Host) und schützt vor anderen
-    Socket-Clients sowie vor Manipulation/Replay; es beschränkt **nicht** den im
-    Host laufenden Modulcode selbst (der das Geheimnis kennt). Die eigentliche
-    Sandbox bleiben DB-Rolle, bereinigte Umgebung und die optionale OS-Isolation.
+-   **Shell/Prozess-Ausführung:** `exec`, `shell_exec`, `system`, `passthru`,
+    `proc_open`, `popen`, `pcntl_exec`.
+-   **Code-Auswertung:** `eval`, `create_function`, String-`assert('…')`.
+-   **Reflection / Sichtbarkeits-Umgehung:** `new Reflection*`,
+    `->setAccessible(…)`.
+-   **Rohe Datenbankverbindung:** `new \PDO`, `pg_connect`/`pg_pconnect`,
+    `ConnectionManager::setConfig`/`drop`/`alias` — DB-Zugriff läuft
+    ausschließlich über die Core-`default`-Connection (RLS-gebunden).
+-   **Roher Dateisystemzugriff:** `fopen`, `file_get_contents`/`file_put_contents`,
+    `readfile`, `mkdir`/`rmdir`/`unlink`/`rename`/`copy`, `scandir`/`opendir`/
+    `glob` — Dateien laufen über `ModuleStorage::for()` (mandantengetrennt,
+    Kapitel 23.x / Inc 8).
+-   **Variable-Variablen** (`$$x`) sowie **Umgebungs-/Config-Mutation**
+    (`putenv`, `ini_set`, `dl`).
 
-Der Modus ist **opt-in** und ergänzt die Vertrauenskette, ersetzt sie
-nicht: Signatur/Anker/Widerruf bleiben die maßgebliche Zulassungsgrenze
-(23.16.1); die Out-of-Process-Isolation begrenzt zusätzlich, was bereits
-zugelassener Modulcode zur Laufzeit technisch erreichen kann.
+Der Matcher trifft nur **bare** globale Aufrufe; gleichnamige Methoden bleiben
+erlaubt (`$conn->exec(…)`, `Db::exec(…)`, `ConnectionManager::get('default')`,
+Socket-`fwrite`/`fgets`/`stream_socket_*`, `preg_replace('/…/u')`). Die drei
+mitgelieferten Module (Ticketing, Knowledge-Base, Connector) passieren das Gate
+ohne Treffer.
 
-**Geltungsbereich (Phase 3, vollständig).** Isolierte Module dürfen **alle
-gängigen Erweiterungspunkte** anbieten: **Service-Contracts, Collector-Beiträge**
-(Health, Anonymisierung, periodische Aufgaben) **, Event-Listener, Daten-Resolver
-und periodische Aufgaben** (`core.collector.scheduled`) — diese laufen über RPC
-im Host. Der **RLS-Zeilenkontext** (`app.current_user_id`/`-group_ids`/`-bypass`)
-wird dabei über die RPC-Grenze mitgereicht und im Host transaktionslokal gesetzt,
-sodass Modul-Beiträge benutzer-/gruppen-scoped arbeiten. Beitragsklassen nutzen
-im Host eine CakePHP-`default`-Connection auf die Modul-Rolle (Search-Path auf
-das Modul-Schema). **Periodische Aufgaben:** Fälligkeits-Prüfung (Heartbeat) und
-der Mehrinstanz-Advisory-Lock bleiben im Core; nur die Ausführung (`run()`)
-reist über die RPC-Grenze (Systemkontext, RLS-Bypass). **Resolver** werden über
-das Capability-Handle aufgerufen und nach der **Isolation des bereitstellenden
-Moduls** geroutet. **Einzige Ausnahme:** der **Auth-Provider-Slot**
-(`core.auth.provider`) bleibt bei Isolation **abgelehnt** — er ist config-artig
-(der Resolver liefert ein In-Process-Authenticator-Objekt, das nicht über RPC
-reichbar ist) und ist daher per Konstruktion in-process.
-
-**Optionale OS-Härtung ohne Core-Änderung (Launcher-Prefix).** Für zwei dieser
-Ausbaustufen — **eigener OS-Benutzer** und **Dateisystem-/Kernel-Sandbox** —
-stellt der Core einen **konfigurierbaren Einsprungpunkt** bereit: Das Setting
-`core.module.host.launcher` definiert ein Befehls-Prefix, das der Supervisor in
-der bereits bereinigten `env -i`-Umgebung **vor `php`** setzt und das den
-Host-Prozess wrappt/exec't. Damit kann der **Betreiber** je nach Plattform
-isolieren, ohne Code zu ändern — z. B. `setpriv --reuid=… --regid=… --clear-groups --`
-(eigener Benutzer; erfordert die nötigen OS-Rechte), `bwrap --unshare-all
---ro-bind / / --proc /proc --dev /dev --die-with-parent` (FS-/Kernel-Sandbox via
-Namespaces + seccomp) oder `firejail`. Die Prozessverwaltung des Supervisors
-(Erkennen/Stoppen) ist **wrapper-tolerant**: Erkennung läuft über den Socket,
-das Stoppen findet den **tatsächlichen** Host-Prozess über die Kommandozeile
-(`/proc`, Match auf Host-Skript **und** Modul-Key) — auch hinter einem forkenden
-Launcher, sodass kein verwaister Host zurückbleibt. **Anforderung an den
-Launcher:** er muss `php` per `exec` ersetzen oder SIGTERM weiterreichen und mit
-dem Elternprozess sterben (z. B. `setpriv … --`, `bwrap … --die-with-parent`).
-**Sicherheit:** Wer dieses Setting setzen darf, kann Code als Worker-Benutzer
-ausführen — auf dieselbe Vertrauensstufe wie Shell-Zugriff beschränken. Default
-ist leer (kein Prefix). **Bewusst spätere Ausbaustufen** (ehrlich benannt): die OS-Härtung als
-**vom Core verwaltete, automatische** Eigenschaft (statt Betreiber-Konfiguration)
-inkl. eigenem Container je Modul. (Die zuvor hier genannten **Capability-Tokens
-je Aufruf** sind umgesetzt — siehe „Authentifizierter Aufruf über RPC" oben.)
-**Hinweis Transaktionsgrenze:** Ein
-Out-of-Process-Beitrag committet in **seiner** Sitzung; die Core-Operation
-(z. B. Anonymisierung) und der Modul-Beitrag bilden daher **keine** verteilte
-Transaktion — bei der irreversiblen Anonymisierung ist „über-bereinigt" jedoch
-unkritisch.
+**Ehrliche Einordnung.** Das Gate ist **Defense in Depth, keine Sandbox**:
+statische Analyse ist grundsätzlich umgehbar (dynamische Aufrufe, String-Tricks).
+Die maßgebliche Zulassungsgrenze bleibt die Signatur-/Vertrauenskette (23.16.1) —
+Vertrauen wird durch Review + Signatur **vor** der Ausführung etabliert. Das Gate
+hält dieses „review-then-trust"-Modell ehrlich, indem es offensichtliche Verstöße
+früh und automatisch abfängt. Die **Mandantentrennung** ist davon unabhängig: sie
+kommt aus Postgres-RLS (App-Rolle `NOBYPASSRLS` + `FORCE ROW LEVEL SECURITY` auf
+modul-eigenen Tabellen, gesetzt über `ModuleTableRls::forceRls`) und gilt für jeden
+Modul-DB-Zugriff über die `default`-Connection.
 
 # 24. Modul-Manifest, Paketstruktur und Installations-/Updatefluss
 
@@ -4652,6 +4584,7 @@ Komponente neu auszuliefern.
 | 6.30 | 07.06.2026 | Doku-Software-Abgleich nach Umsetzung: (a) **7. Administrationsbereich „Sprachverwaltung"** in 27.3.1 + Entscheidung 170 ergänzt (zuvor 6); (b) **API-Token tragen Scopes** (zusätzliche Einschränkung, nie erweiternd) in 27.16.3 + Entscheidung 162 korrigiert (zuvor „keine eigenen Scopes"); (c) **20.1.2 um den realen Backup-Funktionsumfang erweitert** (ZIP+Zeitstempel, Verifikation-vor-Abschluss, optionale AES-256-Verschlüsselung, Zeitplan/Retention nach Anzahl+Alter, append-only-Protokoll, Pre-Flight, Mail-Alarm, Download, Health-Subsystem); (d) **30.3.1**: Core **erzwingt** RLS für `is_scoped`-Module bei der Installation (Abbruch sonst). Hinweis: Mehrsprachigkeit/Locale-Verwaltung ist als eigener Subsystem implementiert, im Anforderungsdokument bislang nur als Technologie-Zeile geführt (eigene Kapitel-Ausarbeitung offen). |
 | 6.31 | 07.06.2026 | Doku-Software-Abgleich (Fortsetzung): (a) **Neues Kapitel 31 „Mehrsprachigkeit und Lokalisierung"** ausgearbeitet (Grundsatz/symbolische Schlüssel, Mitlieferung, Managed Locale Store mit ausfallsicherem Schreiben, Versions-Gate, Sprachverwaltungs-Admin-Bereich mit Status-Trio + verlustfreiem Editor, Laufzeit-Sprachwahl, Audit/Health). (b) Bestehende Kapitel um umgesetzte Mechanismen ergänzt: **20.2.1** Health-Subsysteme `localization` + `backup`; **20.3** Andock-Punkt für periodische Modul-Aufgaben (`core.collector.scheduled`); **24.9.2** Durchsetzung des Anker-Gültigkeitsfensters + gleitende Rotation; **26.9.2** Dead-Letter-Retry/Verwerfen-GUI; **28.14.2** automatischer Wiederherstellungspunkt auch bei Boot-Migrationen. |
 | 6.32 | 08.06.2026 | (a) **Mehrere Worker-Instanzen** explizit unterstützt (20.3): periodische Aufgaben werden je Aufgabe über einen PostgreSQL-Advisory-Lock serialisiert (kein Doppellauf bei >1 Worker); Outbox bleibt über SKIP LOCKED kollisionsfrei. Einzelinstanz = Standard. (b) **Backup-Verschlüsselung DR-tauglich** (20.1.2): Passwort aus Env/Secret (`BACKUP_PASSWORD_FILE`/`BACKUP_PASSWORD`) mit Vorrang vor dem DB-Setting — out-of-band, damit ein verschlüsseltes Backup nicht über das im Dump enthaltene Passwort entschlüsselt werden müsste (Henne-Ei). |
+| 6.117 | 27.06.2026 | **Vereinheitlichung auf In-Process-Module + Capability-Gate (Kap. 23.16.2 neu gefasst, Entscheidung 187)**: Die optionale Out-of-Process-Isolation (eigener Prozess, bereinigte Umgebung, eigene DB-Rolle, RPC über Unix-Domain-Socket mit Pro-Aufruf-Capability-Token, Supervisor, Launcher-Prefix) wird **vollständig entfernt** — Code (`RemoteInvoker`, `ModuleHostSupervisor`, `RpcCapabilityToken`, `ModuleDbRole`, `bin/module-host.php`, `modules.isolation`/`db_role`/`db_role_secret`) und Doku. Begründung: Eine echte In-Process-Sandbox existiert in PHP nicht; die Isolationsgrenze war komplex, aber nicht die maßgebliche Sicherheitsgrenze (das bleibt die Signatur-/Vertrauenskette, 23.16.1). Module laufen jetzt **immer in-process** als vertrauenswürdiger, signierter Code. Ergänzend prüft ein **statisches Capability-Gate** bei der Installation den Modul-Quellcode und weist Pakete mit gefährlichen Primitiven (Shell/`exec`/`eval`/Reflection/rohe DB-/Dateizugriffe) **vor jedem Seiteneffekt** ab (`ManifestLinter::lintCapabilities`; dieselbe Prüfung zur Autorenzeit über `module_lint`). Mandantentrennung unverändert über Postgres-RLS (`NOBYPASSRLS` + `FORCE ROW LEVEL SECURITY`, jetzt via `ModuleTableRls::forceRls`). Verifiziert: ~1575 Zeilen OOP-Code entfernt, volle Suite 663 grün, PHPStan grün. |
 | 6.116 | 17.06.2026 | **Release-Assembly als definierter Vorstufenschritt vor der Signatur (24.13.2 neu, Entscheidung 186)**: `bin/cake mp_tool package` schließt die Lücke zwischen „Modul bearbeitet" und „Paket signiert" und erzwingt vor der Signatur: Manifest-Lint (P16), gültige + monoton steigende SemVer-Version (28.9.2), eine umkehrende `@DOWN`-Operation je Migration (Voraussetzung der Rollback-Garantie 28.14.2), einen Changelog-Eintrag für die Version (24.13/28.9.1). Erzeugt ein bereinigtes, signierfähiges Paketverzeichnis + eine `release.json` (Migrationsliste mit Reversibilitäts-Attribut + Changelog), die als Teil des Pakets mitsigniert wird (manipulationssicher). Verifiziert: `PackageBuilder` + Tests grün, PHPStan/PHPCS grün. |
 | 6.115 | 14.06.2026 | **Konsequente, revisionssichere Mandantentrennung als verbindliche Norm (Entscheidung 185)**: Die Plattform ist durchgängig mehrmandantenfähig mit fail-closed Trennung; Single-Org = Default-Mandant ohne „Mandant anlegen", kein zweiter Codepfad. Jede mandanten-tragende Tabelle (Core + Module, inkl. Referenz-/Konfig-Tabellen) führt `tenant_id` + fail-closed RLS-Policy; reine System-/Infra-Tabellen bleiben zentral; Auth-/Pre-Auth-Tabellen tragen `tenant_id` ohne sperrende Policy (Pre-Auth-Lesezugriff via Host-Resolver). Hintergrundjobs iterieren pro Mandant (`TenantIterator`, neu). Abnahmekriterium: Cross-Tenant-Leak-Test je Modul/Tabelle. Slice 1 (E163): Norm + `TenantIterator` umgesetzt; die flächige `tenant_id`/RLS-Härtung der Core-Tabellen (audit_log etc.) folgt in weiteren Slices. |
 | 6.114 | 13.06.2026 | **Architekturprinzip „enhancing, nicht gating" (26.19.1 neu, Entscheidung 184)**: Die bislang nur gelebte Disziplin – optionale Capabilities (Resolver/Collector/Event/Service, bereitgestellt oder konsumiert) erweitern einen Ablauf nur, bedingen ihn nie; die Abwesenheit eines Providers ist ein definierter neutraler Zustand (Default-Implementierung, leere Menge, Ausblendung) – als verbindliche, im Review durchsetzbare Norm festgeschrieben. Durchsetzung zweigeteilt: **statisch hart** – jeder bereitgestellte Resolver-/Service-Contract muss seine Abwesenheits-/Default-Semantik deklarieren (Manifestfeld `error_behavior`), sonst weisen Manifest-Linter (P16) und Aktivierungsvalidierung ab (Collector/Event ausgenommen, additiv); **review-/testpflichtig** – die konsumentenseitig tatsächlich neutrale Behandlung einer Abweisung (26.13.3) ist nicht statisch erkennbar und bleibt Review-/Abnahmekriterium. Verifiziert: Linter-Test belegt Pflicht für Resolver/Service und Ausnahme für Collector/Event; volle Testsuite grün, statische Analyse grün. |
@@ -4823,4 +4756,5 @@ getroffen.
 | 183 | Kardinalitäten und Konnektor als Blattknoten | Ein Modul kann N Extensions und N Konnektoren haben; eine Extension kann Andockziel von N Konnektoren sein; ein Konnektor hat weder Extensions noch Konnektoren und stellt keine Contracts/Interfaces bereit. Abhängigkeitsgraph bleibt flache Hierarchie Core → Tower → (Extension | Konnektor) |
 | 185 | Konsequente, revisionssichere Mandantentrennung | Die Plattform ist **durchgängig mehrmandantenfähig mit fail-closed Mandantentrennung**; Single-Org ist kein zweiter Codepfad, sondern der Default-Mandant mit deaktivierter „Mandant anlegen"-Aktion. **Regel:** Jede mandanten-tragende Tabelle in Core **und** Modulen führt `tenant_id` + eine fail-closed RLS-Policy (`core.rls_bypass() OR tenant_id = core.current_tenant()`; zusätzlich zur etwaigen BREAD-/Bereichs-Bedingung) — **inklusive Referenz-/Konfig-Tabellen**. Reine System-/Infrastruktur-Tabellen (Module/Contracts/Lizenzen/Trust/Backups/Worker) bleiben zentral. **Ausnahme Auth-/Pre-Auth-Tabellen** (users, sessions, auth_failures, password_reset_tokens, sso_providers, saml_auth_requests): sie tragen `tenant_id` für Revision/Filter, dürfen aber **keine** sperrende Policy haben, die den Pre-Auth-Lesezugriff bricht (Mandant ist dort über den Host-Resolver verfügbar, nicht über den noch nicht etablierten User-Kontext). **`rls_bypass`** nur für eng begrenzte, auditierte Systempfade. **Hintergrundjobs** (Scheduler/Outbox/Queue/Cron) mischen Mandanten nie, sondern iterieren explizit pro Mandant mit gesetztem Kontext (`TenantIterator`). **Abnahmekriterium je Modul/Tabelle:** Cross-Tenant-Leak-Test (zwei Mandanten in einer DB; Mandant B sieht nie Daten von Mandant A — auch nicht über Referenz-/Konfig-Daten, öffentliche/anonyme APIs oder Hintergrundjobs) |
 | 186 | Release-Assembly als Vorstufenschritt vor der Signatur | Zwischen „Modul bearbeitet" und „Paket signiert" steht ein definierter Release-Assembly-Schritt (`mp_tool package`, Kap. 24.13.2), der vor der Signatur erzwingt: Manifest-Lint (P16), gültige + monoton steigende SemVer-Version (28.9.2), eine umkehrende `@DOWN`-Operation je Migration (Voraussetzung der Rollback-Garantie 28.14.2), einen Changelog-Eintrag für die Version (24.13/28.9.1). Erzeugt ein bereinigtes, signierfähiges Paketverzeichnis (ohne Dev-Artefakte) + eine `release.json` (Migrationsliste mit Reversibilitäts-Attribut + Changelog), die als Teil des Pakets mitsigniert wird (manipulationssicher). So gelangen nur reversible, versionierte, dokumentierte Releases in den Signatur-/Auslieferungsfluss |
+| 187 | In-Process-Module + Capability-Gate (statt Out-of-Process-Isolation) | Module laufen **ausschließlich in-process** als vertrauenswürdiger, signierter Code; es gibt keine technische Laufzeit-Sandbox (eine echte In-Process-Sandbox existiert in PHP nicht). Die zuvor optionale Out-of-Process-Isolation (`out_of_process`-Modus, eigener Prozess, bereinigte Umgebung, eigene DB-Rolle `mod_<key>`, RPC über Unix-Domain-Socket mit Pro-Aufruf-Capability-Token, Supervisor, Launcher-Prefix) wird **vollständig entfernt** — sie erhöhte die Komplexität, war aber nicht die maßgebliche Sicherheitsgrenze. Maßgeblich bleibt die Signatur-/Vertrauenskette (Kap. 23.16.1, 24.9): Vertrauen wird **vor** der Ausführung durch Review + Signatur etabliert. **Ergänzend (Defense in Depth):** ein statisches Capability-Gate prüft den Modul-Quellcode bei der Installation und weist Pakete mit gefährlichen Primitiven (Shell-/Prozess-Ausführung, `eval`, Reflection/Sichtbarkeits-Umgehung, rohe DB-Verbindung, roher Dateisystemzugriff, Env-/Config-Mutation) **vor jedem Seiteneffekt** ab (`ManifestLinter::lintCapabilities` → `ModuleLifecycle::install`; dieselbe Prüfung zur Autorenzeit über `module_lint`). Das Gate ist ehrlich als umgehbare statische Analyse benannt, nicht als Sandbox. Mandantentrennung bleibt unabhängig über Postgres-RLS (`NOBYPASSRLS` + `FORCE ROW LEVEL SECURITY`, gesetzt via `ModuleTableRls::forceRls`). Ersetzt die in 6.33–6.48 aufgebaute Out-of-Process-Isolation (Kap. 23.16.2 neu gefasst) |
 | 184 | Enhancing, nicht gating (optionale Capabilities) | Optionale Capabilities (Resolver, Collector, Event, Service – bereitgestellt oder konsumiert) dürfen einen Ablauf nur erweitern, nie bedingen; die Abwesenheit eines aktiven Providers muss ein definierter neutraler Zustand sein (Default-Implementierung bei Resolver/Service, leere Menge/No-op bei Collector/Event, Ausblenden/leeres Ergebnis konsumentenseitig). Kein Pflicht-Flow darf von einem optionalen Provider abhängen (Kap. 26.19.1). Durchsetzung zweigeteilt: **statisch hart** – jeder bereitgestellte Resolver-/Service-Contract muss seine Abwesenheits-/Default-Semantik deklarieren (Manifestfeld `error_behavior`), sonst weisen Manifest-Linter (P16) und Aktivierungsvalidierung ab; **review-/testpflichtig** – die tatsächlich neutrale Behandlung einer Abweisung konsumentenseitig (Kap. 26.13.3) ist nicht statisch erkennbar und Gegenstand von Review und Abnahmekriterium |

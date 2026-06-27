@@ -27,10 +27,10 @@ ungeschützte Fläche ist also nur die **Form der Tabelle zur Erstellungszeit**.
   Tabelle im `mod_<key>`-Schema gegen den Live-Katalog: `tenant_id` uuid NOT NULL DEFAULT
   current_tenant, RLS enabled **und** forced, eine Policy die `tenant_id` an
   `current_tenant()` bindet in USING **und** WITH CHECK, UNIQUEs mit `tenant_id` zuerst.
-  Verstoß → Aktivierung verweigert (Rollback). `forceRls` läuft jetzt für **alle** Module
-  vor dem Gate (essenziell für out_of_process). `core.current_tenant()` zu
-  `ModuleDbRole::CORE_FUNCTIONS` hinzugefügt (out_of_process-Migrationen laufen unter der
-  Modul-Rolle). **Strukturelles** Gate — Policy-*Logik* ist per Leak-Tests gedeckt.
+  Verstoß → Aktivierung verweigert (Rollback). `forceRls` läuft für **alle** Module vor dem
+  Gate (essenziell, damit RLS auf den modul-eigenen Tabellen tatsächlich greift; seit Inc 10
+  in `ModuleTableRls::forceRls`). **Strukturelles** Gate — Policy-*Logik* ist per Leak-Tests
+  gedeckt.
 - **9d — module_lint Migrations-Scan (advisory).** Warnt aggregiert bei einer erstellten
   Tabelle ohne RLS, die nicht als global deklariert ist. Bewusst Warnung (nicht CI-Error):
   Module bauen Tenancy retrofit; das Gate ist die autoritative Prüfung.
@@ -48,14 +48,13 @@ ungeschützte Fläche ist also nur die **Form der Tabelle zur Erstellungszeit**.
   ausklinken — bewusst auditierbar (Manifest, signiert), kein stiller Pfad.
 - ~~`is_scoped`-Trigger~~ **GESCHLOSSEN in 9e:** das Gate prüft jede Tabelle unabhängig
   von `is_scoped` (motiviert vom Connector).
-- **out_of_process-Tenant-Propagation:** Auf dem **Request-Pfad** (Web/API/Listener) wird
-  der Tenant bereits korrekt propagiert — `RemoteInvoker::currentRls()` liest
-  `app.current_tenant_id` und der Host (`bin/module-host.php`) setzt ihn je RPC-Aufruf; ein
-  isoliertes Modul liest/schreibt seine Tenant-Tabellen also korrekt. Der einzige Rest:
+- **Tenant-Propagation in Modul-Beiträge:** Module laufen **in-process** (seit Inc 10 der
+  einzige Pfad), also erben Modul-Beiträge auf dem **Request-Pfad** (Web/API/Listener) den
+  bereits gesetzten RLS-Zeilenkontext (`app.current_tenant_id`) der Request-Transaktion — ein
+  Modul liest/schreibt seine Tenant-Tabellen damit automatisch korrekt. Der einzige Rest:
   `ScheduledTaskRunner` ruft Tasks mit `['bypass'=>true]` (System-Kontext, kein Tenant) —
-  korrekt für system-weite Tasks, aber ein *per-Tenant* out-of-process-Modul-Scheduled-Task
-  bräuchte eine Core-Tenant-Iterations-Fähigkeit (heute kein Konsument, daher zurückgestellt;
-  die Isolations-Test-Fixtures sind als `global` deklariert).
+  korrekt für system-weite Tasks, aber ein *per-Tenant* Modul-Scheduled-Task bräuchte die
+  Core-Tenant-Iteration (`TenantIterator`); heute kein Konsument, daher zurückgestellt.
 
 ## Modul-Adoption (Hand-off, NICHT Core) — Gate ist scharf
 Ticketing + KB müssen VOR der nächsten (Re-)Installation: (1) jede echte globale Tabelle im

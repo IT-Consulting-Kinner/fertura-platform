@@ -3,7 +3,7 @@
 Die technische Plattform von **Fertura** auf Basis von **CakePHP 5 / PHP 8.3 /
 PostgreSQL 17**. Der Core stellt Authentifizierung (lokal + MFA/Passkeys, SSO via
 OIDC/SAML, SCIM-Provisioning), das BREAD-/RLS-Rechtemodell, Modul-Lifecycle mit
-Out-of-Process-Isolation, die Contract-/Capability-Registry, Outbox/Events,
+In-Process-Vertrauensmodell (Signatur + Capability-Gate), die Contract-/Capability-Registry, Outbox/Events,
 Automatisierung/Workflows, Suche (Volltext + Vektor), Backup/Restore (inkl.
 Off-Site), die Lizenz-/Signaturkette, Audit-Log mit SIEM-Export sowie
 Health/Metrics und eine vollständige Admin-GUI (gebündeltes Bootstrap 5) bereit.

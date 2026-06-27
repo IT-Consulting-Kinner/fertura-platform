@@ -38,7 +38,7 @@ Integrationstests gegen DB + echte Services (Review-Punkt 1):
 | **Backup/Restore** | `Service/Backup/BackupRoundtripTest` | Echtes `pg_dump`+Stores in ein verifiziertes ZIP; Prüfsummen-Verifikation; nicht-destruktiver Probe-Restore in eine Scratch-DB; AES-256 (richtiges vs. falsches Passwort) |
 | **i18n** | `Service/I18n/LocaleResolutionTest` | Versions-Gate exakt/same-major/Major-Mismatch; Pack-Status-Klassifikation; wählbare Locales (Englisch immer, Unverfügbare gefiltert) |
 | **Auth/Token** | `Service/Api/TokenAuthTest` | TokenService (Klartext nur bei Erzeugung, Hash-only, Authentisierung, Ablauf, Widerruf); HTTP über `ApiAuthMiddleware` (`/api/v1/me`): gültig → 200, ohne Token → 401, falscher Scope → 403 |
-| **Out-of-Process** | `Service/Module/OutOfProcessIsolationTest` | Eigene DB-Rolle, Migrationen als Rolle, FORCE RLS, Supervisor-Spawn, `__probe`-Isolation, Echo-RPC, Enforcement |
+| **Capability-Gate** | `Service/Sdk/ManifestLinterCapabilityTest` | Statisches Install-Gate (Inc 10): verbotene Primitive (Shell/`exec`/`eval`/Reflection/rohe DB-/Datei-Zugriffe) werden gemeldet; legitime gleichnamige Methoden (`->exec`, `Db::exec`, `ConnectionManager::get`, Socket-`fwrite`) bleiben erlaubt |
 | **Sessions (HA)** | `Session/DatabaseSessionTest` | DB-Session-Store: Schreiben/Lesen/Update/Löschen, Sichtbarkeit über zweite Instanz, GC |
 | **Feature-Flags** | `Service/System/FeatureFlagsTest`, `Controller/ApiFeatureFlagTest` | env-Parsing; API-Gating (404 aus / 401 an); Health-`features` |
 | **Upgrade-Pfad** | `Service/Update/ModuleUpdateTest` | Migrationsvorschau, Update mit Wiederherstellungspunkt (nur bei ausstehenden Migrationen), Downgrade-Schutz, Rollback-Kaskade (erhält installierte Daten) |
@@ -70,8 +70,6 @@ Ergänzend zu PHPUnit, im Container ausführbar (`docker compose exec core sh �
 - `tests/scripts/migration_reversibility_check.sh` — fährt **alle** Core-
   Migrationen auf einer Wegwerf-DB hoch und vollständig zurück
   (`migrate` → `rollback -t 0`): beweist die Down-Reversibilität.
-- `tests/scripts/module_isolation_check.sh` — Out-of-Process-Isolationsnachweis
-  (eingeschränkte Rolle, bereinigte Umgebung, RPC-`__probe`).
 
 ## CI
 

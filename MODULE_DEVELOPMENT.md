@@ -117,8 +117,7 @@ Manifest-Sektion `web_routes`, je Eintrag:
 
 - **`class`** implementiert `App\Service\Module\ModuleWebInterface::handle(array): array`
   und gibt **nur Daten** zurück (`vars`/`status`/`template`/`redirect`) — kein HTML,
-  keine Response-Manipulation. Aufruf **in-process** (Web-Mount ist mit
-  `out_of_process` unvereinbar — bei Aktivierung abgewiesen).
+  keine Response-Manipulation.
 - **`template`**: Datei unter dem modul-eigenen `templates/`-Verzeichnis,
   **snake_case** (CakePHP inflektiert; PascalCase bricht auf Linux/CI). Unterpfade
   erlaubt (`admin/queues` → `templates/admin/queues.php`). Es stehen die Core-
@@ -223,68 +222,52 @@ Breaking-Änderungen an Scoping/Schlüsseln die **Major-Version** erhöhen.
 - Signatur wird **bei der Installation** geprüft (Trust-Anker, Gültigkeitsfenster,
   Vertrauenskette); Widerruf wirkt nachträglich (Kennzeichnung in Modul-Liste/Health).
 
-## 6. Optionale Out-of-Process-Isolation (Kap. 23.16.2)
+## 6. Sicherheits- und Vertrauensmodell (Kap. 23.16)
 
-Standardmäßig laufen Module **in-process** (`isolation = in_process`). Für eine
-echte, **automatisch verwaltete** technische Isolationsgrenze kann ein Modul auf
-`out_of_process` gesetzt werden:
+Module laufen **immer in-process** — als vertrauenswürdiger Code im selben
+Laufzeitkontext wie der Core (kein technischer Subprozess-Sandbox). Die
+Sicherheitsgrenze ist daher **vor der Ausführung** etabliert, nicht zur Laufzeit
+erzwungen. Sie hat zwei Stufen:
 
-```bash
-bin/cake module install /pfad/zum/modul --isolation out_of_process
-bin/cake module isolate <key> out_of_process   # nachträglich umschalten
-bin/cake module host status                     # laufende Hosts anzeigen
-```
+1. **Vertrauenskette (maßgeblich).** Ein Modulpaket wird **bei der Installation**
+   gegen Trust-Anker, Gültigkeitsfenster und Signatur geprüft (Kap. 24.9); Widerruf
+   wirkt nachträglich (Kennzeichnung in Modul-Liste/Health). Nur kuratierte,
+   signierte Pakete werden zugelassen — Vertrauen wird durch Review + Signatur
+   hergestellt, nicht durch Laufzeit-Isolation.
 
-- Der Core legt **automatisch** eine **eigene, eingeschränkte DB-Rolle**
-  (`mod_<key>`, `LOGIN`, `NOBYPASSRLS`) mit zufälligem, **verschlüsselt**
-  gespeichertem Passwort an — Rechte nur auf das eigene Schema, kein Core-
-  Tabellenzugriff.
-- Die **Modul-Migrationen laufen unter dieser Rolle** (kein Superuser-Code);
-  danach erzwingt der Core `FORCE ROW LEVEL SECURITY`, damit RLS auch für die
-  modul-eigenen Tabellen greift.
-- Der Modulcode läuft in einem vom Core verwalteten **Subprozess**
-  (`bin/module-host.php`) mit **bereinigter Umgebung** (kein Core-`DATABASE_URL`,
-  kein `BACKUP_PASSWORD`). Ein **Supervisor** startet ihn beim Aktivieren, stoppt
-  ihn beim Deaktivieren/Löschen und startet abgestürzte Hosts neu (der Worker
-  überwacht periodisch).
-- Der Core ruft **alle gängigen Erweiterungspunkte** transparent über RPC im Host
-  auf (`RemoteInvoker`/`ContributionRuntime`): **Service-Contracts**
-  (`services_registered`), **Collector-Beiträge** (`collectors_registered`, z. B.
-  Health/Anonymisierung **und periodische Aufgaben** `core.collector.scheduled`),
-  **Event-Listener** (`events_registered`) und **Daten-Resolver**
-  (`resolvers_registered`). Der **RLS-Zeilenkontext** der Anfrage wird mitgereicht;
-  Beitragsklassen nutzen im Host `ConnectionManager::get('default')` auf die
-  Modul-Rolle (Search-Path aufs Modul-Schema). Bei **periodischen Aufgaben**
-  bleiben Fälligkeits-Prüfung (Heartbeat) und der Mehrinstanz-Advisory-Lock im
-  Core; nur `run()` reist über RPC (Systemkontext, RLS-Bypass).
-- **Einzige Ausnahme:** der **Auth-Provider-Slot** (`core.auth.provider`) — er ist
-  config-artig (liefert ein In-Process-Authenticator-Objekt, das nicht über RPC
-  reichbar ist) und wird bei Isolation **abgelehnt** (statt still in-process).
-- **Optionale OS-Härtung (Launcher-Prefix):** Das Setting
-  `core.module.host.launcher` setzt ein Befehls-Prefix vor `php`, um den
-  Host-Prozess zusätzlich vom OS zu isolieren — **ohne Core-Codeänderung**. Z. B.
-  `setpriv --reuid=1001 --regid=1001 --clear-groups --` (eigener OS-Benutzer;
-  erfordert OS-Rechte), `bwrap --unshare-all --ro-bind / / --proc /proc --dev /dev
-  --die-with-parent` (FS-/Kernel-Sandbox) oder `firejail`. Der Befehl muss das
-  Image bereitstellen und Argumente an `php` durchreichen. Leer = kein Prefix
-  (Default). Der Launcher muss `php` per `exec` ersetzen oder SIGTERM
-  weiterreichen und mit dem Elternprozess sterben (z. B. `setpriv … --`,
-  `bwrap … --die-with-parent`) — sonst kann beim Stoppen ein verwaister Host
-  zurückbleiben. Wer das Setting setzen darf, kann Code als Worker-Benutzer
-  ausführen (auf Shell-Vertrauensstufe beschränken).
-- **Pro-Aufruf-Authentifizierung:** Jeder RPC-Aufruf trägt ein aufruf-gebundenes
-  Capability-Token (HMAC über die kanonisierte Anfrage + Nonce + Ablauf). Das
-  Host-Geheimnis liegt nur in einer 0600-Datei, dient ausschließlich als
-  Schlüssel und reist nie über den Socket; der Host weist abgelaufene und
-  wiederholte Nonces sowie manipulierte Anfragen ab und startet ohne Geheimnis
-  gar nicht erst (fail-closed). Für die Modulentwicklung transparent (der Core
-  signiert/prüft automatisch). Das Token sichert die Prozessgrenze (Core→Host),
-  nicht den Modulcode selbst — die Isolation leisten DB-Rolle, bereinigte
-  Umgebung und die optionale OS-Härtung.
-- **Transaktionsgrenze:** Ein Out-of-Process-Beitrag committet in seiner eigenen
-  Sitzung — Core-Operation und Modul-Beitrag bilden keine verteilte Transaktion.
-- Verifikation: `OutOfProcessIsolationTest` + `OutOfProcessPhase3Test` (E2E) und
-  `core/tests/scripts/module_isolation_check.sh` (manuell).
+2. **Capability-Gate (Defense in Depth).** Zusätzlich scannt der Core bei der
+   Installation den Modul-Quellcode (`src/`) statisch und **weist ein Paket ab**,
+   das gefährliche PHP-Primitive verwendet — noch bevor irgendein Seiteneffekt
+   eintritt (`ManifestLinter::lintCapabilities` → `ModuleLifecycle::install`).
+   Verboten sind u. a.:
+   - **Shell/Prozess:** `exec`, `shell_exec`, `system`, `passthru`, `proc_open`,
+     `popen`, `pcntl_exec`.
+   - **Code-Eval:** `eval`, `create_function`, `assert('…')`.
+   - **Reflection/Sichtbarkeits-Umgehung:** `new Reflection*`, `->setAccessible(…)`.
+   - **Rohe DB-Verbindung:** `new \PDO`, `pg_connect`, `ConnectionManager::setConfig`
+     u. ä. — DB-Zugriff läuft ausschließlich über die Core-`default`-Connection.
+   - **Roher Dateizugriff:** `fopen`, `file_get_contents`/`file_put_contents`,
+     `mkdir`, `unlink`, `scandir`, `glob` … — Dateien laufen über
+     `ModuleStorage::for()` (mandantengetrennt, Kap. 6.x / Inc 8).
+   - **Variable-Variablen** (`$$x`) und Umgebungs-/Config-Mutation (`putenv`,
+     `ini_set`, `dl`).
+
+   Der Matcher trifft nur **bare** globale Aufrufe, sodass legitime Methoden gleichen
+   Namens erlaubt bleiben (`$conn->exec(…)`, `Db::exec(…)`,
+   `ConnectionManager::get('default')`, Socket-`fwrite`/`fgets`, `preg_replace('/…/u')`).
+   Die drei mitgelieferten Module (Ticketing, Knowledge-Base, Connector) passieren
+   das Gate ohne Treffer.
+
+Das Gate ist **Defense in Depth, keine Sandbox:** statische Analyse ist umgehbar
+(dynamische Aufrufe, String-Tricks). Die eigentliche Zulassungsgrenze bleibt die
+Signatur-/Vertrauenskette; das Gate fängt offensichtliche Verstöße früh und hält das
+„review-then-trust"-Modell ehrlich. Die **Mandantentrennung** kommt unabhängig davon
+aus Postgres-RLS (App-Rolle `NOBYPASSRLS` + `FORCE ROW LEVEL SECURITY` auf
+modul-eigenen Tabellen, gesetzt durch `ModuleTableRls::forceRls`).
+
+Während der Entwicklung meldet `bin/cake module_lint` dieselben Capability-Verstöße
+(plus die Storage-Konventions-Prüfung) zur Autorenzeit, damit ein Paket gar nicht
+erst beim Install scheitert.
 
 ## 7. Erweiterungspunkte des Programms „Wettbewerbsfähigkeit Core" (Tier 1–3)
 

@@ -56,8 +56,9 @@ Fail-closed-Garantie.
   (exakte `tenants.domain` oder Konvention Subdomain==Schlüssel); die
   `TransactionRlsMiddleware` setzt den Mandanten pre-auth aus dem Request-Host
   (mandantenspezifische Login-/SSO-Oberfläche).
-- ✅ **RPC-Propagation** des Mandanten an isolierte Modul-Hosts — `RemoteInvoker`
-  reicht `tenant_id` mit, `bin/module-host.php` setzt `app.current_tenant_id` je Aufruf.
+- ✅ **Mandanten-Kontext für Modul-Beiträge** — Module laufen in-process (seit Inc 10 der
+  einzige Pfad) und erben den von der `TransactionRlsMiddleware` gesetzten Zeilenkontext
+  (`app.current_tenant_id`) der Request-Transaktion automatisch.
 - ✅ **Mandanten-Verwaltungs-GUI** (`/admin/tenants`): anlegen (inkl. Branding),
   sortier-/paginierbare Liste, **Aktivieren/Suspendieren** (Sammelaktion),
   **Benutzer-↔-Mandant-Zuweisung**.
