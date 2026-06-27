@@ -1,184 +1,227 @@
-# KI-Completion als nahtlose Extension — Migrations-Design (Entwurf)
+# KI als Modul über Konnektoren — Migrations-Design (Entwurf)
 
-> **Status: ENTWURF, nicht umgesetzt (Stand 27.06.2026).** Reine Design-/Planungs-Referenz.
-> Kein Implementierungscode. Erarbeitet + adversarial geprüft auf Basis des aktuellen Core.
+> **Status: ENTWURF, nicht umgesetzt (Stand 27.06.2026).** Reine Design-/Planungs-Referenz,
+> kein Implementierungscode.
+>
+> **Diese Fassung ersetzt den früheren „Seamless-Fassaden"-Ansatz.** Der war architektonisch
+> falsch: eine Core-`AiGateway`-Fassade, die intern an ein AI-Modul delegiert, ist ein
+> **verdecktes Modul→Modul-Gespräch** — und Fertura erlaubt Modul↔Modul **nur über einen
+> Konnektor** (Decision 183). Sobald KI ein Modul ist, darf der Core **keinen** modul-gerichteten
+> KI-Einstiegspunkt mehr anbieten.
 
-## 1. Ziel & Motivation
+## 1. Ziel & bindende Regel
 
-KI/LLM ist heute Core-intern. Sie soll umgebaut werden, sodass **Chat/Completion +
-Multi-Provider (mehrere fremdgehostete *und* lokal installierte LLMs) + Usage-Limits/
-Kostenkontrolle** in eine **eigenständige, lizenzierte Extension** wandern. Treiber:
+KI/LLM (Chat/Completion + Multi-Provider hosted+lokal + Usage-Limits/Kostenkontrolle) wandert
+in ein **eigenständiges, lizenziertes AI-Modul**, das die KI-Einstiegspunkte bereitstellt.
+Konsumierende Module erreichen es **ausschließlich über dedizierte Konnektoren** — ein
+**Ticket-AI-Konnektor** und ein **KB-AI-Konnektor**. Der Core steigt aus dem modul-gerichteten
+KI-Geschäft aus; **Embeddings für die Core-Suche bleiben Core-intern**.
 
-- **opt-in** — wer keine KI braucht, installiert die Extension nicht (kein KI-Code, kein Provider).
-- **Monetarisierung** — separat verkaufbar (`requires_license`, `LicenseService`, Marketplace;
-  AGPL-§7-Ausnahme in `LICENSING.md` deckt In-Process-Linking ab).
-- **Flexibilität** — Provider/Modelle/Limits iterieren unabhängig vom Core-Release.
+**Bindende Regel:** Module reden nicht direkt miteinander — Modul↔Modul **nur** über einen
+Konnektor (`type=integration`, Blattknoten, stellt **keine** Contracts bereit, Decision 183).
+**Core↔Modul** (Core löst einen modul-bereitgestellten Contract auf) ist erlaubt und **nicht
+dasselbe** wie Modul↔Modul.
 
-**Harte Anforderung:** Bestehende Module (`knowledgebase`, `ticketing`, Connector) werden
-**nicht** angepasst — die Extension integriert sich nahtlos. (Deckt sich mit der Core-Boundary:
-die Core-Session editiert keinen Modul-Code.)
+**Tragende Annahme — bestätigt:** Ein `type=main`-Modul **darf** einen Service-Contract
+bereitstellen (Decision 153, Kap. 26.4.2 „Contract-Anbieter (Main- und Extension-Module)";
+Decision 181 bestätigt es für Extensions „mit denselben Regeln wie Main-Modul-Contracts").
+Main-Module dürfen aber **keine** fremden Contracts konsumieren (Decision 153) → das AI-Modul
+hat `contracts_used=[]` und nutzt nur Core-Infrastruktur.
 
-## 2. Grundentscheidung: Hybrid-Schnitt (Completion ≠ Embeddings)
+## 2. Topologie
 
-KI zerfällt in zwei unterschiedlich gekoppelte Teile. Nur der **ungekoppelte** Teil wird ausgelagert:
+```
+            ┌─────────────── Core ───────────────┐
+            │ Registry · Outbox · EgressClient ·  │   bietet KEINE modul-gerichteten
+            │ Embeddings(1536)+Suche INTERN       │   KI-Einstiegspunkte mehr
+            └───────▲────────────────────▲────────┘
+        Collector/  │ Event-Dispatch     │ ai.complete (Core vermittelt; Konnektor konsumiert)
+        Listener    │                    │
+   ┌────────────────┴───┐   ┌────────────┴───────────┐   ┌──────────────────┐
+   │ Ticket-AI-Konnektor│   │ KB-AI-Konnektor        │──▶│ AI-Modul (main)  │
+   │ (integration,Blatt)│   │ (integration,Blatt)    │   │ stellt ai.complete│
+   │ hört Ticket-Events │   │ hört KB-Events         │   │ bereit; Multi-    │
+   │ ruft ai.complete   │   │ ruft ai.complete       │   │ Provider+Limits   │
+   └─────────▲──────────┘   └──────────▲─────────────┘   │ requires_license  │
+   Events +  │ Panel         Events +  │ Panel           └──────────────────┘
+   Panel-Slot│               Panel-Slot│
+   ┌─────────┴──────────┐   ┌──────────┴─────────────┐
+   │ Ticketing (main)   │   │ KnowledgeBase (main)   │   ← wissen NICHTS von KI
+   └────────────────────┘   └────────────────────────┘
+```
 
-| | **Chat/Completion** | **Embeddings / semantische Suche** |
-|---|---|---|
-| Core-Konsument heute | **keiner** (`core.ai.complete` ist nur ein Platzhalter-Contract) | hart verdrahtet in `SearchService.hybrid → EmbeddingService.semantic` |
-| Schema-Kopplung | keine | `core.embeddings`, **`vector(1536)` fest**, HNSW-Index |
-| Hot-Path | nein | ja (jede Suchanfrage + jedes Indexieren) |
-| **Entscheidung** | **→ Extension** | **→ bleibt Core** |
+| Knoten | Typ | Rolle | stellt bereit | konsumiert |
+|---|---|---|---|---|
+| **AI-Modul** (`ki_dienste`) | Main (`requires_license`) | quer-schneidende KI-Authorität; Multiplexer über LLM-Provider | `ai.complete` (service, `error_behavior=reject`), opt. `ai.chat` | **nur Core-Infra**: `EgressClient`, `SecretCipher`, `config_schema→tenant_modules.config`, `CacheStore`, `LicenseService`, `AuditLogger` |
+| **Ticket-AI-Konnektor** | Connector (leaf) | brückt Ticketing→AI, nicht-invasiv | **nichts** (`contracts_provided=[]`) | `ai.complete`; `events_registered: ticketing.ticket.*`; `collectors_registered: ticket_view_panels`, `core.collector.anonymize` |
+| **KB-AI-Konnektor** | Connector (leaf) | brückt KB→AI | **nichts** | `ai.complete`; opt. `knowledgebase.get_article`; `knowledgebase.article.*`; `article_view_panels`, `anonymize` |
+| **Core** | Core | Vermittlung; **kein** KI-Einstiegspunkt | Registry/Outbox/Egress/…; **intern**: `EmbeddingService`+`core.embeddings(1536)`+`SearchService.hybrid` | Modul-Contracts zentral (Core→Modul erlaubt) |
+| **Ticketing** | Main | Event-Publisher + Panel-Slot-Anbieter | `ticket_view_panels`, `ticketing.ticket.*` Events | nur Core-Contracts; **kein** AI-Contract direkt |
+| **KnowledgeBase** | Main | heute KI via Direktimport (`new AiGateway()`) | `search`, `get_article`, `article_view_panels`, `article.*` | **Ziel:** via KB-AI-Konnektor entkoppelt (→ KB-Codeänderung) |
 
-Embeddings sind such-kritisch, schema-gebunden (Dimension 1536) und auf dem heißen Pfad —
-dort hat eine Auslagerung den höchsten Aufwand und geringsten Nutzen. Completion ist
-ungekoppelt (kein Core-Feature ruft es heute) — der ideale Auslagerungs-Schnitt.
+## 3. Konnektor-Mechanismus (Vorbild: `ticketing_knowledgebase_bridge`)
 
-## 3. Seamless-Mechanik: Fassade mit interner Delegation
+Verifiziert am Referenz-Konnektor (`contracts_provided`/`resolvers`/`services` alle leer). Zwei
+Schichten, **kein** Modul→Modul-Direktaufruf:
 
-`App\Service\Ai\AiGateway` bleibt die **byte-stabile Fassade** im Core. Module rufen weiter
-`new AiGateway()->complete(...)` (verifiziert: `knowledgebase/src/Ai/AiAssistService.php`
-instanziiert direkt). Intern delegiert der Gateway an **einen** von der Extension registrierten
-Provider; fehlt die Extension, verhält er sich exakt wie heute.
+1. **PUSH (Event-Listener, asynchron — der primäre regelkonforme Pfad):** Das Host-Modul
+   emittiert via `OutboxPublisher` transaktional ein **Fakt-Event** (`ticketing.ticket.created`,
+   `knowledgebase.article.published`) — nicht „an jemanden", sondern als Tatsache. Der
+   Outbox-Worker findet den registrierten Konnektor-Listener über die `ContractRegistry` und ruft
+   `handle(payload, context)`. Der Konnektor liest IDs, holt Kontext über einen **Read-Contract**
+   (`knowledgebase.get_article`), baut den Prompt, ruft das AI-Modul über
+   `CapabilityHandle.invoke(['ai.complete', {prompt, context}])` und schreibt das Ergebnis in
+   seine **eigene** tenant-scoped Kopplungstabelle (RLS, Event-ID UNIQUE = idempotent bei
+   at-least-once) — **nie** in KB/Ticketing-Tabellen.
+2. **PULL (Collector-Panel, synchron — für die Anzeige):** Das Host-Modul rendert eine Ansicht
+   und fragt **selbst** den Core nach `*.view_panels`-Collectors. Der Core liefert anonym
+   Klasse+Modul-Key; das Host-Modul instanziiert das Konnektor-Panel und ruft `panels(context)`.
+   Das Panel liest die vorab berechneten KI-Ergebnisse aus der Konnektor-Kopplungstabelle und
+   reicht den Benutzer-Kontext durch (RLS schützt vor Cross-Tenant/Permission-Leak).
 
-Stabil bleiben: Klasse, FQN (`App\Service\Ai\AiGateway`), Namespace, 2-arg-Default-Konstruktor,
-`AiException`, und alle 5 Public-Methoden — `enabled():bool`, `embedEnabled():bool`,
-`complete(string,array):string`, `chatMessages(array,array):array{text,raw}`, `embed(string):list<float>`.
+Der Konnektor **hört** (Events), **injiziert sich** (Collector) und **konsumiert** `ai.complete`
+(CapabilityHandle) — alles über Core-Infrastruktur. Die gebrückten Module bleiben Fremde.
+Fehlerverhalten: enhancing-not-gating (`CapabilityRejected`/`Throwable` → geschluckt →
+Degradation auf neutral).
 
-### 3.1 Der kritische Punkt: `enabled()` ist der Gatekeeper
+## 4. Modul-Änderungs-Verdikt: **teilweise** (ehrlich)
 
-Das Modul prüft **`$ai->enabled()` BEVOR** es `complete()` ruft. Würde nur `chatMessages()`
-delegiert, liefe die Extension ins Leere: `enabled()` läge weiter an der alten Core-Settings-
-Logik und gäbe `false` zurück, das Modul riefe nie an.
+Die „seamless, byte-stabile"-Garantie des Vorgänger-Plans ist **tot** — sie verdeckte
+Modul→Modul-Verkehr.
 
-> **Konsequenz: `enabled()` UND `embedEnabled()` müssen ebenfalls den Registry-Provider
-> konsultieren.** Damit — und nur damit — hält die Seamless-Garantie.
+- **Ticketing: keine Änderung.** Nutzt heute **null** KI (grep: 0 Treffer auf
+  `AiGateway`/`complete`/`embed`). Der Ticket-AI-Konnektor hängt sich rein additiv an ohnehin
+  existierende Lifecycle-Events + den Panel-Slot — **vorausgesetzt KI bleibt streng additiv**
+  (Anzeige-Panel + async Anreicherung; kein KI-Schritt wird Teil eines Pflicht-Flows).
+- **KB: muss geändert werden.** Siehe §5.
 
-### 3.2 Delegationsfluss
+## 5. Das KB-Problem (der eigentliche Knackpunkt)
 
-1. `chatMessages()` (der einzige Pfad, über den `complete()` läuft — `AiGateway.php:51`) fragt
-   zuerst `ContractRegistry::resolveProvider('core.ai.complete')`.
-2. Bei Treffer: Aufruf der Extension-Provider-Klasse via `ContributionRuntime->call(... 'handle' ...)`
-   mit `handle(array):array`. Input `{prompt|messages, opts}`, Output `{text, raw, usage?}`.
-   `AiGateway` extrahiert `['text']` → Rückgabetyp unverändert.
-3. Bei `null` (keine Extension aktiv/lizenziert): unveränderter Legacy-Fallback; `complete()`
-   wirft `AiException` genau wie heute bei fehlender Konfiguration. Das Modul fängt das ab
-   (`catch Throwable`) und degradiert auf `null/[]` — Fail-safe bleibt erhalten.
-4. `enabled()`/`embedEnabled()` spiegeln denselben Resolve (siehe 3.1).
+KBs heutige KI ist **synchron und inline** (`AiAssistService` → `new AiGateway()->complete()`:
+`generateTeaser`, `rephrase`, `draftFromBullets`, `translateDraft`, `suggestTags`): Der Redakteur
+klickt und erwartet **sofort** einen Draft. Ein Konnektor ist event-/collector-basiert und
+**asynchron**. Da Decision 183 KB verbietet, `ai.complete` direkt zu konsumieren, und der Core
+keinen KI-Einstiegspunkt mehr bietet, bleibt KB nur:
 
-### 3.3 Slot-Exklusivität ist verträglich
+- **(a)** synchrone Inline-KI aufgeben → asynchrone Vorschläge/Panel (UX-Änderung + KB-Code-Umbau),
+- **(b)** KB-KI vorerst einstellen, oder
+- **(c)** das AI-Modul exponiert einen höheren Contract, den der KB-Konnektor **on-demand im
+  `panels()`** synchron aufruft — regelkonform, **aber** Latenz im Request, und (Reviewer-Warnung)
+  ein Collector ist Anzeige-Aggregation, **kein belegter** synchroner schreibender LLM-Call im
+  Request. **Unverifiziert → Spike nötig.**
 
-`core.ai.complete` ist ein SERVICE-Contract; `assertTypeMatch` (`ContractRegistry.php:239`)
-erlaubt `TYPE_PROVIDER`, ein Unique-Index erzwingt **genau einen** aktiven Provider. Die
-Extension ist **der eine** Multiplexer-Provider und routet **intern** zu beliebig vielen
-Sub-LLMs (reine Extension-Geschäftslogik, kein Registry-Konzept). Der Core registriert sich
-**nie selbst** als Provider — die Legacy-Enum-Logik bleibt ein lokaler Fallback *innerhalb*
-`AiGateway`, keine Provider-Registrierung.
+In jedem Fall fällt KBs `use App\Service\Ai\AiGateway` weg → **KB ist nicht byte-unverändert**;
+Umsetzung per **Hand-off ans KB-Repo** (Core-Session editiert keinen Modul-Code).
+„Seamless" war nur haltbar, solange KI ein Core-Einstiegspunkt war — genau das schließt die Regel aus.
 
-### 3.4 `embed()` unberührt
+## 6. Core-Ausstieg (chirurgisch)
 
-`embed()` läuft **nicht** durch `chatMessages()`/`resolveProvider()` und bleibt Core-built-in
-(1536). `EmbeddingService` und `SearchService.hybrid()` ändern sich nicht — die semantische
-Suche ist von der Completion-Migration vollständig entkoppelt.
+**Entfernen (modul-gerichtete Einstiegspunkte):**
+- Contracts `core.ai.complete`/`core.ai.embed` — heute **unverdrahtete DB-Karteileichen**
+  (`ModuleContractsCommand.php:27-28` mappt auf den Core-Service `AiGateway`; **kein**
+  `resolveProvider`/`handleFor`-Wiring existiert) → DELETE ist risikoarm.
+- Die modul-importierbare Completion-Fassade `AiGateway::complete/chatMessages` zurückbauen.
+- `MODULE_DEVELOPMENT.md` + `ModuleContractsCommand` Capability-Liste anpassen.
 
-## 4. Was bleibt im Core / was wandert
+**Core-intern behalten (kein Einstiegspunkt):** `EmbeddingService` + `core.embeddings(1536)` +
+HNSW-Index + `SearchService.hybrid`. Core-Eigenversorgung der Suche ≠ modul-gerichteter
+Einstiegspunkt.
 
-| Komponente | Ort | Begründung |
-|---|---|---|
-| `AiGateway` (Fassade) | **Core** | Module hängen direkt dran; intern auf Delegation umgebaut |
-| `AiException`, `enabled()`/`embedEnabled()` | **Core** | Teil des Modul-Vertrags; `enabled()` muss mit-delegieren |
-| `EmbeddingService` + `core.embeddings` (1536) + `SearchService` | **Core** | such-kritisch, schema-gekoppelt; kein Modul-Embedding-Interface |
-| Legacy-Provider (OpenAI/Anthropic/xAI/Google) | **Core** (Fallback, faktisch deaktiviert) | hält die Suite grün; perspektivisch entfernbar |
-| Multi-Provider-Routing, lokale LLMs, Modellwahl | **Extension** | der „eine" Multiplexer-Provider |
-| Usage-/Token-/Kosten-Metering + Per-Tenant-Limits | **Extension** | `CacheStore::increment` + tenant-scoped `ai_usage`-Tabelle; Limit-Check **vor** dem Call |
-| Provider-/Limit-Settings | **Extension-`config_schema` → `core.tenant_modules.config`** | `SettingsCatalog::DEFINITIONS` ist hartcodiert, nicht erweiterbar; `config_schema` ist der Decision-185-konforme Weg |
-| Local-LLM-Egress | **Extension nutzt Core-`EgressClient`** (+ optional Core-Setting `loopback_allowed`) | nie `new PDO`/curl (Capability-Gate) |
-| Lizenz-Gate | **Extension-Manifest** (`requires_license=true`) + Core-`LicenseService` | `ModuleLifecycle::activate()` blockiert ohne Lizenz |
+> **Chirurgischer Vorbehalt (Reviewer):** `embed()` und `complete()` teilen sich **dieselbe**
+> `AiGateway`-Klasse + Provider (`EmbeddingService.php:19-21,41,90`). Der Completion-Rückbau darf
+> den **Core-internen Embed-Pfad nicht mitreißen** — sonst fällt die semantische Suche still auf
+> FTS. Nötig: interner `EmbeddingGateway` (bleibt) vs. ausgelagerte Completion (geht).
 
-## 5. Vorbedingungen
+## 7. Embeddings-Entscheidung
+
+**Empfehlung: Embeddings bleiben Core-intern (Option i).** Such-kritisch, Hot-Path,
+schema-gebunden (`vector(1536)` fest). Core-interne Nutzung ist **kein** modul-gerichteter
+Einstiegspunkt → verletzt „Core bietet keine KI-Einstiegspunkte" nicht. Graceful Degradation
+existiert (kein Embedding-Provider → `shouldEmbed=false` → reine FTS).
+
+*Option ii (Core→AI-Modul `ai.embed`-Contract, laut Regel erlaubt):* flexible Dimension/Modelle,
+aber Hot-Path wird Registry-abhängig, Tenant-Scoping muss eisern konsistent sein (`core.embeddings`
+ist nur app-seitig tenant-gefiltert), abweichende Dimension erzwingt pgvector-Migration — viel
+Komplexität auf dem kritischsten Pfad bei geringem Nutzen. **Verworfen** (bewusst späterer Schritt).
+
+## 8. Vorbedingungen
 
 | Vorbedingung | Blockierend | Anmerkung |
 |---|---|---|
-| `AiGateway`-Delegations-Hook inkl. **`enabled()`** | **ja** | Kern-Enabler; ohne ihn ignoriert der Core jede Registrierung (§3.1) |
-| Settings via Manifest `config_schema` (kein `SettingsCatalog`-Edit) | **ja** (für Settings-UI) | `DEFINITIONS` ist hartcodierte private const |
-| `core.embeddings` RLS-Härtung | **nein** | bewusste Architektur (Decision 185/E110, app-seitiger `tenant_id`-Filter); Embeddings bleiben Core |
-| `core.ai.complete` Payload-Shape/Version festigen | nein | heute `input_spec`/`output_spec` = NULL; in S0 dokumentieren |
-| Local-LLM-Egress (`loopback_allowed`) | nein | nur für Feature „lokale LLMs"; hosted Provider gehen ohne |
-| Metering-Sichtbarkeit (Dashboard) | nein | Variante A ohne Core-Edit möglich |
-| Lizenz-Gate | nein | `LicenseService` vorhanden, nur Manifest-Flag |
+| `type=main` darf Service-Contract bereitstellen | **erledigt** | Decision 153 / Kap. 26.4.2 — bestätigt |
+| Eigener Modul-Contract `ai.complete` (`error_behavior=reject`) im AI-Modul | **ja** | ersetzt das entfernte `core.ai.complete`; muss VOR den Konnektoren existieren |
+| **KB-UX-Entscheidung** vor jedem KB-Touch | **ja** | sync→async ist Produkt-Entscheidung, kein Refactoring (§5) |
+| Konnektor-Kopplungstabellen: tenant-scoped RLS + Event-ID-UNIQUE | **ja** | Konnektor schreibt nie in KB/Ticketing-Tabellen; Idempotenz bei at-least-once |
+| `AnonymizeContributor` pro Konnektor (`core.collector.anonymize`) | **ja** | KI-Ergebnisse aus Ticket-/Artikeltext → DSGVO |
+| Provider-Keys/Settings via `SecretCipher` + `config_schema→tenant_modules.config` | nein | `SettingsCatalog::DEFINITIONS` ist hartcodiert, nicht erweiterbar |
+| Egress für lokale LLMs (`core.http.egress.loopback_allowed`) | nein | nur falls lokale LLMs Erstklass; Default off, loopback-only, IP-Pinning aktiv |
+| Metering/Limit-Check transaktional VOR dem AI-Call | nein | per-Tenant Kostenkontrolle; atomarer `CacheStore::increment` |
 
-## 6. Stufenplan
+## 9. Stufenplan
 
-Suite bleibt bei **jeder** Stufe grün; `touches_modules = false` durchgängig.
+- **S0 — Contract-Shape `ai.complete` + Sequenz.** Input `{prompt|messages, opts}`, Output
+  `{text, raw, usage?}`; Versionierung. Deklarativ. `touches_modules=false`. *Risiko: sehr niedrig.*
+- **S1 — AI-Modul (`type=main`) mit `ai.complete`-Provider.** Eigenständiges lizenziertes Modul,
+  Multiplexer über Provider via Core-`EgressClient`, Settings via `config_schema`, Keys via
+  `SecretCipher`. Kein Core-/Modul-Edit. *Risiko: niedrig.*
+- **S2 — Core-Exit.** `core.ai.complete/embed` (DB-Karteileichen) entfernen; öffentliche
+  Completion-Fassade zurückbauen; **Embed-Pfad chirurgisch im Core belassen**. Reihenfolge: erst
+  S1 + Konnektoren bereit. *Risiko: niedrig–mittel (überzeichnet im Roh-Plan; trifft real nur KB).*
+- **S3 — Ticket-AI-Konnektor.** Blattknoten; hört Ticket-Events, ruft `ai.complete`, injiziert
+  Insight-Panel; eigene Kopplungstabelle. **Touched Ticketing nicht.** *Risiko: niedrig.*
+- **S4 — KB-AI-Konnektor + KB-Entkopplung (TOUCHT KB).** KB-internen `new AiGateway()` entfernen,
+  Inline-Flow auf Panel/async umstellen **oder** KB-KI einstellen; neuer Konnektor.
+  `touches_existing_modules=true`. *Risiko: hoch (UX-Bruch; KB-Repo-Hand-off).*
+- **S5 — Metering, Limits, Verbrauchssichtbarkeit.** Per-Tenant Token/USD-Limits im AI-Modul
+  (transaktionaler Check vor Call), Dashboard (eigene `web_route` oder `core.collector.consumption`).
+  *Risiko: mittel (Race/Overspend; atomarer Increment).*
 
-- **S0 — Contract festigen.** `core.ai.complete` (existiert, v1.0.0, provider-fähig) eine
-  explizite Payload-Shape geben: Input `{prompt|messages, opts}`, Output `{text, raw, usage?}`.
-  Rein deklarativ. *Risiko: sehr niedrig.*
-- **S1 — Fassaden-Refactor (Kern-Enabler).** In `AiGateway`: `chatMessages()` **und
-  `enabled()`/`embedEnabled()`** stellen `ContractRegistry::resolveProvider('core.ai.complete')`
-  voran; bei Treffer Aufruf via `ContributionRuntime` (`handle(array):array`), sonst
-  unveränderte Legacy-Logik. `try/catch → AiException`, kein neuer Exception-Typ nach außen.
-  Neuer Core-Test mit Fake-Provider; Modul-Suiten (unangetastet) bleiben grün. *Risiko: mittel
-  (zentraler Pfad), mitigiert durch Fallback.*
-- **S2 — Sicherer Local-LLM-Egress (optional).** Neues Setting
-  `core.http.egress.loopback_allowed` (bool, default `false`): erlaubt gezielt `127.0.0.1/::1`
-  **ohne** den globalen SSRF-Kill-Switch `allow_private` zu kippen und **ohne** RFC1918 zu
-  öffnen; IP-Pinning bleibt aktiv. (Nicht über `allowlist` — die umgeht den IP-Check,
-  `EgressClient.php:234`.) *Risiko: mittel (security), mitigiert: Default off, loopback-only.*
-- **S3 — Extension-Gerüst.** Neues lizenziertes Modul (außerhalb Core): Manifest mit
-  `services_registered=[{core.ai.complete, PROVIDER, Multiplexer}]`, `config_schema` für
-  Provider/Modell/Limits, Multiplexer-Stub (`handle()` → ein Cloud-Provider via Core-`EgressClient`).
-  Kein Core-/Modul-Edit. *Risiko: niedrig.*
-- **S4 — Multi-Provider + Metering + Limits.** Internes Routing (hosted + lokal),
-  `CacheStore::increment('ai:cost:<tenant>:<month>')` + `ai_usage`-Tabelle (Migration in der
-  Extension), **Limit-Check transaktional vor dem Call** (Überschreitung → `reject`/`AiException`
-  → Modul degradiert auf `null/[]`). Lokale LLM nur bei S2-Flag. *Risiko: mittel (Race/Overspend),
-  mitigiert: atomarer Increment, Prüfung vor Call; alle Usage-Queries request-tenant-scoped.*
-- **S5 — Verbrauchs-Sichtbarkeit.** *Variante A (empfohlen, kein Core-Edit):* Extension bringt
-  eigene `web_route` `/admin/ai-consumption`, liest `ai_usage`. *Variante B (eleganter, Core-Edit):*
-  generischer `core.collector.consumption`-Contract, in den sich die Extension einklinkt — nur
-  wenn KI-Verbrauch im **bestehenden** Inc-7-Dashboard erscheinen soll (`TenantConsumptionService::summary()`
-  ist heute hartcodiert).
+## 10. Konnektor-Hausaufgaben (Reviewer, teils blockierend)
 
-## 7. Stolpersteine (adversarial geprüft)
+- **Event-Schleifen-/Kosten-DoS-Schutz:** Konnektor schreibt nur in **eigene** Tabelle, feuert
+  **kein** Event, das ein Main-Modul hört (sonst Outbox-Schleife × LLM-Kosten pro Hop).
+  Gerichtetheit + Hop-Count/TTL als blockierende Precondition für S3/S4.
+- **Idempotenz VOR den AI-Call** ziehen (Event-ID-Guard zuerst), sonst Doppelverbrauch bei Retry.
+- **Lizenz-Degradation:** fehlt die AI-Lizenz → `CapabilityRejected` → Panel neutral, kein 500
+  (Test verankern). `integration_relations` müssen AI-Modul **und** gebrücktes Main hart führen.
+- **Health-Collector** des AI-Moduls (`core.collector.health`).
 
-1. **`enabled()`-Delegation** (kritisch) — siehe §3.1; ohne ihn ist alles andere wirkungslos.
-2. **Provider-Auflösung ist tenant-gated** (`gateByTenantModules`, `ContractRegistry.php:379-413`):
-   Die Extension muss für den Mandanten aktiviert sein, sonst liefert `resolveProvider()` `null`.
-   Die Tenant-Scoping-Politik muss zwischen `enabled()`-Check und Call **konsistent** sein.
-3. **`type=extension` erzwingt `extends_main_module`** (`ModuleManifest::validate`): eine
-   freischwebende Extension ist ungültig → siehe offene Entscheidung 1.
-4. **Consumption-Variante B = echter Core-Edit** (`TenantConsumptionService::summary()` hartcodiert).
-   Variante A vermeidet das.
-5. **Lizenz greift bei `activate`, nicht pro Call** — ein aktives Modul läuft nach Lizenzablauf
-   weiter bis zum nächsten Lifecycle-Check; harte Durchsetzung bräuchte Online-Enforcement.
-6. **`allowlist` umgeht den IP-Check** — Local-LLM nur über `loopback_allowed`, nicht `allowlist`.
+### Übersehene Kopplungen (mitwandern / berücksichtigen)
 
-## 8. Offene Entscheidungen
+- `AiStatusPage` (`knowledgebase/src/Web/Admin/AiStatusPage.php`) nutzt `AiGateway` direkt → beim
+  KB-Umbau mit umstellen/entfernen.
+- `AiAssistServiceTest` (instanziiert ohne Mocks) → Test-Migration.
+- KBs `ai.max_input_chars`-Kostenschutz (`AiAssistService.php:108`) → muss in den Konnektor.
+- `ModuleContractsCommand.php:27-28` + `MODULE_DEVELOPMENT.md` listen `core.ai.*` als Capability →
+  beim Core-Exit anpassen.
 
-1. **Verankerung:** KI ist quer-schneidend (KB *und* Ticketing). Empfehlung: **eigenständiges
-   Main-Modul „KI-Dienste"** statt Anker an knowledgebase — umgeht den `extends_main_module`-Zwang
-   sauber (zu bestätigen: Main-Modul darf Service-Contract-Provider sein; Decision 181 spricht dafür).
-2. **Embedding-Dimension:** Embeddings bleiben vorerst Core/1536. Lokale **Embedding**-Modelle
-   mit abweichender Dimension wären ein separater Core-Schema-Schritt — bewusst **nicht** in diesem Plan.
-3. **Limit-Einheit:** Token oder USD (fairer bei Provider-Wechsel, aber Pricing-Pflege)?
-4. **Provider-Keys:** env-Var (heutiger Stil) vs. Core-`SecretCipher` (Operator-Keys verschlüsselt in DB)?
-5. **Lokale LLMs Erstklass?** Dann S2 (`loopback_allowed`); sonst nur hosted (kein Core-Touch).
-6. **Ollama-Auth:** Loopback-Vertrauen ausreichend, oder API-Key/Auth-Proxy verpflichtend?
-7. **Contract-Drift:** harte Shape-Validierung in `handle()` + Version-Bump, um Provider-Drift
-   (neue `opts`/`usage`) zu erkennen? (betrifft S0)
+## 11. Offene Entscheidungen / Gates
 
-## 9. Netto
+1. **KB-UX-Spike (Gate vor S4):** Trägt das Konnektor/Collector-Modell den synchronen Draft-Flow
+   überhaupt, oder muss KBs KI auf async/Panel umgestellt (oder eingestellt) werden? Produkt-Entscheidung.
+2. **AI-Contract-Granularität:** generisches `ai.complete` (Konnektoren bauen Prompts) vs.
+   domänenspezifische Contracts (`ai.analyze_ticket`) — letztere bräuchten Domänenwissen im
+   AI-Modul, eher Konnektor-Aufgabe → Tendenz: generisch.
+3. **Provider-Keys:** env (heute) vs. Core-`SecretCipher` (verschlüsselt, Operator-verwaltet).
+4. **Lokale LLMs Erstklass?** Dann `loopback_allowed` (S-Egress); sonst nur hosted.
+5. **Limit-Einheit:** Token vs. USD (fairer bei Provider-Wechsel, Pricing-Pflege).
+6. **Lizenz-Enforcement** greift bei `activate`, nicht pro Call — akzeptabel, oder Online-Enforcement?
 
-Drei kleine Core-Eingriffe — **S0** (Contract), **S1** (Fassade inkl. `enabled()`), optional
-**S2** (Egress) — tragen die gesamte Auslagerung; alles Weitere lebt in der Extension. **Kein
-Modul wird angefasst.** Die Seamless-Garantie hält, sobald `enabled()`-Delegation +
-Tenant-Scoping-Politik eingebaut sind.
+## 12. Netto
 
-## 10. Verweise
+Die Konnektor-Topologie ist die saubere, regelkonforme Lösung — **Ticketing bekommt KI geschenkt**
+(additiver Konnektor), das **AI-Modul ist sauber lizenzierbar**. Der Preis: **KB muss angefasst
+werden** (synchrone Inline-KI passt nicht ins async-Konnektor-Modell → KB-UX-Entscheidung). Das
+ist kein Designfehler, sondern die Konsequenz der Regel „Module reden nur über Konnektoren".
+Vor jeder Zeile Code: **KB-UX-Spike** fahren; der Rest folgt dem bewährten
+`ticketing_knowledgebase_bridge`-Muster.
 
-- Architektur-Entscheidung Core-vs-Extension: siehe Chat-Analyse (2 Workflows, 14 Agenten, am Code belegt).
-- Kapitel 23.16 (In-Process + Capability-Gate, Entscheidung 187), `LICENSING.md` (AGPL §7),
-  Decision 181/184/185, Inc 7d/7e (Verbrauchs-Dashboards).
-- Relevante Dateien: `core/src/Service/Ai/AiGateway.php`, `EmbeddingService.php`,
-  `core/src/Service/Search/SearchService.php`, `core/src/Service/Registry/ContractRegistry.php`,
-  `core/src/Service/Http/EgressClient.php`, `core/src/Service/Settings/SettingsCatalog.php`.
+## 13. Verweise
+
+- Decision 153 (Main-Module dürfen Contracts bereitstellen), 181 (Extension-Contracts),
+  183 (Konnektor = Blattknoten ohne Contracts), 185 (Mandantentrennung); Kap. 26.4.2, 23.5.x.
+- Referenz-Konnektor: `core/modules/ticketing_knowledgebase_bridge`.
+- Core: `core/src/Service/Ai/AiGateway.php`, `EmbeddingService.php`,
+  `core/src/Service/Search/SearchService.php`, `ContractRegistry.php`, `CapabilityHandle.php`,
+  `EgressClient.php`. KB: `knowledgebase/src/Ai/AiAssistService.php`, `src/Web/Admin/AiStatusPage.php`.
+- Vorgeschichte: Kap. 23.16 (In-Process + Capability-Gate, Entscheidung 187), `LICENSING.md` (AGPL §7).
