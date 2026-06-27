@@ -22,6 +22,13 @@ Konnektor (`type=integration`, Blattknoten, stellt **keine** Contracts bereit, D
 **Core↔Modul** (Core löst einen modul-bereitgestellten Contract auf) ist erlaubt und **nicht
 dasselbe** wie Modul↔Modul.
 
+**Zusatz-Prinzip (verbindlich):** KB und Ticketing sind **standalone** — sie laufen ohne den
+AI-Konnektor vollständig (KI ist keine Abhängigkeit). Sie bieten **generische, fähigkeits-neutrale
+Erweiterungspunkte** an (KEINE `ai.*`-spezifischen Slots), die ein Host-Modul **bereitstellt** und
+**beliebige** Konnektoren **konsumieren** — der AI-Konnektor ist nur **ein** Andocker; ein
+Grammatik-/Übersetzungs-/Klassifizierungs-Konnektor kann dieselben Punkte nutzen. Die
+Andockpunkte = Erweiterungspunkte (Event-/Collector-Slots).
+
 **Tragende Annahme — bestätigt:** Ein `type=main`-Modul **darf** einen Service-Contract
 bereitstellen (Decision 153, Kap. 26.4.2 „Contract-Anbieter (Main- und Extension-Module)";
 Decision 181 bestätigt es für Extensions „mit denselben Regeln wie Main-Modul-Contracts").
@@ -95,24 +102,34 @@ Modul→Modul-Verkehr.
   (Anzeige-Panel + async Anreicherung; kein KI-Schritt wird Teil eines Pflicht-Flows).
 - **KB: muss geändert werden.** Siehe §5.
 
-## 5. Das KB-Problem (der eigentliche Knackpunkt)
+## 5. Das KB-Problem — gelöst: synchrone Inline-KI ist strukturell nicht möglich (Spike-Ergebnis)
 
 KBs heutige KI ist **synchron und inline** (`AiAssistService` → `new AiGateway()->complete()`:
-`generateTeaser`, `rephrase`, `draftFromBullets`, `translateDraft`, `suggestTags`): Der Redakteur
-klickt und erwartet **sofort** einen Draft. Ein Konnektor ist event-/collector-basiert und
-**asynchron**. Da Decision 183 KB verbietet, `ai.complete` direkt zu konsumieren, und der Core
-keinen KI-Einstiegspunkt mehr bietet, bleibt KB nur:
+`generateTeaser`, `rephrase`, `draftFromBullets`, `translateDraft`, `suggestTags`): Klick →
+**sofortiger** Draft. Der KB-UX-Spike hat verifiziert, dass dieses synchrone Muster in der
+Konnektor-Topologie **nicht regelkonform erhaltbar** ist. Zwingende Kette:
 
-- **(a)** synchrone Inline-KI aufgeben → asynchrone Vorschläge/Panel (UX-Änderung + KB-Code-Umbau),
-- **(b)** KB-KI vorerst einstellen, oder
-- **(c)** das AI-Modul exponiert einen höheren Contract, den der KB-Konnektor **on-demand im
-  `panels()`** synchron aufruft — regelkonform, **aber** Latenz im Request, und (Reviewer-Warnung)
-  ein Collector ist Anzeige-Aggregation, **kein belegter** synchroner schreibender LLM-Call im
-  Request. **Unverifiziert → Spike nötig.**
+1. KB **bietet** generische Erweiterungspunkte an; der Konnektor **konsumiert** sie (Datenfluss
+   einseitig: Host stellt bereit → Konnektor verbraucht).
+2. Ein Konnektor (Blattknoten) **stellt nichts bereit** (Decision 183 / Consumer-only 23.5.5) →
+   kann **kein** synchroner Resolver sein, den KB aufruft.
+3. KB darf das AI-Modul **nicht** direkt rufen (Modul→Modul).
+4. Core bietet **keinen** KI-Einstiegspunkt → auch kein synchroner Core-Resolver.
 
-In jedem Fall fällt KBs `use App\Service\Ai\AiGateway` weg → **KB ist nicht byte-unverändert**;
-Umsetzung per **Hand-off ans KB-Repo** (Core-Session editiert keinen Modul-Code).
-„Seamless" war nur haltbar, solange KI ein Core-Einstiegspunkt war — genau das schließt die Regel aus.
+→ **Kein regelkonformer synchroner Pfad.** Die KI-Berechnung läuft zwingend **asynchron**: Der
+Editor emittiert einen **generischen** Trigger (`knowledgebase.article.assist_requested` mit
+Draft-Text + Aktionsname — **nicht** `ai.*`), der Konnektor-Listener ruft das AI-Modul, legt das
+Ergebnis in seiner eigenen Tabelle ab, KB zeigt es via **generischem** Vorschlags-Panel/SSE.
+
+*(Der Spike fand als saubersten Sync-Pfad „KB-eigene `api_route` → Core-`AiGateway`" — aber das
+hält **nur**, solange KI ein Core-Service bleibt (P11). Das widerspricht dem Ziel „KI als Modul,
+Core ohne KI-Einstiegspunkt" und ist daher hier verworfen. Die Konnektor-`web_route`-Variante ist
+technisch nicht hart gesperrt, verletzt aber Consumer-only — siehe §10 Hand-off.)*
+
+**UX-Konsequenz (ehrlich):** „Klick → sofortiger Draft" wird zu „Klick → *generiere…* → Vorschlag
+erscheint (Sekunden später) → übernehmen". KBs `use App\Service\Ai\AiGateway` fällt weg, generische
+Slots + async Vorschlags-UI kommen rein → **KB ist nicht byte-unverändert**, Umsetzung per
+**Hand-off ans KB-Repo**. Das ist die logische Folge der Regeln, nicht ein Designfehler.
 
 ## 6. Core-Ausstieg (chirurgisch)
 
@@ -150,7 +167,8 @@ Komplexität auf dem kritischsten Pfad bei geringem Nutzen. **Verworfen** (bewus
 |---|---|---|
 | `type=main` darf Service-Contract bereitstellen | **erledigt** | Decision 153 / Kap. 26.4.2 — bestätigt |
 | Eigener Modul-Contract `ai.complete` (`error_behavior=reject`) im AI-Modul | **ja** | ersetzt das entfernte `core.ai.complete`; muss VOR den Konnektoren existieren |
-| **KB-UX-Entscheidung** vor jedem KB-Touch | **ja** | sync→async ist Produkt-Entscheidung, kein Refactoring (§5) |
+| **Eigener AI-Egress-Timeout** (`core.ai.timeout_seconds` / per-Call-Timeout) | **ja** | LLM-Calls laufen heute in den globalen `EgressClient`-Timeout (Default **10s**, `AiGateway.php:30`, `OpenAiProvider.php:37`); 20–30s-Drafts scheitern **still** (`AiException`→`null`); globales Anheben dehnt **alle** Egress-Calls. AI braucht eigenen Timeout — kleine Core-Erweiterung |
+| KB-UX = **async** (kein sync inline) | **ja (entschieden)** | strukturell erzwungen (§5); generischer `assist_requested`-Trigger + Vorschlags-Panel/SSE |
 | Konnektor-Kopplungstabellen: tenant-scoped RLS + Event-ID-UNIQUE | **ja** | Konnektor schreibt nie in KB/Ticketing-Tabellen; Idempotenz bei at-least-once |
 | `AnonymizeContributor` pro Konnektor (`core.collector.anonymize`) | **ja** | KI-Ergebnisse aus Ticket-/Artikeltext → DSGVO |
 | Provider-Keys/Settings via `SecretCipher` + `config_schema→tenant_modules.config` | nein | `SettingsCatalog::DEFINITIONS` ist hartcodiert, nicht erweiterbar |
@@ -185,6 +203,15 @@ Komplexität auf dem kritischsten Pfad bei geringem Nutzen. **Verworfen** (bewus
 - **Lizenz-Degradation:** fehlt die AI-Lizenz → `CapabilityRejected` → Panel neutral, kein 500
   (Test verankern). `integration_relations` müssen AI-Modul **und** gebrücktes Main hart führen.
 - **Health-Collector** des AI-Moduls (`core.collector.health`).
+- **FPM-Pool/Concurrency:** Jeder LLM-Call belegt einen Worker bis zum Timeout. Trigger-Endpunkte
+  als rate-limitbare `api_route` (`/api/*` → `ApiRateLimitMiddleware`) + Per-User-Concurrency-Cap,
+  sonst Pool-Erschöpfung bei parallelen Redakteuren. Streaming (Token-für-Token) ist heute **nicht**
+  verfügbar (`LlmProviderInterface` ohne Stream, `EgressClient` buffert voll) → keine TTFT-Mitigation.
+- **Hand-off (Core-Boundary): Validator-Lücke.** Der Manifest-Validator blockt für
+  `type=integration` nur `contracts/resolvers/services`, **nicht `web_routes`**
+  (`ModuleManifest.php:323`); `WebRouteRegistry`/`ModuleWebController` dispatchen ohne Typ-Prüfung.
+  Ein Blattknoten *könnte* so einen Einstiegspunkt anbieten (verletzt Consumer-only 23.5.5). →
+  Eigener Core-Hand-off: `web_routes` für `type=integration` im Validator verbieten.
 
 ### Übersehene Kopplungen (mitwandern / berücksichtigen)
 
@@ -197,8 +224,10 @@ Komplexität auf dem kritischsten Pfad bei geringem Nutzen. **Verworfen** (bewus
 
 ## 11. Offene Entscheidungen / Gates
 
-1. **KB-UX-Spike (Gate vor S4):** Trägt das Konnektor/Collector-Modell den synchronen Draft-Flow
-   überhaupt, oder muss KBs KI auf async/Panel umgestellt (oder eingestellt) werden? Produkt-Entscheidung.
+1. ~~**KB-UX-Spike (Gate vor S4)**~~ **ERLEDIGT:** Sync inline ist strukturell nicht regelkonform
+   (§5) → KB-KI wird **async** (generischer `assist_requested`-Trigger + Vorschlags-Panel/SSE).
+   Verbleibende Produkt-Entscheidung: kurze Funktionen (Teaser/Tags) async akzeptabel, oder einzelne
+   Funktionen vorerst einstellen?
 2. **AI-Contract-Granularität:** generisches `ai.complete` (Konnektoren bauen Prompts) vs.
    domänenspezifische Contracts (`ai.analyze_ticket`) — letztere bräuchten Domänenwissen im
    AI-Modul, eher Konnektor-Aufgabe → Tendenz: generisch.
