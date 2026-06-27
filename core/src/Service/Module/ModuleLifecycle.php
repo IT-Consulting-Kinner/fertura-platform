@@ -537,7 +537,7 @@ class ModuleLifecycle
         // policy = a leak) and harmless for in-process modules (the BYPASSRLS migration
         // owner bypasses regardless; the NOBYPASSRLS app role is only a grantee and is
         // already subject to RLS) — running it uniformly lets the gate require FORCE.
-        (new ModuleDbRole())->forceRls($key);
+        (new ModuleTableRls())->forceRls($key);
 
         // Tenant-conformance gate (Inc 9c, ch. 24/30.3, E47): a module declaring
         // is_scoped resources must have EVERY table in its schema either tenant-conformant

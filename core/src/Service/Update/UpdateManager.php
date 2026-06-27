@@ -9,6 +9,7 @@ use App\Infrastructure\Db;
 use App\Model\Entity\ContractRegistration;
 use App\Service\Module\LifecycleException;
 use App\Service\Module\ModuleDbRole;
+use App\Service\Module\ModuleTableRls;
 use App\Service\Module\ModuleManifest;
 use App\Service\Module\ModuleMigrationRunner;
 use App\Service\Registry\ContractRegistry;
@@ -234,10 +235,9 @@ class UpdateManager
                 );
 
                 $this->migrations->runUp($moduleId, $schema, $targetPath . '/migrations', $roleDsn);
-                // Isolated modules: force RLS on new tables.
-                if ($roleDsn !== null) {
-                    (new ModuleDbRole())->forceRls($key);
-                }
+                // Force RLS on any new tables so they stay tenant-gate-conformant
+                // (Inc 9c requires FORCE); harmless for the common owner role.
+                (new ModuleTableRls())->forceRls($key);
 
                 // Rebuild contracts (those defined by the module).
                 $this->conn()->execute('DELETE FROM contracts WHERE owner_module_key = :k', ['k' => $key]);
