@@ -91,6 +91,50 @@ Der Konnektor **hört** (Events), **injiziert sich** (Collector) und **konsumier
 Fehlerverhalten: enhancing-not-gating (`CapabilityRejected`/`Throwable` → geschluckt →
 Degradation auf neutral).
 
+## 3a. Mehrfach belegbare Andockpunkte (AI + Plagiat + … nebeneinander)
+
+Die generischen Andockpunkte sind **mehrfach belegbar** — strukturell garantiert, weil sie
+**Collector/Event-Slots** sind: `collectContributions()`/`listenerContributions()` liefern **alle**
+aktiven Beiträge (`multi_use=true` Default), der `OutboxWorker` ruft **jeden** Listener
+fehler-isoliert. Nur **Provider/Resolver** sind exklusiv (Partial-Unique-Index
+`uq_registrations_active_provider`). Da Konnektoren (Decision 183) sich **nur** als
+Collector/Listener registrieren dürfen, konkurrieren sie **nie** um einen exklusiven Slot. Präzedenz:
+`core.collector.health` wird heute von Core + N Modulen gleichzeitig beliefert.
+
+| Slot | Art | Zweck | Muster |
+|---|---|---|---|
+| `*.editor_assist_actions` | Collector | Aktions-Menü aggregieren | **Fan-IN**: alle Konnektoren liefern Aktions-Deskriptoren (`{action_id, label, event_name}`), Host merged zu einem Menü |
+| `*.assist.<action>.requested` | Event | **eine** Aktion async ausführen | **Routing**: pro Aktion ein eigenes Event; nur der zuständige Konnektor ist gebunden |
+| `*.assist.result.published` | Event | Ergebnis-Rückmeldung | additiv; Host legt pro Quelle ab |
+| `*_view_panels` | Collector | Ergebnis-Panels | **Fan-OUT**: jeder Konnektor ein Panel nebeneinander, fehler-isoliert |
+
+**Routing-Kniff (vermeidet Fan-out-Kostenleck):** **Pro Aktion ein eigenes Event** statt eines
+generischen `assist_requested`. Klick auf `ai.teaser` publiziert `…assist.teaser.requested` →
+`OutboxWorker` lädt nur die daran gebundenen Listener (physisch **nur** der AI-Konnektor) →
+**genau 1 Backend-Call**, kein Mitlaufen im Event-Retry. Anzeige-Panels dagegen bewusst Fan-out
+(AI- + Plagiats- + Grammatik-Panel nebeneinander).
+
+**Per-Mandant, pro-Konnektor:** über den bestehenden `gateByTenantModules`-Filter — Mandant setzt
+`ai.enabled=true, plagiarism.enabled=false` in `tenant_modules`; der deaktivierte Konnektor wird bei
+jedem `collect/listen` still gefiltert (Aktion fehlt im Menü, Panel erscheint nicht). Keine
+Sonderlogik.
+
+**Auflagen (Reviewer, vor Freigabe):**
+- **Jedes Event sehen auch Webhook/Automation/Workflow** (`OutboxWorker:214-244`) → Event-Family-Präfix
+  dokumentieren.
+- **Idempotenz zweifach:** `idempotency_key` (`article_id+action+revision`, Dedup vor Publish gegen
+  Doppelklick) **und** Idempotenz **pro Listener** (Event-Retry re-runt den erfolgreichen Listener;
+  `derived_done` schützt nur Automation/Workflow).
+- **Per-Aktion-Permission + Dispatch-Zeit-Recheck:** `gateByTenantModules` filtert pro **Mandant**
+  (Render-Zeit), nicht pro **Nutzer/Aktion** → Permission im Deskriptor, Prüfung beim Rendern **und**
+  beim Dispatch.
+- **`event_name` explizit** im Deskriptor (nicht aus `action_id` ableiten) + `module_lint`-Validierung
+  (sonst „Aktion im Menü, kein Listener → stiller No-Op").
+- **Assist-Slots nur Collector/Event mit `multi_use=true`** — kein `multi_use=false`-SERVICE-Contract
+  (bräche Additivität → nur ein Konnektor).
+- **Async-Ergebnis-Kanal** (`assist.result.published` → Panel) ist noch unbelegt → SSE/Polling fürs
+  Panel spezifizieren (knüpft an §5).
+
 ## 4. Modul-Änderungs-Verdikt: **teilweise** (ehrlich)
 
 Die „seamless, byte-stabile"-Garantie des Vorgänger-Plans ist **tot** — sie verdeckte
