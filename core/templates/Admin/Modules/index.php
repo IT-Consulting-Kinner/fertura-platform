@@ -35,10 +35,6 @@ $badge = ['active' => 'success', 'installed_inactive' => 'secondary', 'installed
                     <label class="form-label" for="packageFile"><?= h(__('admin.modules.package_label')) ?></label>
                     <input type="file" name="package" id="packageFile" accept=".zip" class="form-control" required>
                 </div>
-                <div class="mb-3">
-                    <label class="form-label" for="isolationSel"><?= h(__('admin.modules.isolation_label')) ?></label>
-                    <?= $this->Form->select('isolation', ['in_process' => 'in_process', 'out_of_process' => 'out_of_process'], ['id' => 'isolationSel', 'class' => 'form-select mw-sm']) ?>
-                </div>
                 <?= $this->Form->button(__('admin.modules.install_submit'), ['class' => 'btn btn-primary', 'disabled' => $job !== null]) ?>
                 <?php if ($job !== null): ?><span class="text-muted small ms-2"><?= h(__('admin.modules.install_busy')) ?></span><?php endif; ?>
                 <?= $this->Form->end() ?>

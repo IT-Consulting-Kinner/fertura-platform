@@ -125,10 +125,6 @@
                         <label class="form-label" for="protPackage"><?= h(__('admin.modules.package_label')) ?></label>
                         <input type="file" name="package" id="protPackage" accept=".zip" class="form-control" required>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label" for="protIsolation"><?= h(__('admin.modules.isolation_label')) ?></label>
-                        <?= $this->Form->select('isolation', ['in_process' => 'in_process', 'out_of_process' => 'out_of_process'], ['id' => 'protIsolation', 'class' => 'form-select mw-sm']) ?>
-                    </div>
                     <?= $this->Form->button(__('admin.maintenance.action_install_submit'), ['class' => 'btn btn-warning']) ?>
                     <?= $this->Form->end() ?>
                 </div>

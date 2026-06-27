@@ -33,14 +33,13 @@ class ModuleInstallJobTest extends TestCase
 
     public function testEnqueueThenGetAndActive(): void
     {
-        $id = $this->jobs->enqueue('/tmp/pkg.zip', 'pkg.zip', 'in_process', null);
+        $id = $this->jobs->enqueue('/tmp/pkg.zip', 'pkg.zip', null);
         $this->assertNotSame('', $id);
 
         $job = $this->jobs->get($id);
         $this->assertNotNull($job);
         $this->assertSame('queued', $job['status']);
         $this->assertSame('pkg.zip', $job['original_filename']);
-        $this->assertSame('in_process', $job['isolation']);
 
         $active = $this->jobs->active();
         $this->assertNotNull($active);
@@ -49,7 +48,7 @@ class ModuleInstallJobTest extends TestCase
 
     public function testClaimNextTransitionsToRunningAndIsExclusive(): void
     {
-        $id = $this->jobs->enqueue('/tmp/pkg.zip', 'pkg.zip', 'in_process', null);
+        $id = $this->jobs->enqueue('/tmp/pkg.zip', 'pkg.zip', null);
 
         $claimed = $this->jobs->claimNext();
         $this->assertNotNull($claimed);
@@ -63,14 +62,14 @@ class ModuleInstallJobTest extends TestCase
 
     public function testMarkSucceededAndFailed(): void
     {
-        $a = $this->jobs->enqueue('/tmp/a.zip', 'a.zip', 'in_process', null);
+        $a = $this->jobs->enqueue('/tmp/a.zip', 'a.zip', null);
         $this->jobs->markSucceeded($a, 'demo_module');
         $job = $this->jobs->get($a);
         $this->assertSame('succeeded', $job['status']);
         $this->assertSame('demo_module', $job['module_key']);
         $this->assertNotNull($job['finished_at']);
 
-        $b = $this->jobs->enqueue('/tmp/b.zip', 'b.zip', 'in_process', null);
+        $b = $this->jobs->enqueue('/tmp/b.zip', 'b.zip', null);
         $this->jobs->markFailed($b, 'boom');
         $this->assertSame('failed', $this->jobs->get($b)['status']);
         $this->assertSame('boom', $this->jobs->get($b)['message']);
@@ -78,7 +77,7 @@ class ModuleInstallJobTest extends TestCase
 
     public function testRunnerMarksMissingPackageFailed(): void
     {
-        $id = $this->jobs->enqueue('/tmp/does-not-exist-' . bin2hex(random_bytes(4)) . '.zip', 'x.zip', 'in_process', null);
+        $id = $this->jobs->enqueue('/tmp/does-not-exist-' . bin2hex(random_bytes(4)) . '.zip', 'x.zip', null);
 
         $processed = (new ModuleInstallRunner())->tick();
         $this->assertSame($id, $processed);

@@ -249,24 +249,8 @@ class ModuleLifecycle
      * subsequent install fail with "already installed". Each step is best effort
      * and self-contained.
      */
-    private function rollbackInstall(string $key, string $schema, string $targetPath, bool $outOfProcess): void
+    private function rollbackInstall(string $key, string $schema, string $targetPath): void
     {
-        // Out-of-process: stop any host that may already have been started and
-        // remove the module's own DB role (DROP OWNED + DROP ROLE) BEFORE the
-        // schema is dropped — the role may own tables in the schema.
-        if ($outOfProcess) {
-            try {
-                (new ModuleHostSupervisor())->stop($key);
-            } catch (Throwable) {
-                // best effort
-            }
-            try {
-                (new ModuleDbRole())->drop($key);
-            } catch (Throwable) {
-                // best effort
-            }
-        }
-
         $conn = $this->conn();
         $cleanup = [
             "DROP SCHEMA IF EXISTS $schema CASCADE",
@@ -294,21 +278,17 @@ class ModuleLifecycle
      * Public action-own rollback for the maintenance critical-action runner (Phase 6):
      * removes an installed/half-installed module by key. install() only self-rolls-back
      * on its OWN execute failure; this lets the runner undo a module whose post-install
-     * VERIFY failed. Derives schema/target/isolation from the key + module row and
-     * delegates to the same best-effort {@see rollbackInstall()} cleanup, under the
-     * lifecycle lock.
+     * VERIFY failed. Derives schema/target from the key and delegates to the same
+     * best-effort {@see rollbackInstall()} cleanup, under the lifecycle lock.
      */
     public function purge(string $moduleKey): void
     {
         $this->assertKeySafe($moduleKey);
         $this->withLock(function () use ($moduleKey): void {
-            $mod = $this->findModule($moduleKey);
-            $outOfProcess = $mod !== null && (string)($mod['isolation'] ?? 'in_process') === 'out_of_process';
             $this->rollbackInstall(
                 $moduleKey,
                 'mod_' . $moduleKey,
                 $this->modulesBaseDir() . '/' . $moduleKey,
-                $outOfProcess,
             );
         });
     }
@@ -371,14 +351,14 @@ class ModuleLifecycle
     // ---- public operations --------------------------------------------------
 
     /**
-     * @param string $isolation 'in_process' (default) or 'out_of_process'
-     *   (ch. 23.16.2): own DB role, migrations under that role, RLS forced,
-     *   invocation via RPC.
+     * Installs a module from a (signed) package directory. Modules run in-process;
+     * trust is established at install time (signature + review + the capability gate).
+     *
      * @return array<string, mixed>
      */
-    public function install(string $sourcePath, string $isolation = 'in_process'): array
+    public function install(string $sourcePath): array
     {
-        return $this->withLock(function () use ($sourcePath, $isolation): array {
+        return $this->withLock(function () use ($sourcePath): array {
             $sourcePath = rtrim($sourcePath, '/');
             $manifestFile = $sourcePath . '/manifest.json';
             if (!is_file($manifestFile)) {
@@ -404,12 +384,6 @@ class ModuleLifecycle
             }
             if ($this->findModule($key) !== null) {
                 throw new LifecycleException("Modul bereits installiert: $key");
-            }
-
-            // Reject out-of-process early (before any side effect) if the module
-            // does not offer service contracts exclusively (ch. 23.16.2).
-            if ($isolation === 'out_of_process') {
-                $this->assertIsolatable($manifest);
             }
 
             // Dependency check.
@@ -452,11 +426,10 @@ class ModuleLifecycle
                     $schema,
                     $sourcePath,
                     $targetPath,
-                    $isolation,
                     $signatureKeyId,
                 );
             } catch (Throwable $e) {
-                $this->rollbackInstall($key, $schema, $targetPath, $isolation === 'out_of_process');
+                $this->rollbackInstall($key, $schema, $targetPath);
                 throw $e;
             }
         });
@@ -476,7 +449,6 @@ class ModuleLifecycle
         string $schema,
         string $sourcePath,
         string $targetPath,
-        string $isolation,
         ?string $signatureKeyId,
     ): array {
         $conn = $this->conn();
@@ -516,27 +488,12 @@ class ModuleLifecycle
             ModuleAutoloader::register($manifest->phpNamespace(), $targetPath . '/src');
         }
 
-        // Out-of-process isolation (ch. 23.16.2): create the module's own DB role
-        // and run the migrations UNDER that role (no module code with superuser
-        // privileges). Only service contracts are permitted.
-        $roleDsn = null;
-        if ($isolation === 'out_of_process') {
-            $conn->execute("UPDATE modules SET isolation = 'out_of_process' WHERE module_key = :k", ['k' => $key]);
-            $role = new ModuleDbRole();
-            $role->provision($key);
-            $role->grantSchemaCreate($key);
-            // Run the migrations via the login role (no superuser code).
-            $roleDsn = $role->dsn($key);
-        }
+        $this->migrations->runUp($moduleId, $schema, $targetPath . '/migrations');
 
-        $this->migrations->runUp($moduleId, $schema, $targetPath . '/migrations', $roleDsn);
-
-        // Force RLS on every RLS-enabled module table BEFORE the conformance gate, for
-        // ALL isolation modes. It is essential for isolated modules (their own role
-        // owns AND queries the tables, so without FORCE the owner bypasses its own
-        // policy = a leak) and harmless for in-process modules (the BYPASSRLS migration
-        // owner bypasses regardless; the NOBYPASSRLS app role is only a grantee and is
-        // already subject to RLS) — running it uniformly lets the gate require FORCE.
+        // Force RLS on every RLS-enabled module table BEFORE the conformance gate, so
+        // the policy binds the table owner too (harmless for the common BYPASSRLS
+        // migration owner; essential whenever the owning role is NOBYPASSRLS) and the
+        // gate's FORCE requirement is satisfiable.
         (new ModuleTableRls())->forceRls($key);
 
         // Tenant-conformance gate (Inc 9c, ch. 24/30.3, E47): a module declaring
@@ -617,18 +574,6 @@ class ModuleLifecycle
             $errors = $manifest->validate($this->coreVersion);
             if ($errors !== []) {
                 throw new LifecycleException('Aktivierung blockiert: ' . implode(' ', $errors));
-            }
-            // Isolated modules may only offer service contracts (ch. 23.16.2),
-            // otherwise extension points would silently run in-process.
-            if (($mod['isolation'] ?? 'in_process') === 'out_of_process') {
-                $this->assertIsolatable($manifest);
-                // Web pages render HTML in-process; that cannot cross the
-                // out-of-process RPC boundary (ch. 23.16.3).
-                if ($manifest->webRoutes() !== []) {
-                    throw new LifecycleException(
-                        'Out-of-Process-Module dürfen keine web_routes deklarieren (HTML-Rendering ist nicht RPC-fähig).',
-                    );
-                }
             }
             foreach ($manifest->dependencies() as $dep) {
                 $depKey = (string)($dep['module'] ?? $dep['id'] ?? '');
@@ -735,18 +680,6 @@ class ModuleLifecycle
                 'moduleVersion' => (string)$mod['version'],
             ]);
 
-            // Out-of-process: start the isolated host (the worker heals it later if needed).
-            if (($mod['isolation'] ?? 'in_process') === 'out_of_process') {
-                try {
-                    (new ModuleHostSupervisor())->ensureRunning($key);
-                } catch (Throwable $e) {
-                    $this->audit->log('module.host_start_failed', 'module', $key, [
-                        'newValue' => ['error' => $e->getMessage()],
-                        'moduleKey' => $key,
-                    ]);
-                }
-            }
-
             return $this->findModule($key) ?? [];
         });
     }
@@ -780,15 +713,6 @@ class ModuleLifecycle
                 "UPDATE modules SET status = 'inactive', deactivated_at = now() WHERE module_key = :k",
                 ['k' => $key],
             );
-            // Out-of-process: stop the isolated host.
-            if (($mod['isolation'] ?? 'in_process') === 'out_of_process') {
-                try {
-                    (new ModuleHostSupervisor())->stop($key);
-                } catch (Throwable) {
-                    // best effort
-                }
-            }
-
             $this->audit->log('module.deactivate', 'module', $key, [
                 'oldValue' => ['status' => 'active'],
                 'newValue' => ['status' => 'inactive'],
@@ -811,17 +735,6 @@ class ModuleLifecycle
             )->fetch('assoc');
             if ((int)($dependents['c'] ?? 0) > 0) {
                 throw new LifecycleException("Löschen blockiert: andere Module hängen von $key ab.");
-            }
-
-            // Out-of-process: stop the host + remove the module's own DB role
-            // (DROP OWNED detaches the role's objects/privileges before the schema is dropped).
-            if (($mod['isolation'] ?? 'in_process') === 'out_of_process') {
-                try {
-                    (new ModuleHostSupervisor())->stop($key);
-                } catch (Throwable) {
-                    // best effort
-                }
-                (new ModuleDbRole())->drop($key);
             }
 
             if ($mod['status'] === 'active') {
@@ -868,95 +781,11 @@ class ModuleLifecycle
     public function listModules(): array
     {
         return array_values($this->conn()->execute(
-            'SELECT module_key, name, version, type, status, isolation FROM modules ORDER BY module_key',
+            'SELECT module_key, name, version, type, status FROM modules ORDER BY module_key',
         )->fetchAll('assoc'));
     }
 
-    /**
-     * Switches the isolation mode of an already installed module (ch. 23.16.2).
-     * out_of_process: provision the module's own DB role + grant runtime
-     * privileges on the (existing) schema; start the host if the module is
-     * active. in_process: stop the host + remove the role.
-     *
-     * @return array<string, mixed>
-     */
-    public function setIsolation(string $key, string $mode): array
-    {
-        if (!in_array($mode, ['in_process', 'out_of_process'], true)) {
-            throw new LifecycleException("Ungültiger Isolationsmodus: $mode");
-        }
-
-        return $this->withLock(function () use ($key, $mode): array {
-            $mod = $this->findModuleOrFail($key);
-            if ((string)$mod['isolation'] === $mode) {
-                return $mod;
-            }
-
-            if ($mode === 'out_of_process') {
-                $manifest = new ModuleManifest(json_decode((string)$mod['manifest'], true) ?: []);
-                $this->assertIsolatable($manifest);
-                $role = new ModuleDbRole();
-                $role->provision($key);
-                // Existing tables stay superuser-owned -> grant runtime CRUD to the
-                // role; RLS applies as usual (role = NOBYPASSRLS, not the owner).
-                $role->grantSchemaCrud($key);
-                $this->conn()->execute("UPDATE modules SET isolation = 'out_of_process' WHERE module_key = :k", ['k' => $key]);
-                if ($mod['status'] === 'active') {
-                    try {
-                        (new ModuleHostSupervisor())->ensureRunning($key);
-                    } catch (Throwable) {
-                        // the worker heals it later
-                    }
-                }
-            } else {
-                try {
-                    (new ModuleHostSupervisor())->stop($key);
-                } catch (Throwable) {
-                    // best effort
-                }
-                (new ModuleDbRole())->drop($key);
-                $this->conn()->execute(
-                    "UPDATE modules SET isolation = 'in_process', db_role = NULL, db_role_secret = NULL WHERE module_key = :k",
-                    ['k' => $key],
-                );
-            }
-            $this->audit->log('module.set_isolation', 'module', $key, [
-                'newValue' => ['isolation' => $mode],
-                'moduleKey' => $key,
-                'moduleName' => (string)$mod['name'],
-                'moduleVersion' => (string)$mod['version'],
-            ]);
-
-            return $this->findModule($key) ?? [];
-        });
-    }
-
     // ---- internal ------------------------------------------------------------
-
-    /**
-     * Ensures a module is allowed to run out_of_process (ch. 23.16.2, phase 3).
-     * Service contracts, (data) resolvers, collectors (Health/Anonymize/
-     * Scheduled) and event listeners run over RPC; only the **auth provider slot**
-     * (`core.auth.provider`) is rejected, because it configures in-process
-     * authenticator objects (not reachable over RPC).
-     */
-    private function assertIsolatable(ModuleManifest $manifest): void
-    {
-        // Phase 3 (ch. 23.16.2): service contracts, (data) resolvers, collectors
-        // (Health/Anonymize/Scheduled) and event listeners run over RPC. The only
-        // exception: the **auth provider slot** (`core.auth.provider`) configures
-        // in-process authenticator objects (configure-style) and cannot be passed
-        // over RPC — so it is rejected under isolation (rather than being silently
-        // run in-process).
-        foreach ($manifest->resolversRegistered() as $r) {
-            if ((string)($r['contract'] ?? '') === 'core.auth.provider') {
-                throw new LifecycleException(
-                    'Out-of-Process unterstützt den Auth-Provider-Slot (core.auth.provider) nicht: '
-                    . 'er konfiguriert In-Process-Authenticator-Objekte, die nicht über RPC reichbar sind.',
-                );
-            }
-        }
-    }
 
     private function deactivateRegistrations(string $key): void
     {

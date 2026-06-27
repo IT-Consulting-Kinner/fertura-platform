@@ -24,12 +24,12 @@ class ModuleInstallJobService
     }
 
     /** Enqueues an install job for an already-stored package; returns the job id. */
-    public function enqueue(string $packagePath, ?string $originalFilename, string $isolation, ?string $actorId): string
+    public function enqueue(string $packagePath, ?string $originalFilename, ?string $actorId): string
     {
         $row = $this->conn()->execute(
-            'INSERT INTO core.module_install_jobs (package_path, original_filename, isolation, actor_user_id) '
-            . 'VALUES (:p, :f, :i, :a) RETURNING id',
-            ['p' => $packagePath, 'f' => $originalFilename, 'i' => $isolation, 'a' => $actorId],
+            'INSERT INTO core.module_install_jobs (package_path, original_filename, actor_user_id) '
+            . 'VALUES (:p, :f, :a) RETURNING id',
+            ['p' => $packagePath, 'f' => $originalFilename, 'a' => $actorId],
         )->fetch('assoc');
 
         return (string)$row['id'];

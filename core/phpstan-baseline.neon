@@ -943,24 +943,6 @@ parameters:
 			path: src/Service/Module/ModuleAutoloader.php
 
 		-
-			message: '#^Negated boolean expression is always true\.$#'
-			identifier: booleanNot.alwaysTrue
-			count: 2
-			path: src/Service/Module/ModuleHostSupervisor.php
-
-		-
-			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
-			identifier: method.notFound
-			count: 1
-			path: src/Service/Module/RemoteInvoker.php
-
-		-
-			message: '#^Method App\\Service\\Module\\RemoteInvoker\:\:send\(\) has parameter \$req with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Service/Module/RemoteInvoker.php
-
-		-
 			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
 			identifier: method.notFound
 			count: 8
@@ -983,12 +965,6 @@ parameters:
 			identifier: method.notFound
 			count: 1
 			path: src/Service/Realtime/RealtimeService.php
-
-		-
-			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
-			identifier: method.notFound
-			count: 1
-			path: src/Service/Registry/CapabilityHandle.php
 
 		-
 			message: '#^Access to an undefined property Cake\\Datasource\\EntityInterface\:\:\$contract_id\.$#'

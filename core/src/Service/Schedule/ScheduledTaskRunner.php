@@ -48,12 +48,12 @@ class ScheduledTaskRunner
      */
     public function tick(): array
     {
-        // Always include the core's own tasks (in-process).
+        // Always include the core's own tasks.
         $tasks = array_map(
-            static fn($c) => ['class' => $c, 'module_key' => 'core', 'isolation' => 'in_process'],
+            static fn($c) => ['class' => $c, 'module_key' => 'core'],
             self::CORE_TASKS,
         );
-        // Module tasks WITH isolation mode (out_of_process -> via RPC in the host).
+        // Module-contributed scheduled tasks (run in-process).
         try {
             $tasks = array_merge($tasks, (new ContributionRuntime($this->registry))->collectors(self::COLLECTOR));
         } catch (Throwable) {
@@ -72,13 +72,13 @@ class ScheduledTaskRunner
     public function tickClasses(array $classes): array
     {
         return $this->tickContributions(array_map(
-            static fn($c) => ['class' => $c, 'module_key' => 'core', 'isolation' => 'in_process'],
+            static fn($c) => ['class' => $c, 'module_key' => 'core'],
             array_values(array_filter($classes, 'is_string')),
         ));
     }
 
     /**
-     * @param list<array{class:string, module_key:string, isolation?:string}> $tasks
+     * @param list<array{class:string, module_key:string}> $tasks
      * @return list<string>
      */
     private function tickContributions(array $tasks): array

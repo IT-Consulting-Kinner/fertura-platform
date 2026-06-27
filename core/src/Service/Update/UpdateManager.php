@@ -8,7 +8,6 @@ use App\Audit\AuditLogger;
 use App\Infrastructure\Db;
 use App\Model\Entity\ContractRegistration;
 use App\Service\Module\LifecycleException;
-use App\Service\Module\ModuleDbRole;
 use App\Service\Module\ModuleTableRls;
 use App\Service\Module\ModuleManifest;
 use App\Service\Module\ModuleMigrationRunner;
@@ -200,11 +199,6 @@ class UpdateManager
             $schema = 'mod_' . $key;
             $targetPath = (string)$mod['source_path'];
             $wasActive = $mod['status'] === 'active';
-            // Isolated modules: run migrations via the login role (no superuser
-            // code, ch. 23.16.2) — otherwise an update would run privileged.
-            $roleDsn = (string)($mod['isolation'] ?? 'in_process') === 'out_of_process'
-                ? (new ModuleDbRole())->dsn($key)
-                : null;
 
             $hasMigrations = $this->hasPendingMigrations($moduleId, $newSourcePath . '/migrations');
             $recoveryPath = null;
@@ -234,7 +228,7 @@ class UpdateManager
                     ['v' => $newVersion, 'm' => json_encode($manifest->data), 'k' => $key],
                 );
 
-                $this->migrations->runUp($moduleId, $schema, $targetPath . '/migrations', $roleDsn);
+                $this->migrations->runUp($moduleId, $schema, $targetPath . '/migrations');
                 // Force RLS on any new tables so they stay tenant-gate-conformant
                 // (Inc 9c requires FORCE); harmless for the common owner role.
                 (new ModuleTableRls())->forceRls($key);
@@ -272,7 +266,7 @@ class UpdateManager
                         $name = basename($f);
                         // Only roll back migrations newly applied in this update.
                         if ($this->migrations->isApplied($moduleId, $name) && !in_array($name, $preApplied, true)) {
-                            $this->migrations->runDown($moduleId, $schema, $newSourcePath . '/migrations', $name, $roleDsn);
+                            $this->migrations->runDown($moduleId, $schema, $newSourcePath . '/migrations', $name);
                         }
                     }
 

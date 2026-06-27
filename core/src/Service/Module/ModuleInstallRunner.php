@@ -33,7 +33,7 @@ class ModuleInstallRunner
         }
         $id = (string)$job['id'];
         try {
-            $mod = $this->installPackage((string)$job['package_path'], (string)$job['isolation']);
+            $mod = $this->installPackage((string)$job['package_path']);
             $this->jobs->markSucceeded($id, (string)$mod['module_key']);
         } catch (Throwable $e) {
             $this->jobs->markFailed($id, $e->getMessage());
@@ -52,14 +52,14 @@ class ModuleInstallRunner
      *
      * @return array<string, mixed> the installed module row
      */
-    public function installPackage(string $packagePath, string $isolation): array
+    public function installPackage(string $packagePath): array
     {
         $workDir = null;
         try {
             $workDir = $this->extract($packagePath);
             $sourceDir = $this->locateManifestDir($workDir);
 
-            return $this->lifecycle->install($sourceDir, $isolation);
+            return $this->lifecycle->install($sourceDir);
         } finally {
             if ($workDir !== null && is_dir($workDir)) {
                 $this->rrmdir($workDir);

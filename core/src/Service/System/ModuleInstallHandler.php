@@ -11,7 +11,7 @@ use RuntimeException;
 /**
  * The module-install critical action — Phase 6 reference handler.
  *
- * payload: {package_path, isolation, module_key}. execute() runs the DDL-heavy
+ * payload: {package_path, module_key}. execute() runs the DDL-heavy
  * install (the worst mutation path — non-transactional: filesystem + CREATE SCHEMA +
  * module migrations + core rows + grants). verify() asserts the module landed
  * (modules row + schema). rollback() is the existing best-effort action-own undo
@@ -38,10 +38,7 @@ class ModuleInstallHandler implements CriticalActionHandler
 
     public function execute(array $payload): void
     {
-        $mod = $this->runner->installPackage(
-            (string)($payload['package_path'] ?? ''),
-            (string)($payload['isolation'] ?? 'in_process'),
-        );
+        $mod = $this->runner->installPackage((string)($payload['package_path'] ?? ''));
         // Capture the manifest's actual key so verify/rollback don't depend on the
         // enqueuer reading the package. The runner uses ONE handler instance per
         // action (fresh each worker tick), so this never leaks between actions.

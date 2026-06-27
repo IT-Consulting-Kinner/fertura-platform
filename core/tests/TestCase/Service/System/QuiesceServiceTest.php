@@ -64,7 +64,7 @@ class QuiesceServiceTest extends TestCase
         $conn->execute("INSERT INTO event_outbox (contract_name, available_at) VALUES ('quiesce.test', now() + interval '1 hour')");
         $conn->execute("INSERT INTO job_queue (queue, status) VALUES ('quiesce-test', 'reserved')");
         $jobs = new ModuleInstallJobService();
-        $jobs->enqueue('/tmp/q.zip', 'q.zip', 'in_process', null);
+        $jobs->enqueue('/tmp/q.zip', 'q.zip', null);
         $jobs->claimNext(); // -> running (a queued job is not counted as in-flight)
         $sid = $conn->execute(
             "INSERT INTO webhook_subscriptions (name, url) VALUES ('quiesce-test', 'http://example.test') RETURNING id",
@@ -155,7 +155,7 @@ class QuiesceServiceTest extends TestCase
     public function testInFlightCountsRunningInstallJob(): void
     {
         $jobs = new ModuleInstallJobService();
-        $jobs->enqueue('/tmp/a.zip', 'a.zip', 'in_process', null);
+        $jobs->enqueue('/tmp/a.zip', 'a.zip', null);
         $jobs->claimNext(); // queued -> running
 
         // Covers the 'running' arm of status IN ('queued','running').

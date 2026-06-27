@@ -9,7 +9,6 @@ use App\Service\Automation\WorkflowEngine;
 use App\Service\Health\WorkerHeartbeat;
 use App\Service\Module\ContributionRuntime;
 use App\Service\Module\ModuleAutoloader;
-use App\Service\Module\ModuleHostSupervisor;
 use App\Service\Module\ModuleInstallRunner;
 use App\Service\Module\TenantModuleService;
 use App\Service\Observability\HealthAlertService;
@@ -331,10 +330,10 @@ class OutboxWorker
 
         LogContext::put('component', 'worker');
 
-        // Module-host supervision not on every poll cycle but throttled
-        // (DB query + socket checks per isolated module are otherwise expensive).
-        $lastSupervision = 0.0;
-        $supervisionEverySec = 30.0;
+        // Throttle for the periodic maintenance block (observability + critical-action
+        // crash recovery) — not on every poll cycle.
+        $lastThrottled = 0.0;
+        $throttledEverySec = 30.0;
         // Tracks the quiesce pause across iterations so entry/exit are logged once.
         $paused = false;
         // Clear any stale 'paused' handshake left by a previous process that was
@@ -436,20 +435,9 @@ class OutboxWorker
                 } catch (Throwable $e) {
                     $this->log('Modul-Install-Runner-Fehler: ' . $e->getMessage());
                 }
-                // Supervise out-of-process module hosts (self-healing, ch. 23.16.2):
-                // restart crashed hosts, stop orphaned ones — throttled.
-                if ($cycleStart - $lastSupervision >= $supervisionEverySec) {
-                    $lastSupervision = $cycleStart;
-                    try {
-                        $sup = new ModuleHostSupervisor();
-                        $started = $sup->ensureAll();
-                        $sup->reapStale();
-                        if ($started !== []) {
-                            $this->log('Modulhosts gestartet: ' . implode(', ', $started));
-                        }
-                    } catch (Throwable $e) {
-                        $this->log('Modulhost-Supervision-Fehler: ' . $e->getMessage());
-                    }
+                // Throttled periodic maintenance (not every poll cycle).
+                if ($cycleStart - $lastThrottled >= $throttledEverySec) {
+                    $lastThrottled = $cycleStart;
                     // Observability (#12), throttled: OTLP metric push (if
                     // OTEL_EXPORTER_OTLP_ENDPOINT is set) + health alert on a
                     // status change. Error-isolated.

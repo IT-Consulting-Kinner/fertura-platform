@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace App\Service\Module;
 
 use App\Infrastructure\Db;
-use PDO;
 use RuntimeException;
 use Throwable;
 
@@ -20,17 +19,12 @@ use Throwable;
 class ModuleMigrationRunner
 {
     /**
-     * @param ?string $roleDsn If set, the migration DDL runs over a connection
-     *   (PDO DSN) authenticated as the **restricted module login role** instead
-     *   of as superuser (out-of-process isolation, ch. 23.16.2). As a genuine
-     *   login role, a malicious migration **cannot** harm the core:
-     *   `RESET ROLE`/`SET ROLE`/`SET SESSION AUTHORIZATION` do not lead back to
-     *   superuser (there is no `SET LOCAL ROLE` on a superuser session). The
-     *   tracking insert runs on the superuser connection (the role has no access
-     *   to core.*).
+     * Runs the not-yet-applied UP migrations of a package transactionally in the
+     * module schema and records each in core.module_migrations_log.
+     *
      * @return list<string> Names of the migrations that were run.
      */
-    public function runUp(string $moduleId, string $schema, string $migrationsDir, ?string $roleDsn = null): array
+    public function runUp(string $moduleId, string $schema, string $migrationsDir): array
     {
         if (!is_dir($migrationsDir)) {
             return [];
@@ -39,7 +33,6 @@ class ModuleMigrationRunner
         sort($files);
 
         $connection = Db::privileged();
-        $rolePdo = $roleDsn !== null ? $this->roleConnection($roleDsn) : null;
         $executed = [];
 
         foreach ($files as $file) {
@@ -55,36 +48,18 @@ class ModuleMigrationRunner
             $statements = $this->statements($this->upPart((string)file_get_contents($file)));
 
             try {
-                if ($rolePdo !== null) {
-                    // DDL as the restricted login role (no superuser code).
-                    $rolePdo->beginTransaction();
-                    $rolePdo->exec("SET LOCAL search_path TO $schema, core, public");
+                $connection->transactional(function () use ($connection, $schema, $statements, $moduleId, $name): void {
+                    $connection->execute("SET LOCAL search_path TO $schema, core, public");
                     foreach ($statements as $stmt) {
-                        $rolePdo->exec($stmt);
+                        $connection->execute($stmt);
                     }
-                    $rolePdo->commit();
-                    // Tracking as superuser (the role has no core.* access).
                     $connection->execute(
                         "INSERT INTO core.module_migrations_log (module_id, migration_name, status) VALUES (:m, :n, 'success')",
                         ['m' => $moduleId, 'n' => $name],
                     );
-                } else {
-                    $connection->transactional(function () use ($connection, $schema, $statements, $moduleId, $name): void {
-                        $connection->execute("SET LOCAL search_path TO $schema, core, public");
-                        foreach ($statements as $stmt) {
-                            $connection->execute($stmt);
-                        }
-                        $connection->execute(
-                            "INSERT INTO core.module_migrations_log (module_id, migration_name, status) VALUES (:m, :n, 'success')",
-                            ['m' => $moduleId, 'n' => $name],
-                        );
-                    });
-                }
+                });
                 $executed[] = $name;
             } catch (Throwable $e) {
-                if ($rolePdo !== null && $rolePdo->inTransaction()) {
-                    $rolePdo->rollBack();
-                }
                 // No 'failed' log entry (it would cause a unique conflict on
                 // retry); the failed migration transaction has already been rolled back.
                 throw new RuntimeException("Modul-Migration $name fehlgeschlagen: " . $e->getMessage(), 0, $e);
@@ -97,10 +72,9 @@ class ModuleMigrationRunner
     /**
      * Runs the down operation of an already applied module migration (rollback).
      * Reads the @DOWN part from the package file, runs it in the module schema
-     * and removes the log entry. For isolated modules (`$roleDsn`) the down DDL
-     * also runs as the login role.
+     * and removes the log entry.
      */
-    public function runDown(string $moduleId, string $schema, string $migrationsDir, string $name, ?string $roleDsn = null): void
+    public function runDown(string $moduleId, string $schema, string $migrationsDir, string $name): void
     {
         $file = rtrim($migrationsDir, '/') . '/' . $name;
         if (!is_file($file)) {
@@ -115,48 +89,22 @@ class ModuleMigrationRunner
         }
 
         $connection = Db::privileged();
-        $rolePdo = $roleDsn !== null ? $this->roleConnection($roleDsn) : null;
         try {
-            if ($rolePdo !== null) {
-                $rolePdo->beginTransaction();
-                $rolePdo->exec("SET LOCAL search_path TO $schema, core, public");
+            $connection->transactional(function () use ($connection, $schema, $statements, $moduleId, $name): void {
+                $connection->execute("SET LOCAL search_path TO $schema, core, public");
                 foreach ($statements as $stmt) {
-                    $rolePdo->exec($stmt);
+                    $connection->execute($stmt);
                 }
-                $rolePdo->commit();
                 $connection->execute(
                     'DELETE FROM core.module_migrations_log WHERE module_id = :m AND migration_name = :n',
                     ['m' => $moduleId, 'n' => $name],
                 );
-            } else {
-                $connection->transactional(function () use ($connection, $schema, $statements, $moduleId, $name): void {
-                    $connection->execute("SET LOCAL search_path TO $schema, core, public");
-                    foreach ($statements as $stmt) {
-                        $connection->execute($stmt);
-                    }
-                    $connection->execute(
-                        'DELETE FROM core.module_migrations_log WHERE module_id = :m AND migration_name = :n',
-                        ['m' => $moduleId, 'n' => $name],
-                    );
-                });
-            }
+            });
         } catch (Throwable $e) {
-            if ($rolePdo !== null && $rolePdo->inTransaction()) {
-                $rolePdo->rollBack();
-            }
             throw $e instanceof RuntimeException
                 ? $e
                 : new RuntimeException("Down-Migration $name fehlgeschlagen: " . $e->getMessage(), 0, $e);
         }
-    }
-
-    /** Connection as the restricted module login role (for migrations-as-role). */
-    private function roleConnection(string $dsn): PDO
-    {
-        $pdo = new PDO($dsn);
-        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-
-        return $pdo;
     }
 
     public function isApplied(string $moduleId, string $name): bool

@@ -67,7 +67,6 @@ class ModulesController extends AdminController
 
             return $this->redirect(['action' => 'index']);
         }
-        $isolation = (string)$this->request->getData('isolation') === 'out_of_process' ? 'out_of_process' : 'in_process';
 
         // Stored under the shared ./core mount so the worker can read it.
         $dir = TMP . 'module_uploads';
@@ -78,7 +77,7 @@ class ModulesController extends AdminController
         $file->moveTo($path);
 
         $actor = $this->identity()?->getIdentifier();
-        (new ModuleInstallJobService())->enqueue($path, $name, $isolation, is_scalar($actor) ? (string)$actor : null);
+        (new ModuleInstallJobService())->enqueue($path, $name, is_scalar($actor) ? (string)$actor : null);
         $this->Flash->success(__('flash.module.install_queued'));
 
         return $this->redirect(['action' => 'index']);

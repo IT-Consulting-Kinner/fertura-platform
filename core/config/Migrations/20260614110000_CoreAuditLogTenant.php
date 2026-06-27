@@ -8,8 +8,8 @@ use Migrations\BaseMigration;
  * Decision 185).
  *
  * audit_log is the revision cornerstone and the FIRST core table to receive
- * database-level RLS: until now DB-RLS only guarded untrusted module schemas
- * (see {@see \App\Service\Module\ModuleDbRole}), while core tables relied on the
+ * database-level RLS: until now DB-RLS only guarded module schemas, while core
+ * tables relied on the
  * NOBYPASSRLS app role plus application logic. The context plumbing this depends
  * on is already complete — `TransactionRlsMiddleware` sets the per-request
  * tenant, `TenantIterator` the per-worker tenant (E163), and privileged / CLI

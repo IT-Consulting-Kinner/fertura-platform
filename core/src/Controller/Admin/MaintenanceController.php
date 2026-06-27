@@ -191,7 +191,6 @@ class MaintenanceController extends AdminController
 
             return $this->redirect(['action' => 'index']);
         }
-        $isolation = (string)$this->request->getData('isolation') === 'out_of_process' ? 'out_of_process' : 'in_process';
 
         $dir = TMP . 'module_uploads';
         if (!is_dir($dir)) {
@@ -203,7 +202,6 @@ class MaintenanceController extends AdminController
         $actorId = $this->actorId();
         $this->enqueueProtected('module_install', (string)$session['id'], $actorId, [
             'package_path' => $path,
-            'isolation' => $isolation,
         ]);
 
         return $this->redirect(['action' => 'index']);
