@@ -45,3 +45,19 @@ Backfill** (keine Produktivdaten; Dev-/Test-Dateien verwerfen). CI-Gate
 `module_lint` meldet aktuell die umzustellenden Dateien:
 Ticketing `TicketService`, `MailIngestionService`, `MailHtmlRenderer`;
 KB `ArticleService`, `AttachmentService`.
+
+## Legacy-Migration bestehender Dateien (Core-CLI `storage_rehome`)
+
+Liegen doch Altdateien außerhalb der Konvention (kein „kein Backfill"-Fall), kann der
+konforme Modul-`src/` sie **nicht selbst** umlegen: das Capability-Gate (Inc 10) verbietet
+rohen Dateizugriff, und `ModuleStorage::for` erreicht nur den Konventions-Teilbaum. Daher
+macht der **Core** den privilegierten Byte-Umzug — `App\Service\Storage\StorageRehomer` +
+Operator-CLI `bin/cake storage_rehome --module <key> --plan plan.json [--dry-run]
+[--delete-source] [--overwrite] [--out results.json]`.
+
+Arbeitsteilung (Core fasst die Modul-DB **nie** an): das **Modul** erzeugt aus seiner DB
+`plan.json` (`[{tenant_id, source, target}]`, `target` = Relpfad unter
+`tenant/<id>/<key>/`); der **Core** liest die Quelle, schreibt sie via Konvention,
+verifiziert (Größe) vor dem Löschen, ist idempotent, schreibt `results.json`; das **Modul**
+aktualisiert seine `storage_path`-Spalten aus den Ergebnissen. Empfohlene Reihenfolge:
+Code-Switch auf `ModuleStorage::for` → `--dry-run` → echter Lauf mit `--delete-source`.
