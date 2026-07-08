@@ -95,6 +95,18 @@ class ModuleWebTest extends TestCase
         $this->assertResponseContains('Fertura'); // Core layout wraps the page
     }
 
+    public function testStandalonePageUsesLocaleDropdown(): void
+    {
+        // Regression fix: the standalone module layout uses the same locale DROPDOWN
+        // (a <select>) as the admin shell — it previously rendered the legacy
+        // side-by-side buttons because it called the switcher without the 'select' style.
+        $this->session(['Auth' => ['id' => $this->userId, 'username' => 'zztest_web', 'email' => 'w@zztest.local']]);
+        $this->get('/m/zztest_web/dashboard');
+
+        $this->assertResponseOk();
+        $this->assertResponseContains('locale-select'); // <select> dropdown, not buttons
+    }
+
     public function testWebHandlerReceivesPerTenantConfig(): void
     {
         // Increment 5 Phase 3: the Core injects the tenant's stored module config
@@ -199,6 +211,10 @@ class ModuleWebTest extends TestCase
         $this->assertResponseContains('top-nav'); // rendered in the ADMIN shell (top menu)
         $this->assertResponseContains('/m/zztest_web/admin'); // module nav entry links to the page
         $this->assertResponseContains('zztest.nav.group'); // module's nav group label in the top menu
+        // Regression fix: a module admin page gets a Core breadcrumb (Module -> page)
+        // so it has navigation context back to the module area, not a bare shell.
+        $this->assertResponseContains('aria-label="breadcrumb"');
+        $this->assertResponseContains('/admin/module'); // breadcrumb links back to the Module landing
     }
 
     public function testAdminPageForbiddenWithoutArea(): void

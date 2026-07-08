@@ -11,6 +11,7 @@
  * @var \Authentication\IdentityInterface|null $currentUser
  * @var string $moduleKey
  * @var string $moduleTitle
+ * @var list<array{0:string,1:?string}> $breadcrumb  [label, url|null]; null = current
  */
 $currentUser = $currentUser ?? null;
 $moduleKey = $moduleKey ?? '';
@@ -35,7 +36,7 @@ $moduleTitle = $moduleTitle ?? '';
 <nav class="navbar navbar-dark bg-dark px-3" aria-label="<?= h(__('a11y.nav_main')) ?>">
     <a class="navbar-brand" href="/m/<?= h($moduleKey) ?>">Fertura<?= $moduleTitle !== '' ? ' <span class="text-secondary">' . h($moduleTitle) . '</span>' : '' ?></a>
     <div class="d-flex align-items-center text-light gap-2">
-        <?= $this->cell('LocaleSwitcher', [true]) ?>
+        <?= $this->cell('LocaleSwitcher', [true, 'select']) ?>
         <?php if ($currentUser !== null): ?>
             <span class="ms-1 small"><?= h($currentUser->get('username')) ?></span>
             <a class="btn btn-sm btn-outline-light" href="/logout"><?= __('admin.nav.logout') ?></a>
@@ -43,6 +44,7 @@ $moduleTitle = $moduleTitle ?? '';
     </div>
 </nav>
 <main id="main" tabindex="-1" class="container-fluid p-4">
+    <?= $this->element('admin_breadcrumb', ['crumbs' => $breadcrumb ?? []]) ?>
     <div aria-live="polite"><?= $this->Flash->render() ?></div>
     <?= $this->fetch('content') ?>
 </main>
