@@ -159,6 +159,20 @@ class ModuleWebController extends AppController
         $this->set('moduleTitle', $title);
         $this->set('currentUser', $identity);
 
+        // Navigation breadcrumb (Core-owned, ch. 23.16.3). A module MAY return a
+        // `breadcrumb` in its result — a list of [label, url|null] pairs — to give its
+        // page navigation context (the shape is untrusted and coerced). Otherwise an
+        // admin page gets a default trail back to the Module area; a standalone page
+        // shows none unless the module supplies one (its minimal shell already links
+        // home via the brand).
+        $breadcrumb = isset($result['breadcrumb']) && is_array($result['breadcrumb'])
+            ? $this->coerceBreadcrumb($result['breadcrumb'])
+            : [];
+        if ($breadcrumb === [] && $isAdmin) {
+            $breadcrumb = [['admin.nav.modules', '/admin/module'], [$title, null]];
+        }
+        $this->set('breadcrumb', $breadcrumb);
+
         // Admin pages render in the admin shell (scoped sidebar incl. this
         // module's nav entries); standalone pages in the Core module layout.
         if ($isAdmin) {
@@ -200,6 +214,41 @@ class ModuleWebController extends AppController
         )->fetchAll('assoc');
 
         return array_values(array_map(static fn($r) => (string)$r['admin_area_key'], $rows));
+    }
+
+    /**
+     * Coerces a module-provided breadcrumb (untrusted shape) into what the
+     * `admin_breadcrumb` element renders: a list of `[label, url|null]` pairs. Labels
+     * are strings (rendered through i18n, so a raw page title passes through
+     * unchanged). A URL is kept ONLY when it is a safe app-relative path (single
+     * leading '/', no scheme, no protocol-relative '//') so a module cannot inject an
+     * off-site or `javascript:` link into the Core shell.
+     *
+     * @param array<mixed> $raw
+     * @return list<array{0:string,1:?string}>
+     */
+    private function coerceBreadcrumb(array $raw): array
+    {
+        $out = [];
+        foreach ($raw as $crumb) {
+            if (!is_array($crumb) || !isset($crumb[0]) || !is_scalar($crumb[0])) {
+                continue;
+            }
+            $label = (string)$crumb[0];
+            if ($label === '') {
+                continue;
+            }
+            $url = null;
+            if (isset($crumb[1]) && is_string($crumb[1]) && $crumb[1] !== ''
+                && str_starts_with($crumb[1], '/') && !str_starts_with($crumb[1], '//')
+                && !str_contains($crumb[1], '://')
+            ) {
+                $url = $crumb[1];
+            }
+            $out[] = [$label, $url];
+        }
+
+        return $out;
     }
 
     /**
