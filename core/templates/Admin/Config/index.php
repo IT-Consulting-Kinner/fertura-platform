@@ -37,6 +37,14 @@
                     <?= $this->Form->select('value', ['1' => 'true', '0' => 'false'],
                         ['value' => filter_var($s['value'], FILTER_VALIDATE_BOOLEAN) ? '1' : '0', 'class' => 'form-select form-select-sm',
                             'aria-label' => $s['namespace'] . '.' . $s['key']]) ?>
+                <?php elseif (!empty($s['allowed'])): ?>
+                    <?php $opts = [];
+                    foreach ($s['allowed'] as $v) {
+                        $opts[(string)$v] = (string)$v;
+                    } ?>
+                    <?= $this->Form->select('value', $opts,
+                        ['value' => (string)$s['value'], 'class' => 'form-select form-select-sm',
+                            'aria-label' => $s['namespace'] . '.' . $s['key']]) ?>
                 <?php else: ?>
                     <?= $this->Form->control('value', [
                         'label' => false,

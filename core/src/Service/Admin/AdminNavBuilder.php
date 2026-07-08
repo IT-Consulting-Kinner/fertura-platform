@@ -58,15 +58,25 @@ class AdminNavBuilder
      * The return KEYS stay `module`/`administration` so routes, highlighting and
      * breadcrumbs keep working unchanged; only the grouping and the visible LABELS
      * (Betreiber/Mandant, set in the layout) change. `administration` = operator
-     * (Betreiber), `module` = tenant (Mandant). Grouping by scope — not by the viewer's
-     * tenant — is deliberate: in single-org the default tenant is BOTH the operator and
-     * the (only) module user, so a viewer may legitimately hold both realms' areas.
+     * (Betreiber), `module` = tenant (Mandant). Grouping is by area SCOPE; which realms
+     * a viewer SEES is then narrowed by their tenant (below).
+     *
+     * Which realms a viewer SEES is then narrowed by their tenant (operator-tenant
+     * design §6/§5a, Option B): a CUSTOMER-tenant viewer (`$isOperatorTenant = false`)
+     * never sees the operator (Betreiber) Core areas — they are unreachable anyway
+     * (operator gate -> 403), so only the always-available system pages remain in that
+     * realm. Single-org / operator viewers pass the default and keep BOTH realms — in
+     * single-org the default tenant is BOTH operator and (only) module user. An operator
+     * tenant in a multi-tenant install shows no module functions here regardless: its
+     * module-contributed areas are already dropped in {@see build()} by the per-tenant
+     * enablement gate (which reports the operator tenant as owning no modules).
      * (Renaming the keys/routes to betreiber/mandant is a later cosmetic cleanup.)
      *
      * @param list<string> $userAreaKeys areas the current user holds
+     * @param bool $isOperatorTenant whether the viewer is in the operator/default tenant
      * @return array{module: array<string,array{label:string,items:list<array{0:string,1:string}>}>, administration: array<string,array{label:string,items:list<array{0:string,1:string}>}>}
      */
-    public function menu(array $userAreaKeys): array
+    public function menu(array $userAreaKeys, bool $isOperatorTenant = true): array
     {
         $nav = $this->build($userAreaKeys);
 
@@ -96,6 +106,13 @@ class AdminNavBuilder
             }
         }
         $operator['system'] = self::SYSTEM;
+
+        // Narrow the visible realms to the viewer's tenant (see the docblock): a
+        // customer-tenant viewer keeps only the always-available system pages in the
+        // operator realm.
+        if (!$isOperatorTenant) {
+            $operator = ['system' => self::SYSTEM];
+        }
 
         return ['module' => $tenant, 'administration' => $operator];
     }

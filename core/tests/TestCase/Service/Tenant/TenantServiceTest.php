@@ -146,6 +146,50 @@ class TenantServiceTest extends TestCase
         $this->assertNull($r->resolve('acme3.example.test'));
     }
 
+    public function testOperatorTenantModuleFreeTracksMode(): void
+    {
+        $conn = ConnectionManager::get('default');
+        $svc = new TenantService();
+        $operator = TenantService::DEFAULT_TENANT_ID;
+        $conn->begin();
+        try {
+            $cust = $svc->create('zztest-mf', 'MF Co');
+
+            // single_org (the default): the MODE — not the tenant count — decides, so
+            // even with a customer tenant present nobody is module-free.
+            $this->assertFalse($svc->isModuleFreeTenant($operator), 'single_org: operator keeps its dual role');
+
+            // multi_org: the operator/default tenant is module-free; a customer never is.
+            $this->setTenantMode('multi_org');
+            $this->assertTrue($svc->isModuleFreeTenant($operator), 'multi_org: operator tenant is module-free');
+            $this->assertFalse($svc->isModuleFreeTenant($cust['id']), 'a customer tenant is never module-free');
+
+            // currentTenantIsModuleFree / currentTenantIsOperator track the RLS context.
+            $conn->execute("SELECT set_config('app.current_tenant_id', :t, true)", ['t' => $operator]);
+            $this->assertTrue($svc->currentTenantIsOperator());
+            $this->assertTrue($svc->currentTenantIsModuleFree());
+            $conn->execute("SELECT set_config('app.current_tenant_id', :t, true)", ['t' => $cust['id']]);
+            $this->assertFalse($svc->currentTenantIsOperator());
+            $this->assertFalse($svc->currentTenantIsModuleFree(), 'a customer tenant is never module-free');
+            // No tenant context -> never module-free (the tenant-less/CLI path stays open).
+            $conn->execute("SELECT set_config('app.current_tenant_id', '', true)");
+            $this->assertFalse($svc->currentTenantIsModuleFree());
+        } finally {
+            $conn->rollback();
+        }
+    }
+
+    /** Sets the GLOBAL core.tenancy.mode setting (rolled back with the test tx). */
+    private function setTenantMode(string $mode): void
+    {
+        $conn = ConnectionManager::get('default');
+        $conn->execute("DELETE FROM settings WHERE namespace = 'core' AND config_key = 'tenancy.mode' AND tenant_id IS NULL");
+        $conn->execute(
+            "INSERT INTO settings (namespace, config_key, value) VALUES ('core', 'tenancy.mode', to_jsonb(:m::text))",
+            ['m' => $mode],
+        );
+    }
+
     public function testCurrentTenantFunctionAndPredicate(): void
     {
         $conn = ConnectionManager::get('default');

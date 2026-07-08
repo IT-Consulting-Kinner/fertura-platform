@@ -362,7 +362,10 @@ class ContractRegistry
      * Per-tenant module enablement gate (operator/tenant authz §5, Increment 5
      * Phase 2): drops contributions whose owning module is an INSTALLED module that
      * is NOT enabled for the current request tenant — so a module a tenant disabled
-     * stops processing that tenant's events / collectors / provider resolutions.
+     * stops processing that tenant's events / collectors / provider resolutions. It
+     * additionally drops ALL module contributions when the current tenant is the
+     * operator/default tenant in multi_org mode (operator-tenant design §5b): that
+     * tenant runs operator functions only and owns no module functions.
      *
      * Fail-OPEN by design: with no tenant context (system events with tenant_id
      * NULL, CLI, platform/worker jobs) the predicate is empty and nothing is
@@ -390,15 +393,22 @@ class ContractRegistry
         }
         /** @var \Cake\Database\Connection $conn */
         $conn = $this->registrations()->getConnection();
-        // The keys that ARE installed modules but are NOT enabled for the current
-        // tenant = the ones to drop. The `current_tenant() IS NOT NULL` guard makes
-        // the whole predicate empty (no rows -> drop nothing) when no tenant is set.
+        // The keys that ARE installed modules but the current tenant may not run =
+        // the ones to drop. Two reasons: (a) the tenant is the operator/default tenant
+        // in multi_org mode, which owns NO module functions at all (operator-tenant
+        // design §5b, Option B) -> drop every key; or (b) the module is simply not
+        // enabled for this tenant. Both are falsy without a tenant
+        // context (`tenant_is_module_free(NULL)` is NULL, `current_tenant() IS NOT
+        // NULL` is false), so the whole predicate stays empty and nothing is filtered
+        // for the tenant-less/CLI path — the documented fail-open behaviour is intact.
         $rows = $conn->execute(
             'SELECT m.module_key FROM modules m '
-            . 'WHERE m.module_key IN (' . implode(',', $names) . ') '
-            . 'AND core.current_tenant() IS NOT NULL '
+            . 'WHERE m.module_key IN (' . implode(',', $names) . ') AND ('
+            . 'core.tenant_is_module_free(core.current_tenant()) '
+            . 'OR (core.current_tenant() IS NOT NULL '
             . 'AND NOT EXISTS (SELECT 1 FROM tenant_modules tm '
-            . 'WHERE tm.module_key = m.module_key AND tm.tenant_id = core.current_tenant() AND tm.enabled)',
+            . 'WHERE tm.module_key = m.module_key AND tm.tenant_id = core.current_tenant() AND tm.enabled))'
+            . ')',
             $params,
         )->fetchAll('assoc');
         if ($rows === []) {
