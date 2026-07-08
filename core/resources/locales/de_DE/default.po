@@ -1348,6 +1348,9 @@ msgstr "Modul „%s“ für diesen Mandanten deaktivieren? Benutzer dieses Manda
 msgid "admin.tenant_modules.empty"
 msgstr "Keine Module installiert."
 
+msgid "admin.tenant_modules.operator_module_free"
+msgstr "Dies ist der Betreiber-Mandant — er führt ausschließlich Betreiber-Funktionen aus. Module werden je Kundenmandant freigeschaltet und genutzt."
+
 msgid "admin.tenant_modules.configure"
 msgstr "Konfigurieren"
 
@@ -1374,6 +1377,9 @@ msgstr "Kein Mandantenkontext."
 
 msgid "flash.tenant_modules.unknown_module"
 msgstr "Unbekanntes oder inaktives Modul."
+
+msgid "flash.tenant_modules.operator_no_modules"
+msgstr "Der Betreiber-Mandant führt ausschließlich Betreiber-Funktionen aus; Module werden je Kundenmandant freigeschaltet."
 
 msgid "flash.tenant_modules.configured"
 msgstr "Konfiguration gespeichert."

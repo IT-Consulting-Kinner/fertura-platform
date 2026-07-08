@@ -3,8 +3,10 @@ declare(strict_types=1);
 
 namespace App\Service\Module;
 
+use App\Service\Tenant\TenantService;
 use Cake\Database\Connection;
 use Cake\Datasource\ConnectionManager;
+use RuntimeException;
 
 /**
  * Per-tenant module enablement (operator/tenant authz design §5, Increment 5).
@@ -38,9 +40,14 @@ class TenantModuleService
      */
     public function isEnabled(string $moduleKey): bool
     {
+        // `… AND NOT core.tenant_is_module_free(…)`: the operator tenant owns no
+        // module functions in multi_org mode (operator-tenant design §5b, Option B —
+        // the core.tenancy.mode app setting). The predicate is falsy without a tenant
+        // context, so this adds nothing to the existing fail-closed no-tenant result.
         $row = $this->conn()->execute(
             'SELECT EXISTS (SELECT 1 FROM tenant_modules '
-            . 'WHERE module_key = :k AND tenant_id = core.current_tenant() AND enabled) AS ok',
+            . 'WHERE module_key = :k AND tenant_id = core.current_tenant() AND enabled) '
+            . 'AND NOT core.tenant_is_module_free(core.current_tenant()) AS ok',
             ['k' => $moduleKey],
         )->fetch('assoc');
 
@@ -57,7 +64,9 @@ class TenantModuleService
     {
         $rows = $this->conn()->execute(
             'SELECT module_key FROM tenant_modules '
-            . 'WHERE tenant_id = core.current_tenant() AND enabled',
+            . 'WHERE tenant_id = core.current_tenant() AND enabled '
+            // The operator tenant exposes no module nav in multi_org mode.
+            . 'AND NOT core.tenant_is_module_free(core.current_tenant())',
         )->fetchAll('assoc');
 
         return array_values(array_map(static fn($r): string => (string)$r['module_key'], $rows));
@@ -79,6 +88,8 @@ class TenantModuleService
             'SELECT m.module_key, m.name, m.version FROM tenant_modules tm '
             . 'JOIN modules m ON m.module_key = tm.module_key '
             . "WHERE tm.tenant_id = core.current_tenant() AND tm.enabled AND m.status = 'active' "
+            // The operator tenant consumes no modules in multi_org mode.
+            . 'AND NOT core.tenant_is_module_free(core.current_tenant()) '
             . 'ORDER BY m.name',
         )->fetchAll('assoc');
 
@@ -139,6 +150,16 @@ class TenantModuleService
      */
     public function enable(string $tenantId, string $moduleKey): void
     {
+        // Defense: the operator/default tenant may not hold module grants in multi_org
+        // mode (operator-tenant design §5b). The tenant GUI blocks this earlier with a
+        // translated flash; this guards every other caller (cross-tenant provisioning)
+        // so no path can grant a module to the operator.
+        if ((new TenantService())->isModuleFreeTenant($tenantId)) {
+            throw new RuntimeException(
+                'The operator tenant runs operator functions only; '
+                . 'modules are enabled per customer tenant.',
+            );
+        }
         $this->conn()->execute(
             'INSERT INTO tenant_modules (tenant_id, module_key, enabled) VALUES (:t, :k, true) '
             . 'ON CONFLICT (tenant_id, module_key) DO UPDATE SET enabled = true',

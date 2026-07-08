@@ -8,6 +8,7 @@ use App\Service\Module\ContributionRuntime;
 use App\Service\Module\TenantModuleService;
 use App\Service\Module\WebRouteRegistry;
 use App\Service\Storage\StorageManager;
+use App\Service\Tenant\TenantService;
 use Cake\Core\Configure;
 use Cake\Datasource\ConnectionManager;
 use Cake\Event\EventInterface;
@@ -162,8 +163,15 @@ class ModuleWebController extends AppController
         // module's nav entries); standalone pages in the Core module layout.
         if ($isAdmin) {
             $navBuilder = new AdminNavBuilder();
+            // Narrow the top-menu realms to the viewer's tenant (operator-tenant design
+            // §6/§5a): a module admin page only renders when the module is enabled for
+            // this tenant, so the tenant is a customer (or the single-org operator); the
+            // realm split hides the operator realm from customer tenants here too.
             $this->set('navAreas', $navBuilder->build($userAreas));
-            $this->set('topMenu', $navBuilder->menu($userAreas));
+            $this->set('topMenu', $navBuilder->menu(
+                $userAreas,
+                (new TenantService())->currentTenantIsOperator(),
+            ));
             $this->set('userAreas', $userAreas);
             $this->set('activeArea', $route['area']);
             $this->set('activeTop', $navBuilder->areaTop((string)$route['area']));

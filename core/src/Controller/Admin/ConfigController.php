@@ -34,6 +34,9 @@ class ConfigController extends AdminController
                     'secret' => $isSecret,
                     'min' => $def['min'] ?? null,
                     'max' => $def['max'] ?? null,
+                    // Fixed allowed values (enum-style string settings, e.g.
+                    // tenancy.mode) -> the GUI renders a dropdown instead of free text.
+                    'allowed' => $def['allowed'] ?? null,
                     'default' => $def['default'],
                     'value' => $isSecret ? ($current === null || $current === '' ? null : '********') : $current,
                 ];

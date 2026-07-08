@@ -89,6 +89,17 @@ class TenantModuleContributionGateTest extends TestCase
         )->fetch('assoc')['id'];
     }
 
+    /** Sets the GLOBAL core.tenancy.mode setting (rolled back with the test tx). */
+    private function setTenantMode(string $mode): void
+    {
+        $conn = $this->conn();
+        $conn->execute("DELETE FROM settings WHERE namespace = 'core' AND config_key = 'tenancy.mode' AND tenant_id IS NULL");
+        $conn->execute(
+            "INSERT INTO settings (namespace, config_key, value) VALUES ('core', 'tenancy.mode', to_jsonb(:m::text))",
+            ['m' => $mode],
+        );
+    }
+
     /** module_keys of the listeners the registry resolves for the test contract. */
     private function listenerModuleKeys(bool $tenantScoped = true): array
     {
@@ -157,6 +168,34 @@ class TenantModuleContributionGateTest extends TestCase
             $keys = $this->listenerModuleKeys(false);
             $this->assertContains(self::MOD, $keys, 'un-gated must include the disabled module');
             $this->assertContains('core', $keys);
+        } finally {
+            $conn->rollback();
+        }
+    }
+
+    public function testOperatorTenantOwnsNoModulesInMultiOrgMode(): void
+    {
+        $operator = '00000000-0000-0000-0000-000000000001';
+        $conn = $this->conn();
+        $conn->begin();
+        try {
+            // The module is enabled for the operator/default tenant, acting as it.
+            $conn->execute(
+                'INSERT INTO tenant_modules (tenant_id, module_key, enabled) VALUES (:t, :k, true) '
+                . 'ON CONFLICT (tenant_id, module_key) DO UPDATE SET enabled = true',
+                ['t' => $operator, 'k' => self::MOD],
+            );
+            $conn->execute("SELECT set_config('app.current_tenant_id', :t, true)", ['t' => $operator]);
+
+            // single_org (the default): the operator keeps its dual role -> listener runs.
+            $this->assertContains(self::MOD, $this->listenerModuleKeys(), 'single_org: operator uses modules');
+
+            // multi_org: the operator tenant runs operator functions only -> EVERY module
+            // contribution is dropped (operator-tenant design §5b, Option B); core passes.
+            $this->setTenantMode('multi_org');
+            $keys = $this->listenerModuleKeys();
+            $this->assertNotContains(self::MOD, $keys, 'multi_org: operator tenant owns no modules');
+            $this->assertContains('core', $keys, 'core/platform contributions still pass');
         } finally {
             $conn->rollback();
         }

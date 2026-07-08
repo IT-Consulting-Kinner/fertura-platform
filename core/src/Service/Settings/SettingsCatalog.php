@@ -111,6 +111,13 @@ class SettingsCatalog
             // Multi-tenancy: reject a logged-in user on the domain of a FOREIGN
             // tenant (cross-tenant host policy). Single-org is unaffected.
             'tenancy.enforce_host_match' => ['type' => 'bool', 'default' => true],
+            // Tenant topology mode (operator-tenant design §5b). `single_org`
+            // (default, backward-compatible): the default tenant keeps its dual
+            // operator+module-user role, no operator/module separation. `multi_org`:
+            // strict separation — the operator/default tenant is module-free, modules
+            // live only in customer tenants. Read as the GLOBAL (tenant_id NULL) value;
+            // `allowed` constrains it to the two values (enforced by validate()).
+            'tenancy.mode' => ['type' => 'string', 'default' => 'single_org', 'allowed' => ['single_org', 'multi_org']],
             // Driver of the generic job-queue transport (#10): `db` (default,
             // Postgres) or `redis` (Redis Streams; QUEUE_REDIS_URL). The event
             // outbox is unaffected by this (always DB).
@@ -223,6 +230,14 @@ class SettingsCatalog
             case 'string':
                 if (!is_string($value)) {
                     $errors[] = "$key muss eine Zeichenkette sein.";
+                    break;
+                }
+                // Enum-style constraint: a string setting may declare `allowed`, a
+                // fixed set of valid values (e.g. tenancy.mode). Enforced centrally
+                // here so both write paths (set() and ConfigController::save) reject
+                // any other value.
+                if (isset($def['allowed']) && is_array($def['allowed']) && !in_array($value, $def['allowed'], true)) {
+                    $errors[] = "$key muss einer von: " . implode(', ', $def['allowed']) . ' sein.';
                 }
                 break;
             case 'json':
