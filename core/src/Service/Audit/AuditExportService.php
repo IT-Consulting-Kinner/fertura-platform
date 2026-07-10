@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Service\Audit;
 
+use App\Infrastructure\Db;
 use App\Infrastructure\Uuid;
 use Cake\Database\Connection;
 use Cake\Datasource\ConnectionManager;
@@ -39,16 +40,35 @@ class AuditExportService
      *   the request transaction (and its tenant context) is still live.
      * @return \Generator<int, array<string,mixed>>
      */
-    public function stream(array $filters, ?string $tenantId = null): Generator
+    public function stream(array $filters, ?string $tenantId = null, bool $operatorGlobal = false): Generator
     {
-        // The export body is emitted via a CallbackStream AFTER the request
-        // transaction has committed, so the request's SET LOCAL app.current_tenant_id
-        // is already gone — core.current_tenant() would be NULL and audit_log's RLS
-        // policy (tenant_id = core.current_tenant()) would match ZERO rows. Re-apply
-        // the captured tenant on this (post-commit, autocommit) connection so the
-        // export is correctly scoped to the caller's tenant (peer-review F11/F15).
-        if ($tenantId !== null && $tenantId !== '') {
-            $this->conn()->execute("SELECT set_config('app.current_tenant_id', :t, false)", ['t' => $tenantId]);
+        [$where, $params] = $this->where($filters);
+
+        if ($operatorGlobal && $tenantId !== null && $tenantId !== '') {
+            // Operator export: own tenant + operator-global (tenant_id IS NULL)
+            // platform events. RLS would hide the NULL rows, so read via the
+            // privileged (BYPASSRLS) connection and scope IN SQL — other tenants
+            // stay invisible. Re-apply the tenant as well: if no privileged
+            // connection is configured and this falls back to the RLS 'default'
+            // connection, the export still scopes to the operator tenant (the global
+            // NULL rows then need a real privileged connection, per the audit_log
+            // RLS design) instead of returning nothing.
+            $conn = Db::privileged();
+            $conn->execute("SELECT set_config('app.current_tenant_id', :t, false)", ['t' => $tenantId]);
+            $where[] = '(tenant_id = :op_tenant OR tenant_id IS NULL)';
+            $params['op_tenant'] = $tenantId;
+        } else {
+            // The export body is emitted via a CallbackStream AFTER the request
+            // transaction has committed, so the request's SET LOCAL
+            // app.current_tenant_id is already gone — core.current_tenant() would be
+            // NULL and audit_log's RLS policy (tenant_id = core.current_tenant())
+            // would match ZERO rows. Re-apply the captured tenant on this
+            // (post-commit, autocommit) connection so the export is correctly scoped
+            // to the caller's tenant (peer-review F11/F15).
+            $conn = $this->conn();
+            if ($tenantId !== null && $tenantId !== '') {
+                $conn->execute("SELECT set_config('app.current_tenant_id', :t, false)", ['t' => $tenantId]);
+            }
         }
 
         $withValues = (bool)($filters['with_values'] ?? true);
@@ -56,7 +76,6 @@ class AuditExportService
             . 'module_key, module_name, module_version, component, correlation_id'
             . ($withValues ? ', old_value, new_value' : '');
 
-        [$where, $params] = $this->where($filters);
         $emitted = 0;
         // Keyset cursor over the PK (created_at, id) — stable and index-backed.
         $cursorTs = null;
@@ -74,7 +93,7 @@ class AuditExportService
                 . ($clauses !== [] ? ' WHERE ' . implode(' AND ', $clauses) : '')
                 . ' ORDER BY created_at, id LIMIT ' . self::BATCH;
 
-            $rows = $this->conn()->execute($sql, $p)->fetchAll('assoc');
+            $rows = $conn->execute($sql, $p)->fetchAll('assoc');
             if ($rows === []) {
                 return;
             }
