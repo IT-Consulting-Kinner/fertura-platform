@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Controller\Admin;
 
+use App\Infrastructure\Db;
 use App\Service\Audit\AuditExportService;
 use Cake\Datasource\ConnectionManager;
 use Cake\Http\CallbackStream;
@@ -38,11 +39,25 @@ class AuditController extends AdminController
             $where[] = 'a.module_key = :mkey';
             $params['mkey'] = $moduleKey;
         }
+        // Operator readers additionally see operator-global (tenant_id IS NULL)
+        // platform events — module installs, license/contract registrations, admin
+        // grants. The RLS default connection hides those (its policy matches only
+        // tenant_id = core.current_tenant()), so operators read via the privileged
+        // connection, scoped IN SQL to their own tenant + global so other tenants
+        // stay invisible. Tenant admins keep the RLS-scoped default connection.
+        $isOperator = $this->isOperatorTenant();
+        if ($isOperator) {
+            $conn = Db::privileged();
+            $where[] = '(a.tenant_id = :op_tenant OR a.tenant_id IS NULL)';
+            $params['op_tenant'] = self::OPERATOR_TENANT_ID;
+        } else {
+            // RLS-effective default connection. Narrow to the concrete Connection so
+            // execute() resolves; ConnectionInterface intentionally omits it.
+            /** @var \Cake\Database\Connection $conn */
+            $conn = ConnectionManager::get('default');
+        }
+
         $whereSql = $where !== [] ? ' WHERE ' . implode(' AND ', $where) : '';
-        // RLS-effective default connection. Narrow to the concrete Connection so
-        // execute() resolves; ConnectionInterface intentionally omits it.
-        /** @var \Cake\Database\Connection $conn */
-        $conn = ConnectionManager::get('default');
 
         // Paginated instead of a hard LIMIT 100 (older entries were only reachable
         // via the NDJSON export). The filters carry into the page links (view).
@@ -58,8 +73,12 @@ class AuditController extends AdminController
             . ' ORDER BY a.created_at DESC LIMIT ' . $perPage . ' OFFSET ' . $offset;
         $entries = $conn->execute($sql, $params)->fetchAll('assoc');
 
-        $actions = $conn->execute('SELECT DISTINCT action FROM audit_log ORDER BY action')->fetchAll('assoc');
-        $entityTypes = $conn->execute('SELECT DISTINCT entity_type FROM audit_log ORDER BY entity_type')->fetchAll('assoc');
+        // Filter dropdowns: scope the DISTINCT lists the same way (operator: own
+        // tenant + global; tenant admin: RLS-scoped by the connection).
+        $scope = $isOperator ? ' WHERE (tenant_id = :op_tenant OR tenant_id IS NULL)' : '';
+        $scopeParams = $isOperator ? ['op_tenant' => self::OPERATOR_TENANT_ID] : [];
+        $actions = $conn->execute('SELECT DISTINCT action FROM audit_log' . $scope . ' ORDER BY action', $scopeParams)->fetchAll('assoc');
+        $entityTypes = $conn->execute('SELECT DISTINCT entity_type FROM audit_log' . $scope . ' ORDER BY entity_type', $scopeParams)->fetchAll('assoc');
 
         $this->set(compact('entries', 'actions', 'entityTypes', 'action', 'entityType', 'moduleKey', 'page', 'total'));
         $this->set('perPage', $perPage);
@@ -90,8 +109,11 @@ class AuditController extends AdminController
         /** @var \Cake\Database\Connection $conn */
         $conn = ConnectionManager::get('default');
         $tenantId = (string)($conn->execute('SELECT core.current_tenant() AS t')->fetch('assoc')['t'] ?? '');
-        $body = new CallbackStream(static function () use ($filters, $tenantId): void {
-            foreach ((new AuditExportService())->stream($filters, $tenantId) as $row) {
+        // Operators additionally export operator-global (tenant_id IS NULL) events,
+        // matching what /admin/audit shows them; tenant admins stay tenant-scoped.
+        $operatorGlobal = $this->isOperatorTenant();
+        $body = new CallbackStream(static function () use ($filters, $tenantId, $operatorGlobal): void {
+            foreach ((new AuditExportService())->stream($filters, $tenantId, $operatorGlobal) as $row) {
                 echo json_encode($row, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n";
             }
         });
