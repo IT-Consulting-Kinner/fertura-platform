@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Test\TestCase\Service\System;
 
+use App\Service\Security\CookieSecurity;
 use App\Service\System\AllowTokenCookie;
 use Cake\TestSuite\TestCase;
 
@@ -22,32 +23,85 @@ class AllowTokenCookieTest extends TestCase
         $this->assertSame('Lax', $cookie->getSameSite()?->value);
     }
 
+    /** An explicit pin wins over the debug fallback — in both directions. */
     public function testSecureFollowsTlsEnv(): void
     {
-        $prev = $_ENV['SESSION_COOKIE_SECURE'] ?? null;
-        // Dev default (HTTP) -> not Secure, so local usage keeps working.
-        unset($_ENV['SESSION_COOKIE_SECURE']);
-        putenv('SESSION_COOKIE_SECURE');
-        $this->assertFalse(AllowTokenCookie::make('t')->isSecure());
-
-        // Once TLS is terminated (SESSION_COOKIE_SECURE=1) the cookie is Secure.
-        $_ENV['SESSION_COOKIE_SECURE'] = '1';
-        putenv('SESSION_COOKIE_SECURE=1');
+        $prevSecure = self::readEnv(CookieSecurity::ENV_OVERRIDE);
+        $prevDebug = self::readEnv('DEBUG');
         try {
+            // TLS-terminated box that happens to run with debug on: pin wins -> Secure.
+            self::pinEnv('DEBUG', '1');
+            self::pinEnv(CookieSecurity::ENV_OVERRIDE, '1');
+            $this->assertTrue(AllowTokenCookie::make('t')->isSecure());
+
+            // Intentional HTTP staging box without debug: pin wins -> not Secure.
+            self::pinEnv('DEBUG', '0');
+            self::pinEnv(CookieSecurity::ENV_OVERRIDE, '0');
+            $this->assertFalse(AllowTokenCookie::make('t')->isSecure());
+        } finally {
+            self::pinEnv(CookieSecurity::ENV_OVERRIDE, $prevSecure);
+            self::pinEnv('DEBUG', $prevDebug);
+        }
+    }
+
+    /**
+     * Without an explicit pin the flag follows DEBUG. DEBUG is pinned here rather
+     * than inherited: the ambient value differs per environment (dev container sets
+     * DEBUG=1, CI leaves it unset), which would otherwise flip this test's outcome.
+     */
+    public function testSecureFailsSafeWithoutPin(): void
+    {
+        $prevSecure = self::readEnv(CookieSecurity::ENV_OVERRIDE);
+        $prevDebug = self::readEnv('DEBUG');
+        try {
+            self::pinEnv(CookieSecurity::ENV_OVERRIDE, null);
+
+            // Local debug/dev (HTTP, no TLS): drop the flag so login stays usable.
+            self::pinEnv('DEBUG', '1');
+            $this->assertFalse(AllowTokenCookie::make('t')->isSecure());
+
+            // Every other deployment: fail-safe ON even though nobody set the pin.
+            self::pinEnv('DEBUG', '0');
             $this->assertTrue(AllowTokenCookie::make('t')->isSecure());
         } finally {
-            if ($prev === null) {
-                unset($_ENV['SESSION_COOKIE_SECURE']);
-                putenv('SESSION_COOKIE_SECURE');
-            } else {
-                $_ENV['SESSION_COOKIE_SECURE'] = $prev;
-                putenv('SESSION_COOKIE_SECURE=' . $prev);
-            }
+            self::pinEnv(CookieSecurity::ENV_OVERRIDE, $prevSecure);
+            self::pinEnv('DEBUG', $prevDebug);
         }
     }
 
     public function testExpireIsExpired(): void
     {
         $this->assertTrue(AllowTokenCookie::expire()->isExpired());
+    }
+
+    /** Read an env var the way env() resolves it: $_SERVER, then $_ENV, then getenv(). */
+    private static function readEnv(string $name): ?string
+    {
+        $value = $_SERVER[$name] ?? $_ENV[$name] ?? null;
+        if ($value === null) {
+            $fromGetenv = getenv($name);
+            $value = $fromGetenv === false ? null : $fromGetenv;
+        }
+
+        return $value === null ? null : (string)$value;
+    }
+
+    /**
+     * Pin (or clear with null) an env var in every source env() consults. Touching
+     * only one of them is not enough: $_SERVER shadows $_ENV, so a leftover entry
+     * there would keep the old value visible.
+     */
+    private static function pinEnv(string $name, ?string $value): void
+    {
+        if ($value === null) {
+            unset($_ENV[$name], $_SERVER[$name]);
+            putenv($name);
+
+            return;
+        }
+
+        $_ENV[$name] = $value;
+        $_SERVER[$name] = $value;
+        putenv($name . '=' . $value);
     }
 }
