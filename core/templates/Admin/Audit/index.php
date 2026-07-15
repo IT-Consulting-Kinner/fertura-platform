@@ -12,8 +12,13 @@
 <h1 class="h3 mb-3"><?= h(__('admin.audit.title')) ?></h1>
 
 <?= $this->Form->create(null, ['type' => 'get', 'class' => 'row g-2 align-items-end mb-3']) ?>
-    <div class="col-auto"><label class="form-label small mb-0"><?= h(__('admin.audit.label_action')) ?></label>
-        <?= $this->Form->control('action', ['label' => false, 'value' => $action, 'class' => 'form-control form-control-sm', 'placeholder' => __('admin.audit.placeholder_contains')]) ?></div>
+    <div class="col-auto"><label class="form-label small mb-0" for="audit-action"><?= h(__('admin.audit.label_action')) ?></label>
+        <?php // Explicit text widget (not Form->control): control() would magically turn
+              // the field into a <select> from the plural view var $actions, producing a
+              // broken, unclearable dropdown. A free-text field with $actions as a
+              // <datalist> keeps the ILIKE "contains" filter and stays clearable. ?>
+        <?= $this->Form->text('action', ['id' => 'audit-action', 'value' => $action, 'class' => 'form-control form-control-sm', 'placeholder' => __('admin.audit.placeholder_contains'), 'list' => 'audit-action-options']) ?>
+        <datalist id="audit-action-options"><?php foreach ($actions as $a): ?><option value="<?= h((string)$a['action']) ?>"></option><?php endforeach; ?></datalist></div>
     <div class="col-auto"><label class="form-label small mb-0"><?= h(__('admin.audit.label_entity_type')) ?></label>
         <?= $this->Form->select('entity_type', array_column($entityTypes, 'entity_type', 'entity_type'),
             ['value' => $entityType, 'empty' => __('admin.audit.option_all'), 'class' => 'form-select form-select-sm']) ?></div>
