@@ -2,11 +2,15 @@
 /**
  * @var \App\View\AppView $this
  * @var list<array{module_key:string, name:string, version:string, enabled:bool}> $modules
+ * @var bool $moduleFree the operator tenant in a multi-tenant install: owns no modules
  */
 ?>
 <h1 class="h3 mb-3"><?= h(__('admin.tenant_modules.title')) ?></h1>
 <p class="text-muted small"><?= h(__('admin.tenant_modules.hint')) ?></p>
 
+<?php if (!empty($moduleFree)): ?>
+    <div class="alert alert-info"><?= h(__('admin.tenant_modules.operator_module_free')) ?></div>
+<?php else: ?>
 <table class="table table-sm table-hover align-middle">
     <thead><tr>
         <th scope="col"><?= h(__('admin.tenant_modules.col_module')) ?></th>
@@ -48,3 +52,4 @@
     <?php endif; ?>
     </tbody>
 </table>
+<?php endif; ?>

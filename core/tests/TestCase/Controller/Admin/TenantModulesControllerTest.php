@@ -72,6 +72,9 @@ class TenantModulesControllerTest extends TestCase
         // Deleting the module cascades its tenant_modules grants.
         $conn->execute('DELETE FROM modules WHERE module_key = :k', ['k' => self::MOD]);
         $conn->execute("DELETE FROM tenants WHERE key LIKE 'zztmctrl%'");
+        // Reset the global tenant-mode setting (this integration test writes it without
+        // a transaction, so it must be cleaned so other tests keep the single_org default).
+        $conn->execute("DELETE FROM settings WHERE namespace = 'core' AND config_key = 'tenancy.mode'");
     }
 
     private function login(): void
@@ -131,6 +134,32 @@ class TenantModulesControllerTest extends TestCase
                 ->execute("SELECT 1 FROM tenant_modules WHERE module_key = 'zznonexistent_mod'")
                 ->fetch(),
             'no grant is created for an unknown/inactive module',
+        );
+    }
+
+    public function testOperatorTenantCannotEnableModulesInMultiOrgMode(): void
+    {
+        // multi_org mode: the seeded admin is in the operator/default tenant, which then
+        // runs operator functions ONLY -> enabling a module for it is refused (operator-
+        // tenant design §5b, Option B). The global tenant_mode row is reset in cleanup().
+        $conn = ConnectionManager::get('default');
+        $conn->execute(
+            "INSERT INTO settings (namespace, config_key, value) VALUES ('core', 'tenancy.mode', to_jsonb('multi_org'::text))",
+        );
+
+        $this->login();
+        $this->enableCsrfToken();
+        $this->enableSecurityToken();
+        $this->post('/admin/tenant-modules/enable/' . self::MOD);
+
+        $this->assertRedirect(['action' => 'index']);
+        $this->assertFalse(
+            $conn->execute(
+                'SELECT 1 FROM tenant_modules WHERE module_key = :k '
+                . "AND tenant_id = '00000000-0000-0000-0000-000000000001' AND enabled",
+                ['k' => self::MOD],
+            )->fetch(),
+            'the operator tenant gets no module grant in multi_org mode',
         );
     }
 

@@ -25,4 +25,21 @@ class SettingsCatalogTest extends TestCase
         $this->assertNotEmpty($cat->validate('core', 'ai.timeout_seconds', 0));
         $this->assertNotEmpty($cat->validate('core', 'ai.timeout_seconds', 700));
     }
+
+    public function testTenantModeSettingRegisteredWithAllowedValues(): void
+    {
+        $cat = new SettingsCatalog();
+
+        // The TenantMode setting (operator-tenant design §5b): registered, default
+        // single_org (backward-compatible), constrained to the two allowed values.
+        $this->assertTrue($cat->isKnown('core', 'tenancy.mode'));
+        $this->assertSame('single_org', $cat->default('core', 'tenancy.mode'));
+
+        // Allowed values validate; anything else is rejected (the generic `allowed`
+        // allow-list check on the string type).
+        $this->assertSame([], $cat->validate('core', 'tenancy.mode', 'single_org'));
+        $this->assertSame([], $cat->validate('core', 'tenancy.mode', 'multi_org'));
+        $this->assertNotEmpty($cat->validate('core', 'tenancy.mode', 'bogus'));
+        $this->assertNotEmpty($cat->validate('core', 'tenancy.mode', 'MultiOrg'));
+    }
 }

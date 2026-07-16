@@ -1352,6 +1352,9 @@ msgstr "Disable module \"%s\" for this tenant? Users of this tenant will lose ac
 msgid "admin.tenant_modules.empty"
 msgstr "No modules installed."
 
+msgid "admin.tenant_modules.operator_module_free"
+msgstr "This is the operator tenant — it runs operator functions only. Modules are enabled and used per customer tenant."
+
 msgid "admin.tenant_modules.configure"
 msgstr "Configure"
 
@@ -1378,6 +1381,9 @@ msgstr "No tenant context."
 
 msgid "flash.tenant_modules.unknown_module"
 msgstr "Unknown or inactive module."
+
+msgid "flash.tenant_modules.operator_no_modules"
+msgstr "The operator tenant runs operator functions only; modules are enabled per customer tenant."
 
 msgid "flash.tenant_modules.configured"
 msgstr "Configuration saved."

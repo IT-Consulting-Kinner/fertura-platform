@@ -118,6 +118,91 @@ Neu: **Per-Tenant-Modul-Aktivierung + -Konfiguration.** Heute ist ein Modul glob
 Dies ist ein **eigener, substanzieller Increment** (berührt Web-Mount-Dispatch, Nav, Listener-
 Aktivierung) und der Core/Modul-Contract (Module liefern ihren Config-Vertrag).
 
+### 5a. Betriebsverhalten der Bereitstellung/Aktivierung (Stand 2026-07-03, entschieden)
+
+Zwei Ebenen, keine dritte:
+- **Betreiber „stellt bereit" = plattformweite Aktivierung** (`modules.status='active'`, operator-only
+  `ModulesController`). Damit ist das Modul für **alle** Mandanten *verfügbar*.
+- **Kundentenant-Admin „aktiviert + nutzt"** über `Mandant ▸ Module` (`TenantModulesController`,
+  tenant-scoped): er schaltet ein aktives Modul für **seinen** Tenant ein. `TenantModuleService`
+  ist strict opt-in / fail-closed (`isEnabled` / `ContractRegistry::gateByTenantModules`) — Web-Mounts,
+  Nav und **Event-Listener** greifen nur für Tenants mit einer `tenant_modules(enabled=true)`-Zeile.
+
+**Bewusste Entscheidung (2026-07-03): KEINE per-Kundentenant-Bereitstellungs-Ebene.** Jedes
+plattform-aktive Modul ist für **jeden** Tenant freischaltbar; der Betreiber steuert nicht pro
+Kundentenant, *welche* Module ein einzelner Tenant sehen/aktivieren darf (Tarif-/Vertrags-Gating ist
+bewusst nicht abgebildet). `TenantModuleService::listForTenant` zeigt jedem Tenant-Admin per LEFT JOIN
+**alle** aktiven Module — ein **neu angelegter** Mandant „erbt" damit automatisch die Sicht auf alle
+bereitgestellten (aktiven) Module und kann sie sofort aktivieren.
+
+**Konsequenzen (per Design, KEIN Bug):**
+- Ein **neu angelegter** Mandant startet mit **null aktivierten** Modulen — er *sieht* alle aktiven,
+  muss sie aber selbst aktivieren (Tenant-Opt-in). `TenantService::create()` schreibt bewusst keine
+  `tenant_modules`-Zeilen.
+- Ein **neu plattform-aktiviertes** Modul (z. B. die AI-Topologie ki_dienste + Bridges) ist sofort für
+  alle Tenants *aktivierbar*, aber pro Tenant **inert**, bis dessen Admin es aktiviert. Ein
+  integritätswahrender Konnektor (z. B. die Ticketing↔KB-Bridge) pflegt Referenzen erst ab Aktivierung
+  durch den Tenant.
+- Der einmalige Backfill in `CoreTenantModules` (2026-06-22) hat *damals* aktive Module × *damals*
+  existierende Tenants enabled (Upgrade-Kompatibilität); danach ist Aktivierung ausschließlich
+  Tenant-Aktion. Die Whole-Stack-Harness bildete das anfangs nicht ab (Test-Tenant ohne Enablement) →
+  im Harness-Test behoben, nicht im Core.
+
+### 5b. Betreiber-Tenant ist modul-frei im MultiOrg-Modus (Stand 2026-07-08, umgesetzt — Option B)
+
+**Bindende Anforderung:** Ein Admin im **Betreiber-Tenant** führt **ausschließlich Betreiber-Funktionen**
+aus; aktivierte Module und die damit verbundenen Funktionen sind **nur in den Kundentenants** verfügbar
+(und dort keine Betreiber-Funktionen). Die Gegenrichtung (Kundentenant → Betreiber-Funktion) war bereits
+durch das Operator-Tor (§1) erzwungen; **neu** ist die Richtung Betreiber-Tenant → **keine** Modul-Funktion.
+
+**Explizites App-Setting `core.tenancy.mode` steuert das Verhalten** (nicht der Tenant-Count):
+- `single_org` (**Default**, rückwärtskompatibel): der Default-Tenant behält seine historische
+  **Doppelrolle** (Betreiber **und** einziger Modul-Nutzer). Keine Trennung. Decision 185
+  „Single-Org = Default-Tenant, kein zweiter Code-Pfad" bleibt intakt.
+- `multi_org`: **strikte Trennung** — der Betreiber-/Default-Tenant ist **modul-frei**, Module leben nur in
+  Kundentenants.
+
+Das Setting ist im `SettingsCatalog` deklariert (`['type'=>'string','default'=>'single_org','allowed'=>['single_org','multi_org']]`);
+der neue generische `allowed`-Allow-List-Check in `SettingsCatalog::validate()` erzwingt die zwei Werte auf
+beiden Schreibpfaden (`SettingsManager::set` + `ConfigController::save`), und die Config-GUI rendert ein
+Dropdown (Template-else-if für `allowed`-Settings). Es ist ein **globales** (Operator-)Setting
+(`tenant_id NULL`), editierbar im `core_config`-Bereich.
+
+**Single Source of Truth — DB-Prädikat** (Migration `CoreTenantModuleFreeFunction`):
+```sql
+core.tenant_is_module_free(t uuid) :=
+    t = <default>
+    AND coalesce((SELECT s.value #>> '{}' FROM core.settings s
+                  WHERE s.namespace='core' AND s.config_key='tenancy.mode' AND s.tenant_id IS NULL),
+                 'single_org') = 'multi_org'
+```
+`core.settings` trägt keine RLS → die globale Zeile ist aus **jedem** Tenant-Kontext lesbar; das explizite
+`tenant_id IS NULL` liest tenant-neutral, sodass ein etwaiger Per-Tenant-Override den Modus nicht kippen
+kann. Fehlende Zeile → `coalesce` → `single_org` (Katalog-Default) → nicht modul-frei (**false**, nicht
+NULL). Ein NULL-Tenant-Argument bleibt falsy → jeder Aufrufer behält seine NULL-/no-tenant-Semantik.
+
+**Enforcement-Punkte (alle konsumieren dasselbe Prädikat — unverändert gegenüber der Count-Fassung):**
+- `TenantModuleService::isEnabled / enabledKeys / enabledModules` — `… AND NOT core.tenant_is_module_free(…)`:
+  Web-/API-Dispatch, Nav-Filterung und Consumption liefern für den Betreiber-Tenant (multi_org) nichts.
+- `ContractRegistry::gateByTenantModules` — droppt für den modul-freien Betreiber-Tenant **alle**
+  Modul-Contributions (Listener/Collectors/Provider); Core/Plattform-Contributions passieren weiter.
+- `TenantModuleService::enable` (+ `TenantModulesController`-GUI, i18n-Flash) — Enable im Betreiber-Tenant
+  wird abgewiesen (Service-Defense deckt auch Provisioning-Pfade).
+- **Nav** (`AdminNavBuilder::menu($areas, $isOperatorTenant)`): ein Kundentenant-Viewer sieht das
+  Betreiber-Realm nicht (nur die immer verfügbaren System-Seiten). Die Modul-Areas des Betreiber-Tenants
+  verschwinden ohnehin über das (nun modus-getriebene) Enablement-Gate; der Operator-Viewer braucht daher
+  keine zusätzliche Nav-Filterung.
+
+**Nicht-destruktiv / reversibel:** rein lesende Gatterung — bestehende `tenant_modules`-Zeilen des
+Betreiber-Tenants (z. B. aus dem `CoreTenantModules`-Backfill oder Single-Org-Nutzung) werden **nicht**
+gelöscht, sondern nur inert, solange `multi_org` gilt. Zurückstellen auf `single_org` reaktiviert die
+Doppelrolle sofort.
+
+**Bekannte, orthogonale Altlast (kein Bug dieser Änderung):** die Tenant-Consumer-Areas
+`tenant_modules`/`consumption`/`tenant_backup` stehen in `AdminController::NAV` + `TENANT_AREAS`, aber nicht
+in `AdminNavBuilder::ADMIN_ORDER` → sie erscheinen aktuell in keinem Top-Menü-Dropdown (nur per Direkt-URL
+erreichbar). Das ist eine **bestehende** Nav-Verdrahtungslücke und wird hier bewusst nicht mitbehoben.
+
 ## 6. Navigation
 
 Top-Menü wird zwei **Realms**:

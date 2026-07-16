@@ -128,6 +128,26 @@ class AuditExportServiceTest extends TestCase
         $this->assertSame(1, $this->exportCountAsRole('zztest.scoped', $b), 'tenant B sees only its own audit row');
     }
 
+    public function testOperatorGlobalIncludesNullTenantEventsButNotOtherTenants(): void
+    {
+        // A2: an operator reads own-tenant + operator-global (tenant_id IS NULL)
+        // platform events, but never another tenant's. The operator path
+        // (operatorGlobal = true) scopes explicitly in SQL over the privileged
+        // connection — proven here by seeding one row per bucket.
+        $a = $this->makeTenant('zzaud_opa');
+        $b = $this->makeTenant('zzaud_opb');
+        $this->seedForTenant('zztest.opscope', $a); // own-tenant event
+        $this->seedForTenant('zztest.opscope', $b); // OTHER tenant — must stay hidden
+        $this->seedGlobal('zztest.opscope');        // operator-global (tenant_id NULL)
+
+        $rows = iterator_to_array(
+            (new AuditExportService())->stream(['action' => 'zztest.opscope'], $a, true),
+        );
+
+        // Own-tenant row + the global row (2), but never tenant B's (would be 3).
+        $this->assertCount(2, $rows, 'operator sees own tenant + global, never another tenant');
+    }
+
     private function makeTenant(string $key): string
     {
         return (string)ConnectionManager::get('default')->execute(
@@ -144,6 +164,14 @@ class AuditExportServiceTest extends TestCase
         $conn->execute("SELECT set_config('app.current_tenant_id', :t, false)", ['t' => $tenantId]);
         (new AuditLogger())->log($action, 'zztest_entity', '019eb000-0000-7000-8000-0000000000aa', ['component' => 'core']);
         $conn->execute("SELECT set_config('app.current_tenant_id', '', false)");
+    }
+
+    private function seedGlobal(string $action): void
+    {
+        // Operator-global / system event: cleared context -> tenant_id defaults to NULL.
+        $conn = ConnectionManager::get('default');
+        $conn->execute("SELECT set_config('app.current_tenant_id', '', false)");
+        (new AuditLogger())->log($action, 'zztest_entity', '019eb000-0000-7000-8000-0000000000bb', ['component' => 'core']);
     }
 
     private function ensureRole(): void
