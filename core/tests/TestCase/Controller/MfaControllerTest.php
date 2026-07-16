@@ -83,6 +83,28 @@ class MfaControllerTest extends TestCase
         $this->assertNotEmpty($_SESSION['Mfa']['setup_secret'] ?? null);
     }
 
+    /**
+     * The self-service MFA views render inside the Fertura 'account' chrome
+     * (brand + logout), never the default CakePHP shell — regression for the
+     * index view rendering with the framework's default layout.
+     */
+    public function testViewsUseFerturaLayoutNotDefaultCakeShell(): void
+    {
+        $this->auth();
+        $this->get('/mfa');
+        $this->assertResponseOk();
+        $this->assertResponseContains('navbar-brand'); // account layout chrome
+        $this->assertResponseContains('/logout');
+        $this->assertResponseNotContains('CakePHP'); // default shell branding
+
+        // The POST-rendered setup view goes through the same beforeRender hook.
+        $this->auth();
+        $this->post('/mfa/setup');
+        $this->assertResponseOk();
+        $this->assertResponseContains('navbar-brand');
+        $this->assertResponseNotContains('CakePHP');
+    }
+
     public function testConfirmActivatesWithValidCodeAndRejectsInvalid(): void
     {
         $secret = Totp::generateSecret();

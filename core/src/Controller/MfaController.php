@@ -8,6 +8,7 @@ use App\Service\Security\MfaService;
 use App\Service\Security\Totp;
 use App\Service\Security\WebAuthnService;
 use Cake\Datasource\ConnectionManager;
+use Cake\Event\EventInterface;
 use Cake\Http\Response;
 use Throwable;
 
@@ -21,6 +22,20 @@ use Throwable;
  */
 class MfaController extends AppController
 {
+    /**
+     * Self-service chrome (identical to {@see AccountController}): all rendered
+     * MFA views live in the standalone 'account' layout — Fertura brand, locale
+     * switcher and the current user + logout — never the default CakePHP shell.
+     * The JSON/redirect actions return a Response directly and never render, so
+     * this hook does not touch them.
+     */
+    public function beforeRender(EventInterface $event): void
+    {
+        parent::beforeRender($event);
+        $this->set('currentUser', $this->identity());
+        $this->viewBuilder()->setLayout('account');
+    }
+
     public function index(): void
     {
         $mfa = new MfaService();
