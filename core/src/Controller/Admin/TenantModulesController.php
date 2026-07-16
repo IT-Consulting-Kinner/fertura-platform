@@ -5,6 +5,7 @@ namespace App\Controller\Admin;
 
 use App\Audit\AuditLogger;
 use App\Service\Module\TenantModuleService;
+use App\Service\Tenant\TenantService;
 use Cake\Datasource\ConnectionManager;
 use Cake\Http\Response;
 use RuntimeException;
@@ -29,8 +30,12 @@ class TenantModulesController extends AdminController
 
     public function index(): void
     {
-        $modules = (new TenantModuleService())->listForTenant($this->currentTenantId());
-        $this->set(compact('modules'));
+        // The operator/default tenant owns no modules in multi_org mode (operator-
+        // tenant design §5b): show the "no modules here" state instead of an
+        // un-enableable list. In single_org mode it is still the (only) module user.
+        $moduleFree = (new TenantService())->currentTenantIsModuleFree();
+        $modules = $moduleFree ? [] : (new TenantModuleService())->listForTenant($this->currentTenantId());
+        $this->set(compact('modules', 'moduleFree'));
     }
 
     public function enable(string $moduleKey): ?Response
@@ -57,6 +62,11 @@ class TenantModulesController extends AdminController
             // crafted POST enabling a stale/unknown key (disable is always safe).
             if ($enable && !$svc->isActiveModule($moduleKey)) {
                 throw new RuntimeException(__('flash.tenant_modules.unknown_module'));
+            }
+            // The operator/default tenant may not enable modules in multi_org mode
+            // (operator-tenant design §5b); the service enforces this too.
+            if ($enable && (new TenantService())->currentTenantIsModuleFree()) {
+                throw new RuntimeException(__('flash.tenant_modules.operator_no_modules'));
             }
             $enable ? $svc->enable($tenantId, $moduleKey) : $svc->disable($tenantId, $moduleKey);
             (new AuditLogger())->log(

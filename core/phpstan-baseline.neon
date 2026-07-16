@@ -1093,18 +1093,6 @@ parameters:
 			path: src/Service/Tenant/TenantConnectionResolver.php
 
 		-
-			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
-			identifier: method.notFound
-			count: 11
-			path: src/Service/Tenant/TenantService.php
-
-		-
-			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:transactional\(\)\.$#'
-			identifier: method.notFound
-			count: 1
-			path: src/Service/Tenant/TenantService.php
-
-		-
 			message: '#^Method App\\Service\\Tenant\\TenantService\:\:all\(\) should return list\<array\{id\: string, key\: string, name\: string, active\: bool\}\> but returns array\<array\{id\: string, key\: string, name\: string, active\: bool\}\>\.$#'
 			identifier: return.type
 			count: 1

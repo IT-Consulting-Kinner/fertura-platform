@@ -142,8 +142,9 @@ class AdminController extends AppController
         $this->set('currentUser', $identity);
         $this->set('userAreas', $this->userAreaKeys);
         $this->set('navAreas', (new AdminNavBuilder())->build($this->userAreaKeys));
-        // Top-menu dropdowns (Module / Administration) for the layout.
-        $this->set('topMenu', (new AdminNavBuilder())->menu($this->userAreaKeys));
+        // Top-menu dropdowns (Module / Administration) for the layout, narrowed to the
+        // viewer's tenant realm(s) (operator-tenant design §6/§5a).
+        $this->set('topMenu', $this->topMenuForViewer());
         $this->set('activeArea', $this->requiredArea);
         // Which top-menu entry (Dashboard/Module/Administration) is active. Nav
         // controllers override this per landing; module-lifecycle and module-
@@ -279,5 +280,19 @@ class AdminController extends AppController
         )->fetch('assoc');
 
         return $row !== false && ($row['ok'] === true || $row['ok'] === 't');
+    }
+
+    /**
+     * The top menu narrowed to the viewer's tenant realm(s): customer-tenant admins do
+     * not see the operator (Betreiber) realm, single-org / operator admins see both
+     * (operator-tenant design §6/§5a, {@see AdminNavBuilder::menu}). Module functions of
+     * an operator tenant in a multi-tenant install are already gone from the menu via
+     * the per-tenant enablement gate.
+     *
+     * @return array{module: array<string,array{label:string,items:list<array{0:string,1:string}>}>, administration: array<string,array{label:string,items:list<array{0:string,1:string}>}>}
+     */
+    protected function topMenuForViewer(): array
+    {
+        return (new AdminNavBuilder())->menu($this->userAreaKeys, $this->isOperatorTenant());
     }
 }

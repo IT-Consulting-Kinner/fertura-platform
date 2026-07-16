@@ -5,7 +5,7 @@ namespace App\Service\Tenant;
 
 use App\Audit\AuditLogger;
 use App\Infrastructure\Uuid;
-use Cake\Datasource\ConnectionInterface;
+use Cake\Database\Connection;
 use Cake\Datasource\ConnectionManager;
 use InvalidArgumentException;
 use Throwable;
@@ -28,9 +28,14 @@ class TenantService
     {
     }
 
-    private function conn(): ConnectionInterface
+    private function conn(): Connection
     {
-        return ConnectionManager::get('default');
+        // Narrow to the concrete Connection so execute()/transactional() resolve;
+        // ConnectionInterface intentionally omits them (cf. TenantModuleService).
+        /** @var \Cake\Database\Connection $conn */
+        $conn = ConnectionManager::get('default');
+
+        return $conn;
     }
 
     private function audit(): AuditLogger
@@ -54,6 +59,58 @@ class TenantService
         } catch (Throwable) {
             return null;
         }
+    }
+
+    /**
+     * Whether the CURRENT request tenant (RLS context) is the operator/default tenant.
+     * NULL/unset context yields false (fail-closed). Used to scope the admin nav realms
+     * to the viewer's tenant ({@see \App\Service\Admin\AdminNavBuilder::menu}).
+     */
+    public function currentTenantIsOperator(): bool
+    {
+        $row = $this->conn()->execute(
+            'SELECT core.current_tenant() = :d AS ok',
+            ['d' => self::DEFAULT_TENANT_ID],
+        )->fetch('assoc');
+
+        return $row !== false && ($row['ok'] === true || $row['ok'] === 't');
+    }
+
+    /**
+     * Whether $tenantId must be MODULE-FREE — it is the operator/default tenant AND the
+     * tenant topology mode is `multi_org` (the `core.tenancy.mode` app setting), so it
+     * runs operator functions only and may neither enable nor use modules (operator-
+     * tenant design §5b). In `single_org` mode (the default) nothing is module-free.
+     * Delegates to the DB predicate {@see \core.tenant_is_module_free} so the rule has a
+     * single source of truth. An invalid/unknown id is not module-free (callers keep
+     * their own no-tenant path).
+     */
+    public function isModuleFreeTenant(string $tenantId): bool
+    {
+        if (!Uuid::isValid($tenantId)) {
+            return false;
+        }
+        $row = $this->conn()->execute(
+            'SELECT core.tenant_is_module_free(:t) AS ok',
+            ['t' => $tenantId],
+        )->fetch('assoc');
+
+        return $row !== false && ($row['ok'] === true || $row['ok'] === 't');
+    }
+
+    /**
+     * Whether the CURRENT request tenant (RLS context) must be module-free
+     * ({@see isModuleFreeTenant}). False when no tenant context is set (the DB
+     * predicate is NULL for a NULL current tenant), so this never blocks the
+     * tenant-less/CLI path.
+     */
+    public function currentTenantIsModuleFree(): bool
+    {
+        $row = $this->conn()->execute(
+            'SELECT core.tenant_is_module_free(core.current_tenant()) AS ok',
+        )->fetch('assoc');
+
+        return $row !== false && ($row['ok'] === true || $row['ok'] === 't');
     }
 
     /**

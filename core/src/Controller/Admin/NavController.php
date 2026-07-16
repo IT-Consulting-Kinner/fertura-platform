@@ -24,7 +24,7 @@ class NavController extends AdminController
     /** "Module" landing: tiles for the module-contributed setting areas. */
     public function modules(): void
     {
-        $menu = (new AdminNavBuilder())->menu($this->userAreaKeys);
+        $menu = $this->topMenuForViewer();
         $this->set('heading', 'admin.nav.modules');
         $this->set('groups', $menu['module']);
         $this->set('metrics', $this->tileMetrics());
@@ -35,7 +35,7 @@ class NavController extends AdminController
     /** "Administration" landing: tiles for the Core admin areas + system. */
     public function administration(): void
     {
-        $menu = (new AdminNavBuilder())->menu($this->userAreaKeys);
+        $menu = $this->topMenuForViewer();
         $this->set('heading', 'admin.nav.administration');
         $this->set('groups', $menu['administration']);
         $this->set('metrics', $this->tileMetrics());

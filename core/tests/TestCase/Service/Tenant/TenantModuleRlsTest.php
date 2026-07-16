@@ -4,9 +4,11 @@ declare(strict_types=1);
 namespace App\Test\TestCase\Service\Tenant;
 
 use App\Service\Module\TenantModuleService;
+use App\Service\Tenant\TenantService;
 use Cake\Database\Connection;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\TestCase;
+use RuntimeException;
 
 /**
  * Per-tenant module enablement (operator/tenant authz §5, Increment 5.1,
@@ -106,6 +108,53 @@ class TenantModuleRlsTest extends TestCase
         } finally {
             $conn->rollback(); // discards the grants + the local tenant context
         }
+    }
+
+    public function testOperatorTenantIsModuleFreeInMultiOrgMode(): void
+    {
+        $operator = TenantService::DEFAULT_TENANT_ID;
+        $svc = new TenantModuleService();
+        $conn = $this->conn();
+        $conn->begin();
+        try {
+            $conn->execute(
+                'INSERT INTO tenant_modules (tenant_id, module_key, enabled) VALUES (:t, :k, true) '
+                . 'ON CONFLICT (tenant_id, module_key) DO UPDATE SET enabled = true',
+                ['t' => $operator, 'k' => self::MOD],
+            );
+            $conn->execute("SELECT set_config('app.current_tenant_id', :t, true)", ['t' => $operator]);
+
+            // single_org (the default): the operator tenant may use its module.
+            $this->assertTrue($svc->isEnabled(self::MOD), 'single_org: operator module enabled');
+
+            // multi_org: the operator/default tenant owns no modules — the enabled grant
+            // reads as NOT enabled (operator-tenant design §5b, Option B).
+            $this->setTenantMode('multi_org');
+            $this->assertFalse($svc->isEnabled(self::MOD), 'multi_org: operator owns no modules');
+            $this->assertSame([], $svc->enabledKeys());
+
+            // enable() refuses the operator tenant (defense; the GUI blocks it earlier).
+            $threw = false;
+            try {
+                $svc->enable($operator, self::MOD);
+            } catch (RuntimeException) {
+                $threw = true;
+            }
+            $this->assertTrue($threw, 'enabling a module for the operator tenant is refused in multi_org');
+        } finally {
+            $conn->rollback();
+        }
+    }
+
+    /** Sets the GLOBAL core.tenancy.mode setting (rolled back with the test tx). */
+    private function setTenantMode(string $mode): void
+    {
+        $conn = $this->conn();
+        $conn->execute("DELETE FROM settings WHERE namespace = 'core' AND config_key = 'tenancy.mode' AND tenant_id IS NULL");
+        $conn->execute(
+            "INSERT INTO settings (namespace, config_key, value) VALUES ('core', 'tenancy.mode', to_jsonb(:m::text))",
+            ['m' => $mode],
+        );
     }
 
     public function testGrantsAreTenantScopedUnderRls(): void
