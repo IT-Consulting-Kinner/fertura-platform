@@ -317,8 +317,13 @@ class ModuleLifecycle
      * into the managed locale store (i18n-4). Domain = manifest `locales.domain`
      * (defaults to the module key); signed -> reviewed (E38). On uninstall the
      * files are kept (there is no counterpart here).
+     *
+     * Public because the update path (UpdateManager::updateModule) must import
+     * the NEW version's pack too — the store is version-keyed, so without this
+     * every module update left the new version without a language pack and the
+     * module's i18n domain silently degraded to raw keys.
      */
-    private function importPackageLocales(string $sourcePath, ModuleManifest $manifest, bool $signed): void
+    public function importPackageLocales(string $sourcePath, ModuleManifest $manifest, bool $signed): void
     {
         $domain = $manifest->locales()['domain'];
         $base = rtrim($sourcePath, '/') . '/locales';

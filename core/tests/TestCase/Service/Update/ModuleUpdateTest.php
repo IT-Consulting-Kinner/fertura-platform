@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Test\TestCase\Service\Update;
 
+use App\Service\I18n\LanguagePackStore;
 use App\Service\Module\LifecycleException;
 use App\Service\Module\ModuleLifecycle;
 use App\Service\Settings\SettingsManager;
@@ -139,6 +140,26 @@ class ModuleUpdateTest extends TestCase
         $this->assertSame([], $this->recovery->calls, 'Ohne ausstehende Migrationen kein Wiederherstellungspunkt.');
     }
 
+    public function testUpdateImportsLanguagePackForNewVersion(): void
+    {
+        // Both packages ship a locale file (locales/de_DE/<key>.po).
+        $this->addLocale($this->v1, '1.0.0');
+        $this->addLocale($this->v2, '1.1.0');
+        (new ModuleLifecycle())->install($this->v1);
+
+        $this->manager()->updateModule(self::KEY, $this->v2);
+
+        // The managed locale store is version-keyed: the update must import the
+        // NEW version's pack (install imported only 1.0.0) — otherwise the
+        // module's i18n domain resolves to nothing after the update and every
+        // runtime string degrades to its raw key.
+        $row = ConnectionManager::get('default')->execute(
+            "SELECT id FROM language_packs WHERE component_key = :k AND version = '1.1.0' AND locale = 'de_DE'",
+            ['k' => self::KEY],
+        )->fetch('assoc');
+        $this->assertNotEmpty($row, 'Sprachpaket der neuen Version muss beim Update importiert werden.');
+    }
+
     public function testFailedUpdateRollsBackVersionAndPreservesInstalledData(): void
     {
         (new ModuleLifecycle())->install($this->v1);
@@ -195,6 +216,16 @@ class ModuleUpdateTest extends TestCase
         return $dir;
     }
 
+    /** Ships a minimal de_DE catalog with the package (domain = module key). */
+    private function addLocale(string $dir, string $version): void
+    {
+        @mkdir($dir . '/locales/de_DE', 0o775, true);
+        file_put_contents(
+            $dir . '/locales/de_DE/' . self::KEY . '.po',
+            "msgid \"\"\nmsgstr \"\"\n\nmsgid \"t.title\"\nmsgstr \"Titel $version\"\n",
+        );
+    }
+
     private function cleanup(): void
     {
         $conn = ConnectionManager::get('default');
@@ -208,6 +239,7 @@ class ModuleUpdateTest extends TestCase
             'DELETE FROM contracts WHERE owner_module_key = :k',
             'DELETE FROM resources WHERE module_key = :k',
             'DELETE FROM update_history WHERE component_key = :k',
+            'DELETE FROM language_packs WHERE component_key = :k',
             'DELETE FROM modules WHERE module_key = :k',
             ] as $sql
         ) {
@@ -218,6 +250,7 @@ class ModuleUpdateTest extends TestCase
         }
         $this->rrmdir(ROOT . '/modules/' . self::KEY);
         $this->rrmdir(ROOT . '/modules/' . self::KEY . '.bak');
+        $this->rrmdir((new LanguagePackStore())->base() . '/' . self::KEY);
     }
 
     private function rrmdir(string $path): void

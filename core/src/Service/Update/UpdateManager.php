@@ -8,6 +8,7 @@ use App\Audit\AuditLogger;
 use App\Infrastructure\Db;
 use App\Model\Entity\ContractRegistration;
 use App\Service\Module\LifecycleException;
+use App\Service\Module\ModuleLifecycle;
 use App\Service\Module\ModuleTableRls;
 use App\Service\Module\ModuleManifest;
 use App\Service\Module\ModuleMigrationRunner;
@@ -183,7 +184,7 @@ class UpdateManager
                 throw new LifecycleException("Paket gehört nicht zu Modul $key (id={$manifest->key()}).");
             }
 
-            $this->verify($newSourcePath, $manifest);
+            $signed = $this->verify($newSourcePath, $manifest);
             $errors = $manifest->validate($this->coreVersion);
             if ($errors !== []) {
                 throw new LifecycleException('Manifest ungültig: ' . implode(' ', $errors));
@@ -242,6 +243,13 @@ class UpdateManager
                     $this->reactivateRegistrations($key, $manifest, $newVersion);
                     $this->conn()->execute("UPDATE modules SET status = 'active' WHERE module_key = :k", ['k' => $key]);
                 }
+
+                // Import the NEW version's language files into the managed locale
+                // store. The store is version-keyed and the install path imports on
+                // install (ModuleLifecycle) — without this, every update left the
+                // new version pack-less and the module's i18n domain silently fell
+                // back to raw keys (found live after knowledgebase 0.3.1 -> 0.3.2).
+                (new ModuleLifecycle())->importPackageLocales($targetPath, $manifest, $signed);
 
                 $this->removeDir($backupPath);
                 $this->recordHistory('module', $key, $oldVersion, $newVersion, 'success', null, $recoveryPath, $manifest->isSecurityUpdate(), $manifest->severity());
@@ -403,16 +411,23 @@ class UpdateManager
         );
     }
 
-    private function verify(string $sourcePath, ModuleManifest $manifest): void
+    /**
+     * Verifies the package signature when required. Returns whether the package
+     * was actually verified (false = requirement disabled) — mirrors the install
+     * path's signed/reviewed semantics for imported language packs.
+     */
+    private function verify(string $sourcePath, ModuleManifest $manifest): bool
     {
         if (!(bool)$this->settings->get('core', 'require_module_signature', true)) {
-            return;
+            return false;
         }
         try {
             $this->verifier->verify($sourcePath, $manifest->publisher());
         } catch (PackageVerificationException $e) {
             throw new LifecycleException('Signaturprüfung fehlgeschlagen: ' . $e->getMessage());
         }
+
+        return true;
     }
 
     /**
