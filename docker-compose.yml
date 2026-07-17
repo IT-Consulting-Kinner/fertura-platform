@@ -89,6 +89,17 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    # Healthy only once the entrypoint bootstrap has finished: composer install ->
+    # migrations -> `exec php-fpm` run in order, so php-fpm accepting FastCGI on
+    # :9000 means the whole stack is up. Lets consumer CIs (module integration
+    # harnesses) `docker compose up --wait` instead of racing the bootstrap. Local
+    # `up` is unchanged: web/worker still gate only on their existing depends_on.
+    healthcheck:
+      test: ["CMD-SHELL", "php -r '$$c=@fsockopen(\"127.0.0.1\",9000,$$e,$$s,1);exit($$c?0:1);'"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 120s
 
   web:
     image: nginx:1.27-alpine
