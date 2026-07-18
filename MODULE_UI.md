@@ -52,6 +52,32 @@ Innerhalb eines vom Modul geöffneten `Form->create()/end()`:
 <?= $this->Form->end() ?>
 ```
 
+### Inline-Accordion (Liste zuerst, Formular eingeklappt)
+
+Das Core-Admin-Idiom für Anlege-/Bearbeitungsformulare auf Listenseiten:
+`formAccordion($titel, $bodyHtml, $options)` rendert das Bootstrap-Accordion-
+Chrome, damit kein Modul es je Template von Hand baut. `$bodyHtml` ist
+fertiges HTML (typisch das komplette Formular von oben) und wird **roh**
+ausgegeben; der Titel wird escaped. Das nötige Collapse-JS
+(`bootstrap.bundle.min`) laden Admin-Shell und Modul-Layout bereits.
+
+```php
+<?php ob_start(); ?>
+<?= $this->Form->create() ?>
+<?= $this->UiKit->fields([/* wie oben */]) ?>
+<?= $this->Form->button(__('Speichern')) ?>
+<?= $this->Form->end() ?>
+<?= $this->UiKit->formAccordion(__('Neu anlegen'), (string)ob_get_clean(), [
+    // 'open' => true  — z. B. im Edit-Modus oder nach Validierungsfehlern,
+    // damit sich das vorbefüllte Formular nicht selbst versteckt.
+    'open' => (bool)($edit ?? false),
+]) ?>
+```
+
+Standard ist eingeklappt (`open => false`) — die Liste bleibt zuerst sichtbar.
+Mehrere Accordions pro Seite bekommen automatisch eindeutige IDs; ein eigenes
+`'id'` ist nur nötig, wenn ein stabiler Anker gebraucht wird.
+
 ## Einzelwert
 
 `$this->UiKit->value($v, 'bool'|'code'|'datetime'|'badge'|'text')` formatiert einen

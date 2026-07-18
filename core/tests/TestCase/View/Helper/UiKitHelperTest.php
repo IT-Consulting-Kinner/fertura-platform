@@ -58,6 +58,43 @@ class UiKitHelperTest extends TestCase
         $this->assertStringNotContainsString('&amp;quot;', $html); // NOT double-escaped
     }
 
+    public function testFormAccordionRendersCollapsedByDefaultWithUniqueIds(): void
+    {
+        $first = $this->ui->formAccordion('Neu anlegen', '<form id="f1"></form>');
+        $second = $this->ui->formAccordion('Bearbeiten', '<form id="f2"></form>');
+
+        // Collapsed by default: list first, Bootstrap toggles via the bundle JS.
+        $this->assertStringContainsString('accordion-button collapsed', $first);
+        $this->assertStringContainsString('aria-expanded="false"', $first);
+        $this->assertStringContainsString('data-bs-toggle="collapse"', $first);
+        $this->assertStringContainsString('class="accordion-collapse collapse"', $first);
+        // Body HTML is caller-produced and passes through RAW.
+        $this->assertStringContainsString('<form id="f1"></form>', $first);
+
+        // Auto ids stay unique across multiple accordions on one page, and the
+        // toggle targets exactly its own body.
+        preg_match('/id="(uikit-accordion-\d+)"/', $first, $m1);
+        preg_match('/id="(uikit-accordion-\d+)"/', $second, $m2);
+        $this->assertNotSame($m1[1], $m2[1]);
+        $this->assertStringContainsString('data-bs-target="#' . $m1[1] . '-body"', $first);
+        $this->assertStringContainsString('aria-controls="' . $m1[1] . '-body"', $first);
+    }
+
+    public function testFormAccordionOpenRendersExpandedAndEscapesTitle(): void
+    {
+        // Edit mode ('open') must not hide its own prefilled form behind a fold.
+        $html = $this->ui->formAccordion('Edit "<b>x</b>"', '<form></form>', ['open' => true, 'id' => 'acc-edit']);
+
+        $this->assertStringContainsString('aria-expanded="true"', $html);
+        $this->assertStringContainsString('accordion-collapse collapse show', $html);
+        $this->assertStringNotContainsString('accordion-button collapsed', $html);
+        $this->assertStringContainsString('id="acc-edit"', $html);
+        $this->assertStringContainsString('data-bs-target="#acc-edit-body"', $html);
+        // Title is data -> escaped; body stays raw.
+        $this->assertStringNotContainsString('<b>x</b>', str_replace('<form></form>', '', $html));
+        $this->assertStringContainsString('&lt;b&gt;', $html);
+    }
+
     public function testIndexEmptyState(): void
     {
         $html = $this->ui->index([], [['key' => 'a', 'label' => 'A']], ['empty' => 'Nichts da']);

@@ -201,6 +201,46 @@ class UiKitHelper extends Helper
     }
 
     /**
+     * Bootstrap accordion around an inline create/edit form — the Core admin
+     * idiom (list first, form folded; cf. templates/Admin/Localization/index.php),
+     * so modules stop hand-rolling the card/accordion chrome per template.
+     *
+     * `$bodyHtml` is finished, caller-produced HTML (typically
+     * `Form->create()` + `UiKit->fields()` + `Form->end()`) and is emitted RAW;
+     * the title is escaped. The Bootstrap Collapse JS this relies on
+     * (`bootstrap.bundle.min`) is loaded by both the admin shell and the module
+     * layout, so the accordion works on every module-rendered page.
+     *
+     * Options:
+     *   - `open` (bool, default false): render expanded — e.g. when redisplaying
+     *     a prefilled edit or validation-failed form, so the form does not hide
+     *     itself. Collapsed by default keeps the list first.
+     *   - `id` (string): explicit id prefix when a stable anchor is needed;
+     *     defaults to an auto-incremented unique id (multiple accordions per page).
+     *
+     * @param array<string,mixed> $options
+     */
+    public function formAccordion(string $title, string $bodyHtml, array $options = []): string
+    {
+        $open = (bool)($options['open'] ?? false);
+        $id = (string)($options['id'] ?? ('uikit-accordion-' . ++self::$accordionSeq));
+        $bodyId = $id . '-body';
+
+        return '<div class="accordion mb-4" id="' . h($id) . '"><div class="accordion-item">'
+            . '<h2 class="accordion-header">'
+            . '<button class="accordion-button' . ($open ? '' : ' collapsed') . '" type="button"'
+            . ' data-bs-toggle="collapse" data-bs-target="#' . h($bodyId) . '"'
+            . ' aria-expanded="' . ($open ? 'true' : 'false') . '" aria-controls="' . h($bodyId) . '">'
+            . h($title) . '</button></h2>'
+            . '<div id="' . h($bodyId) . '" class="accordion-collapse collapse' . ($open ? ' show' : '') . '">'
+            . '<div class="accordion-body">' . $bodyHtml . '</div>'
+            . '</div></div></div>';
+    }
+
+    /** Per-request sequence for unique {@see formAccordion()} ids. */
+    private static int $accordionSeq = 0;
+
+    /**
      * Sortable column header: a link that toggles between ascending/descending,
      * with a direction arrow. `$query` = current query parameters (with `sort`/`dir`).
      *
