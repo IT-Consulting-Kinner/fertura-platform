@@ -641,6 +641,24 @@ msgstr "Permissions revoked."
 msgid "flash.group.perms_set"
 msgstr "Permissions set."
 
+msgid "admin.users.col_groups"
+msgstr "Groups"
+
+msgid "admin.users.field_group"
+msgstr "Group"
+
+msgid "admin.users.field_group_choose"
+msgstr "– choose group –"
+
+msgid "admin.users.no_group"
+msgstr "no group"
+
+msgid "admin.users.no_groups_hint"
+msgstr "No active group exists yet. Create a group first (or run bin/cake group_init), then create users."
+
+msgid "flash.user.group_required"
+msgstr "Please choose an active group – users without a group are not allowed."
+
 # === Cluster 4: Config / Marketplace / Updates / Mail / PasswordReset ===
 msgid "admin.config.title"
 msgstr "Configuration"

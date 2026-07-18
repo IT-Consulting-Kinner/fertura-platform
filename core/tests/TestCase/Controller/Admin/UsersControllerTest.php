@@ -60,6 +60,12 @@ class UsersControllerTest extends TestCase
             'DELETE FROM user_admin_areas WHERE user_id IN '
             . "(SELECT id FROM users WHERE email LIKE '%@zzusers.local')",
         );
+        // Test groups (mandatory-group flow) incl. their membership rows.
+        $conn->execute(
+            'DELETE FROM groups_users WHERE group_id IN '
+            . "(SELECT id FROM \"groups\" WHERE name LIKE 'zzusers_grp_%')",
+        );
+        $conn->execute("DELETE FROM \"groups\" WHERE name LIKE 'zzusers_grp_%'");
         $conn->execute("DELETE FROM users WHERE email LIKE '%@zzusers.local'");
         // Foreign tenants seeded by the cross-tenant isolation test (after their users).
         $conn->execute("DELETE FROM tenants WHERE key LIKE 'zzt_other_%'");
@@ -133,22 +139,59 @@ class UsersControllerTest extends TestCase
         $this->assertRedirect(['action' => 'index']);
     }
 
-    public function testAddCreatesInvitedUser(): void
+    /** Creates an active group in the acting admin's (default) tenant. */
+    private function makeGroup(): string
+    {
+        return (string)ConnectionManager::get('default')->execute(
+            'INSERT INTO "groups" (name, tenant_id) VALUES (:n, '
+            . "'00000000-0000-0000-0000-000000000001') RETURNING id",
+            ['n' => 'zzusers_grp_' . bin2hex(random_bytes(3))],
+        )->fetch('assoc')['id'];
+    }
+
+    public function testAddCreatesInvitedUserWithGroupMembership(): void
     {
         $this->login();
+        $groupId = $this->makeGroup();
         $email = 'newuser_' . bin2hex(random_bytes(3)) . '@zzusers.local';
         $this->post('/admin/users/add', [
             'username' => 'zztest_new_' . bin2hex(random_bytes(3)),
             'email' => $email,
+            'group_id' => $groupId,
         ]);
 
         $this->assertRedirect(['action' => 'index']);
         $row = ConnectionManager::get('default')->execute(
-            'SELECT status FROM users WHERE email = :e',
+            'SELECT id, status FROM users WHERE email = :e',
             ['e' => $email],
         )->fetch('assoc');
         $this->assertNotFalse($row);
         $this->assertSame('invited', $row['status']); // invitation instead of directly active
+        // Mandatory group: the membership row exists right after creation.
+        $member = ConnectionManager::get('default')->execute(
+            'SELECT 1 FROM groups_users WHERE group_id = :g AND user_id = :u',
+            ['g' => $groupId, 'u' => $row['id']],
+        )->fetch();
+        $this->assertNotFalse($member, 'new user is a member of the chosen group');
+    }
+
+    public function testAddWithoutGroupIsRejected(): void
+    {
+        // No group-less users: omitting (or faking) the group re-renders the
+        // form with an error and creates nothing.
+        $this->login();
+        $email = 'nogroup_' . bin2hex(random_bytes(3)) . '@zzusers.local';
+        $this->post('/admin/users/add', [
+            'username' => 'zztest_nogroup_' . bin2hex(random_bytes(3)),
+            'email' => $email,
+        ]);
+
+        $this->assertResponseOk(); // re-render, not a success redirect
+        $row = ConnectionManager::get('default')->execute(
+            'SELECT 1 FROM users WHERE email = :e',
+            ['e' => $email],
+        )->fetch();
+        $this->assertFalse($row, 'no user was created without a group');
     }
 
     public function testAddRejectsDuplicateEmailWithCleanError(): void
@@ -167,6 +210,7 @@ class UsersControllerTest extends TestCase
         $this->post('/admin/users/add', [
             'username' => 'zztest_dupemail_' . bin2hex(random_bytes(3)),
             'email' => strtoupper($email), // same email, different case
+            'group_id' => $this->makeGroup(), // valid group -> reaches the email rule
         ]);
 
         $this->assertResponseOk(); // re-render with inline error, NOT a redirect (success) or 500
