@@ -12,6 +12,9 @@
 <h1 class="h3 mb-3"><?= h(__('admin.audit.title')) ?></h1>
 
 <?= $this->Form->create(null, ['type' => 'get', 'class' => 'row g-2 align-items-end mb-3']) ?>
+    <?php // Marker: this GET submit is an active state change -> the controller
+          // persists the filters + page size as this user's list preference. ?>
+    <?= $this->Form->hidden('_lp', ['value' => 1]) ?>
     <div class="col-auto"><label class="form-label small mb-0" for="audit-action"><?= h(__('admin.audit.label_action')) ?></label>
         <?php // Explicit text widget (not Form->control): control() would magically turn
               // the field into a <select> from the plural view var $actions, producing a
@@ -24,9 +27,11 @@
             ['value' => $entityType, 'empty' => __('admin.audit.option_all'), 'class' => 'form-select form-select-sm']) ?></div>
     <div class="col-auto"><label class="form-label small mb-0"><?= h(__('admin.audit.label_module')) ?></label>
         <?= $this->Form->control('module_key', ['label' => false, 'value' => $moduleKey, 'class' => 'form-control form-control-sm']) ?></div>
+    <?= $this->UiKit->perPageSelect($perPage) ?>
     <div class="col-auto">
         <?= $this->Form->button(__('admin.audit.btn_filter'), ['class' => 'btn btn-primary btn-sm']) ?>
-        <?= $this->Html->link(__('admin.audit.btn_reset'), ['action' => 'index'], ['class' => 'btn btn-outline-secondary btn-sm']) ?>
+        <?php // Reset carries the marker with empty filters -> persists the cleared state. ?>
+        <?= $this->Html->link(__('admin.audit.btn_reset'), ['action' => 'index', '?' => ['_lp' => 1]], ['class' => 'btn btn-outline-secondary btn-sm']) ?>
         <?= $this->Html->link(
             __('admin.audit.btn_export'),
             ['action' => 'export', '?' => ['action' => $action, 'entity_type' => $entityType, 'module_key' => $moduleKey]],

@@ -6,6 +6,7 @@ namespace App\Controller\Admin;
 use App\Controller\AppController;
 use App\Infrastructure\Uuid;
 use App\Service\Admin\AdminNavBuilder;
+use App\Service\Admin\ListPrefsService;
 use App\Service\Tenant\TenantService;
 use Cake\Datasource\ConnectionManager;
 use Cake\Event\EventInterface;
@@ -222,6 +223,88 @@ class AdminController extends AppController
         )->fetchAll('assoc');
 
         return array_map(static fn($r) => (string)$r['admin_area_key'], $rows);
+    }
+
+    /** The acting admin's user id, or '' when unauthenticated (fail-closed). */
+    protected function actingUserId(): string
+    {
+        $id = $this->identity()?->getIdentifier();
+
+        return is_scalar($id) ? (string)$id : '';
+    }
+
+    /**
+     * Resolves the effective state of a paginated admin list from the request +
+     * the user's STORED per-list preferences (Paket 2). A visit that carries the
+     * `_lp` marker (filter submit, reset, pagination link) is authoritative and
+     * is PERSISTED; a fresh visit without it reapplies the stored state. So a
+     * user's chosen filters and page size survive navigating away and back.
+     *
+     * `page` always comes from the request (never persisted). `per_page` is
+     * clamped to `$perPageOptions`. Returns the effective filters/per_page/page
+     * plus the query bag to hand to `UiKit->paginate()` so its links carry the
+     * state forward.
+     *
+     * @param list<string> $filterKeys the filter query params this list understands
+     * @param list<int> $perPageOptions
+     * @return array{
+     *   filters: array<string,string>, per_page: int, page: int,
+     *   query: array<string,mixed>
+     * }
+     */
+    protected function resolveListState(
+        string $listKey,
+        array $filterKeys,
+        int $defaultPerPage = 50,
+        array $perPageOptions = [25, 50, 100, 200],
+    ): array {
+        $req = $this->getRequest();
+        $userId = $this->actingUserId();
+        $service = new ListPrefsService();
+        // The request is an active state change (its query is authoritative and
+        // gets persisted) when it carries ANY relevant param: the `_lp` marker
+        // (used by the reset link to force an authoritative EMPTY state), a
+        // per_page choice, or any filter key — even one present-but-empty, so an
+        // explicit "clear this filter" is honoured. A truly bare visit carries
+        // none of these and reapplies the stored preference instead.
+        $active = $req->getQuery('_lp') !== null || $req->getQuery('per_page') !== null;
+        foreach ($filterKeys as $k) {
+            if ($req->getQuery($k) !== null) {
+                $active = true;
+                break;
+            }
+        }
+
+        $filters = [];
+        if ($active) {
+            foreach ($filterKeys as $k) {
+                $filters[$k] = trim((string)$req->getQuery($k, ''));
+            }
+            $perPage = (int)$req->getQuery('per_page', (string)$defaultPerPage);
+            if (!in_array($perPage, $perPageOptions, true)) {
+                $perPage = $defaultPerPage;
+            }
+            if ($userId !== '') {
+                $service->save($userId, $listKey, $perPage, $filters);
+            }
+        } else {
+            $stored = $userId !== '' ? $service->load($userId, $listKey) : ['per_page' => null, 'filters' => []];
+            foreach ($filterKeys as $k) {
+                $filters[$k] = (string)($stored['filters'][$k] ?? '');
+            }
+            $perPage = $stored['per_page'] ?? $defaultPerPage;
+            if (!in_array($perPage, $perPageOptions, true)) {
+                $perPage = $defaultPerPage;
+            }
+        }
+
+        $page = max(1, (int)$req->getQuery('page', '1'));
+        // Query bag for pagination links: the active filters + per_page + the
+        // marker, so paging keeps the state (and re-persists it) without the
+        // template needing to know the storage mechanism.
+        $query = array_filter($filters, static fn($v) => $v !== '') + ['per_page' => $perPage, '_lp' => 1];
+
+        return ['filters' => $filters, 'per_page' => $perPage, 'page' => $page, 'query' => $query];
     }
 
     /**

@@ -1218,6 +1218,8 @@ msgstr "Actions"
 
 msgid "uikit.filter"
 msgstr "Filter"
+msgid "uikit.per_page"
+msgstr "Per page"
 
 msgid "uikit.ref_open"
 msgstr "Open in new tab"

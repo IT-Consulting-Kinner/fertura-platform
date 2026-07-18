@@ -107,12 +107,29 @@ class AuditFilterResetTest extends TestCase
         $this->assertRowNotListed('zztest.beta');
         $this->assertSame('zztest.alpha', $this->actionInputValue());
 
-        // 2) Reset link (no query) -> filter cleared: BOTH rows listed, input empty.
-        $this->get('/admin/audit');
+        // 2) Reset link (?_lp=1, no filter values) -> the persisted filter is
+        // cleared (Paket 2): BOTH rows listed, input empty. A bare visit would
+        // now REAPPLY the stored filter, so reset must carry the marker.
+        $this->get('/admin/audit?_lp=1');
         $this->assertResponseOk();
         $this->assertRowListed('zztest.alpha');
         $this->assertRowListed('zztest.beta');
         $this->assertSame('', $this->actionInputValue());
+    }
+
+    public function testBareVisitReappliesStoredFilter(): void
+    {
+        // Paket 2: after filtering, navigating away and back (a bare visit with
+        // no query) reapplies the stored filter for this user.
+        $this->login();
+        $this->get('/admin/audit?action=zztest.alpha');
+        $this->assertRowNotListed('zztest.beta');
+
+        $this->get('/admin/audit'); // bare -> stored filter reapplied
+        $this->assertResponseOk();
+        $this->assertRowListed('zztest.alpha');
+        $this->assertRowNotListed('zztest.beta');
+        $this->assertSame('zztest.alpha', $this->actionInputValue());
     }
 
     public function testExplicitEmptyActionClearsFilter(): void

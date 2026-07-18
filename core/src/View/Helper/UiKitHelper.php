@@ -442,6 +442,35 @@ class UiKitHelper extends Helper
     }
 
     /**
+     * "Entries per page" select for a paginated list (Paket 2). Renders inside a
+     * caller-opened GET form; on change it auto-submits (a tiny inline handler,
+     * consistent with the locale switcher) so the page reloads with the new page
+     * size. Emit the `_lp` marker as a hidden field in the same form so the
+     * controller persists the choice ({@see AdminController::resolveListState}).
+     *
+     * @param list<int> $options
+     */
+    public function perPageSelect(int $current, array $options = [25, 50, 100, 200]): string
+    {
+        $opts = [];
+        foreach ($options as $n) {
+            $opts[(string)$n] = (string)$n;
+        }
+        // PHP normalizes the numeric string keys back to int; FormHelper::select
+        // renders them fine, but its stub expects string keys.
+        // @phpstan-ignore-next-line argument.type
+        $select = $this->Form->select('per_page', $opts, [
+            'id' => 'uikit-per-page',
+            'value' => $current,
+            'class' => 'form-select form-select-sm',
+            'onchange' => 'this.form.requestSubmit()',
+        ]);
+
+        return '<div class="col-auto"><label class="form-label small mb-0" for="uikit-per-page">'
+            . h(__d('default', 'uikit.per_page')) . '</label>' . $select . '</div>';
+    }
+
+    /**
      * @param array<string,mixed>|string|null $url
      * @param array<string,mixed> $query
      */

@@ -21,9 +21,12 @@ class AuditController extends AdminController
 
     public function index(): void
     {
-        $action = trim((string)$this->request->getQuery('action'));
-        $entityType = trim((string)$this->request->getQuery('entity_type'));
-        $moduleKey = trim((string)$this->request->getQuery('module_key'));
+        // Per-user list preferences (Paket 2): the filter values and page size
+        // are stored and reapplied on the next visit.
+        $state = $this->resolveListState('audit', ['action', 'entity_type', 'module_key']);
+        $action = trim($state['filters']['action']);
+        $entityType = trim($state['filters']['entity_type']);
+        $moduleKey = trim($state['filters']['module_key']);
 
         $where = [];
         $params = [];
@@ -60,9 +63,10 @@ class AuditController extends AdminController
         $whereSql = $where !== [] ? ' WHERE ' . implode(' AND ', $where) : '';
 
         // Paginated instead of a hard LIMIT 100 (older entries were only reachable
-        // via the NDJSON export). The filters carry into the page links (view).
-        $perPage = 50;
-        $page = max(1, (int)$this->request->getQuery('page', 1));
+        // via the NDJSON export). Page size + filters come from the stored list
+        // preferences; the filters carry into the page links (view).
+        $perPage = $state['per_page'];
+        $page = $state['page'];
         $total = (int)($conn->execute('SELECT count(*) c FROM audit_log a' . $whereSql, $params)->fetch('assoc')['c'] ?? 0);
         $offset = ($page - 1) * $perPage;
 
@@ -82,7 +86,9 @@ class AuditController extends AdminController
 
         $this->set(compact('entries', 'actions', 'entityTypes', 'action', 'entityType', 'moduleKey', 'page', 'total'));
         $this->set('perPage', $perPage);
-        $this->set('query', $this->request->getQueryParams());
+        // Pagination links carry the active filters + per_page + the `_lp` marker
+        // so paging keeps (and re-persists) the state.
+        $this->set('query', $state['query']);
     }
 
     /**

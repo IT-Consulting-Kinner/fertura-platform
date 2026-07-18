@@ -1214,6 +1214,8 @@ msgstr "Aktionen"
 
 msgid "uikit.filter"
 msgstr "Filtern"
+msgid "uikit.per_page"
+msgstr "Pro Seite"
 
 msgid "uikit.ref_open"
 msgstr "In neuem Tab öffnen"
