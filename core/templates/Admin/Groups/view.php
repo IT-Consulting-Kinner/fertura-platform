@@ -4,11 +4,19 @@
  * @var array<string, mixed> $group
  * @var array<int, array<string, mixed>> $members
  * @var array<int, array<string, mixed>> $candidates
- * @var array<int, array<string, mixed>> $permissions
- * @var array<int, array<string, mixed>> $resources
+ * @var array<string, array<string, mixed>> $grants          Class-level grant per "module::type".
+ * @var array<string, array{name: string, resources: array<int, array<string, mixed>>}> $resourceGroups
  */
 $active = filter_var($group['active'], FILTER_VALIDATE_BOOLEAN);
-$flag = static fn ($v) => filter_var($v, FILTER_VALIDATE_BOOLEAN) ? '✓' : '–';
+$truthy = static fn ($v) => filter_var($v ?? false, FILTER_VALIDATE_BOOLEAN);
+// Module-domain label with fallback: __d() returns the key untranslated, then
+// the technical name from the registry is shown instead (hand-off: modules ship
+// perm.resource.<type> / perm.action.<name> in their language packs).
+$dLabel = static function (string $domain, string $key, string $fallback): string {
+    $t = __d($domain, $key);
+
+    return $t === $key ? $fallback : $t;
+};
 ?>
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h1 class="h3 mb-0"><?= h($group['name']) ?>
@@ -45,61 +53,49 @@ $flag = static fn ($v) => filter_var($v, FILTER_VALIDATE_BOOLEAN) ? '✓' : '–
         </div>
     </div>
     <div class="col-md-7">
-        <div class="card mb-4">
-            <div class="card-header"><?= h(__('admin.groups.perms_granted')) ?></div>
-            <table class="table table-sm table-hover mb-0">
-                <thead><tr><th scope="col"><?= h(__('admin.groups.perms_col_resource')) ?></th><th scope="col"><?= h(__('admin.groups.perms_col_object')) ?></th><th scope="col" class="text-center"><abbr title="<?= h(__('admin.groups.perm_browse')) ?>">B</abbr></th><th scope="col" class="text-center"><abbr title="<?= h(__('admin.groups.perm_read')) ?>">R</abbr></th><th scope="col" class="text-center"><abbr title="<?= h(__('admin.groups.perm_add')) ?>">A</abbr></th><th scope="col" class="text-center"><abbr title="<?= h(__('admin.groups.perm_edit')) ?>">E</abbr></th><th scope="col" class="text-center"><abbr title="<?= h(__('admin.groups.perm_delete')) ?>">D</abbr></th><th scope="col"><?= h(__('admin.groups.perms_col_extra')) ?></th></tr></thead>
-                <tbody>
-                <?php foreach ($permissions as $p): ?>
-                    <?php $ex = is_string($p['extra_actions'] ?? null) ? (json_decode((string)$p['extra_actions'], true) ?: []) : (array)($p['extra_actions'] ?? []); ?>
-                    <tr>
-                        <td><code class="small"><?= h($p['module_key']) ?>::<?= h($p['resource_type']) ?></code></td>
-                        <td class="small"><?= $p['resource_key'] === null ? '<span class="text-muted">' . h(__('admin.groups.perms_class')) . '</span>' : h((string)$p['resource_key']) ?></td>
-                        <td class="text-center"><?= $flag($p['can_browse']) ?></td>
-                        <td class="text-center"><?= $flag($p['can_read']) ?></td>
-                        <td class="text-center"><?= $flag($p['can_add']) ?></td>
-                        <td class="text-center"><?= $flag($p['can_edit']) ?></td>
-                        <td class="text-center"><?= $flag($p['can_delete']) ?></td>
-                        <td class="small"><?= h(implode(', ', array_keys(array_filter($ex)))) ?: '–' ?></td>
-                    </tr>
-                <?php endforeach; ?>
-                <?php if ($permissions === []): ?><tr><td colspan="8" class="text-muted"><?= h(__('admin.groups.perms_empty')) ?></td></tr><?php endif; ?>
-                </tbody>
-            </table>
-        </div>
-
         <div class="card">
             <div class="card-header"><?= h(__('admin.groups.perms_editor_title')) ?></div>
             <div class="card-body">
-                <?php if ($resources === []): ?>
+                <?php if ($resourceGroups === []): ?>
                     <p class="text-muted mb-0"><?= h(__('admin.groups.perms_editor_none')) ?></p>
                 <?php else: ?>
                     <p class="text-muted small"><?= h(__('admin.groups.perms_editor_hint')) ?></p>
-                    <?php foreach ($resources as $r):
-                        $rid = $r['module_key'] . '::' . $r['resource_type'];
-                        $rkey = str_replace(['.', ':'], '_', $rid);
-                        $extra = is_string($r['extra_actions'] ?? null) ? (json_decode((string)$r['extra_actions'], true) ?: []) : (array)($r['extra_actions'] ?? []);
-                    ?>
-                        <div class="border rounded p-2 mb-2">
-                            <?= $this->Form->create(null, ['url' => ['action' => 'setPermission', $group['id']], 'class' => 'd-flex flex-wrap gap-2 align-items-end']) ?>
-                            <?= $this->Form->hidden('resource', ['value' => $rid]) ?>
-                            <div class="w-100"><strong class="small"><?= h($r['resource_name']) ?></strong>
-                                <code class="small text-muted"><?= h($rid) ?></code>
-                                <?php if (filter_var($r['is_scoped'], FILTER_VALIDATE_BOOLEAN)): ?><span class="badge text-bg-light">scoped</span><?php endif; ?>
+                    <p class="text-muted small"><?= h(__('admin.groups.perms_scoped_hint')) ?></p>
+                    <?= $this->Form->create(null, ['url' => ['action' => 'savePermissions', $group['id']]]) ?>
+                    <?php foreach ($resourceGroups as $moduleKey => $module): ?>
+                        <?php ob_start(); ?>
+                        <?php foreach ($module['resources'] as $r):
+                            $rid = $r['module_key'] . '::' . $r['resource_type'];
+                            $rkey = str_replace(['.', ':'], '_', $rid);
+                            $grant = $grants[$rid] ?? null;
+                            $grantExtra = $grant !== null && is_string($grant['extra_actions'] ?? null)
+                                ? (json_decode((string)$grant['extra_actions'], true) ?: [])
+                                : (array)($grant['extra_actions'] ?? []);
+                            $declared = is_string($r['extra_actions'] ?? null)
+                                ? (json_decode((string)$r['extra_actions'], true) ?: [])
+                                : (array)($r['extra_actions'] ?? []);
+                            $resourceLabel = $dLabel((string)$r['module_key'], 'perm.resource.' . $r['resource_type'], (string)$r['resource_name']);
+                        ?>
+                            <div class="border rounded p-2 mb-2 d-flex flex-wrap gap-3 align-items-center">
+                                <div class="w-100"><strong class="small"><?= h($resourceLabel) ?></strong>
+                                    <code class="small text-muted"><?= h($rid) ?></code>
+                                    <?php if ($truthy($r['is_scoped'])): ?><span class="badge text-bg-light" title="<?= h(__('admin.groups.scoped_badge_title')) ?>">scoped</span><?php endif; ?>
+                                </div>
+                                <?php // BREAD order: Browse, Read, Edit, Add, Delete. ?>
+                                <?php foreach (['browse' => 'B', 'read' => 'R', 'edit' => 'E', 'add' => 'A', 'delete' => 'D'] as $a => $lbl): ?>
+                                    <div class="form-check"><?= $this->Form->checkbox('perm.' . $rid . '.' . $a, ['class' => 'form-check-input', 'id' => $rkey . '_' . $a, 'checked' => $grant !== null && $truthy($grant['can_' . $a]), 'hiddenField' => false]) ?>
+                                        <label class="form-check-label small" for="<?= $rkey . '_' . $a ?>" title="<?= h(__('admin.groups.perm_' . $a)) ?>"><?= $lbl ?></label></div>
+                                <?php endforeach; ?>
+                                <?php foreach (array_values($declared) as $ea): $ea = (string)$ea; if ($ea === '') { continue; } ?>
+                                    <div class="form-check"><?= $this->Form->checkbox('perm.' . $rid . '.x.' . $ea, ['class' => 'form-check-input', 'id' => $rkey . '_x_' . $ea, 'checked' => (bool)($grantExtra[$ea] ?? false), 'hiddenField' => false]) ?>
+                                        <label class="form-check-label small" for="<?= $rkey . '_x_' . $ea ?>"><?= h($dLabel((string)$r['module_key'], 'perm.action.' . $ea, $ea)) ?></label></div>
+                                <?php endforeach; ?>
                             </div>
-                            <?php foreach (['browse' => 'B', 'read' => 'R', 'add' => 'A', 'edit' => 'E', 'delete' => 'D'] as $a => $lbl): ?>
-                                <div class="form-check"><?= $this->Form->checkbox('can_' . $a, ['class' => 'form-check-input', 'id' => $rkey . '_' . $a, 'aria-label' => __('admin.groups.perm_' . $a)]) ?>
-                                    <label class="form-check-label small" for="<?= $rkey . '_' . $a ?>" title="<?= h(__('admin.groups.perm_' . $a)) ?>"><?= $lbl ?></label></div>
-                            <?php endforeach; ?>
-                            <?php foreach (array_values($extra) as $ea): $ea = (string)$ea; if ($ea === '') { continue; } ?>
-                                <div class="form-check"><?= $this->Form->checkbox('extra[' . $ea . ']', ['class' => 'form-check-input', 'id' => $rkey . '_x_' . $ea]) ?>
-                                    <label class="form-check-label small" for="<?= $rkey . '_x_' . $ea ?>"><?= h($ea) ?></label></div>
-                            <?php endforeach; ?>
-                            <?= $this->Form->control('resource_key', ['label' => false, 'placeholder' => __('admin.groups.perms_object_placeholder'), 'class' => 'form-control form-control-sm', 'style' => 'max-width:150px']) ?>
-                            <?= $this->Form->button(__('admin.groups.perms_save'), ['class' => 'btn btn-outline-primary btn-sm']) ?>
-                            <?= $this->Form->end() ?>
-                        </div>
+                        <?php endforeach; ?>
+                        <?= $this->UiKit->formAccordion($module['name'], (string)ob_get_clean(), ['open' => true, 'id' => 'perm-' . str_replace('.', '-', (string)$moduleKey)]) ?>
                     <?php endforeach; ?>
+                    <?= $this->Form->button(__('admin.groups.perms_save'), ['class' => 'btn btn-primary']) ?>
+                    <?= $this->Form->end() ?>
                 <?php endif; ?>
             </div>
         </div>
