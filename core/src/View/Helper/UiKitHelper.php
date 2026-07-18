@@ -180,6 +180,13 @@ class UiKitHelper extends Helper
             if ($key === '') {
                 continue;
             }
+            // Hidden fields (e.g. dispatch keys like action/id) carry no label and
+            // must not be wrapped in the visible mb-3 spacing div — that would
+            // render an empty margin block (Ticketing pilot finding b).
+            if ((string)($f['input'] ?? 'text') === 'hidden') {
+                $out .= $this->Form->hidden($key, isset($f['value']) ? ['value' => $f['value']] : []);
+                continue;
+            }
             // Reference field (select over elements managed elsewhere, possibly in
             // another module): renders an input-group with an "open in new tab"
             // link to the element's admin page and an options-refresh button, so a
@@ -305,7 +312,7 @@ class UiKitHelper extends Helper
     public function formAccordion(string $title, string $bodyHtml, array $options = []): string
     {
         $open = (bool)($options['open'] ?? false);
-        $id = (string)($options['id'] ?? ('uikit-accordion-' . ++self::$accordionSeq));
+        $id = (string)($options['id'] ?? 'uikit-accordion-' . ++self::$accordionSeq);
         $bodyId = $id . '-body';
 
         return '<div class="accordion mb-4" id="' . h($id) . '"><div class="accordion-item">'
@@ -319,10 +326,14 @@ class UiKitHelper extends Helper
             . '</div></div></div>';
     }
 
-    /** Per-request sequence for unique {@see formAccordion()} ids. */
+    /**
+     * Per-request sequence for unique {@see formAccordion()} ids.
+     */
     private static int $accordionSeq = 0;
 
-    /** Per-request sequence for unique {@see referenceField()} ids. */
+    /**
+     * Per-request sequence for unique {@see referenceField()} ids.
+     */
     private static int $refSeq = 0;
 
     /**
@@ -515,12 +526,32 @@ class UiKitHelper extends Helper
         $out = '';
         foreach ($actions as $a) {
             $url = isset($a['url']) && is_callable($a['url']) ? ($a['url'])($row) : ($a['url'] ?? '#');
-            $attr = ['class' => (string)($a['class'] ?? 'btn btn-sm btn-outline-secondary')];
+            $label = (string)($a['label'] ?? '');
+            $class = (string)($a['class'] ?? 'btn btn-sm btn-outline-secondary');
+            // Per-row POST action ('post' => true): a state change like the
+            // ubiquitous activate/deactivate toggle must not be a GET link.
+            // Renders a standalone inline form + submit button — CSRF comes from
+            // the FormHelper; with 'confirm' it routes through the shared modal.
+            if (!empty($a['post'])) {
+                if (isset($a['confirm'])) {
+                    $opts = ['class' => $class];
+                    if (isset($a['variant'])) {
+                        $opts['variant'] = (string)$a['variant'];
+                    }
+                    $out .= $this->confirmPost($label, $url, (string)$a['confirm'], $opts) . ' ';
+                } else {
+                    $out .= $this->Form->create(null, ['url' => $url, 'class' => 'd-inline'])
+                        . $this->Form->button($label, ['type' => 'submit', 'class' => $class])
+                        . $this->Form->end() . ' ';
+                }
+                continue;
+            }
+            $attr = ['class' => $class];
             if (isset($a['confirm'])) {
                 // Route through the shared confirm modal (ui.js) instead of native confirm.
                 $attr['data-confirm'] = (string)$a['confirm'];
             }
-            $out .= $this->Html->link((string)($a['label'] ?? ''), $url, $attr) . ' ';
+            $out .= $this->Html->link($label, $url, $attr) . ' ';
         }
 
         return trim($out);

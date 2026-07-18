@@ -5,6 +5,7 @@ namespace App\Test\TestCase\Service\Module;
 
 use App\Service\Module\PageSpecCoercer;
 use Cake\TestSuite\TestCase;
+use stdClass;
 
 /**
  * Unit tests for the page-spec coercion (docs/module-page-spec-design.md):
@@ -92,6 +93,36 @@ class PageSpecCoercerTest extends TestCase
         );
     }
 
+    public function testTableActionKeepsPostFlagAndFormAccordionKeepsHiddenMap(): void
+    {
+        // v1.1 additions from the Ticketing pilot: per-row POST actions and
+        // first-class hidden dispatch fields.
+        $out = $this->coercer->coerce(['sections' => [
+            [
+                'type' => 'table',
+                'columns' => [['key' => 'name']],
+                'rows' => [],
+                'actions' => [[
+                    'label' => 'Deaktivieren', 'url_template' => '/x/toggle/{id}',
+                    'post' => 1, 'variant' => 'btn-warning', 'confirm' => 'Sicher?',
+                ]],
+            ],
+            [
+                'type' => 'form_accordion',
+                'title' => 'Neu',
+                'hidden' => ['action' => 'create', 'cb' => static fn() => 1, 'nested' => ['x']],
+                'fields' => [['key' => 'name']],
+            ],
+        ]]);
+
+        $action = $out['sections'][0]['actions'][0];
+        $this->assertTrue($action['post']); // cast to bool
+        $this->assertSame('btn-warning', $action['variant']);
+        $this->assertSame('Sicher?', $action['confirm']);
+        // hidden map: scalars only, callables/nested dropped.
+        $this->assertSame(['action' => 'create'], $out['sections'][1]['hidden']);
+    }
+
     public function testFiltersKeepsValuesAndDropsUnsafeUrlAndNonScalars(): void
     {
         $out = $this->coercer->coerce(['sections' => [[
@@ -114,7 +145,7 @@ class PageSpecCoercerTest extends TestCase
         // Review finding: (string) on an object without __toString would throw
         // out of the coercer, breaking the "degrade silently" contract.
         $out = $this->coercer->coerce(['sections' => [
-            ['type' => 'html', 'html' => new \stdClass()],
+            ['type' => 'html', 'html' => new stdClass()],
             ['type' => 'html', 'html' => ['x']],
             ['type' => 'html', 'html' => 'ok'],
         ]]);

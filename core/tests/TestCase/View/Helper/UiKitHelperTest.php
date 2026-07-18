@@ -201,6 +201,45 @@ class UiKitHelperTest extends TestCase
         $this->assertStringContainsString('Öffnen', $html);
     }
 
+    public function testIndexPostActionRendersInlineFormInsteadOfLink(): void
+    {
+        // v1.1: 'post' => true renders a standalone inline form (CSRF via
+        // FormHelper) — a state toggle must never be a GET link. With 'confirm'
+        // it routes through the shared confirm modal.
+        $rows = [['id' => 7, 'name' => 'Sieben']];
+        $html = $this->ui->index($rows, [['key' => 'name', 'label' => 'Name']], ['actions' => [
+            ['label' => 'Deaktivieren', 'url' => static fn($r) => '/things/toggle/' . $r['id'],
+             'post' => true, 'confirm' => 'Sicher?'],
+        ]]);
+
+        $this->assertStringContainsString('<form', $html);
+        $this->assertStringContainsString('action="/things/toggle/7"', $html);
+        $this->assertStringContainsString('data-confirm="Sicher?"', $html);
+        $this->assertStringNotContainsString('<a href="/things/toggle/7"', $html); // not a GET link
+
+        // Without 'confirm': plain inline POST form, no confirm attribute.
+        $plain = $this->ui->index($rows, [['key' => 'name', 'label' => 'Name']], ['actions' => [
+            ['label' => 'Toggle', 'url' => static fn($r) => '/things/toggle/' . $r['id'], 'post' => true],
+        ]]);
+        $this->assertStringContainsString('<form', $plain);
+        $this->assertStringNotContainsString('data-confirm', $plain);
+    }
+
+    public function testFieldsHiddenInputRendersWithoutWrapperDiv(): void
+    {
+        // v1.1 (pilot finding b): hidden dispatch fields must not produce the
+        // visible mb-3 spacing block.
+        $html = $this->ui->fields([
+            ['key' => 'action', 'input' => 'hidden', 'value' => 'update'],
+            ['key' => 'name', 'label' => 'Name'],
+        ]);
+
+        $this->assertStringContainsString('name="action" value="update"', $html);
+        $this->assertStringContainsString('type="hidden"', $html);
+        // Exactly ONE visible wrapper (the name field), none for the hidden one.
+        $this->assertSame(1, substr_count($html, '<div class="mb-3">'));
+    }
+
     public function testValueFormatting(): void
     {
         $this->assertStringContainsString('text-bg-success', $this->ui->value(true, 'bool'));
