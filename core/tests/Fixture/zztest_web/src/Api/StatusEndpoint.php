@@ -25,6 +25,9 @@ final class StatusEndpoint
                 // Demonstrates that the module can read its own token header for
                 // self-managed auth (Decision D1 = pass-through).
                 'saw_module_token' => isset($headers['X-Module-Token']),
+                // Echoes the client IP so the test proves the Core passes it
+                // through (E174 — module-side per-IP throttling of public routes).
+                'client_ip' => $request['client_ip'] ?? null,
             ],
             // A `public` route may set caching headers (E160) and Retry-After for
             // its own rate-limit backoff (E175). Only allowlisted headers pass

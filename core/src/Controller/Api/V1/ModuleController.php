@@ -50,6 +50,12 @@ class ModuleController extends ApiController
             'body' => $this->request->getParsedBody() ?? [],
             'user_id' => $this->userId(),
             'scopes' => $this->scopes(),
+            // Client IP for module-side per-IP rate-limiting of PUBLIC endpoints
+            // (E174/E175, e.g. the KB headless /search + /feedback throttles) —
+            // mirrors the web-mount dispatcher. Uses clientIp() = REMOTE_ADDR
+            // unless trusted proxies are configured, so it is not
+            // X-Forwarded-For-spoofable (same source the Core LoginThrottle keys on).
+            'client_ip' => $this->request->clientIp() ?: null,
             // Header lines (name => value) so a `public`-route module can validate
             // its OWN token (e.g. a queue-bound module token).
             'headers' => array_map(
