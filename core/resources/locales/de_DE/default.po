@@ -1213,6 +1213,12 @@ msgstr "Aktionen"
 msgid "uikit.filter"
 msgstr "Filtern"
 
+msgid "uikit.ref_open"
+msgstr "In neuem Tab öffnen"
+
+msgid "uikit.ref_refresh"
+msgstr "Auswahl aktualisieren"
+
 msgid "admin.nav.tenants"
 msgstr "Mandanten"
 

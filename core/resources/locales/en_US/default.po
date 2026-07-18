@@ -1217,6 +1217,12 @@ msgstr "Actions"
 msgid "uikit.filter"
 msgstr "Filter"
 
+msgid "uikit.ref_open"
+msgstr "Open in new tab"
+
+msgid "uikit.ref_refresh"
+msgstr "Refresh options"
+
 msgid "admin.nav.tenants"
 msgstr "Tenants"
 

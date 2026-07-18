@@ -136,6 +136,18 @@ class ModuleWebController extends AppController
         if (isset($result['download']) && is_array($result['download'])) {
             return $this->moduleDownload($result['download']);
         }
+        // JSON result: a handler may answer with `json` instead of a template —
+        // used by the reference-field options refresh (MODULE_UI.md), where the
+        // browser re-fetches a select's options in place. Runs in the normal web
+        // middleware (session auth + the per-tenant/area gates above + the RLS
+        // tenant context), so the payload is tenant-scoped like any web page.
+        if (array_key_exists('json', $result)) {
+            $jsonStatus = isset($result['status']) && is_int($result['status']) ? $result['status'] : 200;
+
+            return $this->response->withType('application/json')
+                ->withStatus($jsonStatus)
+                ->withStringBody((string)json_encode($result['json']));
+        }
         $vars = isset($result['vars']) && is_array($result['vars']) ? $result['vars'] : [];
         $template = isset($result['template']) && is_string($result['template']) && $result['template'] !== ''
             ? $result['template'] : $route['template'];

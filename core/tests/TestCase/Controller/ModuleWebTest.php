@@ -161,6 +161,21 @@ class ModuleWebTest extends TestCase
         $this->assertResponseContains('js/ui.js'); // [data-confirm] -> modal wiring
     }
 
+    public function testWebHandlerCanReturnJson(): void
+    {
+        // Options refresh for UiKit reference fields (MODULE_UI.md): a web
+        // handler may answer with `json` instead of a template. The response
+        // runs through session auth + the per-tenant gates and the RLS context,
+        // so the options stay tenant-scoped like any web page.
+        $this->session(['Auth' => ['id' => $this->userId, 'username' => 'zztest_web', 'email' => 'w@zztest.local']]);
+        $this->get('/m/zztest_web/options?q=Kw7');
+
+        $this->assertResponseOk();
+        $this->assertContentType('application/json');
+        $this->assertResponseContains('"value":"a1"');
+        $this->assertResponseContains('Beta Kw7'); // handler saw the query params
+    }
+
     public function testGuestPageRendersWithoutLogin(): void
     {
         $this->get('/m/zztest_web/public');

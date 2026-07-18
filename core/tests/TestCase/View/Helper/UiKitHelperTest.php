@@ -110,6 +110,57 @@ class UiKitHelperTest extends TestCase
         $this->assertStringNotContainsString('&amp;quot;', $html); // NOT double-escaped
     }
 
+    public function testReferenceFieldRendersLinkAndRefreshButton(): void
+    {
+        // Reference field: select + "open in new tab" link + options-refresh
+        // button as one input-group (MODULE_UI.md, Referenz-Felder).
+        $view = new View();
+        $view->set('userAreas', ['ticketing_admin']);
+        $ui = new UiKitHelper($view);
+
+        $html = $ui->fields([[
+            'key' => 'mailbox_id', 'label' => 'Mailbox', 'input' => 'select',
+            'options' => ['m1' => 'Support'], 'value' => 'm1', 'empty' => true,
+            'reference' => [
+                'url' => '/m/ticketing/admin/mailboxes',
+                'area' => 'ticketing_admin',
+                'options_url' => '/m/ticketing/admin/mailboxes/options',
+            ],
+        ]]);
+
+        $this->assertStringContainsString('input-group', $html);
+        $this->assertStringContainsString('href="/m/ticketing/admin/mailboxes"', $html);
+        $this->assertStringContainsString('target="_blank"', $html);
+        $this->assertStringContainsString('rel="noopener"', $html); // no window.opener backchannel
+        $this->assertStringContainsString('data-options-refresh="/m/ticketing/admin/mailboxes/options"', $html);
+        $this->assertStringContainsString('data-options-target="#uikit-ref-mailbox_id"', $html);
+        $this->assertStringContainsString('id="uikit-ref-mailbox_id"', $html); // select carries the target id
+    }
+
+    public function testReferenceFieldGatesLinkByAreaAndDropsForeignUrls(): void
+    {
+        $view = new View();
+        $view->set('userAreas', []); // target area NOT held
+        $ui = new UiKitHelper($view);
+
+        $html = $ui->fields([[
+            'key' => 'x', 'label' => 'X', 'input' => 'select', 'options' => [],
+            'reference' => [
+                'url' => '/m/t/admin/things',
+                'area' => 'not_held',
+                'options_url' => 'https://evil.test/options', // not app-relative
+            ],
+        ]]);
+
+        // Visibility = server-side authorization: no link into a guaranteed 403.
+        $this->assertStringNotContainsString('target="_blank"', $html);
+        // Foreign origins are dropped, never wired into the fetch().
+        $this->assertStringNotContainsString('evil.test', $html);
+        $this->assertStringNotContainsString('data-options-refresh', $html);
+        // The select itself still renders.
+        $this->assertStringContainsString('form-select', $html);
+    }
+
     public function testIndexEmptyState(): void
     {
         $html = $this->ui->index([], [['key' => 'a', 'label' => 'A']], ['empty' => 'Nichts da']);
