@@ -225,6 +225,25 @@ class UiKitHelperTest extends TestCase
         $this->assertStringNotContainsString('data-confirm', $plain);
     }
 
+    public function testIndexActionWithEmptyUrlRendersNoControl(): void
+    {
+        // Review finding: when an action's URL resolves to ''/null (e.g. a
+        // page-spec url_template whose expansion failed re-validation), no
+        // control may render — '' targets the CURRENT page and would give a
+        // 'post' action unintended write semantics there.
+        $rows = [['id' => 7, 'name' => 'Sieben']];
+        $html = $this->ui->index($rows, [['key' => 'name', 'label' => 'Name']], ['actions' => [
+            ['label' => 'KaputtPost', 'url' => static fn($r) => '', 'post' => true],
+            ['label' => 'KaputtLink', 'url' => static fn($r) => null],
+            ['label' => 'Ok', 'url' => static fn($r) => '/things/' . $r['id']],
+        ]]);
+
+        $this->assertStringNotContainsString('KaputtPost', $html);
+        $this->assertStringNotContainsString('KaputtLink', $html);
+        $this->assertStringNotContainsString('<form', $html); // no self-targeting POST form
+        $this->assertStringContainsString('href="/things/7"', $html); // valid action still renders
+    }
+
     public function testFieldsHiddenInputRendersWithoutWrapperDiv(): void
     {
         // v1.1 (pilot finding b): hidden dispatch fields must not produce the
