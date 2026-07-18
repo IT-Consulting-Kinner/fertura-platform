@@ -6,6 +6,8 @@ namespace App\Command;
 use App\Audit\AuditLogger;
 use App\Auth\PasswordPolicy;
 use App\Model\Entity\User;
+use App\Service\Permission\AdminGroupService;
+use App\Service\Tenant\TenantService;
 use Cake\Command\Command;
 use Cake\Console\Arguments;
 use Cake\Console\ConsoleIo;
@@ -134,11 +136,30 @@ class CreateAdminCommand extends Command
             return static::CODE_ERROR;
         }
 
+        // Membership in the tenant's ADMINISTRATOR group (ch. 25): admin areas
+        // gate the admin GUI, but module resources are gated by BREAD group
+        // permissions — without a group the full admin could open module admin
+        // pages yet see no data. ensure() is idempotent (and tops up grants for
+        // later-installed modules); the RLS context is required for the
+        // permission rows' tenant_id.
+        $tenantId = (string)($user->get('tenant_id') ?? TenantService::DEFAULT_TENANT_ID);
+        $connection->execute("SELECT set_config('app.current_tenant_id', :t, false)", ['t' => $tenantId]);
+        try {
+            $groupService = new AdminGroupService();
+            $group = $groupService->ensure($tenantId);
+            $groupService->addUser($group['id'], (string)$user->get('id'));
+        } finally {
+            $connection->execute("SELECT set_config('app.current_tenant_id', '', false)");
+        }
+
         $io->success(sprintf(
-            'Volladministrator "%s" (ID %s) gespeichert, %d Administrationsbereiche zugewiesen.',
+            'Volladministrator "%s" (ID %s) gespeichert, %d Administrationsbereiche zugewiesen, '
+            . 'Mitglied der Gruppe "%s" (%d Ressourcen-Grants).',
             $user->username,
             $user->id,
             $count,
+            AdminGroupService::DEFAULT_NAME,
+            $group['granted'],
         ));
 
         return static::CODE_SUCCESS;

@@ -31,11 +31,20 @@ class UsersController extends AdminController
     /** Renders the user list plus the inline "create" accordion form. */
     private function renderUserList(EntityInterface $user, bool $openCreate): void
     {
-        $users = ConnectionManager::get('default')->execute(
-            'SELECT id, username, email, status, first_name, last_name FROM users '
-            . 'WHERE tenant_id = core.current_tenant() ORDER BY username',
+        /** @var \Cake\Database\Connection $conn */
+        $conn = ConnectionManager::get('default');
+        $users = $conn->execute(
+            'SELECT u.id, u.username, u.email, u.status, u.first_name, u.last_name, '
+            . '(SELECT string_agg(g.name, \', \' ORDER BY g.name) FROM "groups" g '
+            . ' JOIN groups_users gu ON gu.group_id = g.id WHERE gu.user_id = u.id) AS group_names '
+            . 'FROM users u WHERE u.tenant_id = core.current_tenant() ORDER BY u.username',
         )->fetchAll('assoc');
-        $this->set(compact('users', 'user', 'openCreate'));
+        // Group choices for the create form: creating a user REQUIRES a group
+        // (no group-less users — without one, no BREAD permission ever applies).
+        $groupOptions = array_column($conn->execute(
+            'SELECT id, name FROM "groups" WHERE active AND tenant_id = core.current_tenant() ORDER BY name',
+        )->fetchAll('assoc'), 'name', 'id');
+        $this->set(compact('users', 'user', 'openCreate', 'groupOptions'));
         $this->viewBuilder()->setTemplate('index');
     }
 
@@ -91,12 +100,35 @@ class UsersController extends AdminController
             return $this->redirect(['action' => 'index']);
         }
         $user->set('tenant_id', $tid);
+        // Mandatory group (no group-less users): without a group membership no
+        // BREAD permission ever applies to the account. The chosen group must be
+        // an ACTIVE group of the acting admin's OWN tenant — a POSTed foreign
+        // group id would otherwise pull the new user into another tenant's group.
+        $groupId = (string)$this->request->getData('group_id');
+        /** @var \Cake\Database\Connection $conn */
+        $conn = ConnectionManager::get('default');
+        $groupOk = $this->isUuid($groupId) && $conn->execute(
+            'SELECT 1 FROM "groups" WHERE id = :g AND active AND tenant_id = core.current_tenant()',
+            ['g' => $groupId],
+        )->fetch() !== false;
+        if (!$groupOk) {
+            $this->Flash->error(__('flash.user.group_required'));
+            $this->renderUserList($user, true);
+
+            return null;
+        }
         // atomic=false: the request already runs in a transaction
         // (TransactionRlsMiddleware), so save needs no nested one. This also keeps
         // a failing application rule (unique email/username) a clean `false` instead
         // of a nested-transaction rollback that would poison the request transaction.
         if ($users->save($user, ['atomic' => false])) {
-            $this->audit()->log('user.create', 'user', (string)$user->id, ['newValue' => ['status' => $user->status]]);
+            $conn->execute(
+                'INSERT INTO groups_users (group_id, user_id) VALUES (:g, :u) ON CONFLICT DO NOTHING',
+                ['g' => $groupId, 'u' => (string)$user->get('id')],
+            );
+            $this->audit()->log('user.create', 'user', (string)$user->id, [
+                'newValue' => ['status' => $user->status, 'group' => $groupId],
+            ]);
             $this->Flash->success(__('flash.user.created'));
 
             return $this->redirect(['action' => 'index']);

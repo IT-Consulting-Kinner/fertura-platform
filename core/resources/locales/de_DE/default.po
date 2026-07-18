@@ -637,6 +637,24 @@ msgstr "Rechte entzogen."
 msgid "flash.group.perms_set"
 msgstr "Rechte gesetzt."
 
+msgid "admin.users.col_groups"
+msgstr "Gruppen"
+
+msgid "admin.users.field_group"
+msgstr "Gruppe"
+
+msgid "admin.users.field_group_choose"
+msgstr "– Gruppe wählen –"
+
+msgid "admin.users.no_group"
+msgstr "keine Gruppe"
+
+msgid "admin.users.no_groups_hint"
+msgstr "Es existiert noch keine aktive Gruppe. Erst eine Gruppe anlegen (oder bin/cake group_init ausführen), dann Benutzer erstellen."
+
+msgid "flash.user.group_required"
+msgstr "Bitte eine aktive Gruppe wählen – Benutzer ohne Gruppe sind nicht zulässig."
+
 # === Cluster 4: Config / Marketplace / Updates / Mail / PasswordReset ===
 msgid "admin.config.title"
 msgstr "Konfiguration"
