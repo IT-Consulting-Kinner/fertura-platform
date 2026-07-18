@@ -92,6 +92,37 @@ class PageSpecCoercerTest extends TestCase
         );
     }
 
+    public function testFiltersKeepsValuesAndDropsUnsafeUrlAndNonScalars(): void
+    {
+        $out = $this->coercer->coerce(['sections' => [[
+            'type' => 'filters',
+            'fields' => [['key' => 'q', 'label' => 'Suche', 'placeholder' => 'Name…']],
+            'values' => ['q' => 'abc', 'cb' => static fn() => 1, 'nested' => ['x']],
+            'submit' => 'Los',
+            'url' => 'https://evil.test/search',
+        ]]]);
+
+        $f = $out['sections'][0];
+        $this->assertSame([['key' => 'q', 'label' => 'Suche', 'placeholder' => 'Name…']], $f['fields']);
+        $this->assertSame(['q' => 'abc'], $f['values']); // callable + nested dropped
+        $this->assertSame('Los', $f['submit']);
+        $this->assertArrayNotHasKey('url', $f); // off-origin -> form targets current page
+    }
+
+    public function testHtmlSectionDropsNonScalarValueInsteadOfThrowing(): void
+    {
+        // Review finding: (string) on an object without __toString would throw
+        // out of the coercer, breaking the "degrade silently" contract.
+        $out = $this->coercer->coerce(['sections' => [
+            ['type' => 'html', 'html' => new \stdClass()],
+            ['type' => 'html', 'html' => ['x']],
+            ['type' => 'html', 'html' => 'ok'],
+        ]]);
+
+        $this->assertCount(1, $out['sections']);
+        $this->assertSame('ok', $out['sections'][0]['html']);
+    }
+
     public function testAlertVariantFallsBackToInfoOnUnknownValue(): void
     {
         $out = $this->coercer->coerce(['sections' => [

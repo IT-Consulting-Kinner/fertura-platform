@@ -187,11 +187,15 @@ class ModuleWebController extends AppController
             if (!in_array($tplRoot, $paths, true)) {
                 Configure::write('App.paths.templates', array_merge([$tplRoot], $paths));
             }
-        } else {
-            $this->set('pageSpec', $page);
         }
 
         $this->set($vars);
+        if ($page !== null) {
+            // AFTER set($vars): a module var named `pageSpec` must not replace
+            // the coerced spec with its raw shape (callables/URLs would re-enter
+            // the renderer), same protection order as moduleKey/moduleTitle below.
+            $this->set('pageSpec', $page);
+        }
         $this->set('moduleKey', $moduleKey);
         $this->set('moduleTitle', $title);
         $this->set('currentUser', $identity);
