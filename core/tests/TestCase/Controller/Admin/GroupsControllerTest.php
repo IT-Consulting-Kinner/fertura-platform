@@ -61,6 +61,7 @@ class GroupsControllerTest extends TestCase
             . "(SELECT id FROM \"groups\" WHERE name LIKE 'zztest-grp-%')",
         );
         $conn->execute("DELETE FROM \"groups\" WHERE name LIKE 'zztest-grp-%'");
+        $conn->execute("DELETE FROM resources WHERE module_key = 'zzgrpui'");
         $conn->execute("DELETE FROM users WHERE email LIKE '%@zzgroup.local'");
         // Foreign tenants from the cross-tenant isolation test (after their groups/users).
         $conn->execute("DELETE FROM tenants WHERE key LIKE 'zzt_grp_other_%'");
@@ -146,7 +147,7 @@ class GroupsControllerTest extends TestCase
         $this->post('/admin/groups/setActive/garbage/on');
         $this->assertRedirect(['action' => 'index']);
 
-        $this->post('/admin/groups/setPermission/garbage', ['resource' => 'core::doc', 'can_read' => '1']);
+        $this->post('/admin/groups/savePermissions/garbage', ['perm' => []]);
         $this->assertRedirect(['action' => 'index']);
 
         $this->post('/admin/groups/removeMember/' . $gid . '/garbage');
@@ -232,35 +233,94 @@ class GroupsControllerTest extends TestCase
         $this->assertSame(0, $this->memberCount($gid));
     }
 
-    public function testSetPermissionGrantsThenRevokes(): void
+    /** Registers a group-capable test resource (cleaned up via zzgrpui prefix). */
+    private function makeResource(string $type = 'thing', string $extraJson = '["publish"]'): void
     {
+        ConnectionManager::get('default')->execute(
+            'INSERT INTO resources (module_key, resource_type, resource_name, is_scoped, group_capable, extra_actions) '
+            . "VALUES ('zzgrpui', :t, :n, true, true, CAST(:x AS jsonb)) ON CONFLICT DO NOTHING",
+            ['t' => $type, 'n' => 'zzgrpui.' . $type, 'x' => $extraJson],
+        );
+    }
+
+    public function testSavePermissionsGrantsThenRevokesViaCheckboxState(): void
+    {
+        // The editor posts the whole checkbox matrix: checked = grant (class-
+        // wide), an entirely unchecked resource = revoke.
+        $this->makeResource();
         $gid = $this->makeGroup('perm-');
         $this->login();
 
-        // Grant: BREAD read+browse on an object class.
-        $this->post('/admin/groups/setPermission/' . $gid, [
-            'resource' => 'core::doc',
-            'resource_key' => '',
-            'can_browse' => '1',
-            'can_read' => '1',
+        $this->post('/admin/groups/savePermissions/' . $gid, [
+            'perm' => ['zzgrpui::thing' => ['browse' => '1', 'read' => '1', 'x' => ['publish' => '1']]],
         ]);
         $this->assertSame(1, $this->permCount($gid));
+        $row = ConnectionManager::get('default')->execute(
+            'SELECT can_browse, can_read, can_delete, resource_key, extra_actions FROM group_resource_permissions WHERE group_id = :g',
+            ['g' => $gid],
+        )->fetch('assoc');
+        $this->assertTrue(in_array($row['can_browse'], [true, 't', '1', 1], true));
+        $this->assertFalse(in_array($row['can_delete'], [true, 't', '1', 1], true));
+        $this->assertNull($row['resource_key']); // GUI grants the CLASS only
+        $this->assertTrue((bool)(json_decode((string)$row['extra_actions'], true)['publish'] ?? false));
 
-        // Revoke: all checkboxes off -> entry removed.
-        $this->post('/admin/groups/setPermission/' . $gid, [
-            'resource' => 'core::doc',
-            'resource_key' => '',
-        ]);
+        // Revoke: same save with the resource unchecked -> row removed.
+        $this->post('/admin/groups/savePermissions/' . $gid, ['perm' => []]);
         $this->assertSame(0, $this->permCount($gid));
     }
 
-    public function testSetPermissionRejectsInvalidResource(): void
+    public function testSavePermissionsIgnoresForgedResourceAndUndeclaredExtra(): void
     {
+        // Fail-closed: only REGISTERED group-capable resources and their
+        // DECLARED extra actions are processed — forged form keys do nothing.
+        $this->makeResource();
         $gid = $this->makeGroup('badperm-');
         $this->login();
-        $this->post('/admin/groups/setPermission/' . $gid, ['resource' => 'noseparator']);
+
+        $this->post('/admin/groups/savePermissions/' . $gid, [
+            'perm' => [
+                'evil::thing' => ['browse' => '1'], // unregistered resource
+                'zzgrpui::thing' => ['x' => ['undeclared_action' => '1']], // undeclared extra
+            ],
+        ]);
         $this->assertRedirect(['action' => 'view', $gid]);
         $this->assertSame(0, $this->permCount($gid));
+    }
+
+    public function testViewRendersEditorInBreadOrderWithPrefilledState(): void
+    {
+        // The checkbox row follows the BREAD order (Browse, Read, Edit, Add,
+        // Delete — not the old B-R-A-E-D), grants are prefilled as checked, the
+        // module accordion groups the resources, and the object-key input is gone.
+        $this->makeResource();
+        $gid = $this->makeGroup('render-');
+        ConnectionManager::get('default')->execute(
+            'INSERT INTO group_resource_permissions (group_id, module_key, resource_type, can_browse, can_read) '
+            . "VALUES (:g, 'zzgrpui', 'thing', true, true)",
+            ['g' => $gid],
+        );
+        $this->login();
+        $this->get('/admin/groups/view/' . $gid);
+
+        $this->assertResponseOk();
+        $body = (string)$this->_response->getBody();
+        // BREAD order: the checkbox ids appear as browse < read < edit < add < delete.
+        $pos = [];
+        foreach (['browse', 'read', 'edit', 'add', 'delete'] as $a) {
+            $p = strpos($body, 'id="zzgrpui__thing_' . $a . '"');
+            $this->assertNotFalse($p, "checkbox $a rendered");
+            $pos[] = $p;
+        }
+        $sorted = $pos;
+        sort($sorted);
+        $this->assertSame($sorted, $pos, 'checkboxes follow BREAD order');
+        // Prefill: granted browse is checked, ungranted delete is not.
+        $this->assertMatchesRegularExpression('/id="zzgrpui__thing_browse"[^>]*checked/', $body);
+        $this->assertDoesNotMatchRegularExpression('/id="zzgrpui__thing_delete"[^>]*checked/', $body);
+        // Accordion per module + scoped badge, and NO object-key field anymore.
+        $this->assertResponseContains('id="perm-zzgrpui"');
+        $this->assertResponseContains('scoped');
+        $this->assertResponseNotContains('name="resource_key"');
     }
 
     private function countGroups(): int
