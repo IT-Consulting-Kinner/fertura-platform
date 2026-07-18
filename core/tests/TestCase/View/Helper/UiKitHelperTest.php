@@ -95,6 +95,21 @@ class UiKitHelperTest extends TestCase
         $this->assertStringContainsString('&lt;b&gt;', $html);
     }
 
+    public function testFormAccordionEscapesCallerSuppliedId(): void
+    {
+        // Adversarial-review finding: pin the h() escaping of the 'id' option —
+        // it lands in FOUR attribute contexts (id, data-bs-target, aria-controls,
+        // body id). Without this test, dropping the h() calls ("auto ids are
+        // always safe") would pass the suite; a later caller building the id from
+        // record data could then break out of the attribute (same evolution that
+        // made confirmPost's data-attribute test necessary).
+        $html = $this->ui->formAccordion('T', '<form></form>', ['id' => 'x"><script>alert(1)</script>']);
+
+        $this->assertStringNotContainsString('<script>alert(1)</script>', $html);
+        $this->assertStringContainsString('&quot;&gt;&lt;script&gt;', $html); // quote cannot break out
+        $this->assertStringNotContainsString('&amp;quot;', $html); // NOT double-escaped
+    }
+
     public function testIndexEmptyState(): void
     {
         $html = $this->ui->index([], [['key' => 'a', 'label' => 'A']], ['empty' => 'Nichts da']);
