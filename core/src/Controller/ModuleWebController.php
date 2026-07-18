@@ -175,13 +175,14 @@ class ModuleWebController extends AppController
                 (string)$route['area'],
                 '/m/' . $moduleKey . '/' . $path,
             );
-            // Name the current page when the shared trail could not: for an admin
-            // route without a matching nav item the trail still ends on a Core
-            // NAVIGATION crumb (top menu or section tile) — never on a module leaf
-            // ('/m/…', the sub-page case, where the linked list leaf is the Core
-            // idiom for the last crumb).
+            // Name the current page whenever the shared trail did not: the builder
+            // ends on a null-URL crumb ONLY when that crumb IS this page (exact
+            // leaf/function match). Any linked ending — top menu, section tile, a
+            // list leaf on a sub-page, or the single-item function on a nav-less
+            // route — means the current page is still unnamed, so the page title
+            // becomes the active crumb.
             $last = $breadcrumb === [] ? null : $breadcrumb[array_key_last($breadcrumb)];
-            if ($last === null || ($last[1] !== null && !str_starts_with((string)$last[1], '/m/'))) {
+            if ($last === null || $last[1] !== null) {
                 $breadcrumb[] = [$title, null];
             }
         }

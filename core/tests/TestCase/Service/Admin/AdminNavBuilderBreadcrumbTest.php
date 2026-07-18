@@ -69,6 +69,32 @@ class AdminNavBuilderBreadcrumbTest extends TestCase
         ], $trail);
     }
 
+    public function testSingleItemAreaOnOtherPathLinksToTheFunction(): void
+    {
+        // Adversarial-review finding: the collapsed group label may only claim
+        // "current page" when the request really is that page. On any other path
+        // (Core sub-page like /admin/localization/edit, or a nav-less module
+        // route in the area) it links to the function so the caller can append
+        // the actual page as the active crumb.
+        $trail = $this->builder()->breadcrumb(['update_manager'], 'update_manager', '/admin/updates/history');
+
+        $this->assertSame([
+            ['admin.nav.administration', '/admin/administration'],
+            ['admin.nav.updates', '/admin/updates'],
+        ], $trail);
+    }
+
+    public function testSingleItemModuleAreaNavlessRouteLinksToTheFunction(): void
+    {
+        $nav = ['zx_admin' => ['label' => 'ZX', 'items' => [['Einstellungen', '/m/zx/admin/settings']]]];
+        $trail = $this->builder($nav)->breadcrumb(['zx_admin'], 'zx_admin', '/m/zx/admin/import');
+
+        $this->assertSame([
+            ['admin.nav.modules', '/admin/module'],
+            ['ZX', '/m/zx/admin/settings'],
+        ], $trail);
+    }
+
     public function testModuleLifecycleKeepsItsClearerLabel(): void
     {
         $trail = $this->builder()->breadcrumb(['module_lifecycle'], 'module_lifecycle', '/admin/modules');
