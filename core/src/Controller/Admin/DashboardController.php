@@ -32,7 +32,6 @@ class DashboardController extends AdminController
 
         // Platform-wide inventory (modules/contracts/outbox/licenses are NOT
         // tenant-scoped): operator admins only.
-        $modulesByStatus = [];
         if ($isOperator) {
             $stats += [
                 'modules_active' => $scalar("SELECT count(*) c FROM modules WHERE status = 'active'"),
@@ -42,11 +41,8 @@ class DashboardController extends AdminController
                 'outbox_deadletter' => $scalar("SELECT count(*) c FROM event_outbox WHERE status = 'dead_letter'"),
                 'licenses' => $scalar('SELECT count(*) c FROM licenses'),
             ];
-            $modulesByStatus = $conn->execute(
-                'SELECT status, count(*) AS c FROM modules GROUP BY status ORDER BY status',
-            )->fetchAll('assoc');
         }
 
-        $this->set(compact('stats', 'modulesByStatus', 'isOperator'));
+        $this->set(compact('stats', 'isOperator'));
     }
 }

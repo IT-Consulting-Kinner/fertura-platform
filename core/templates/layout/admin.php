@@ -52,7 +52,7 @@ $dropdown = function (string $top, string $label, array $groups) use ($activeTop
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title><?= $this->fetch('title') ?: 'Fertura Admin' ?></title>
+    <title><?= $this->fetch('title') ?: 'Fertura' ?></title>
     <?= $this->Html->css('bootstrap.min') ?>
     <style>
         body { background:#f6f7f9; }
@@ -79,7 +79,7 @@ $dropdown = function (string $top, string $label, array $groups) use ($activeTop
 <body>
 <a class="skip-link" href="#main"><?= __('a11y.skip_to_content') ?></a>
 <nav class="navbar navbar-dark bg-dark px-3" aria-label="<?= h(__('a11y.nav_main')) ?>">
-    <span class="navbar-brand mb-0">Fertura <span class="text-secondary">Admin</span></span>
+    <span class="navbar-brand mb-0">Fertura</span>
     <div class="top-nav me-auto">
         <a class="nav-link<?= $activeTop === 'dashboard' ? ' active' : '' ?>"<?= $activeTop === 'dashboard' ? ' aria-current="page"' : '' ?> href="/admin"><?= h(__('admin.nav.dashboard')) ?></a>
         <?= $dropdown('module', (string)__('admin.nav.modules'), $topMenu['module']) ?>

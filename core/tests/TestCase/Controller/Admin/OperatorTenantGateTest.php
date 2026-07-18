@@ -138,7 +138,10 @@ class OperatorTenantGateTest extends TestCase
         $this->login($this->tenantAdminId);
         $this->get('/admin');
         $this->assertResponseOk();
-        $this->assertResponseNotContains('Modules by status', 'tenant admin must not see operator module inventory');
+        // Operator-only inventory cards (modules/contracts/outbox/licenses) are
+        // omitted for tenant admins ("Modules by status" was removed entirely).
+        // 'Outbox' is a locale-stable substring of the card label (de+en).
+        $this->assertResponseNotContains('Outbox', 'tenant admin must not see operator platform inventory');
     }
 
     public function testDashboardShowsOperatorDataToOperatorAdmin(): void
@@ -146,7 +149,9 @@ class OperatorTenantGateTest extends TestCase
         $this->login($this->operatorAdminId);
         $this->get('/admin');
         $this->assertResponseOk();
-        $this->assertResponseContains('Modules by status');
+        // Operator-only inventory card ("Modules by status" chart was removed;
+        // 'Outbox' is a locale-stable substring of the card label de+en).
+        $this->assertResponseContains('Outbox');
     }
 
     public function testHealthDetailDeniedForTenantAdmin(): void
