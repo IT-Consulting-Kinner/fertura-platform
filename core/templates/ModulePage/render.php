@@ -72,7 +72,12 @@ foreach ($pageSpec['sections'] as $section) {
             if (isset($section['url'])) {
                 $createOpts['url'] = $section['url'];
             }
+            $hidden = '';
+            foreach ($section['hidden'] ?? [] as $hKey => $hVal) {
+                $hidden .= $this->Form->hidden((string)$hKey, ['value' => $hVal]);
+            }
             $body = $this->Form->create(null, $createOpts)
+                . $hidden
                 . $this->UiKit->fields($section['fields'])
                 // FormHelper escapes the button label by default.
                 . $this->Form->button(

@@ -202,12 +202,18 @@ class ModuleWebTest extends TestCase
         // links resolved to the bare /module-web/dispatch fallback -> 500).
         $this->assertResponseContains('href="/m/zztest_web/spec?page=1"');
         $this->assertResponseNotContains('/module-web/dispatch');
+        // v1.1: per-row POST action — inline form targeting the expanded
+        // url_template, routed through the shared confirm modal.
+        $this->assertResponseContains('action="/m/zztest_web/spec/toggle/7"');
+        $this->assertResponseContains('data-confirm="Wirklich deaktivieren?"');
         // form_accordion: Core opens the form -> CSRF token present; collapsed
         // default; without 'url' the form posts back to the current page.
         $this->assertResponseContains('accordion-button collapsed');
         $this->assertResponseContains('name="_csrfToken"');
         $this->assertResponseContains('action="/m/zztest_web/spec"');
         $this->assertResponseContains('Anlegen');
+        // v1.1: hidden dispatch field renders as a bare hidden input.
+        $this->assertResponseContains('name="action" value="create"');
         // reference field inside the spec form survives coercion.
         $this->assertResponseContains('data-options-refresh="/m/zztest_web/options"');
         // detail section

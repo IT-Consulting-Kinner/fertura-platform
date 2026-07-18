@@ -146,14 +146,23 @@ return [
              ['key' => 'active', 'label' => __d('meinmodul', 'f.active'), 'type' => 'bool'],
          ],
          'rows' => $rows,
-         'actions' => [['label' => __d('meinmodul', 'a.edit'),
-                        'url_template' => '/m/meinmodul/admin/things?edit={id}']],
+         'actions' => [
+             // GET-Link; Query-Strings in Templates sind erlaubt:
+             ['label' => __d('meinmodul', 'a.edit'),
+              'url_template' => '/m/meinmodul/admin/things?edit={id}'],
+             // Per-Zeile-POST (Toggle-Idiom): Inline-Form, CSRF vom Core,
+             // mit 'confirm' über das geteilte Bestätigungs-Modal:
+             ['label' => __d('meinmodul', 'a.deactivate'),
+              'url_template' => '/m/meinmodul/admin/things/toggle/{id}',
+              'post' => true, 'confirm' => __d('meinmodul', 'a.deactivate_confirm')],
+         ],
          'empty' => __d('meinmodul', 'admin.things.empty'),
          'paginate' => ['page' => $page, 'per_page' => 20, 'total' => $total]],
         ['type' => 'form_accordion',
          'title' => __d('meinmodul', 'admin.things.create'),
          'open' => $edit !== null,
          'url' => '/m/meinmodul/admin/things',
+         'hidden' => ['action' => 'create'],   // Dispatch-Felder ohne sichtbaren Wrapper
          'fields' => [/* wie fields(), inkl. reference */],
          'submit' => __d('meinmodul', 'a.save')],
         ['type' => 'detail', 'row' => $row, 'fields' => [/* wie detail() */]],
@@ -174,4 +183,11 @@ Regeln:
   Modul (Default: „Speichern").
 - `template` bleibt vollwertig für Spezialseiten (Editor, Timeline, …);
   `html`-Sections sind das letzte Mittel innerhalb einer Spec.
-- Noch nicht in v1 (kommt additiv): Zeilen-Auswahl + Bulk-Aktionen.
+- Noch nicht enthalten (kommt additiv): Zeilen-Auswahl + Bulk-Aktionen.
+
+**`page` NEBEN `vars`/`template` (Abwärtskompatibilität):** Ein Handler darf
+`page` UND `template`/`vars` gleichzeitig liefern — ein Page-Spec-fähiger Core
+rendert `page`, ein älterer Core ignoriert das unbekannte Feld und rendert das
+Manifest-`template` wie bisher. So pilotiert ein Modul den Spec ohne
+`core_compatibility`-Anhebung; das Template wird erst gelöscht (und
+`core_compatibility` angehoben), wenn das Modul den Spec verbindlich macht.

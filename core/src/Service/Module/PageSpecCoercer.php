@@ -181,6 +181,15 @@ final class PageSpecCoercer
             if (isset($a['confirm']) && is_scalar($a['confirm'])) {
                 $action['confirm'] = (string)$a['confirm'];
             }
+            // v1.1 (Ticketing pilot finding a): per-row POST action — a state
+            // toggle (activate/deactivate) must not be a GET link. The UiKit
+            // renders it as an inline form (CSRF from the Core FormHelper).
+            if (isset($a['post'])) {
+                $action['post'] = (bool)$a['post'];
+            }
+            if (isset($a['variant']) && is_scalar($a['variant'])) {
+                $action['variant'] = (string)$a['variant'];
+            }
             $actions[] = $action;
         }
 
@@ -221,6 +230,11 @@ final class PageSpecCoercer
         }
         if (isset($s['submit']) && is_scalar($s['submit'])) {
             $out['submit'] = (string)$s['submit'];
+        }
+        // v1.1 (Ticketing pilot finding b): first-class hidden fields (dispatch
+        // keys like action/id) — rendered as Form->hidden, no visible wrapper.
+        if (isset($s['hidden']) && is_array($s['hidden'])) {
+            $out['hidden'] = $this->scalarMap($s['hidden']);
         }
 
         return $out;

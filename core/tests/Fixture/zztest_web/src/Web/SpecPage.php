@@ -52,6 +52,10 @@ final class SpecPage
                         ],
                         'actions' => [
                             ['label' => 'Bearbeiten', 'url_template' => '/m/zztest_web/spec?edit={id}'],
+                            // v1.1: per-row POST action (toggle idiom) — inline
+                            // form with Core CSRF + shared confirm modal.
+                            ['label' => 'Deaktivieren', 'url_template' => '/m/zztest_web/spec/toggle/{id}',
+                             'post' => true, 'confirm' => 'Wirklich deaktivieren?'],
                             // Hostile: off-origin url_template must be dropped.
                             ['label' => 'Evil', 'url_template' => 'https://evil.test/{id}'],
                         ],
@@ -62,6 +66,8 @@ final class SpecPage
                         'type' => 'form_accordion',
                         'title' => 'Neu anlegen',
                         // No 'url': the form posts back to the current page.
+                        // v1.1: first-class hidden dispatch fields.
+                        'hidden' => ['action' => 'create'],
                         'fields' => [
                             ['key' => 'name', 'label' => 'Name', 'required' => true],
                             [
