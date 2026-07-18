@@ -5,6 +5,7 @@ namespace App\Controller;
 
 use App\Service\Admin\AdminNavBuilder;
 use App\Service\Module\ContributionRuntime;
+use App\Service\Module\PageSpecCoercer;
 use App\Service\Module\TenantModuleService;
 use App\Service\Module\WebRouteRegistry;
 use App\Service\Storage\StorageManager;
@@ -164,16 +165,30 @@ class ModuleWebController extends AppController
         $title = isset($result['title']) && is_string($result['title']) ? $result['title'] : $route['title'];
         $status = isset($result['status']) && is_int($result['status']) ? $result['status'] : 200;
 
-        // Render the module-provided template under the Core's module layout.
-        // The module ROOT (with a trailing separator, as CakePHP expects for a
-        // template path root) is prepended to the search paths, and the template
-        // is resolved under its `templates/` subdir — so the module ships
-        // `<module>/templates/<tpl>.php`. The Core layouts/elements remain
-        // reachable via the existing (lower-priority) paths.
-        $tplRoot = $route['source_path'] . DIRECTORY_SEPARATOR;
-        $paths = (array)Configure::read('App.paths.templates');
-        if (!in_array($tplRoot, $paths, true)) {
-            Configure::write('App.paths.templates', array_merge([$tplRoot], $paths));
+        // Page spec (docs/module-page-spec-design.md): a handler may return a
+        // declarative `page` (sections of UiKit building blocks) instead of a
+        // template — the Core renders it via templates/ModulePage/render.php, so
+        // standard CRUD pages need no module template at all and a Core design
+        // change restyles every module at once. The shape is untrusted and
+        // coerced to pure data (no callables, safe app-relative URLs only).
+        $page = isset($result['page']) && is_array($result['page'])
+            ? (new PageSpecCoercer())->coerce($result['page'])
+            : null;
+
+        if ($page === null) {
+            // Render the module-provided template under the Core's module layout.
+            // The module ROOT (with a trailing separator, as CakePHP expects for a
+            // template path root) is prepended to the search paths, and the template
+            // is resolved under its `templates/` subdir — so the module ships
+            // `<module>/templates/<tpl>.php`. The Core layouts/elements remain
+            // reachable via the existing (lower-priority) paths.
+            $tplRoot = $route['source_path'] . DIRECTORY_SEPARATOR;
+            $paths = (array)Configure::read('App.paths.templates');
+            if (!in_array($tplRoot, $paths, true)) {
+                Configure::write('App.paths.templates', array_merge([$tplRoot], $paths));
+            }
+        } else {
+            $this->set('pageSpec', $page);
         }
 
         $this->set($vars);
@@ -229,8 +244,8 @@ class ModuleWebController extends AppController
         }
         $this->viewBuilder()
             ->setLayout($isAdmin ? 'admin' : 'module')
-            ->setTemplatePath('templates')
-            ->setTemplate($template);
+            ->setTemplatePath($page !== null ? 'ModulePage' : 'templates')
+            ->setTemplate($page !== null ? 'render' : $template);
         $this->response = $this->response->withStatus($status);
 
         return null;

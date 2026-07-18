@@ -176,6 +176,42 @@ class ModuleWebTest extends TestCase
         $this->assertResponseContains('Beta Kw7'); // handler saw the query params
     }
 
+    public function testPageSpecRendersViaCoreRenderer(): void
+    {
+        // Page spec (docs/module-page-spec-design.md): the handler returns a
+        // declarative `page` instead of a template; the Core renders the
+        // sections via templates/ModulePage/render.php. The fixture spec also
+        // carries hostile bits (callables, off-origin templates, an unknown
+        // section type) that must be dropped without breaking the page.
+        $this->session(['Auth' => ['id' => $this->userId, 'username' => 'zztest_web', 'email' => 'w@zztest.local']]);
+        $this->get('/m/zztest_web/spec');
+
+        $this->assertResponseOk();
+        // alert section
+        $this->assertResponseContains('alert-warning');
+        $this->assertResponseContains('Keine Mailbox konfiguriert.');
+        // table section: rows render, cell data is escaped, link_template expands.
+        $this->assertResponseContains('Sieben');
+        $this->assertResponseContains('Acht &amp; Co');
+        $this->assertResponseContains('href="/m/zztest_web/things/7"');
+        $this->assertResponseContains('href="/m/zztest_web/spec?edit=7"'); // action url_template
+        $this->assertResponseContains('page-item'); // paginate rendered (2 pages)
+        // form_accordion: Core opens the form -> CSRF token present; collapsed default.
+        $this->assertResponseContains('accordion-button collapsed');
+        $this->assertResponseContains('name="_csrfToken"');
+        $this->assertResponseContains('Anlegen');
+        // reference field inside the spec form survives coercion.
+        $this->assertResponseContains('data-options-refresh="/m/zztest_web/options"');
+        // detail section
+        $this->assertResponseContains('<dt class="col-sm-3">Name</dt>');
+        // html slot passes through raw
+        $this->assertResponseContains('<div data-test="raw">RAW-OK</div>');
+        // hostile bits dropped: no off-origin URL anywhere in the page.
+        $this->assertResponseNotContains('evil.test');
+        // Core layout wraps the page (standalone module shell).
+        $this->assertResponseContains('Fertura');
+    }
+
     public function testGuestPageRendersWithoutLogin(): void
     {
         $this->get('/m/zztest_web/public');
