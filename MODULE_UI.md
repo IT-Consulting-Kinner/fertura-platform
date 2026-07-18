@@ -100,7 +100,10 @@ Regeln:
 - Beide URLs müssen **app-relativ** sein (führendes `/`, kein `//`) — sonst
   werden sie verworfen.
 - `area` ist optional; wenn gesetzt, erscheint der Link nur für Nutzer, die
-  die Area halten (Sichtbarkeit = serverseitige Autorisierung).
+  die Area halten (Sichtbarkeit = serverseitige Autorisierung). Die
+  Area-Information liegt nur auf **Admin-Seiten** vor — auf Standalone-Seiten
+  (`auth=user` ohne `area`) wird ein area-gegateter Link daher immer
+  ausgeblendet (fail-closed). Für Standalone-Seiten `area` weglassen.
 - Der Refresh baut die Optionen per `ui.js` in place neu auf; die aktuelle
   Auswahl und eine führende Leer-Option („bitte wählen") bleiben erhalten.
 

@@ -133,8 +133,29 @@ class UiKitHelperTest extends TestCase
         $this->assertStringContainsString('target="_blank"', $html);
         $this->assertStringContainsString('rel="noopener"', $html); // no window.opener backchannel
         $this->assertStringContainsString('data-options-refresh="/m/ticketing/admin/mailboxes/options"', $html);
-        $this->assertStringContainsString('data-options-target="#uikit-ref-mailbox_id"', $html);
-        $this->assertStringContainsString('id="uikit-ref-mailbox_id"', $html); // select carries the target id
+        // The id carries a per-request sequence (uikit-ref-<key>-N); the refresh
+        // button targets exactly the select that carries it.
+        preg_match('/id="(uikit-ref-mailbox_id-\d+)"/', $html, $m);
+        $this->assertNotEmpty($m, 'select carries a sequenced id');
+        $this->assertStringContainsString('data-options-target="#' . $m[1] . '"', $html);
+    }
+
+    public function testReferenceFieldIdsStayUniqueForSameKeyOnOnePage(): void
+    {
+        // The same field key used in two forms on one page (create accordion +
+        // edit form) must not collide: without the sequence both selects share an
+        // id and the second form's refresh button rebuilds the first select.
+        $view = new View();
+        $ui = new UiKitHelper($view);
+        $spec = [[
+            'key' => 'mailbox_id', 'label' => 'Mailbox', 'input' => 'select', 'options' => [],
+            'reference' => ['options_url' => '/m/t/admin/mailboxes/options'],
+        ]];
+
+        $html = $ui->fields($spec) . $ui->fields($spec);
+        preg_match_all('/id="(uikit-ref-mailbox_id-\d+)"/', $html, $m);
+        $this->assertCount(2, $m[1]);
+        $this->assertNotSame($m[1][0], $m[1][1], 'two same-key reference fields get distinct ids');
     }
 
     public function testReferenceFieldGatesLinkByAreaAndDropsForeignUrls(): void

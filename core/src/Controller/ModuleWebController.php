@@ -9,6 +9,7 @@ use App\Service\Module\TenantModuleService;
 use App\Service\Module\WebRouteRegistry;
 use App\Service\Storage\StorageManager;
 use App\Service\Tenant\TenantService;
+use App\Utility\AppUrl;
 use Cake\Core\Configure;
 use Cake\Datasource\ConnectionManager;
 use Cake\Event\EventInterface;
@@ -143,10 +144,19 @@ class ModuleWebController extends AppController
         // tenant context), so the payload is tenant-scoped like any web page.
         if (array_key_exists('json', $result)) {
             $jsonStatus = isset($result['status']) && is_int($result['status']) ? $result['status'] : 200;
+            try {
+                // Substitute malformed UTF-8 (e.g. imported labels) rather than
+                // silently emitting a 200 with an empty body: an encode failure is
+                // a module bug that must surface, mirroring the template path's 500.
+                $body = json_encode($result['json'], JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE);
+            } catch (Throwable $e) {
+                Log::error('Modul-JSON-Kodierung fehlgeschlagen: ' . $e->getMessage(), ['module' => $moduleKey]);
+                throw new InternalErrorException();
+            }
 
             return $this->response->withType('application/json')
                 ->withStatus($jsonStatus)
-                ->withStringBody((string)json_encode($result['json']));
+                ->withStringBody($body);
         }
         $vars = isset($result['vars']) && is_array($result['vars']) ? $result['vars'] : [];
         $template = isset($result['template']) && is_string($result['template']) && $result['template'] !== ''
@@ -247,9 +257,10 @@ class ModuleWebController extends AppController
      * Coerces a module-provided breadcrumb (untrusted shape) into what the
      * `admin_breadcrumb` element renders: a list of `[label, url|null]` pairs. Labels
      * are strings (rendered through i18n, so a raw page title passes through
-     * unchanged). A URL is kept ONLY when it is a safe app-relative path (single
-     * leading '/', no scheme, no protocol-relative '//') so a module cannot inject an
-     * off-site or `javascript:` link into the Core shell.
+     * unchanged). A URL is kept ONLY when it is a safe app-relative path
+     * ({@see AppUrl::isSafeRelative}, which also rejects the backslash/tab bypasses
+     * of the naive "/ but not //" test) so a module cannot inject an off-site or
+     * `javascript:` link into the Core shell.
      *
      * @param array<mixed> $raw
      * @return list<array{0:string,1:?string}>
@@ -266,10 +277,7 @@ class ModuleWebController extends AppController
                 continue;
             }
             $url = null;
-            if (isset($crumb[1]) && is_string($crumb[1]) && $crumb[1] !== ''
-                && str_starts_with($crumb[1], '/') && !str_starts_with($crumb[1], '//')
-                && !str_contains($crumb[1], '://')
-            ) {
+            if (isset($crumb[1]) && is_string($crumb[1]) && AppUrl::isSafeRelative($crumb[1])) {
                 $url = $crumb[1];
             }
             $out[] = [$label, $url];
