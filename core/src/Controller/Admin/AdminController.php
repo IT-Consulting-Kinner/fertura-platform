@@ -261,22 +261,28 @@ class AdminController extends AppController
         $req = $this->getRequest();
         $userId = $this->actingUserId();
         $service = new ListPrefsService();
-        // The request is an active state change (its query is authoritative and
-        // gets persisted) when it carries ANY relevant param: the `_lp` marker
-        // (used by the reset link to force an authoritative EMPTY state), a
-        // per_page choice, or any filter key — even one present-but-empty, so an
-        // explicit "clear this filter" is honoured. A truly bare visit carries
-        // none of these and reapplies the stored preference instead.
-        $active = $req->getQuery('_lp') !== null || $req->getQuery('per_page') !== null;
+        // The query is AUTHORITATIVE for this render (its values are applied
+        // instead of the stored ones) when the request carries any relevant
+        // param: the `_lp` marker, a per_page choice, or any filter key — even
+        // one present-but-empty, so a hand-cleared filter is honoured. A truly
+        // bare visit carries none and reapplies the stored preference.
+        $applyQuery = $req->getQuery('_lp') !== null || $req->getQuery('per_page') !== null;
         foreach ($filterKeys as $k) {
             if ($req->getQuery($k) !== null) {
-                $active = true;
+                $applyQuery = true;
                 break;
             }
         }
+        // PERSIST only on the explicit `_lp` marker — which the app's own filter
+        // form, reset link and pagination emit, but a hand-typed/deep-linked URL
+        // does not — and never for a cross-site request (Sec-Fetch-Site), so a
+        // forged `<img src=…?_lp=1>` or a prefetch cannot silently rewrite a
+        // logged-in admin's saved list state (GET has no CSRF token).
+        $crossSite = strtolower(trim($req->getHeaderLine('Sec-Fetch-Site'))) === 'cross-site';
+        $persist = $req->getQuery('_lp') !== null && !$crossSite && $userId !== '';
 
         $filters = [];
-        if ($active) {
+        if ($applyQuery) {
             foreach ($filterKeys as $k) {
                 $filters[$k] = trim((string)$req->getQuery($k, ''));
             }
@@ -284,7 +290,7 @@ class AdminController extends AppController
             if (!in_array($perPage, $perPageOptions, true)) {
                 $perPage = $defaultPerPage;
             }
-            if ($userId !== '') {
+            if ($persist) {
                 $service->save($userId, $listKey, $perPage, $filters);
             }
         } else {

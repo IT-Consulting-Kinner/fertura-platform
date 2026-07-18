@@ -28,10 +28,14 @@ class CoreUserListPrefs extends BaseMigration
             . 'prefs jsonb NOT NULL, '
             . "updated_at timestamptz NOT NULL DEFAULT now()')",
         );
-        // One row per user per list; the upsert in ListPrefsService targets it.
+        // One row per user per list, TENANT-SCOPED (via the helper, which prepends
+        // tenant_id): UNIQUE (tenant_id, user_id, list_key). A global (user_id,
+        // list_key) unique would, after a user is reassigned to another tenant,
+        // let the upsert collide with the now RLS-invisible old-tenant row and
+        // raise an RLS violation (500) forever — the tenant-scoped key avoids it.
         $this->execute(
-            'ALTER TABLE core.user_list_prefs '
-            . 'ADD CONSTRAINT uq_user_list_prefs UNIQUE (user_id, list_key)',
+            "SELECT core.add_tenant_unique('core', 'user_list_prefs', "
+            . "'uq_user_list_prefs', 'user_id, list_key')",
         );
     }
 

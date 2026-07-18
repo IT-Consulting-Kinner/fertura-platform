@@ -71,9 +71,12 @@ class ListPrefsService
             $prefs['per_page'] = $perPage;
         }
 
+        // The conflict target matches the tenant-scoped unique
+        // (tenant_id, user_id, list_key); tenant_id is the row's DEFAULT
+        // core.current_tenant(), evaluated before the conflict check.
         $this->conn()->execute(
             'INSERT INTO user_list_prefs (user_id, list_key, prefs) VALUES (:u, :k, CAST(:p AS jsonb)) '
-            . 'ON CONFLICT (user_id, list_key) DO UPDATE SET prefs = EXCLUDED.prefs, updated_at = now()',
+            . 'ON CONFLICT (tenant_id, user_id, list_key) DO UPDATE SET prefs = EXCLUDED.prefs, updated_at = now()',
             ['u' => $userId, 'k' => $listKey, 'p' => json_encode($prefs)],
         );
     }

@@ -28,6 +28,36 @@ class AuditController extends AdminController
         $entityType = trim($state['filters']['entity_type']);
         $moduleKey = trim($state['filters']['module_key']);
 
+        // Operator readers additionally see operator-global (tenant_id IS NULL)
+        // platform events — module installs, license/contract registrations, admin
+        // grants. The RLS default connection hides those (its policy matches only
+        // tenant_id = core.current_tenant()), so operators read via the privileged
+        // connection, scoped IN SQL to their own tenant + global so other tenants
+        // stay invisible. Tenant admins keep the RLS-scoped default connection.
+        $isOperator = $this->isOperatorTenant();
+        if ($isOperator) {
+            $conn = Db::privileged();
+        } else {
+            // RLS-effective default connection. Narrow to the concrete Connection so
+            // execute() resolves; ConnectionInterface intentionally omits it.
+            /** @var \Cake\Database\Connection $conn */
+            $conn = ConnectionManager::get('default');
+        }
+
+        // Filter dropdowns: scope the DISTINCT lists (operator: own tenant + global;
+        // tenant admin: RLS-scoped by the connection). Computed BEFORE the WHERE so a
+        // STORED entity_type that no longer exists can be dropped — otherwise it
+        // would filter the list to empty while the <select> shows "All" (a stored
+        // value the FormHelper cannot match), leaving the admin with a mysteriously
+        // empty page.
+        $scope = $isOperator ? ' WHERE (tenant_id = :op_tenant OR tenant_id IS NULL)' : '';
+        $scopeParams = $isOperator ? ['op_tenant' => self::OPERATOR_TENANT_ID] : [];
+        $actions = $conn->execute('SELECT DISTINCT action FROM audit_log' . $scope . ' ORDER BY action', $scopeParams)->fetchAll('assoc');
+        $entityTypes = $conn->execute('SELECT DISTINCT entity_type FROM audit_log' . $scope . ' ORDER BY entity_type', $scopeParams)->fetchAll('assoc');
+        if ($entityType !== '' && !in_array($entityType, array_column($entityTypes, 'entity_type'), true)) {
+            $entityType = '';
+        }
+
         $where = [];
         $params = [];
         if ($action !== '') {
@@ -42,22 +72,9 @@ class AuditController extends AdminController
             $where[] = 'a.module_key = :mkey';
             $params['mkey'] = $moduleKey;
         }
-        // Operator readers additionally see operator-global (tenant_id IS NULL)
-        // platform events — module installs, license/contract registrations, admin
-        // grants. The RLS default connection hides those (its policy matches only
-        // tenant_id = core.current_tenant()), so operators read via the privileged
-        // connection, scoped IN SQL to their own tenant + global so other tenants
-        // stay invisible. Tenant admins keep the RLS-scoped default connection.
-        $isOperator = $this->isOperatorTenant();
         if ($isOperator) {
-            $conn = Db::privileged();
             $where[] = '(a.tenant_id = :op_tenant OR a.tenant_id IS NULL)';
             $params['op_tenant'] = self::OPERATOR_TENANT_ID;
-        } else {
-            // RLS-effective default connection. Narrow to the concrete Connection so
-            // execute() resolves; ConnectionInterface intentionally omits it.
-            /** @var \Cake\Database\Connection $conn */
-            $conn = ConnectionManager::get('default');
         }
 
         $whereSql = $where !== [] ? ' WHERE ' . implode(' AND ', $where) : '';
@@ -76,13 +93,6 @@ class AuditController extends AdminController
             . $whereSql
             . ' ORDER BY a.created_at DESC LIMIT ' . $perPage . ' OFFSET ' . $offset;
         $entries = $conn->execute($sql, $params)->fetchAll('assoc');
-
-        // Filter dropdowns: scope the DISTINCT lists the same way (operator: own
-        // tenant + global; tenant admin: RLS-scoped by the connection).
-        $scope = $isOperator ? ' WHERE (tenant_id = :op_tenant OR tenant_id IS NULL)' : '';
-        $scopeParams = $isOperator ? ['op_tenant' => self::OPERATOR_TENANT_ID] : [];
-        $actions = $conn->execute('SELECT DISTINCT action FROM audit_log' . $scope . ' ORDER BY action', $scopeParams)->fetchAll('assoc');
-        $entityTypes = $conn->execute('SELECT DISTINCT entity_type FROM audit_log' . $scope . ' ORDER BY entity_type', $scopeParams)->fetchAll('assoc');
 
         $this->set(compact('entries', 'actions', 'entityTypes', 'action', 'entityType', 'moduleKey', 'page', 'total'));
         $this->set('perPage', $perPage);
