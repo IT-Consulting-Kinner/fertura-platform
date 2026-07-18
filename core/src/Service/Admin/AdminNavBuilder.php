@@ -128,6 +128,63 @@ class AdminNavBuilder
     }
 
     /**
+     * Breadcrumb trail for a function page under an admin area: top menu → section
+     * (the drill-down tile page, only when the area has more than one item) → the
+     * current function, found by longest-prefix match over the area's nav items so
+     * sub-pages (add/edit/view) still resolve to their leaf, which then links back
+     * to the leaf's list page.
+     *
+     * Shared by {@see AdminController} (Core admin pages) and
+     * {@see \App\Controller\ModuleWebController} (module admin pages) so both
+     * render the identical trail (ch. 23.16.3). Module-contributed areas work
+     * unchanged because {@see WebRouteRegistry::adminNav()} already resolves their
+     * labels in the module's i18n domain and their item URLs to `/m/<key>/…`.
+     *
+     * @param list<string> $userAreaKeys areas the current user holds
+     * @param string $requestPath current request path (for the leaf prefix match)
+     * @return list<array{0:string,1:?string}> [label, url|null]; null = current
+     */
+    public function breadcrumb(array $userAreaKeys, string $area, string $requestPath): array
+    {
+        $top = $this->areaTop($area);
+        $crumbs = [[$top === 'module' ? 'admin.nav.modules' : 'admin.nav.administration', '/admin/' . $top]];
+
+        $def = $this->build($userAreaKeys)[$area] ?? null;
+        if ($def === null) {
+            return $crumbs;
+        }
+        $label = $area === 'module_lifecycle' ? 'admin.nav.module_management' : $def['label'];
+        $items = $def['items'];
+
+        if (count($items) === 1) {
+            // No drill-down tile page exists: the group label IS the function.
+            $crumbs[] = [$label, null];
+
+            return $crumbs;
+        }
+
+        // Section tile page, then the current function — found by longest-prefix
+        // match so sub-pages (add/edit/view) still resolve to their leaf, which
+        // then links back to the leaf's list page.
+        $crumbs[] = [$label, '/admin/section/' . $area];
+        $best = null;
+        $bestLen = -1;
+        foreach ($items as $it) {
+            $url = (string)$it[1];
+            if (str_starts_with($requestPath, $url) && strlen($url) > $bestLen) {
+                $best = $it;
+                $bestLen = strlen($url);
+            }
+        }
+        if ($best !== null) {
+            $onLeaf = rtrim($requestPath, '/') === rtrim((string)$best[1], '/');
+            $crumbs[] = [(string)$best[0], $onLeaf ? null : (string)$best[1]];
+        }
+
+        return $crumbs;
+    }
+
+    /**
      * Operator-scoped = a Core area not typed as tenant. Mirrors
      * {@see AdminController::isOperatorArea()} so the nav grouping and the access gate
      * agree on the operator/tenant boundary.

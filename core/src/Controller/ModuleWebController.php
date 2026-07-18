@@ -162,14 +162,28 @@ class ModuleWebController extends AppController
         // Navigation breadcrumb (Core-owned, ch. 23.16.3). A module MAY return a
         // `breadcrumb` in its result — a list of [label, url|null] pairs — to give its
         // page navigation context (the shape is untrusted and coerced). Otherwise an
-        // admin page gets a default trail back to the Module area; a standalone page
-        // shows none unless the module supplies one (its minimal shell already links
-        // home via the brand).
+        // admin page gets the SAME trail a Core admin page gets (top menu → the
+        // area's section tile → the function, via the shared AdminNavBuilder); a
+        // standalone page shows none unless the module supplies one (its minimal
+        // shell already links home via the brand).
         $breadcrumb = isset($result['breadcrumb']) && is_array($result['breadcrumb'])
             ? $this->coerceBreadcrumb($result['breadcrumb'])
             : [];
         if ($breadcrumb === [] && $isAdmin) {
-            $breadcrumb = [['admin.nav.modules', '/admin/module'], [$title, null]];
+            $breadcrumb = (new AdminNavBuilder())->breadcrumb(
+                $userAreas,
+                (string)$route['area'],
+                '/m/' . $moduleKey . '/' . $path,
+            );
+            // Name the current page when the shared trail could not: for an admin
+            // route without a matching nav item the trail still ends on a Core
+            // NAVIGATION crumb (top menu or section tile) — never on a module leaf
+            // ('/m/…', the sub-page case, where the linked list leaf is the Core
+            // idiom for the last crumb).
+            $last = $breadcrumb === [] ? null : $breadcrumb[array_key_last($breadcrumb)];
+            if ($last === null || ($last[1] !== null && !str_starts_with((string)$last[1], '/m/'))) {
+                $breadcrumb[] = [$title, null];
+            }
         }
         $this->set('breadcrumb', $breadcrumb);
 
