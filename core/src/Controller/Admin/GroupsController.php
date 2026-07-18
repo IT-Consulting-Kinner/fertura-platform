@@ -97,6 +97,19 @@ class GroupsController extends AdminController
         foreach ($grantRows as $g) {
             $grants[$g['module_key'] . '::' . $g['resource_type']] = $g;
         }
+        // Object-level rows are CLI-managed and not editable here, but they must
+        // stay VISIBLE (revision-proof norm): an auditing admin would otherwise
+        // read "every box empty" as "no access" while object grants keep working.
+        $objectCounts = [];
+        foreach (
+            $conn->execute(
+                'SELECT module_key, resource_type, count(*) AS c FROM group_resource_permissions '
+                . 'WHERE group_id = :id AND resource_key IS NOT NULL GROUP BY module_key, resource_type',
+                ['id' => $id],
+            )->fetchAll('assoc') as $o
+        ) {
+            $objectCounts[$o['module_key'] . '::' . $o['resource_type']] = (int)$o['c'];
+        }
         // Only group-capable resources can be assigned in the group permission
         // editor (ch. 25.11), grouped by owning module for the accordion display.
         $resourceGroups = [];
@@ -105,7 +118,7 @@ class GroupsController extends AdminController
             $resourceGroups[$mk] ??= ['name' => (string)($r['module_name'] ?? '') ?: $mk, 'resources' => []];
             $resourceGroups[$mk]['resources'][] = $r;
         }
-        $this->set(compact('group', 'members', 'candidates', 'grants', 'resourceGroups'));
+        $this->set(compact('group', 'members', 'candidates', 'grants', 'resourceGroups', 'objectCounts'));
 
         return null;
     }
@@ -216,7 +229,8 @@ class GroupsController extends AdminController
         $current = [];
         foreach (
             $conn->execute(
-                'SELECT module_key, resource_type, can_browse, can_read, can_add, can_edit, can_delete, extra_actions '
+                'SELECT module_key, resource_type, can_browse, can_read, can_add, can_edit, can_delete, extra_actions, '
+                . 'deny_browse, deny_read, deny_add, deny_edit, deny_delete, deny_extra '
                 . 'FROM group_resource_permissions WHERE group_id = :id AND resource_key IS NULL',
                 ['id' => $id],
             )->fetchAll('assoc') as $g
@@ -238,21 +252,43 @@ class GroupsController extends AdminController
                 'add' => !empty($row['add']),
                 'delete' => !empty($row['delete']),
             ];
-            // Extra actions (ch. 25.7): only the DECLARED ones are considered.
+            // Extra actions (ch. 25.7): only the DECLARED ones are considered
+            // from the FORM. Stored extras OUTSIDE the declaration (granted via
+            // CLI, invisible in the checkbox editor) are carried over untouched
+            // — a Save click must not silently strip another surface's state.
             $declared = is_string($r['extra_actions'] ?? null)
                 ? (json_decode((string)$r['extra_actions'], true) ?: [])
                 : (array)($r['extra_actions'] ?? []);
+            $declaredNames = array_values(array_filter(array_map('strval', $declared)));
             $extra = [];
-            foreach ($declared as $name) {
-                $name = (string)$name;
-                if ($name !== '' && !empty($row['x'][$name])) {
+            foreach ($declaredNames as $name) {
+                if (!empty($row['x'][$name])) {
                     $extra[$name] = true;
+                }
+            }
+            $storedExtra = isset($current[$rid]) && is_string($current[$rid]['extra_actions'] ?? null)
+                ? (json_decode((string)$current[$rid]['extra_actions'], true) ?: [])
+                : [];
+            foreach ($storedExtra as $name => $on) {
+                if (!empty($on) && !in_array((string)$name, $declaredNames, true)) {
+                    $extra[(string)$name] = true;
                 }
             }
 
             if (!in_array(true, $bread, true) && $extra === []) {
                 if (isset($current[$rid])) {
-                    $service->revoke($id, $moduleKey, $resourceType, null);
+                    if ($this->hasDenyFlags($current[$rid])) {
+                        // Deny-wins rows must SURVIVE an all-unchecked save:
+                        // deleting the row would act as a grant (the deny
+                        // disappears and another group's allow wins again).
+                        // Clear only the allow side — grant() upserts the can_*/
+                        // extra columns and leaves every deny_* column alone.
+                        if ($this->grantDiffers($current[$rid], $bread, $extra)) {
+                            $service->grant($id, $moduleKey, $resourceType, null, $bread, $extra);
+                        }
+                    } else {
+                        $service->revoke($id, $moduleKey, $resourceType, null);
+                    }
                 }
             } elseif ($this->grantDiffers($current[$rid] ?? null, $bread, $extra)) {
                 $service->grant($id, $moduleKey, $resourceType, null, $bread, $extra);
@@ -261,6 +297,27 @@ class GroupsController extends AdminController
         $this->Flash->success(__('flash.group.perms_saved'));
 
         return $this->redirect(['action' => 'view', $id]);
+    }
+
+    /**
+     * Whether the class-level row carries any deny rule (deny-wins, ch. 25):
+     * such a row must never be deleted by the allow-side editor.
+     *
+     * @param array<string,mixed> $row
+     */
+    private function hasDenyFlags(array $row): bool
+    {
+        $truthy = static fn($v): bool => $v === true || $v === 't' || $v === '1' || $v === 1;
+        foreach (['deny_browse', 'deny_read', 'deny_add', 'deny_edit', 'deny_delete'] as $col) {
+            if ($truthy($row[$col] ?? false)) {
+                return true;
+            }
+        }
+        $denyExtra = is_string($row['deny_extra'] ?? null)
+            ? (json_decode((string)$row['deny_extra'], true) ?: [])
+            : (array)($row['deny_extra'] ?? []);
+
+        return array_filter($denyExtra) !== [];
     }
 
     /**
