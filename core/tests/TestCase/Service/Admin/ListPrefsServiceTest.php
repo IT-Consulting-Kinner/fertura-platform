@@ -58,6 +58,26 @@ class ListPrefsServiceTest extends TestCase
         $this->assertSame(['action' => 'user', 'module_key' => 'kb'], $out['filters']);
     }
 
+    public function testPrefsAreIsolatedPerUser(): void
+    {
+        // Review finding: a second user's stored prefs must never surface for the
+        // first (keyed by the globally-unique user_id).
+        $conn = ConnectionManager::get('default');
+        $otherId = (string)$conn->execute(
+            "INSERT INTO users (username, email, status) VALUES (:u, :e, 'active') RETURNING id",
+            ['u' => 'zzlp2_' . bin2hex(random_bytes(3)), 'e' => bin2hex(random_bytes(3)) . '@zzlistprefs.local'],
+        )->fetch('assoc')['id'];
+
+        $service = new ListPrefsService();
+        $service->save($this->userId, 'audit', 25, ['action' => 'mine']);
+        $service->save($otherId, 'audit', 100, ['action' => 'theirs']);
+
+        $this->assertSame(['action' => 'mine'], $service->load($this->userId, 'audit')['filters']);
+        $this->assertSame(25, $service->load($this->userId, 'audit')['per_page']);
+        $this->assertSame(['action' => 'theirs'], $service->load($otherId, 'audit')['filters']);
+        $this->assertSame(100, $service->load($otherId, 'audit')['per_page']);
+    }
+
     public function testSaveUpsertsSameRowPerList(): void
     {
         $service = new ListPrefsService();

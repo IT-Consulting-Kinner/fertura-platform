@@ -119,10 +119,10 @@ class AuditFilterResetTest extends TestCase
 
     public function testBareVisitReappliesStoredFilter(): void
     {
-        // Paket 2: after filtering, navigating away and back (a bare visit with
-        // no query) reapplies the stored filter for this user.
+        // Paket 2: filtering VIA THE FORM (carries _lp) persists; navigating away
+        // and back (a bare visit with no query) reapplies the stored filter.
         $this->login();
-        $this->get('/admin/audit?action=zztest.alpha');
+        $this->get('/admin/audit?_lp=1&action=zztest.alpha');
         $this->assertRowNotListed('zztest.beta');
 
         $this->get('/admin/audit'); // bare -> stored filter reapplied
@@ -130,6 +130,36 @@ class AuditFilterResetTest extends TestCase
         $this->assertRowListed('zztest.alpha');
         $this->assertRowNotListed('zztest.beta');
         $this->assertSame('zztest.alpha', $this->actionInputValue());
+    }
+
+    public function testDeepLinkFilterAppliesButDoesNotPersist(): void
+    {
+        // Review finding (GET-write CSRF): a filter query WITHOUT the _lp marker
+        // (a hand-typed/deep link, or a forged subresource) is applied for THIS
+        // render but must NOT be persisted, so it cannot silently rewrite the
+        // stored state.
+        $this->login();
+        $this->get('/admin/audit?action=zztest.alpha'); // no _lp
+        $this->assertRowNotListed('zztest.beta'); // applied now
+
+        $this->get('/admin/audit'); // bare -> nothing was stored -> both listed
+        $this->assertResponseOk();
+        $this->assertRowListed('zztest.alpha');
+        $this->assertRowListed('zztest.beta');
+    }
+
+    public function testCrossSiteRequestDoesNotPersist(): void
+    {
+        // Even with the _lp marker, a cross-site request (Sec-Fetch-Site) must
+        // not persist — neutralizes a forged <img src=…?_lp=1> / prefetch.
+        $this->login();
+        $this->configRequest(['headers' => ['Sec-Fetch-Site' => 'cross-site']]);
+        $this->get('/admin/audit?_lp=1&action=zztest.alpha');
+
+        $this->get('/admin/audit'); // bare -> nothing persisted -> both listed
+        $this->assertResponseOk();
+        $this->assertRowListed('zztest.alpha');
+        $this->assertRowListed('zztest.beta');
     }
 
     public function testExplicitEmptyActionClearsFilter(): void
