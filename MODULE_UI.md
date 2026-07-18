@@ -151,7 +151,9 @@ return [
              ['label' => __d('meinmodul', 'a.edit'),
               'url_template' => '/m/meinmodul/admin/things?edit={id}'],
              // Per-Zeile-POST (Toggle-Idiom): Inline-Form, CSRF vom Core,
-             // mit 'confirm' über das geteilte Bestätigungs-Modal:
+             // mit 'confirm' über das geteilte Bestätigungs-Modal.
+             // NICHT kombinierbar mit select/bulkActions (die Liste läge dann
+             // in EINEM Formular — HTML verbietet verschachtelte Formulare):
              ['label' => __d('meinmodul', 'a.deactivate'),
               'url_template' => '/m/meinmodul/admin/things/toggle/{id}',
               'post' => true, 'confirm' => __d('meinmodul', 'a.deactivate_confirm')],
