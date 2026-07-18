@@ -53,6 +53,7 @@ class AdminGroupServiceTest extends TestCase
         $conn->execute('DELETE FROM "groups" WHERE name = :n', ['n' => self::GROUP]);
         $conn->execute("DELETE FROM resources WHERE module_key LIKE 'zzgrpinit%'");
         $conn->execute("DELETE FROM users WHERE email LIKE '%@zzgrpinit.local'");
+        $conn->execute("DELETE FROM tenants WHERE key LIKE 'zzgrp_t2_%'");
     }
 
     private function seedResource(string $moduleKey, string $type, string $extraJson): void
@@ -102,6 +103,47 @@ class AdminGroupServiceTest extends TestCase
             ['g' => $first['id']],
         )->fetch();
         $this->assertNotFalse($topped, 'later-registered resource topped up on re-run');
+    }
+
+    public function testEnsureWorksForASecondTenant(): void
+    {
+        // HIGH review finding: the GLOBAL unique index uq_groups_name_lower made
+        // the same group name impossible in a second tenant — ensure() crashed
+        // with 23505 for every tenant after the first. Now unique PER tenant
+        // (migration CoreGroupsPerTenantUnique).
+        $conn = ConnectionManager::get('default');
+        $tenantId = (string)$conn->execute(
+            "INSERT INTO tenants (key, name) VALUES (:k, 'ZZ Second Tenant') RETURNING id",
+            ['k' => 'zzgrp_t2_' . bin2hex(random_bytes(3))],
+        )->fetch('assoc')['id'];
+
+        $service = new AdminGroupService();
+        $first = $service->ensure(self::TENANT, self::GROUP);
+
+        $conn->execute("SELECT set_config('app.current_tenant_id', :t, false)", ['t' => $tenantId]);
+        $second = $service->ensure($tenantId, self::GROUP);
+
+        $this->assertTrue($second['created'], 'same-named group created in the second tenant');
+        $this->assertNotSame($first['id'], $second['id']);
+    }
+
+    public function testEnsureRerunSkipsUnchangedGrants(): void
+    {
+        // Idempotent re-runs must not flood the append-only audit_log: a grant
+        // row already carrying the full set is skipped entirely.
+        $conn = ConnectionManager::get('default');
+        $service = new AdminGroupService();
+        $service->ensure(self::TENANT, self::GROUP);
+        $before = (int)$conn->execute(
+            "SELECT count(*) AS c FROM audit_log WHERE action = 'bread_rights.update'",
+        )->fetch('assoc')['c'];
+
+        $service->ensure(self::TENANT, self::GROUP); // nothing changed
+
+        $after = (int)$conn->execute(
+            "SELECT count(*) AS c FROM audit_log WHERE action = 'bread_rights.update'",
+        )->fetch('assoc')['c'];
+        $this->assertSame($before, $after, 're-run without changes writes no bread_rights.update entries');
     }
 
     public function testAddUserIsIdempotent(): void

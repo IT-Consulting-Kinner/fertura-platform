@@ -228,6 +228,11 @@ class SsoService
         }
 
         if ($user === false) {
+            // DOCUMENTED exception to the "no users without a group" invariant
+            // (enforced in the admin GUI and create_admin): JIT provisioning
+            // cannot know the intended group, so the user starts group-less —
+            // fail-closed (no BREAD permission applies) until an admin assigns
+            // one; the users list marks such accounts ("keine Gruppe").
             $id = $conn->execute(
                 'INSERT INTO users (username, email, first_name, last_name, status, password_hash, tenant_id) '
                 . "VALUES (:u, :e, :f, :l, 'active', NULL, :t) RETURNING id",
