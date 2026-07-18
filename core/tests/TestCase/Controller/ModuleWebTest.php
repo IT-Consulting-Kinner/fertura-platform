@@ -238,6 +238,23 @@ class ModuleWebTest extends TestCase
         $this->assertResponseContains('"saw_module_token":true'); // module read its own header
     }
 
+    public function testPublicApiEndpointReceivesClientIp(): void
+    {
+        // E174: the API dispatcher passes the client IP through (like the
+        // web-mount dispatcher already did), so a module can run its own per-IP
+        // throttle on public endpoints (e.g. KB /search + /feedback). Without
+        // this, `$request['client_ip']` was simply absent and every module-side
+        // per-IP limiter was silently inactive on the API path.
+        $this->configRequest([
+            'headers' => ['Accept' => 'application/json'],
+            'environment' => ['REMOTE_ADDR' => '203.0.113.9'],
+        ]);
+        $this->get('/api/v1/m/zztest_web/status');
+
+        $this->assertResponseOk();
+        $this->assertResponseContains('"client_ip":"203.0.113.9"');
+    }
+
     public function testUserApiEndpointStillRequiresToken(): void
     {
         // A `user`-auth module endpoint (default) still requires a Core token.
