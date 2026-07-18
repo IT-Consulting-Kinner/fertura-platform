@@ -27,6 +27,14 @@ final class SpecPage
                         'text' => 'Keine Mailbox konfiguriert.',
                     ],
                     [
+                        'type' => 'filters',
+                        'fields' => [
+                            ['key' => 'q', 'label' => 'Suche', 'placeholder' => 'Name…'],
+                        ],
+                        'values' => ['q' => 'Sieben-Filter'],
+                        'submit' => 'Filtern!',
+                    ],
+                    [
                         'type' => 'table',
                         'columns' => [
                             [
@@ -53,7 +61,7 @@ final class SpecPage
                     [
                         'type' => 'form_accordion',
                         'title' => 'Neu anlegen',
-                        'url' => '/m/zztest_web/spec',
+                        // No 'url': the form posts back to the current page.
                         'fields' => [
                             ['key' => 'name', 'label' => 'Name', 'required' => true],
                             [

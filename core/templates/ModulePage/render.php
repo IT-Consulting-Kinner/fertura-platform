@@ -51,11 +51,16 @@ foreach ($pageSpec['sections'] as $section) {
             echo $this->UiKit->index($section['rows'], $columns, $tableOpts);
             if (isset($section['paginate'])) {
                 $p = $section['paginate'];
+                // Pass the CURRENT path explicitly: with $url=null the UiKit falls
+                // back to array-URL generation, which resolves to the bare
+                // /module-web/dispatch fallback route (no moduleKey pass args) —
+                // every pagination link would 500. The string branch simply
+                // appends the query to this page's own URL.
                 echo $this->UiKit->paginate(
                     $p['page'],
                     $p['per_page'],
                     $p['total'],
-                    null,
+                    $this->getRequest()->getUri()->getPath(),
                     $this->getRequest()->getQueryParams(),
                 );
             }

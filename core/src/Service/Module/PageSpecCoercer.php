@@ -64,7 +64,12 @@ final class PageSpecCoercer
                     'form_accordion' => $this->formAccordion($s),
                     'detail' => $this->detail($s),
                     'alert' => $this->alert($s),
-                    'html' => ['type' => 'html', 'html' => (string)($s['html'] ?? '')],
+                    // Scalar-only like every other arm: a non-stringable value
+                    // (object/array) must drop the section, not throw out of the
+                    // coercer's "unknown shapes degrade silently" contract.
+                    'html' => isset($s['html']) && is_scalar($s['html'])
+                        ? ['type' => 'html', 'html' => (string)$s['html']]
+                        : null,
                     default => null,
                 };
             }

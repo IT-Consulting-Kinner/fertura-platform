@@ -190,15 +190,23 @@ class ModuleWebTest extends TestCase
         // alert section
         $this->assertResponseContains('alert-warning');
         $this->assertResponseContains('Keine Mailbox konfiguriert.');
+        // filters section: field renders with the current value + custom submit.
+        $this->assertResponseContains('Sieben-Filter');
+        $this->assertResponseContains('Filtern!');
         // table section: rows render, cell data is escaped, link_template expands.
         $this->assertResponseContains('Sieben');
         $this->assertResponseContains('Acht &amp; Co');
         $this->assertResponseContains('href="/m/zztest_web/things/7"');
         $this->assertResponseContains('href="/m/zztest_web/spec?edit=7"'); // action url_template
-        $this->assertResponseContains('page-item'); // paginate rendered (2 pages)
-        // form_accordion: Core opens the form -> CSRF token present; collapsed default.
+        // Paginate must target THIS page (review finding: with $url=null the
+        // links resolved to the bare /module-web/dispatch fallback -> 500).
+        $this->assertResponseContains('href="/m/zztest_web/spec?page=1"');
+        $this->assertResponseNotContains('/module-web/dispatch');
+        // form_accordion: Core opens the form -> CSRF token present; collapsed
+        // default; without 'url' the form posts back to the current page.
         $this->assertResponseContains('accordion-button collapsed');
         $this->assertResponseContains('name="_csrfToken"');
+        $this->assertResponseContains('action="/m/zztest_web/spec"');
         $this->assertResponseContains('Anlegen');
         // reference field inside the spec form survives coercion.
         $this->assertResponseContains('data-options-refresh="/m/zztest_web/options"');
@@ -210,6 +218,24 @@ class ModuleWebTest extends TestCase
         $this->assertResponseNotContains('evil.test');
         // Core layout wraps the page (standalone module shell).
         $this->assertResponseContains('Fertura');
+    }
+
+    public function testPageSpecOnAdminRouteRendersInAdminShellWithBreadcrumb(): void
+    {
+        // A page-spec route MAY declare an `area`: the spec then renders inside
+        // the admin shell with the same default breadcrumb a template page gets
+        // (shared AdminNavBuilder trail + page title as the active crumb).
+        ConnectionManager::get('default')->execute(
+            'INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a)',
+            ['u' => $this->userId, 'a' => 'zztest_web_admin'],
+        );
+        $this->session(['Auth' => ['id' => $this->userId, 'username' => 'zztest_web', 'email' => 'w@zztest.local']]);
+        $this->get('/m/zztest_web/admin/spec');
+
+        $this->assertResponseOk();
+        $this->assertResponseContains('accordion-button collapsed'); // spec section renders
+        $this->assertResponseContains('zztest.nav.group'); // admin shell nav present
+        $this->assertResponseContains('Spec-Seite'); // handler title = active crumb
     }
 
     public function testGuestPageRendersWithoutLogin(): void

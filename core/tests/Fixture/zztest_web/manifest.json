@@ -64,6 +64,14 @@
             "template": "dashboard",
             "auth": "user",
             "title": "Web Test Spec"
+        },
+        {
+            "path": "/admin/spec",
+            "class": "ZztestWeb\\Web\\SpecPage",
+            "template": "dashboard",
+            "auth": "user",
+            "area": "zztest_web_admin",
+            "title": "Web Test Spec Admin"
         }
     ],
     "api_routes": [
