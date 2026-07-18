@@ -157,8 +157,12 @@ class AdminNavBuilder
         $items = $def['items'];
 
         if (count($items) === 1) {
-            // No drill-down tile page exists: the group label IS the function.
-            $crumbs[] = [$label, null];
+            // No drill-down tile page exists: the group label IS the function —
+            // but only claim "current page" (null URL) when the request really is
+            // that page; on any other path (sub-page or a nav-less module route
+            // in this area) the crumb links to the function instead.
+            $onItem = rtrim($requestPath, '/') === rtrim((string)$items[0][1], '/');
+            $crumbs[] = [$label, $onItem ? null : (string)$items[0][1]];
 
             return $crumbs;
         }
