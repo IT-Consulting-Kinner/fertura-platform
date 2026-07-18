@@ -532,6 +532,9 @@ class UiKitHelper extends Helper
             // ubiquitous activate/deactivate toggle must not be a GET link.
             // Renders a standalone inline form + submit button — CSRF comes from
             // the FormHelper; with 'confirm' it routes through the shared modal.
+            // CONSTRAINT: must not be combined with the select/bulkActions
+            // pattern, which wraps the whole list in ONE form — HTML forbids
+            // nested forms, the browser would silently re-parent the inner one.
             if (!empty($a['post'])) {
                 if (isset($a['confirm'])) {
                     $opts = ['class' => $class];
