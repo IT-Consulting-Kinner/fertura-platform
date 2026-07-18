@@ -18,6 +18,7 @@ use App\Service\Security\PackageVerificationException;
 use App\Service\Security\PackageVerifier;
 use App\Service\Settings\SettingsManager;
 use Cake\Database\Connection;
+use RuntimeException;
 use Throwable;
 
 /**
@@ -549,6 +550,24 @@ class ModuleLifecycle
 
         // Register the declared BREAD resources (Step 9, ch. 25.11).
         foreach ($manifest->permissions() as $p) {
+            // Charset gate (fail-closed at install, like assertKeySafe for the
+            // module key): resource types and extra-action names become form
+            // field path segments and DOM ids in the group permission editor —
+            // a '.' would be split by the FormHelper (the checkbox round trip
+            // silently breaks), brackets/quotes would break name/attribute.
+            $resourceType = (string)($p['resource_type'] ?? '');
+            if (!preg_match('/^[a-z][a-z0-9_]*$/', $resourceType)) {
+                throw new RuntimeException(
+                    "Ungueltiger resource_type \"$resourceType\" im Manifest (erlaubt: [a-z][a-z0-9_]*).",
+                );
+            }
+            foreach ((array)($p['extra_actions'] ?? []) as $ea) {
+                if (!is_string($ea) || !preg_match('/^[a-z][a-z0-9_]*$/', $ea)) {
+                    throw new RuntimeException(
+                        "Ungueltige extra_action in Ressource \"$resourceType\" (erlaubt: [a-z][a-z0-9_]*).",
+                    );
+                }
+            }
             $conn->execute(
                 'INSERT INTO resources (module_key, resource_type, resource_name, description, is_scoped, group_capable, extra_actions) '
                 . 'VALUES (:m, :t, :n, :d, :s, :gc, CAST(:e AS jsonb)) '

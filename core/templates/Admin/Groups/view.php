@@ -6,6 +6,7 @@
  * @var array<int, array<string, mixed>> $candidates
  * @var array<string, array<string, mixed>> $grants          Class-level grant per "module::type".
  * @var array<string, array{name: string, resources: array<int, array<string, mixed>>}> $resourceGroups
+ * @var array<string, int> $objectCounts                     CLI-managed object rows per "module::type".
  */
 $active = filter_var($group['active'], FILTER_VALIDATE_BOOLEAN);
 $truthy = static fn ($v) => filter_var($v ?? false, FILTER_VALIDATE_BOOLEAN);
@@ -66,7 +67,9 @@ $dLabel = static function (string $domain, string $key, string $fallback): strin
                         <?php ob_start(); ?>
                         <?php foreach ($module['resources'] as $r):
                             $rid = $r['module_key'] . '::' . $r['resource_type'];
-                            $rkey = str_replace(['.', ':'], '_', $rid);
+                            // DOM-id-safe key (registry values are charset-gated at
+                            // install; this is belt to that braces).
+                            $rkey = (string)preg_replace('/[^a-zA-Z0-9_-]/', '_', $rid);
                             $grant = $grants[$rid] ?? null;
                             $grantExtra = $grant !== null && is_string($grant['extra_actions'] ?? null)
                                 ? (json_decode((string)$grant['extra_actions'], true) ?: [])
@@ -80,15 +83,17 @@ $dLabel = static function (string $domain, string $key, string $fallback): strin
                                 <div class="w-100"><strong class="small"><?= h($resourceLabel) ?></strong>
                                     <code class="small text-muted"><?= h($rid) ?></code>
                                     <?php if ($truthy($r['is_scoped'])): ?><span class="badge text-bg-light" title="<?= h(__('admin.groups.scoped_badge_title')) ?>">scoped</span><?php endif; ?>
+                                    <?php if (($objectCounts[$rid] ?? 0) > 0): ?><span class="badge text-bg-secondary" title="<?= h(__('admin.groups.perms_scoped_hint')) ?>"><?= h(__('admin.groups.object_rows_badge', $objectCounts[$rid])) ?></span><?php endif; ?>
                                 </div>
                                 <?php // BREAD order: Browse, Read, Edit, Add, Delete. ?>
                                 <?php foreach (['browse' => 'B', 'read' => 'R', 'edit' => 'E', 'add' => 'A', 'delete' => 'D'] as $a => $lbl): ?>
                                     <div class="form-check"><?= $this->Form->checkbox('perm.' . $rid . '.' . $a, ['class' => 'form-check-input', 'id' => $rkey . '_' . $a, 'checked' => $grant !== null && $truthy($grant['can_' . $a]), 'hiddenField' => false]) ?>
-                                        <label class="form-check-label small" for="<?= $rkey . '_' . $a ?>" title="<?= h(__('admin.groups.perm_' . $a)) ?>"><?= $lbl ?></label></div>
+                                        <label class="form-check-label small" for="<?= h($rkey . '_' . $a) ?>" title="<?= h(__('admin.groups.perm_' . $a)) ?>"><?= $lbl ?></label></div>
                                 <?php endforeach; ?>
-                                <?php foreach (array_values($declared) as $ea): $ea = (string)$ea; if ($ea === '') { continue; } ?>
-                                    <div class="form-check"><?= $this->Form->checkbox('perm.' . $rid . '.x.' . $ea, ['class' => 'form-check-input', 'id' => $rkey . '_x_' . $ea, 'checked' => (bool)($grantExtra[$ea] ?? false), 'hiddenField' => false]) ?>
-                                        <label class="form-check-label small" for="<?= $rkey . '_x_' . $ea ?>"><?= h($dLabel((string)$r['module_key'], 'perm.action.' . $ea, $ea)) ?></label></div>
+                                <?php foreach (array_values($declared) as $ea): $ea = (string)$ea; if ($ea === '') { continue; }
+                                    $eaKey = (string)preg_replace('/[^a-zA-Z0-9_-]/', '-', $ea); ?>
+                                    <div class="form-check"><?= $this->Form->checkbox('perm.' . $rid . '.x.' . $ea, ['class' => 'form-check-input', 'id' => $rkey . '_x_' . $eaKey, 'checked' => (bool)($grantExtra[$ea] ?? false), 'hiddenField' => false]) ?>
+                                        <label class="form-check-label small" for="<?= h($rkey . '_x_' . $eaKey) ?>"><?= h($dLabel((string)$r['module_key'], 'perm.action.' . $ea, $ea)) ?></label></div>
                                 <?php endforeach; ?>
                             </div>
                         <?php endforeach; ?>

@@ -287,6 +287,101 @@ class GroupsControllerTest extends TestCase
         $this->assertSame(0, $this->permCount($gid));
     }
 
+    public function testSavePermissionsRejectsCrossTenantGroup(): void
+    {
+        // Explicit tenant guard (dual-role convention): savePermissions on a
+        // FOREIGN tenant's group must be treated like an unknown group.
+        $conn = ConnectionManager::get('default');
+        $otherTenant = (string)$conn->execute(
+            "INSERT INTO tenants (key, name) VALUES ('zzt_grp_other_' || substr(md5(random()::text), 1, 8), 'Other') RETURNING id",
+        )->fetch('assoc')['id'];
+        $foreignGroup = (string)$conn->execute(
+            'INSERT INTO "groups" (name, description, tenant_id) VALUES (:n, :d, :t) RETURNING id',
+            ['n' => 'zztest-grp-xperm-' . bin2hex(random_bytes(2)), 'd' => 'f', 't' => $otherTenant],
+        )->fetch('assoc')['id'];
+        $this->makeResource();
+        $this->login();
+
+        $this->post('/admin/groups/savePermissions/' . $foreignGroup, [
+            'perm' => ['zzgrpui::thing' => ['browse' => '1']],
+        ]);
+
+        $this->assertRedirect(['action' => 'index']); // treated as unknown
+        $this->assertSame(0, $this->permCount($foreignGroup));
+        $conn->execute('DELETE FROM "groups" WHERE id = :g', ['g' => $foreignGroup]);
+        $conn->execute('DELETE FROM tenants WHERE id = :t', ['t' => $otherTenant]);
+    }
+
+    public function testSavePermissionsPreservesObjectRowsAndUndeclaredExtras(): void
+    {
+        // Review findings: a Save click must not destroy CLI-managed state —
+        // neither object-level rows (resource_key set) nor stored extra actions
+        // OUTSIDE the resource's declaration (invisible in the checkbox editor).
+        $this->makeResource();
+        $gid = $this->makeGroup('cli-');
+        $conn = ConnectionManager::get('default');
+        $conn->execute(
+            'INSERT INTO group_resource_permissions (group_id, module_key, resource_type, can_read, extra_actions) '
+            . "VALUES (:g, 'zzgrpui', 'thing', true, CAST('{\"cli_special\": true}' AS jsonb))",
+            ['g' => $gid],
+        );
+        $conn->execute(
+            'INSERT INTO group_resource_permissions (group_id, module_key, resource_type, resource_key, can_read) '
+            . "VALUES (:g, 'zzgrpui', 'thing', 'OBJ-1', true)",
+            ['g' => $gid],
+        );
+        $this->login();
+
+        // Save with browse checked (read unchecked): the undeclared CLI extra
+        // must survive, the object row must stay untouched.
+        $this->post('/admin/groups/savePermissions/' . $gid, [
+            'perm' => ['zzgrpui::thing' => ['browse' => '1']],
+        ]);
+
+        $class = $conn->execute(
+            'SELECT can_browse, can_read, extra_actions FROM group_resource_permissions '
+            . 'WHERE group_id = :g AND resource_key IS NULL',
+            ['g' => $gid],
+        )->fetch('assoc');
+        $this->assertTrue(in_array($class['can_browse'], [true, 't', '1', 1], true));
+        $this->assertFalse(in_array($class['can_read'], [true, 't', '1', 1], true));
+        $this->assertTrue(
+            (bool)(json_decode((string)$class['extra_actions'], true)['cli_special'] ?? false),
+            'undeclared CLI extra survives the GUI save',
+        );
+        $obj = $conn->execute(
+            "SELECT 1 FROM group_resource_permissions WHERE group_id = :g AND resource_key = 'OBJ-1'",
+            ['g' => $gid],
+        )->fetch();
+        $this->assertNotFalse($obj, 'object-level row survives the blanket save');
+    }
+
+    public function testSavePermissionsKeepsDenyRowOnAllUncheckedSave(): void
+    {
+        // Deny-wins: deleting a deny-carrying row would ACT AS A GRANT (the
+        // deny disappears, another group's allow wins again) — an all-unchecked
+        // save clears the allow side only and keeps the row.
+        $this->makeResource();
+        $gid = $this->makeGroup('deny-');
+        $conn = ConnectionManager::get('default');
+        $conn->execute(
+            'INSERT INTO group_resource_permissions (group_id, module_key, resource_type, can_browse, deny_read) '
+            . "VALUES (:g, 'zzgrpui', 'thing', true, true)",
+            ['g' => $gid],
+        );
+        $this->login();
+
+        $this->post('/admin/groups/savePermissions/' . $gid, ['perm' => []]);
+
+        $row = $conn->execute(
+            'SELECT can_browse, deny_read FROM group_resource_permissions WHERE group_id = :g AND resource_key IS NULL',
+            ['g' => $gid],
+        )->fetch('assoc');
+        $this->assertNotFalse($row, 'deny-carrying row survives');
+        $this->assertFalse(in_array($row['can_browse'], [true, 't', '1', 1], true), 'allow side cleared');
+        $this->assertTrue(in_array($row['deny_read'], [true, 't', '1', 1], true), 'deny preserved');
+    }
+
     public function testViewRendersEditorInBreadOrderWithPrefilledState(): void
     {
         // The checkbox row follows the BREAD order (Browse, Read, Edit, Add,
