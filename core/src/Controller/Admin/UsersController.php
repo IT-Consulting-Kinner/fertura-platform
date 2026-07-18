@@ -33,10 +33,14 @@ class UsersController extends AdminController
     {
         /** @var \Cake\Database\Connection $conn */
         $conn = ConnectionManager::get('default');
+        // Explicit tenant predicate on groups IN ADDITION to RLS (dual-role
+        // convention): under an RLS-bypassing role a stray cross-tenant
+        // membership row must not leak a foreign tenant's group name.
         $users = $conn->execute(
             'SELECT u.id, u.username, u.email, u.status, u.first_name, u.last_name, '
             . '(SELECT string_agg(g.name, \', \' ORDER BY g.name) FROM "groups" g '
-            . ' JOIN groups_users gu ON gu.group_id = g.id WHERE gu.user_id = u.id) AS group_names '
+            . ' JOIN groups_users gu ON gu.group_id = g.id WHERE gu.user_id = u.id '
+            . ' AND g.tenant_id = core.current_tenant()) AS group_names '
             . 'FROM users u WHERE u.tenant_id = core.current_tenant() ORDER BY u.username',
         )->fetchAll('assoc');
         // Group choices for the create form: creating a user REQUIRES a group
@@ -105,6 +109,10 @@ class UsersController extends AdminController
         // an ACTIVE group of the acting admin's OWN tenant — a POSTed foreign
         // group id would otherwise pull the new user into another tenant's group.
         $groupId = (string)$this->request->getData('group_id');
+        // Keep the selection on a failed-create re-render: patchEntity drops
+        // group_id (mass-assignment guard, not a users column), so the select
+        // would silently reset while every text field is preserved.
+        $user->set('group_id', $groupId);
         /** @var \Cake\Database\Connection $conn */
         $conn = ConnectionManager::get('default');
         $groupOk = $this->isUuid($groupId) && $conn->execute(

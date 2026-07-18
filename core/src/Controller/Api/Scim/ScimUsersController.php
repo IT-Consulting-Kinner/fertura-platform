@@ -123,6 +123,10 @@ class ScimUsersController extends ApiController
         // not the users.tenant_id column default (which is the operator tenant).
         // The uniqueness probe above stays global because username/email are
         // globally unique (uq_users_*_lower), matching the DB constraint.
+        // DOCUMENTED exception to the "no users without a group" invariant
+        // (enforced in the admin GUI and create_admin): SCIM carries no group
+        // notion here, so the user starts group-less — fail-closed until an
+        // admin assigns one; the users list marks such accounts.
         $row = $this->conn()->execute(
             'INSERT INTO users (username, email, first_name, last_name, status, tenant_id) '
             . 'VALUES (:u, :e, :f, :l, :s, core.current_tenant()) RETURNING *',

@@ -143,20 +143,30 @@ class CreateAdminCommand extends Command
         // later-installed modules); the RLS context is required for the
         // permission rows' tenant_id.
         $tenantId = (string)($user->get('tenant_id') ?? TenantService::DEFAULT_TENANT_ID);
+        // Name the affected TENANT explicitly: the username lookup above is
+        // GLOBAL (usernames are lower()-unique platform-wide), so an operator
+        // re-running create_admin can silently hit a CUSTOMER tenant's user —
+        // the output must make that visible (revision-proof attribution).
+        $tenantRow = $connection->execute(
+            'SELECT key FROM tenants WHERE id = :t',
+            ['t' => $tenantId],
+        )->fetch('assoc');
+        $tenantLabel = $tenantRow !== false ? (string)$tenantRow['key'] : $tenantId;
         $connection->execute("SELECT set_config('app.current_tenant_id', :t, false)", ['t' => $tenantId]);
         try {
             $groupService = new AdminGroupService();
             $group = $groupService->ensure($tenantId);
-            $groupService->addUser($group['id'], (string)$user->get('id'));
+            $groupService->addUser($group['id'], (string)$user->get('id'), 'create_admin');
         } finally {
             $connection->execute("SELECT set_config('app.current_tenant_id', '', false)");
         }
 
         $io->success(sprintf(
-            'Volladministrator "%s" (ID %s) gespeichert, %d Administrationsbereiche zugewiesen, '
-            . 'Mitglied der Gruppe "%s" (%d Ressourcen-Grants).',
+            'Volladministrator "%s" (ID %s) im Mandanten "%s" gespeichert, %d Administrationsbereiche '
+            . 'zugewiesen, Mitglied der Gruppe "%s" (%d Ressourcen-Grants).',
             $user->username,
             $user->id,
+            $tenantLabel,
             $count,
             AdminGroupService::DEFAULT_NAME,
             $group['granted'],

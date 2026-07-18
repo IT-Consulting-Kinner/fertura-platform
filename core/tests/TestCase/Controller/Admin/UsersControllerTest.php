@@ -207,13 +207,18 @@ class UsersControllerTest extends TestCase
             ['u' => 'zztest_owner_' . bin2hex(random_bytes(3)), 'e' => $email],
         );
 
+        $groupId = $this->makeGroup(); // valid group -> reaches the email rule
         $this->post('/admin/users/add', [
             'username' => 'zztest_dupemail_' . bin2hex(random_bytes(3)),
             'email' => strtoupper($email), // same email, different case
-            'group_id' => $this->makeGroup(), // valid group -> reaches the email rule
+            'group_id' => $groupId,
         ]);
 
         $this->assertResponseOk(); // re-render with inline error, NOT a redirect (success) or 500
+        // Review finding: the re-rendered form must KEEP the chosen group —
+        // patchEntity drops group_id (mass-assignment guard), the controller
+        // re-sets it on the entity so the select stays preselected.
+        $this->assertResponseContains('value="' . $groupId . '" selected');
         $this->assertSame(
             1,
             (int)ConnectionManager::get('default')->execute(

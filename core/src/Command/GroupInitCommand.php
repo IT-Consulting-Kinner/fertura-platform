@@ -29,7 +29,11 @@ class GroupInitCommand extends Command
         $parser
             ->setDescription(
                 'Legt die Administratoren-Gruppe eines Mandanten an (idempotent) und '
-                . 'vergibt Vollrechte auf alle gruppenfaehigen Ressourcen.',
+                . 'vergibt Vollrechte auf alle gruppenfaehigen Ressourcen. Der Gruppenname '
+                . 'ist per Konvention fuer die Administratorrolle reserviert: eine bereits '
+                . 'existierende Gruppe dieses Namens wird auf Vollrechte angehoben, '
+                . 'Re-Runs stellen eingeschraenkte Allow-Haken wieder auf voll '
+                . '(Deny-Regeln bleiben unberuehrt und gewinnen weiterhin).',
             )
             ->addOption('tenant', [
                 'help' => 'Mandant (key oder UUID); Standard: der Betreiber-/Default-Mandant',
