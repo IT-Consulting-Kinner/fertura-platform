@@ -45,10 +45,12 @@ class DashboardControllerTest extends TestCase
     private function cleanup(): void
     {
         $conn = ConnectionManager::get('default');
-        if ($this->adminId !== '') {
-            $conn->execute('DELETE FROM user_admin_areas WHERE user_id = :u', ['u' => $this->adminId]);
-        }
+        $conn->execute(
+            'DELETE FROM user_admin_areas WHERE user_id IN '
+            . "(SELECT id FROM users WHERE email LIKE '%@zzdash.local')",
+        );
         $conn->execute("DELETE FROM users WHERE email LIKE '%@zzdash.local'");
+        $conn->execute("DELETE FROM tenants WHERE key LIKE 'zzdash_t_%'");
     }
 
     public function testDashboardRendersOperatorGroupAsExpandedAccordion(): void
@@ -67,5 +69,33 @@ class DashboardControllerTest extends TestCase
         $this->assertResponseContains('Outbox');
         // The removed "Modules by status" table must not reappear.
         $this->assertResponseNotContains('Modules by status');
+    }
+
+    public function testTenantAdminSeesNoOperatorInventoryCards(): void
+    {
+        // Security boundary: a NON-operator (customer-tenant) admin must see only
+        // tenant figures, never the platform-inventory cards.
+        $conn = ConnectionManager::get('default');
+        $tenantId = (string)$conn->execute(
+            "INSERT INTO tenants (key, name) VALUES ('zzdash_t_' || substr(md5(random()::text), 1, 8), 'ZZ Tenant') RETURNING id",
+        )->fetch('assoc')['id'];
+        $tenantAdmin = (string)$conn->execute(
+            "INSERT INTO users (username, email, status, tenant_id) VALUES (:u, :e, 'active', :t) RETURNING id",
+            ['u' => 'zzdash_ta_' . bin2hex(random_bytes(3)), 'e' => bin2hex(random_bytes(3)) . '@zzdash.local', 't' => $tenantId],
+        )->fetch('assoc')['id'];
+        $conn->execute(
+            'INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a)',
+            ['u' => $tenantAdmin, 'a' => 'user_group_admin'],
+        );
+
+        $this->session(['Auth' => ['id' => $tenantAdmin, 'username' => 'zzdash_ta', 'email' => 't@zzdash.local']]);
+        $this->get('/admin');
+
+        $this->assertResponseOk();
+        // Tenant figures present, operator inventory absent ('Outbox' is a
+        // locale-stable substring of the operator-only outbox card).
+        $this->assertResponseContains(__('admin.dashboard.card_users_active'));
+        $this->assertResponseNotContains('Outbox');
+        $this->assertResponseNotContains('Contracts');
     }
 }

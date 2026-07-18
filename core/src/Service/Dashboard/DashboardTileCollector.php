@@ -27,6 +27,16 @@ class DashboardTileCollector
     private const VARIANTS = ['primary', 'secondary', 'success', 'danger', 'warning', 'info', 'light', 'dark'];
 
     /**
+     * Defensive caps on the dashboard hot path: a misbehaving (but in-process,
+     * trusted-at-install) provider that returns a flood of tiles or a multi-MB
+     * label must not blow up the page. Modules are trusted; this only bounds an
+     * accident, not a threat.
+     */
+    private const MAX_TILES_PER_MODULE = 12;
+    private const MAX_LABEL_LEN = 120;
+    private const MAX_VALUE_LEN = 40;
+
+    /**
      * One group per contributing module: `{key, name, tiles}`; empty when no
      * module contributes (module-free operator tenant, or none enabled).
      *
@@ -58,6 +68,9 @@ class DashboardTileCollector
                 continue;
             }
             foreach ($raw as $tile) {
+                if (count($byModule[$moduleKey] ?? []) >= self::MAX_TILES_PER_MODULE) {
+                    break; // cap: ignore a flood of tiles from one provider
+                }
                 $coerced = is_array($tile) ? $this->coerceTile($tile) : null;
                 if ($coerced !== null) {
                     $byModule[$moduleKey][] = $coerced;
@@ -92,9 +105,12 @@ class DashboardTileCollector
         if ($label === '') {
             return null;
         }
+        $value = isset($tile['value']) && is_scalar($tile['value']) ? (string)$tile['value'] : '';
         $out = [
-            'label' => $label,
-            'value' => isset($tile['value']) && is_scalar($tile['value']) ? (string)$tile['value'] : '',
+            // Truncate defensively (multibyte-safe) so an oversized string can't
+            // bloat the page; the view escapes the result.
+            'label' => mb_substr($label, 0, self::MAX_LABEL_LEN),
+            'value' => mb_substr($value, 0, self::MAX_VALUE_LEN),
         ];
         if (isset($tile['url']) && is_string($tile['url']) && AppUrl::isSafeRelative($tile['url'])) {
             $out['url'] = $tile['url'];
