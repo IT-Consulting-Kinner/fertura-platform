@@ -170,43 +170,14 @@ class AdminController extends AppController
         if ($this->requiredArea === null || $this->computeActiveTop() === 'dashboard') {
             return [];
         }
-        $top = $this->computeActiveTop();
-        $crumbs = [[$top === 'module' ? 'admin.nav.modules' : 'admin.nav.administration', '/admin/' . $top]];
 
-        $def = ((new AdminNavBuilder())->build($this->userAreaKeys))[$this->requiredArea] ?? null;
-        if ($def === null) {
-            return $crumbs;
-        }
-        $label = $this->requiredArea === 'module_lifecycle' ? 'admin.nav.module_management' : $def['label'];
-        $items = $def['items'];
-
-        if (count($items) === 1) {
-            // No drill-down tile page exists: the group label IS the function.
-            $crumbs[] = [$label, null];
-
-            return $crumbs;
-        }
-
-        // Section tile page, then the current function — found by longest-prefix
-        // match so sub-pages (add/edit/view) still resolve to their leaf, which
-        // then links back to the leaf's list page.
-        $crumbs[] = [$label, '/admin/section/' . $this->requiredArea];
-        $path = $this->getRequest()->getUri()->getPath();
-        $best = null;
-        $bestLen = -1;
-        foreach ($items as $it) {
-            $url = (string)$it[1];
-            if (str_starts_with($path, $url) && strlen($url) > $bestLen) {
-                $best = $it;
-                $bestLen = strlen($url);
-            }
-        }
-        if ($best !== null) {
-            $onLeaf = rtrim($path, '/') === rtrim((string)$best[1], '/');
-            $crumbs[] = [(string)$best[0], $onLeaf ? null : (string)$best[1]];
-        }
-
-        return $crumbs;
+        // Shared with ModuleWebController so Core and module admin pages render
+        // the identical trail (the builder mirrors computeActiveTop's realm split).
+        return (new AdminNavBuilder())->breadcrumb(
+            $this->userAreaKeys,
+            $this->requiredArea,
+            $this->getRequest()->getUri()->getPath(),
+        );
     }
 
     /** Maps the current page to its top-menu entry for highlighting. */
