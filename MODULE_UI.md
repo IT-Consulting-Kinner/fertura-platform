@@ -125,3 +125,53 @@ public function handle(array $request): array
 
 `$this->UiKit->value($v, 'bool'|'code'|'datetime'|'badge'|'text')` formatiert einen
 einzelnen Wert HTML-sicher (z. B. für eigene Templates).
+
+## Seiten-Spec (zentraler Renderer, empfohlen für Standard-CRUD)
+
+Statt eines eigenen Templates kann ein Web-Handler eine **deklarative
+Seitenbeschreibung** zurückgeben — der Core rendert sie selbst (einheitliches
+Design, ein Core-Eingriff wirkt auf alle Module). Vollständiges Design:
+`docs/module-page-spec-design.md`.
+
+```php
+return [
+    'title' => __d('meinmodul', 'admin.things.title'),
+    'page' => ['sections' => [
+        ['type' => 'alert', 'variant' => 'warning', 'text' => __d('meinmodul', 'admin.things.hint')],
+        ['type' => 'filters', 'fields' => [/* wie filters() */], 'values' => $filterValues],
+        ['type' => 'table',
+         'columns' => [
+             ['key' => 'name', 'label' => __d('meinmodul', 'f.name'),
+              'link_template' => '/m/meinmodul/things/{id}'],   // statt link-Callable
+             ['key' => 'active', 'label' => __d('meinmodul', 'f.active'), 'type' => 'bool'],
+         ],
+         'rows' => $rows,
+         'actions' => [['label' => __d('meinmodul', 'a.edit'),
+                        'url_template' => '/m/meinmodul/admin/things?edit={id}']],
+         'empty' => __d('meinmodul', 'admin.things.empty'),
+         'paginate' => ['page' => $page, 'per_page' => 20, 'total' => $total]],
+        ['type' => 'form_accordion',
+         'title' => __d('meinmodul', 'admin.things.create'),
+         'open' => $edit !== null,
+         'url' => '/m/meinmodul/admin/things',
+         'fields' => [/* wie fields(), inkl. reference */],
+         'submit' => __d('meinmodul', 'a.save')],
+        ['type' => 'detail', 'row' => $row, 'fields' => [/* wie detail() */]],
+        ['type' => 'html', 'html' => $sonderfall], // letztes Mittel
+    ]],
+];
+```
+
+Regeln:
+
+- **Nur Daten, keine Callables.** `link`/`format`/`badge`/`url`-Callables werden
+  verworfen; Links kommen aus `link_template`/`url_template` mit flachen
+  `{key}`-Platzhaltern (Werte werden URL-encodiert eingesetzt).
+- **URLs/Templates nur app-relativ** — alles andere fällt weg (fail-closed).
+- **Unbekannte Section-Typen/Keys werden still verworfen** (im Debug-Modus
+  geloggt): eine Spec gegen einen neueren Core degradiert kontrolliert.
+- Das Formular öffnet der **Core** → CSRF automatisch; `submit`-Label kommt vom
+  Modul (Default: „Speichern").
+- `template` bleibt vollwertig für Spezialseiten (Editor, Timeline, …);
+  `html`-Sections sind das letzte Mittel innerhalb einer Spec.
+- Noch nicht in v1 (kommt additiv): Zeilen-Auswahl + Bulk-Aktionen.

@@ -140,15 +140,19 @@ desto besser trägt der Spec).
 - Keine Änderung am POST-Handling: der Handler verarbeitet Submits weiterhin
   selbst (Method-agnostische Route, `redirect`-Result bei Erfolg).
 
-## 8. Offene Fragen (vor Implementierung zu entscheiden)
+## 8. Entschiedene Fragen (v1, umgesetzt)
 
-1. `html`-Slot zulassen (Empfehlung: ja, s. §4)?
-2. Section-Typ `detail` in v1 aufnehmen oder erst mit dem ersten Konsumenten?
-3. `link_template`-Platzhalter-Syntax: `{id}` (Row-Key, URL-encodiert) —
-   reicht das, oder braucht v1 verkettete Keys (`{space.key}`)? (Empfehlung:
-   flach starten, additiv erweitern.)
-4. Soll der Coercer verworfene Sections/Keys ins Log schreiben (Autoren-Hilfe
-   im Dev, `DEBUG`-gated), oder komplett still bleiben?
+1. `html`-Slot: **zugelassen** (letztes Mittel, s. §4).
+2. Section-Typ `detail`: **in v1 enthalten** (mappt 1:1 auf `UiKit->detail()`,
+   vervollständigt CRUD ohne späteren Vertrags-Bump).
+3. `link_template`-Platzhalter: **flach** (`{id}` = Row-Key, rawurlencodiert
+   eingesetzt, Ergebnis erneut gegen `AppUrl::isSafeRelative` geprüft);
+   verkettete Keys additiv, wenn ein Konsument sie braucht.
+4. Coercer-Drops: **im Debug-Modus geloggt** (`Log::debug`), in Produktion
+   still (kontrollierte Degradation, §5).
+
+v1-Scope-Hinweis: Zeilen-Auswahl (`select`) + Bulk-Aktionen sind NICHT in v1 —
+sie brauchen die Form-Umschließung der Tabelle und kommen additiv.
 
 ## 9. Implementierungsskizze (wenn freigegeben)
 

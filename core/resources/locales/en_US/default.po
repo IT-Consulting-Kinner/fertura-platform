@@ -1223,6 +1223,9 @@ msgstr "Open in new tab"
 msgid "uikit.ref_refresh"
 msgstr "Refresh options"
 
+msgid "uikit.save"
+msgstr "Save"
+
 msgid "admin.nav.tenants"
 msgstr "Tenants"
 

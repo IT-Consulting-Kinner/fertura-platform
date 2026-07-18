@@ -57,6 +57,13 @@
             "template": "dashboard",
             "auth": "user",
             "title": "Web Test Options"
+        },
+        {
+            "path": "/spec",
+            "class": "ZztestWeb\\Web\\SpecPage",
+            "template": "dashboard",
+            "auth": "user",
+            "title": "Web Test Spec"
         }
     ],
     "api_routes": [

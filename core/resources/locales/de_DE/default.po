@@ -1219,6 +1219,9 @@ msgstr "In neuem Tab öffnen"
 msgid "uikit.ref_refresh"
 msgstr "Auswahl aktualisieren"
 
+msgid "uikit.save"
+msgstr "Speichern"
+
 msgid "admin.nav.tenants"
 msgstr "Mandanten"
 
