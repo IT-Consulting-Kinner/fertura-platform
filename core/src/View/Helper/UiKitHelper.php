@@ -526,6 +526,14 @@ class UiKitHelper extends Helper
         $out = '';
         foreach ($actions as $a) {
             $url = isset($a['url']) && is_callable($a['url']) ? ($a['url'])($row) : ($a['url'] ?? '#');
+            // No safe URL for this row (e.g. a page-spec url_template whose
+            // expansion failed re-validation) -> render NO control at all: an
+            // empty url resolves to the CURRENT page, which would give a 'post'
+            // action unintended write semantics there (review finding); same
+            // suppression rule as cell()'s null link.
+            if ($url === null || $url === '') {
+                continue;
+            }
             $label = (string)($a['label'] ?? '');
             $class = (string)($a['class'] ?? 'btn btn-sm btn-outline-secondary');
             // Per-row POST action ('post' => true): a state change like the
