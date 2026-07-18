@@ -50,6 +50,13 @@
             "template": "dashboard",
             "auth": "guest",
             "title": "Web Test Download"
+        },
+        {
+            "path": "/options",
+            "class": "ZztestWeb\\Web\\OptionsPage",
+            "template": "dashboard",
+            "auth": "user",
+            "title": "Web Test Options"
         }
     ],
     "api_routes": [

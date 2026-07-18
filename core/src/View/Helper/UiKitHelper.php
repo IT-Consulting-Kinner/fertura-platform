@@ -179,6 +179,14 @@ class UiKitHelper extends Helper
             if ($key === '') {
                 continue;
             }
+            // Reference field (select over elements managed elsewhere, possibly in
+            // another module): renders an input-group with an "open in new tab"
+            // link to the element's admin page and an options-refresh button, so a
+            // missing element can be created without abandoning this form.
+            if (isset($f['reference']) && is_array($f['reference']) && (string)($f['input'] ?? 'text') === 'select') {
+                $out .= $this->referenceField($key, $f);
+                continue;
+            }
             $opts = [
                 'label' => $f['label'] ?? $key,
                 'type' => (string)($f['input'] ?? 'text'),
@@ -198,6 +206,68 @@ class UiKitHelper extends Helper
         }
 
         return $out;
+    }
+
+    /**
+     * A `select` whose elements are managed on another admin page (same or other
+     * module), rendered as an input-group: the select, an "open in new tab" link
+     * to that page (`reference.url`, `target=_blank` with `rel=noopener`) and an
+     * options-refresh button (`reference.options_url`) wired by ui.js
+     * (`[data-options-refresh]`) to re-fetch `{options:[{value,label}]}` and
+     * rebuild the select in place, keeping the current selection. Spares the
+     * user the leave-form/create/come-back/re-enter round trip.
+     *
+     * Guard rails:
+     *  - Both URLs must be app-relative (single leading '/'): anything else is
+     *    dropped, so a spec cannot point the browser at a foreign origin.
+     *  - `reference.area` (optional): the link only renders when the current
+     *    viewer holds that admin area (`userAreas` view var) — visibility =
+     *    server-side authorization, never a link into a guaranteed 403.
+     *
+     * @param array<string,mixed> $f field spec (key/label/options/value/…, `reference`)
+     */
+    private function referenceField(string $key, array $f): string
+    {
+        $ref = (array)$f['reference'];
+        $id = 'uikit-ref-' . (string)preg_replace('/[^a-zA-Z0-9_-]/', '-', $key);
+        $appRelative = static fn(string $u): bool => str_starts_with($u, '/') && !str_starts_with($u, '//');
+
+        $selectOpts = [
+            'id' => $id,
+            'class' => 'form-select',
+            'required' => (bool)($f['required'] ?? false),
+        ];
+        if (isset($f['value'])) {
+            $selectOpts['value'] = $f['value'];
+        }
+        if (isset($f['empty'])) {
+            $selectOpts['empty'] = $f['empty'];
+        }
+        $select = $this->Form->select($key, (array)($f['options'] ?? []), $selectOpts);
+
+        $buttons = '';
+        $url = (string)($ref['url'] ?? '');
+        $areas = (array)($this->getView()->get('userAreas') ?? []);
+        $linkAllowed = !isset($ref['area']) || in_array((string)$ref['area'], $areas, true);
+        if ($url !== '' && $appRelative($url) && $linkAllowed) {
+            $openLabel = __d('default', 'uikit.ref_open');
+            $buttons .= '<a class="btn btn-outline-secondary" href="' . h($url) . '" target="_blank" rel="noopener"'
+                . ' aria-label="' . h($openLabel) . '" title="' . h($openLabel) . '">&#8599;</a>';
+        }
+        $optionsUrl = (string)($ref['options_url'] ?? '');
+        if ($optionsUrl !== '' && $appRelative($optionsUrl)) {
+            $refreshLabel = __d('default', 'uikit.ref_refresh');
+            $buttons .= '<button type="button" class="btn btn-outline-secondary"'
+                . ' data-options-refresh="' . h($optionsUrl) . '" data-options-target="#' . h($id) . '"'
+                . ' aria-label="' . h($refreshLabel) . '" title="' . h($refreshLabel) . '">&#10227;</button>';
+        }
+
+        $label = '<label class="form-label" for="' . h($id) . '">' . h((string)($f['label'] ?? $key)) . '</label>';
+        $help = isset($f['help']) ? '<div class="form-text">' . h((string)$f['help']) . '</div>' : '';
+
+        return '<div class="mb-3">' . $label
+            . '<div class="input-group">' . $select . $buttons . '</div>'
+            . $help . '</div>';
     }
 
     /**

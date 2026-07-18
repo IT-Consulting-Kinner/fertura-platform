@@ -78,6 +78,46 @@ Standard ist eingeklappt (`open => false`) — die Liste bleibt zuerst sichtbar.
 Mehrere Accordions pro Seite bekommen automatisch eindeutige IDs; ein eigenes
 `'id'` ist nur nötig, wenn ein stabiler Anker gebraucht wird.
 
+### Referenz-Felder (Elemente, die woanders verwaltet werden)
+
+Ein `select`, dessen Einträge auf einer anderen Admin-Seite gepflegt werden
+(gleiches oder anderes Modul), bekommt per `reference` eine Input-Group mit
+„In neuem Tab öffnen"-Link und „Auswahl aktualisieren"-Button — der Nutzer
+muss die Form nicht verlassen, wenn ein Element fehlt:
+
+```php
+['key' => 'mailbox_id', 'label' => __('Mailbox'), 'input' => 'select',
+ 'options' => $mailboxes, 'empty' => true,
+ 'reference' => [
+     'url'         => '/m/ticketing/admin/mailboxes',          // Anlage/Übersicht (neuer Tab, rel=noopener)
+     'area'        => 'ticketing_admin',                       // Link nur, wenn der Nutzer diese Area hält
+     'options_url' => '/m/ticketing/admin/mailboxes/options',  // JSON-Refresh (s. u.)
+ ]]
+```
+
+Regeln:
+
+- Beide URLs müssen **app-relativ** sein (führendes `/`, kein `//`) — sonst
+  werden sie verworfen.
+- `area` ist optional; wenn gesetzt, erscheint der Link nur für Nutzer, die
+  die Area halten (Sichtbarkeit = serverseitige Autorisierung).
+- Der Refresh baut die Optionen per `ui.js` in place neu auf; die aktuelle
+  Auswahl und eine führende Leer-Option („bitte wählen") bleiben erhalten.
+
+**Options-Endpunkt:** eine normale `web_route` des Ziel-Moduls, deren Handler
+statt eines Templates `json` zurückgibt — Session-Auth, Tenant-Gates und
+RLS-Kontext gelten wie auf jeder Web-Seite:
+
+```php
+public function handle(array $request): array
+{
+    return ['json' => ['options' => [
+        ['value' => (string)$row['id'], 'label' => $row['name']],
+        // …
+    ]]];
+}
+```
+
 ## Einzelwert
 
 `$this->UiKit->value($v, 'bool'|'code'|'datetime'|'badge'|'text')` formatiert einen
