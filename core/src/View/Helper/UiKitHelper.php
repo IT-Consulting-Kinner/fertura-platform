@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\View\Helper;
 
+use App\Utility\AppUrl;
 use Cake\View\Helper;
 
 /**
@@ -218,19 +219,25 @@ class UiKitHelper extends Helper
      * user the leave-form/create/come-back/re-enter round trip.
      *
      * Guard rails:
-     *  - Both URLs must be app-relative (single leading '/'): anything else is
-     *    dropped, so a spec cannot point the browser at a foreign origin.
+     *  - Both URLs must be a safe app-relative path ({@see AppUrl::isSafeRelative},
+     *    which also rejects the backslash/tab bypasses of the naive "/ but not //"
+     *    test): anything else is dropped, so a spec cannot point the browser at a
+     *    foreign origin.
      *  - `reference.area` (optional): the link only renders when the current
      *    viewer holds that admin area (`userAreas` view var) — visibility =
-     *    server-side authorization, never a link into a guaranteed 403.
+     *    server-side authorization, never a link into a guaranteed 403. NOTE the
+     *    `userAreas` var is only populated on admin-shell pages; an area-gated
+     *    link on a standalone page is therefore always hidden (fail-closed).
+     *  - The DOM id carries a per-request sequence, so the same field key used in
+     *    two forms on one page (create accordion + edit form) stays unique — the
+     *    refresh button and label[for] then resolve to their own select.
      *
      * @param array<string,mixed> $f field spec (key/label/options/value/…, `reference`)
      */
     private function referenceField(string $key, array $f): string
     {
         $ref = (array)$f['reference'];
-        $id = 'uikit-ref-' . (string)preg_replace('/[^a-zA-Z0-9_-]/', '-', $key);
-        $appRelative = static fn(string $u): bool => str_starts_with($u, '/') && !str_starts_with($u, '//');
+        $id = 'uikit-ref-' . (string)preg_replace('/[^a-zA-Z0-9_-]/', '-', $key) . '-' . ++self::$refSeq;
 
         $selectOpts = [
             'id' => $id,
@@ -243,19 +250,22 @@ class UiKitHelper extends Helper
         if (isset($f['empty'])) {
             $selectOpts['empty'] = $f['empty'];
         }
+        if (isset($f['help'])) {
+            $selectOpts['aria-describedby'] = $id . '-help';
+        }
         $select = $this->Form->select($key, (array)($f['options'] ?? []), $selectOpts);
 
         $buttons = '';
         $url = (string)($ref['url'] ?? '');
         $areas = (array)($this->getView()->get('userAreas') ?? []);
         $linkAllowed = !isset($ref['area']) || in_array((string)$ref['area'], $areas, true);
-        if ($url !== '' && $appRelative($url) && $linkAllowed) {
+        if ($url !== '' && AppUrl::isSafeRelative($url) && $linkAllowed) {
             $openLabel = __d('default', 'uikit.ref_open');
             $buttons .= '<a class="btn btn-outline-secondary" href="' . h($url) . '" target="_blank" rel="noopener"'
                 . ' aria-label="' . h($openLabel) . '" title="' . h($openLabel) . '">&#8599;</a>';
         }
         $optionsUrl = (string)($ref['options_url'] ?? '');
-        if ($optionsUrl !== '' && $appRelative($optionsUrl)) {
+        if ($optionsUrl !== '' && AppUrl::isSafeRelative($optionsUrl)) {
             $refreshLabel = __d('default', 'uikit.ref_refresh');
             $buttons .= '<button type="button" class="btn btn-outline-secondary"'
                 . ' data-options-refresh="' . h($optionsUrl) . '" data-options-target="#' . h($id) . '"'
@@ -263,7 +273,9 @@ class UiKitHelper extends Helper
         }
 
         $label = '<label class="form-label" for="' . h($id) . '">' . h((string)($f['label'] ?? $key)) . '</label>';
-        $help = isset($f['help']) ? '<div class="form-text">' . h((string)$f['help']) . '</div>' : '';
+        $help = isset($f['help'])
+            ? '<div class="form-text" id="' . h($id) . '-help">' . h((string)$f['help']) . '</div>'
+            : '';
 
         return '<div class="mb-3">' . $label
             . '<div class="input-group">' . $select . $buttons . '</div>'
@@ -309,6 +321,9 @@ class UiKitHelper extends Helper
 
     /** Per-request sequence for unique {@see formAccordion()} ids. */
     private static int $accordionSeq = 0;
+
+    /** Per-request sequence for unique {@see referenceField()} ids. */
+    private static int $refSeq = 0;
 
     /**
      * Sortable column header: a link that toggles between ascending/descending,

@@ -32,18 +32,31 @@
     }
     var url = btn.getAttribute('data-options-refresh') || '';
     var sel = document.querySelector(btn.getAttribute('data-options-target') || '');
-    if (!sel || url.charAt(0) !== '/' || url.charAt(1) === '/') {
+    // Same intent as the server-side App\Utility\AppUrl guard: only a safe
+    // app-relative path may be fetched — a single leading slash, no
+    // protocol-relative/backslash authority, no scheme. Uses a plain-ASCII
+    // allowlist (rejecting backslash, spaces and control chars implicitly) so
+    // the file stays free of control bytes. Defence in depth over CSP
+    // connect-src 'self'.
+    var unsafeChar = /[^A-Za-z0-9/\-._~%?=&#+,;@!$()*]/;
+    if (!sel || url.charAt(0) !== '/' || url.charAt(1) === '/' ||
+        unsafeChar.test(url) || url.indexOf('://') !== -1) {
       return;
     }
     btn.disabled = true;
+    btn.setAttribute('aria-busy', 'true');
+    btn.removeAttribute('data-refresh-failed');
     fetch(url, { headers: { 'Accept': 'application/json' } })
       .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error(String(r.status))); })
       .then(function (data) {
         var list = data && Array.isArray(data.options) ? data.options : [];
         var current = sel.value;
+        // Preserve a leading empty "choose" option if the select had one.
         var keepEmpty = sel.options.length && sel.options[0].value === '' ? sel.options[0] : null;
-        while (sel.options.length) {
-          sel.remove(0);
+        // Remove ALL children (options AND optgroup wrappers) so a select first
+        // rendered from grouped options is not left with empty optgroup shells.
+        while (sel.firstChild) {
+          sel.removeChild(sel.firstChild);
         }
         if (keepEmpty) {
           sel.add(keepEmpty);
@@ -54,12 +67,23 @@
           opt.textContent = String(o.label);
           sel.add(opt);
         });
-        if (current !== '') {
-          sel.value = current; // keep the selection when it still exists
+        sel.value = current;
+        // If the previously selected value is gone, fall back to the first option
+        // (the empty "choose" entry when present) instead of an index of -1, which
+        // renders blank AND omits the field from the form submission entirely.
+        if (sel.value !== current) {
+          sel.selectedIndex = sel.options.length ? 0 : -1;
         }
       })
-      .catch(function () { /* network/JSON error: leave the options unchanged */ })
-      .finally(function () { btn.disabled = false; });
+      .catch(function () {
+        // Network/JSON/HTTP error: leave the options untouched but signal it, so
+        // the user does not read "no change" as "refreshed, nothing new".
+        btn.setAttribute('data-refresh-failed', 'true');
+      })
+      .finally(function () {
+        btn.disabled = false;
+        btn.removeAttribute('aria-busy');
+      });
   });
 
   // 3. Confirm modal.
