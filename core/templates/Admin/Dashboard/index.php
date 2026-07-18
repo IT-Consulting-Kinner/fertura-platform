@@ -2,7 +2,6 @@
 /**
  * @var \App\View\AppView $this
  * @var array<string,int> $stats
- * @var array<int,array<string,mixed>> $modulesByStatus
  * @var bool $isOperator
  */
 $this->assign('title', __('admin.dashboard.title'));
@@ -33,13 +32,3 @@ if ($isOperator) {
         </div>
     <?php endforeach; ?>
 </div>
-
-<?php if ($isOperator): ?>
-<h2 class="h5 mt-4"><?= h(__('admin.dashboard.modules_by_status')) ?></h2>
-<table class="table table-sm table-hover w-auto">
-    <?php foreach ($modulesByStatus as $row): ?>
-        <tr><td class="pe-4"><span class="badge text-bg-<?= $row['status'] === 'active' ? 'success' : 'secondary' ?>"><?= h(__('admin.module.status_' . $row['status'])) ?></span></td><td class="fw-semibold"><?= h((string)$row['c']) ?></td></tr>
-    <?php endforeach; ?>
-    <?php if (!$modulesByStatus): ?><tr><td class="text-muted"><?= h(__('admin.dashboard.no_modules')) ?></td></tr><?php endif; ?>
-</table>
-<?php endif; ?>

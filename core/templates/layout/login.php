@@ -32,7 +32,7 @@
     <div class="d-flex justify-content-end mb-2"><?= $this->cell('LocaleSwitcher', [false, 'select']) ?></div>
     <div class="card shadow">
         <div class="card-body p-4">
-            <h1 class="h4 mb-3 text-center">Fertura <span class="text-secondary">Admin</span></h1>
+            <h1 class="h4 mb-3 text-center">Fertura</h1>
             <div aria-live="polite"><?= $this->Flash->render() ?></div>
             <?= $this->fetch('content') ?>
         </div>
