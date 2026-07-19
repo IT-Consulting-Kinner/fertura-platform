@@ -107,6 +107,31 @@ class DashboardTileCollectorTest extends TestCase
         $this->assertStringNotContainsString('<script>', $json);
     }
 
+    public function testGroupHeadingUsesLocalizedNavGroupLabel(): void
+    {
+        // Positive path of moduleLabels(): a module with a web_route carrying a
+        // nav_group gets that resolved label as the heading (like the menu),
+        // NOT the manifest name. Point zzdash's source_path at the zztest_web
+        // fixture (its manifest has an admin route with nav_group
+        // 'zztest.nav.group'); with no zzdash .po loaded, __d returns the key
+        // verbatim — which is exactly what the menu would show too, and proves
+        // the override branch ran (heading != manifest name 'ZZ Dashboard').
+        ConnectionManager::get('default')->execute(
+            'UPDATE modules SET source_path = :p WHERE module_key = :k',
+            ['p' => ROOT . '/tests/Fixture/zztest_web', 'k' => 'zzdash'],
+        );
+
+        $groups = (new DashboardTileCollector())->collect(['is_operator' => true]);
+        $zz = null;
+        foreach ($groups as $g) {
+            if ($g['key'] === 'zzdash') {
+                $zz = $g;
+            }
+        }
+        $this->assertNotNull($zz);
+        $this->assertSame('zztest.nav.group', $zz['name'], 'nav_group override ran, not the manifest name');
+    }
+
     public function testDisabledModuleContributesNoTilesUnderTenantContext(): void
     {
         // Tenant gate (operator/tenant authz §5): with a tenant context where the

@@ -124,11 +124,13 @@ class DashboardTileCollector
     }
 
     /**
-     * Module key => accordion group heading. Uses the module's LOCALIZED admin
-     * nav-group label (the same source the admin menu resolves, so the dashboard
-     * heading reads "Ticketsystem"/"Wissensdatenbank" like the menu, not the
-     * language-neutral manifest name); falls back to the manifest `name` when the
-     * module has no nav_group or its language pack does not resolve the key.
+     * Module key => accordion group heading. Uses the module's admin nav-group
+     * label resolved EXACTLY as the admin menu does ({@see WebRouteRegistry::
+     * adminNav}: `__d(domain, nav_group)` on the first nav_group per module), so
+     * the dashboard heading always reads like the menu — "Ticketsystem" /
+     * "Wissensdatenbank" for a localized key, a plain literal for a literal
+     * nav_group. A module with NO nav_group (a tiles-only module, no admin page)
+     * keeps the manifest `name`.
      *
      * @return array<string, string>
      */
@@ -141,10 +143,12 @@ class DashboardTileCollector
             $out[(string)$row['module_key']] = (string)$row['name'];
         }
 
-        // Override with the localized nav_group label (first one per module),
-        // resolved in the module's own i18n domain — mirrors WebRouteRegistry::
-        // adminNav(). __d returns the key unchanged when unresolved, in which
-        // case the manifest name stays.
+        // Override with the FIRST nav_group per module, resolved in the module's
+        // own i18n domain — identical to what the menu shows (adminNav also takes
+        // the first route's nav_group and calls __d directly, no fallback), so
+        // heading and menu never diverge. A module whose nav_group is an
+        // unresolved key would show that key in BOTH places (its own i18n gap,
+        // caught by the module's I18nCoverageTest), not a heading/menu mismatch.
         $seen = [];
         foreach ((new WebRouteRegistry())->all() as $r) {
             $moduleKey = (string)$r['module_key'];
@@ -153,10 +157,7 @@ class DashboardTileCollector
                 continue;
             }
             $seen[$moduleKey] = true;
-            $resolved = (string)__d($moduleKey, $navGroup);
-            if ($resolved !== $navGroup) {
-                $out[$moduleKey] = $resolved;
-            }
+            $out[$moduleKey] = (string)__d($moduleKey, $navGroup);
         }
 
         return $out;
