@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Service\Dashboard;
 
 use App\Service\Module\ContributionRuntime;
+use App\Service\Module\WebRouteRegistry;
 use App\Utility\AppUrl;
 use Cake\Datasource\ConnectionManager;
 use Cake\I18n\I18n;
@@ -54,7 +55,7 @@ class DashboardTileCollector
         }
 
         $call = ['locale' => I18n::getLocale(), 'is_operator' => (bool)$context['is_operator']];
-        $names = $this->moduleNames();
+        $names = $this->moduleLabels();
 
         // Accumulate tiles per module (a module may register more than one provider).
         $byModule = [];
@@ -123,17 +124,39 @@ class DashboardTileCollector
     }
 
     /**
-     * Module key => display name, for the accordion group headings.
+     * Module key => accordion group heading. Uses the module's LOCALIZED admin
+     * nav-group label (the same source the admin menu resolves, so the dashboard
+     * heading reads "Ticketsystem"/"Wissensdatenbank" like the menu, not the
+     * language-neutral manifest name); falls back to the manifest `name` when the
+     * module has no nav_group or its language pack does not resolve the key.
      *
      * @return array<string, string>
      */
-    private function moduleNames(): array
+    private function moduleLabels(): array
     {
         /** @var \Cake\Database\Connection $conn */
         $conn = ConnectionManager::get('default');
         $out = [];
         foreach ($conn->execute('SELECT module_key, name FROM modules')->fetchAll('assoc') as $row) {
             $out[(string)$row['module_key']] = (string)$row['name'];
+        }
+
+        // Override with the localized nav_group label (first one per module),
+        // resolved in the module's own i18n domain — mirrors WebRouteRegistry::
+        // adminNav(). __d returns the key unchanged when unresolved, in which
+        // case the manifest name stays.
+        $seen = [];
+        foreach ((new WebRouteRegistry())->all() as $r) {
+            $moduleKey = (string)$r['module_key'];
+            $navGroup = (string)$r['nav_group'];
+            if ($navGroup === '' || isset($seen[$moduleKey]) || !isset($out[$moduleKey])) {
+                continue;
+            }
+            $seen[$moduleKey] = true;
+            $resolved = (string)__d($moduleKey, $navGroup);
+            if ($resolved !== $navGroup) {
+                $out[$moduleKey] = $resolved;
+            }
         }
 
         return $out;
