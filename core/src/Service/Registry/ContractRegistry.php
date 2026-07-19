@@ -99,6 +99,69 @@ class ContractRegistry
         });
     }
 
+    /**
+     * Idempotently syncs a contract definition, keeping its stable `id` across
+     * module updates. Unlike {@see registerContract()} (install-time, insert-only),
+     * this UPDATES an existing same-owner contract in place instead of throwing.
+     *
+     * The stable id is the whole point: the module update path must not
+     * delete-and-recreate a module's contracts, because
+     * `fk_registrations_contract`/`fk_bindings_contract` are `ON DELETE CASCADE` —
+     * dropping the contract would hard-delete every OTHER module's registration and
+     * binding docked onto it (e.g. a connector's consumer registration on an
+     * extension's service contract), and nothing rebuilds those. Upserting leaves
+     * those downstream rows untouched.
+     *
+     * A name already owned by a DIFFERENT module is a hard conflict (the global
+     * `uq_contracts_name` would reject it anyway).
+     *
+     * @param array<string, mixed> $opts
+     */
+    public function upsertContract(
+        string $ownerModuleKey,
+        string $name,
+        string $type,
+        string $version,
+        array $opts = [],
+    ): Contract {
+        $valid = [Contract::TYPE_RESOLVER, Contract::TYPE_COLLECTOR, Contract::TYPE_EVENT, Contract::TYPE_SERVICE];
+        if (!in_array($type, $valid, true)) {
+            throw new RegistryException("Unbekannter Contract-Typ: $type");
+        }
+        SemVer::parse($version);
+        $existing = $this->findContract($name);
+        if ($existing !== null && (string)$existing->owner_module_key !== $ownerModuleKey) {
+            throw new RegistryException(
+                "Contract-Name bereits von Modul {$existing->owner_module_key} belegt: $name.",
+            );
+        }
+
+        $contracts = $this->contracts();
+
+        return $contracts->getConnection()->transactional(function () use ($contracts, $existing, $ownerModuleKey, $name, $type, $version, $opts) {
+            $c = $existing ?? $contracts->newEmptyEntity();
+            $c->set('owner_module_key', $ownerModuleKey);
+            $c->set('name', $name);
+            $c->set('contract_type', $type);
+            $c->set('version', $version);
+            $c->set('input_spec', $opts['inputSpec'] ?? null);
+            $c->set('output_spec', $opts['outputSpec'] ?? null);
+            $c->set('default_behavior', $opts['defaultBehavior'] ?? null);
+            $c->set('multi_use', $opts['multiUse'] ?? true);
+            $c->set('description', $opts['description'] ?? null);
+            $c->set('active', true);
+            if (!$contracts->save($c)) {
+                throw new RegistryException('Contract konnte nicht gespeichert werden.');
+            }
+            $this->audit->log($existing !== null ? 'contract.update' : 'contract.register', 'contract', $name, [
+                'newValue' => ['type' => $type, 'version' => $version, 'owner' => $ownerModuleKey],
+                'moduleKey' => $ownerModuleKey,
+            ]);
+
+            return $c;
+        });
+    }
+
     // ---- Registration against a contract ------------------------------------
 
     public function register(
@@ -143,13 +206,16 @@ class ContractRegistry
         }
 
         // Slot exclusivity for providers (clean error + audit; the partial
-        // unique index is the DB-side safety net).
+        // unique index is the DB-side safety net). Only a DIFFERENT module holding
+        // the active slot is a conflict — re-registering the module's own provider
+        // (e.g. on reactivate/update) must be idempotent and reuse its own row.
         if ($registrationType === ContractRegistration::TYPE_PROVIDER) {
             $existing = $this->registrations()->find()
                 ->where([
                     'contract_id' => $contract->id,
                     'registration_type' => ContractRegistration::TYPE_PROVIDER,
                     'active' => true,
+                    'module_key !=' => $moduleKey,
                 ])
                 ->first();
             if ($existing !== null) {
@@ -196,7 +262,28 @@ class ContractRegistry
             $requiredVersion,
             $contractName,
         ) {
-            $r = $registrations->newEmptyEntity();
+            // Upsert by (contract, module, type, implementation_class): a prior
+            // deactivate leaves the row in place (active=false), so re-registering
+            // must REACTIVATE that same row instead of inserting a duplicate. Plain
+            // inserts let inactive orphans pile up over every deactivate/activate (or
+            // update) cycle and risk a double fan-out. implementation_class MUST be
+            // part of the key: one module legitimately registers SEVERAL collector or
+            // listener classes on ONE contract (e.g. Ticketing's seven scheduled
+            // tasks on core.collector.scheduled) — keying without it would collapse
+            // them to a single row and silently drop all but the last. It is NULL for
+            // providers/consumers, which stay one-per-triple. (The partial unique
+            // index over the same tuple `WHERE active` is the DB safety net.)
+            $implClass = $opts['implementationClass'] ?? null;
+            $r = $registrations->find()
+                ->where([
+                    'contract_id' => $contract->id,
+                    'module_key' => $moduleKey,
+                    'registration_type' => $registrationType,
+                    'implementation_class IS' => $implClass,
+                ])
+                ->orderBy(['active' => 'DESC', 'created_at' => 'DESC'])
+                ->first()
+                ?? $registrations->newEmptyEntity();
             $r->set('contract_id', $contract->id);
             $r->set('module_key', $moduleKey);
             $r->set('module_version', $opts['moduleVersion'] ?? null);
@@ -205,6 +292,7 @@ class ContractRegistry
             $r->set('required_version', $requiredVersion);
             $r->set('priority', (int)($opts['priority'] ?? 0));
             $r->set('active', true);
+            $r->set('deactivated_at', null);
             if (!$registrations->save($r)) {
                 throw new RegistryException('Registrierung konnte nicht gespeichert werden.');
             }
@@ -262,6 +350,49 @@ class ContractRegistry
             $this->audit->log('registration.deactivate', 'contract_registration', $contract->name, [
                 'oldValue' => ['active' => true],
                 'newValue' => ['active' => false],
+                'moduleKey' => $r->module_key,
+            ]);
+        });
+    }
+
+    /**
+     * Reactivates a previously deactivated registration and re-issues its
+     * capability binding — the exact inverse of {@see deactivateRegistration()}.
+     * Used by the reactivation cascade to restore a docking integration that a
+     * prior deactivation of the providing module had severed.
+     */
+    public function reactivateRegistration(string $registrationId): void
+    {
+        $registrations = $this->registrations();
+        /** @var \App\Model\Entity\ContractRegistration $r */
+        $r = $registrations->get($registrationId);
+        /** @var \App\Model\Entity\Contract $contract */
+        $contract = $this->contracts()->get($r->contract_id);
+
+        // Re-validate the stored required_version against the CURRENT contract
+        // version, exactly as register() does: the contract may have been updated
+        // to an incompatible version while this registration was severed, so
+        // silently re-docking would issue an active binding for a state register()
+        // would reject. The cascade caller catches this and skips (audited).
+        if (
+            $r->required_version !== null
+            && !VersionConstraint::parse((string)$r->required_version)
+                ->isSatisfiedBy(SemVer::parse((string)$contract->version))
+        ) {
+            throw new RegistryException(
+                "Inkompatible Version für {$contract->name}: "
+                . "gefordert {$r->required_version}, angeboten {$contract->version}.",
+            );
+        }
+
+        $registrations->getConnection()->transactional(function () use ($registrations, $r, $contract): void {
+            $r->set('active', true);
+            $r->set('deactivated_at', null);
+            $registrations->save($r);
+            $this->issueBinding($r->module_key, (string)$r->contract_id, $r->required_version);
+            $this->audit->log('registration.reactivate', 'contract_registration', $contract->name, [
+                'oldValue' => ['active' => false],
+                'newValue' => ['active' => true],
                 'moduleKey' => $r->module_key,
             ]);
         });
