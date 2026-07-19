@@ -138,6 +138,24 @@ services:
       db:
         condition: service_healthy
 
+  # Dev-only persistent stub LLM for the ki_dienste "local" provider. Shares the
+  # worker's network namespace so it binds 127.0.0.1:8199 exactly where the outbox
+  # ai.complete egress (which runs in the worker) reaches it — no provider-config
+  # and no Core egress/SSRF-allowlist change (loopback egress is already allowed).
+  # Replaces the ad-hoc `php -S` stopgap; comes up with `docker compose up -d`.
+  # CAVEAT: because it joins the worker's netns, restarting the worker ALONE tears
+  # down the stub's networking — restart both together, e.g.
+  #   docker compose up -d --force-recreate worker ai-stub-worker
+  ai-stub-worker:
+    image: php:8.3-cli-alpine
+    restart: unless-stopped
+    depends_on:
+      - worker
+    network_mode: "service:worker"
+    volumes:
+      - ./dev/ai-stub/stub_llm.php:/stub_llm.php:ro
+    command: ["php", "-S", "127.0.0.1:8199", "/stub_llm.php"]
+
   mail:
     image: axllent/mailpit:latest
     restart: unless-stopped
