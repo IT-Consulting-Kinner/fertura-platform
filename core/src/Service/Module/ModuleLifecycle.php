@@ -18,6 +18,7 @@ use App\Service\Security\PackageVerificationException;
 use App\Service\Security\PackageVerifier;
 use App\Service\Settings\SettingsManager;
 use Cake\Database\Connection;
+use Cake\Datasource\ConnectionManager;
 use RuntimeException;
 use Throwable;
 
@@ -69,6 +70,28 @@ class ModuleLifecycle
         // The module lifecycle performs DDL (CREATE/DROP SCHEMA) -> privileged
         // (superuser) connection that bypasses RLS (E26).
         return Db::privileged();
+    }
+
+    /**
+     * The app (default) connection — where {@see \App\Service\Registry\ContractRegistry}
+     * reads and writes the registry tables (contracts / contract_registrations /
+     * capability_bindings; all core-global, no RLS). Registry-STATE reads in the
+     * (de)activation cascades MUST use this connection, not the privileged one
+     * ({@see conn()}): on the web request path (Admin UI -> ModulesController) the
+     * whole lifecycle op runs inside TransactionRlsMiddleware's still-uncommitted
+     * transaction on the default connection, so a separate privileged session would
+     * read a stale snapshot that lacks the registrations this op just wrote — and the
+     * cascade would silently no-op (deactivate: still see the just-severed provider as
+     * active and skip the sever; reactivate: not see the just-registered provider and
+     * restore nothing). In dev/CLI without a separate privileged role this is the same
+     * connection, so behaviour is unchanged there.
+     */
+    private function appConn(): Connection
+    {
+        /** @var \Cake\Database\Connection $conn */
+        $conn = ConnectionManager::get('default');
+
+        return $conn;
     }
 
     /**
@@ -714,6 +737,11 @@ class ModuleLifecycle
                 'moduleVersion' => (string)$mod['version'],
             ]);
 
+            // Reactivation cascade: now that this module provides its contracts
+            // again, restore the docking integrations that a prior deactivation of
+            // it had severed (the inverse of cascadeDeactivateIntegrations).
+            $this->cascadeReactivateIntegrations($key);
+
             return $this->findModule($key) ?? [];
         });
     }
@@ -826,7 +854,7 @@ class ModuleLifecycle
         // Deactivate the module's own active registrations, remembering which
         // contracts it provided so the cascade can check whether each one just
         // lost its last provider.
-        $rows = $this->conn()->execute(
+        $rows = $this->appConn()->execute(
             'SELECT id, contract_id, registration_type FROM contract_registrations WHERE module_key = :k AND active',
             ['k' => $key],
         )->fetchAll('assoc');
@@ -862,7 +890,7 @@ class ModuleLifecycle
         foreach ($providedContractIds as $contractId) {
             // Another active provider still serves the contract -> the docking
             // integrations remain functional and must be left untouched.
-            $stillProvided = $this->conn()->execute(
+            $stillProvided = $this->appConn()->execute(
                 'SELECT 1 FROM contract_registrations '
                 . 'WHERE contract_id = :c AND registration_type = :t AND active LIMIT 1',
                 ['c' => $contractId, 't' => ContractRegistration::TYPE_PROVIDER],
@@ -871,7 +899,7 @@ class ModuleLifecycle
                 continue;
             }
 
-            $consumers = $this->conn()->execute(
+            $consumers = $this->appConn()->execute(
                 'SELECT cr.id, cr.module_key, c.name AS contract_name '
                 . 'FROM contract_registrations cr JOIN contracts c ON c.id = cr.contract_id '
                 . 'WHERE cr.contract_id = :c AND cr.registration_type = :t AND cr.active',
@@ -894,6 +922,89 @@ class ModuleLifecycle
                             'active' => false,
                             'reason' => 'provider_deactivated',
                             'triggerModule' => $triggerKey,
+                        ],
+                        'moduleKey' => (string)$consumer['module_key'],
+                    ],
+                );
+            }
+        }
+    }
+
+    /**
+     * Reactivation cascade (inverse of {@see cascadeDeactivateIntegrations()}):
+     * when a module is (re)activated and provides its contracts again, restore the
+     * integrations a prior deactivation of it had severed. Decision 149 defined
+     * only the sever direction; without this a provider deactivate→activate cycle
+     * (and, before the update path kept stable contract ids, every extension
+     * update) left every docked connector permanently inert — its module shows
+     * `active` but its consumer registration + binding stay dead.
+     *
+     * A severed integration is identified unambiguously: a CONSUMER registration
+     * that is inactive WHILE its own owning module is still active. Nothing else
+     * produces that pair — a module deactivated in its own right is not active, and
+     * the sever is the only path that flips a foreign consumer inactive. A single
+     * restore that cannot proceed (e.g. a multi-use slot taken meanwhile) is
+     * audited and skipped; it must never block the provider's activation.
+     */
+    private function cascadeReactivateIntegrations(string $providerKey): void
+    {
+        $provided = $this->appConn()->execute(
+            'SELECT DISTINCT contract_id FROM contract_registrations '
+            . 'WHERE module_key = :k AND registration_type = :t AND active',
+            ['k' => $providerKey, 't' => ContractRegistration::TYPE_PROVIDER],
+        )->fetchAll('assoc');
+
+        foreach ($provided as $p) {
+            $contractId = (string)$p['contract_id'];
+            $severed = $this->appConn()->execute(
+                // multi_use as ::int — a raw PG boolean can come back as the string
+                // 'f', which is truthy in PHP; the cast makes the guard reliable.
+                'SELECT cr.id, cr.module_key, c.name AS contract_name, (c.multi_use)::int AS multi_use '
+                . 'FROM contract_registrations cr '
+                . 'JOIN contracts c ON c.id = cr.contract_id '
+                . 'JOIN modules m ON m.module_key = cr.module_key '
+                . 'WHERE cr.contract_id = :c AND cr.registration_type = :t '
+                . "AND NOT cr.active AND m.status = 'active'",
+                ['c' => $contractId, 't' => ContractRegistration::TYPE_CONSUMER],
+            )->fetchAll('assoc');
+
+            foreach ($severed as $consumer) {
+                // Single-use interface (ch. 29.8.1): don't restore a consumer if a
+                // different module already holds the sole active consumer slot.
+                if ((int)$consumer['multi_use'] === 0) {
+                    $taken = $this->appConn()->execute(
+                        'SELECT 1 FROM contract_registrations '
+                        . 'WHERE contract_id = :c AND registration_type = :t AND active LIMIT 1',
+                        ['c' => $contractId, 't' => ContractRegistration::TYPE_CONSUMER],
+                    )->fetch();
+                    if ($taken !== false) {
+                        continue;
+                    }
+                }
+                try {
+                    $this->registry->reactivateRegistration((string)$consumer['id']);
+                } catch (RegistryException $e) {
+                    $this->audit->log(
+                        'module.integration_reactivate_failed',
+                        'contract_registration',
+                        (string)$consumer['contract_name'],
+                        [
+                            'newValue' => ['reason' => $e->getMessage()],
+                            'moduleKey' => (string)$consumer['module_key'],
+                        ],
+                    );
+                    continue;
+                }
+                $this->audit->log(
+                    'module.integration_reactivated',
+                    'contract_registration',
+                    (string)$consumer['contract_name'],
+                    [
+                        'oldValue' => ['active' => false],
+                        'newValue' => [
+                            'active' => true,
+                            'reason' => 'provider_reactivated',
+                            'triggerModule' => $providerKey,
                         ],
                         'moduleKey' => (string)$consumer['module_key'],
                     ],

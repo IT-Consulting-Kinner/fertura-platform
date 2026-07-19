@@ -234,13 +234,28 @@ class UpdateManager
                 // (Inc 9c requires FORCE); harmless for the common owner role.
                 (new ModuleTableRls())->forceRls($key);
 
-                // Rebuild contracts (those defined by the module).
-                $this->conn()->execute('DELETE FROM contracts WHERE owner_module_key = :k', ['k' => $key]);
-                foreach ($manifest->contractsProvided() as $c) {
-                    $this->registry->registerContract($key, (string)$c['name'], (string)$c['type'], (string)$c['version']);
-                }
+                // Sync the module's contract definitions WITHOUT dropping them.
+                // Deleting + recreating them would (via fk_registrations_contract /
+                // fk_bindings_contract ON DELETE CASCADE) hard-delete every OTHER
+                // module's registration + binding docked onto these contracts — a
+                // connector's consumer registration on this extension's service
+                // contract, say — and nothing rebuilds those, so the connector goes
+                // silently inert after the update. Upserting keeps each contract's
+                // stable id, leaving downstream registrations untouched.
+                $this->syncProvidedContracts($key, $manifest);
                 if ($wasActive) {
                     $this->reactivateRegistrations($key, $manifest, $newVersion);
+                    // Purge the module's OWN registrations the new manifest no longer
+                    // declares: deactivateRegistrations() marked every prior row
+                    // inactive and reactivateRegistrations() re-activated exactly the
+                    // current manifest, so any row of this module still inactive is one
+                    // the update dropped. Leaving it would let a later provider
+                    // reactivation cascade resurrect a consumer the module no longer
+                    // declares (the cascade keys on active-module + inactive-consumer).
+                    $this->conn()->execute(
+                        'DELETE FROM contract_registrations WHERE module_key = :k AND NOT active',
+                        ['k' => $key],
+                    );
                     $this->conn()->execute("UPDATE modules SET status = 'active' WHERE module_key = :k", ['k' => $key]);
                 }
 
@@ -288,12 +303,13 @@ class UpdateManager
                         'UPDATE modules SET version = :v, manifest = CAST(:m AS jsonb), status = :s WHERE module_key = :k',
                         ['v' => $oldVersion, 'm' => json_encode($oldManifest->data), 's' => $mod['status'], 'k' => $key],
                     );
-                    $this->conn()->execute('DELETE FROM contracts WHERE owner_module_key = :k', ['k' => $key]);
+                    // Restore the old contract definitions the same non-destructive
+                    // way (stable ids -> downstream integrations survive the
+                    // rollback too). Only the module's OWN registrations/bindings
+                    // are wiped and rebuilt from the old manifest.
+                    $this->syncProvidedContracts($key, $oldManifest);
                     $this->conn()->execute('DELETE FROM contract_registrations WHERE module_key = :k', ['k' => $key]);
                     $this->conn()->execute('DELETE FROM capability_bindings WHERE module_key = :k', ['k' => $key]);
-                    foreach ($oldManifest->contractsProvided() as $c) {
-                        $this->registry->registerContract($key, (string)$c['name'], (string)$c['type'], (string)$c['version']);
-                    }
                     if ($wasActive) {
                         $this->reactivateRegistrations($key, $oldManifest, $oldVersion);
                     }
@@ -496,11 +512,72 @@ class UpdateManager
                 'implementationClass' => $e['class'] ?? null, 'requiredVersion' => $e['version'] ?? null, 'moduleVersion' => $moduleVersion,
             ]);
         }
+        // Service providers (public module interfaces, ch. 29): a module that
+        // provides a service contract registers its OWN provider row only via
+        // services_registered. Omitting it here left that provider registration
+        // deactivated after every update, so downstream consumers of the service
+        // went inert despite a "successful" update (mirrors activate()).
+        foreach ($manifest->servicesRegistered() as $s) {
+            $this->registry->register($key, (string)$s['contract'], ContractRegistration::TYPE_PROVIDER, [
+                'implementationClass' => $s['class'] ?? null, 'requiredVersion' => $s['version'] ?? null, 'moduleVersion' => $moduleVersion,
+            ]);
+        }
         foreach ($manifest->contractsUsed() as $u) {
             $this->registry->register($key, (string)$u['contract'], ContractRegistration::TYPE_CONSUMER, [
                 'requiredVersion' => $u['version'] ?? null, 'moduleVersion' => $moduleVersion,
             ]);
         }
+    }
+
+    /**
+     * Idempotently syncs the module's provided contract definitions, keeping each
+     * contract's STABLE id across the update. See
+     * {@see \App\Service\Registry\ContractRegistry::upsertContract()} for why the
+     * delete-and-recreate this replaces was destructive (fk_registrations_contract
+     * is ON DELETE CASCADE, so it silently wiped downstream integrations).
+     *
+     * A contract the module no longer declares is SOFT-deactivated (active=false),
+     * NOT hard-deleted: a hard delete would cascade-remove any downstream module's
+     * registration + binding docked onto it (silent, and irrecoverable if the update
+     * then fails and rolls back — the recreated contract gets a fresh id the orphaned
+     * downstream rows no longer reference). Soft-deactivating keeps the stable id, so
+     * a rollback's upsertContract(oldManifest) reactivates it and the downstream
+     * integration comes back untouched; on a legitimate drop the inactive contract
+     * simply stops resolving (contract.active is checked first at resolution).
+     */
+    private function syncProvidedContracts(string $key, ModuleManifest $manifest): void
+    {
+        $keep = [];
+        foreach ($manifest->contractsProvided() as $c) {
+            $name = (string)$c['name'];
+            $keep[] = $name;
+            $this->registry->upsertContract($key, $name, (string)$c['type'], (string)$c['version'], [
+                'description' => $c['description'] ?? null,
+                'multiUse' => $c['multi_use'] ?? true,
+                'inputSpec' => $c['input_spec'] ?? null,
+                'outputSpec' => $c['output_spec'] ?? null,
+                'defaultBehavior' => $c['error_behavior'] ?? null,
+            ]);
+        }
+        if ($keep === []) {
+            $this->conn()->execute(
+                'UPDATE contracts SET active = false, deactivated_at = now() WHERE owner_module_key = :k',
+                ['k' => $key],
+            );
+
+            return;
+        }
+        $placeholders = [];
+        $params = ['k' => $key];
+        foreach ($keep as $i => $name) {
+            $placeholders[] = ":n$i";
+            $params["n$i"] = $name;
+        }
+        $this->conn()->execute(
+            'UPDATE contracts SET active = false, deactivated_at = now() '
+            . 'WHERE owner_module_key = :k AND name NOT IN (' . implode(', ', $placeholders) . ')',
+            $params,
+        );
     }
 
     /** @return array<string, mixed> */

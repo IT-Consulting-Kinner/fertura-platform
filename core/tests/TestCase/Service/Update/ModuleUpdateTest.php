@@ -3,9 +3,11 @@ declare(strict_types=1);
 
 namespace App\Test\TestCase\Service\Update;
 
+use App\Model\Entity\ContractRegistration;
 use App\Service\I18n\LanguagePackStore;
 use App\Service\Module\LifecycleException;
 use App\Service\Module\ModuleLifecycle;
+use App\Service\Registry\ContractRegistry;
 use App\Service\Settings\SettingsManager;
 use App\Service\Update\RecoveryPoint;
 use App\Service\Update\UpdateManager;
@@ -25,6 +27,8 @@ use Throwable;
 class ModuleUpdateTest extends TestCase
 {
     private const KEY = 'ztest_upd';
+    private const CONSUMER_KEY = 'ztest_upd_con';
+    private const PROVIDED_CONTRACT = 'ztest_upd.service.x';
     private string $v1 = '';
     private string $v2 = '';
     private string $v2bad = '';
@@ -183,6 +187,117 @@ class ModuleUpdateTest extends TestCase
         $this->assertSame('vorhanden', $row['name'] ?? null);
     }
 
+    /**
+     * Updating a PROVIDER module must NOT sever the integrations docked onto its
+     * contracts. The old path did `DELETE FROM contracts WHERE owner_module_key`
+     * and rebuilt them — but fk_registrations_contract / fk_bindings_contract are
+     * ON DELETE CASCADE, so every downstream connector's consumer registration +
+     * binding got hard-deleted and nothing rebuilt them (the connector went
+     * silently inert after each provider update). The fix upserts contracts in
+     * place, keeping their stable id, so downstream rows survive untouched.
+     */
+    public function testUpdatePreservesDownstreamConsumerRegistration(): void
+    {
+        $base = dirname($this->v1);
+        $prov1 = $this->buildProviderWithContract($base . '/prov1', '1.0.0', [
+            '001_init.sql' => "CREATE TABLE widget (id uuid NOT NULL DEFAULT core.uuid_generate_v7() PRIMARY KEY, name text);\n-- @DOWN\nDROP TABLE widget;\n",
+        ]);
+        (new ModuleLifecycle())->install($prov1);
+        (new ModuleLifecycle())->activate(self::KEY);
+
+        // A downstream connector docks a CONSUMER registration onto the contract.
+        $conn = ConnectionManager::get('default');
+        $conn->execute(
+            'INSERT INTO modules (module_key, name, version, type, core_compatibility, status, manifest) '
+            . "VALUES (:k, 'ZZ Downstream', '1.0.0', 'extension', '>=1.0.0', 'active', '{}'::jsonb)",
+            ['k' => self::CONSUMER_KEY],
+        );
+        $registry = new ContractRegistry();
+        $registry->register(self::CONSUMER_KEY, self::PROVIDED_CONTRACT, ContractRegistration::TYPE_CONSUMER, [
+            'moduleVersion' => '1.0.0',
+        ]);
+
+        $before = $conn->execute('SELECT id FROM contracts WHERE name = :n', ['n' => self::PROVIDED_CONTRACT])->fetch('assoc');
+        $this->assertNotFalse($before, 'Contract muss durch die Provider-Installation existieren.');
+        $this->assertTrue($this->consumerActive(), 'Consumer muss vor dem Update aktiv sein.');
+        $this->assertTrue($registry->isBindingActive(self::CONSUMER_KEY, self::PROVIDED_CONTRACT));
+        // The provider's OWN service-provider registration is active after activate().
+        $this->assertTrue($this->ownProviderActive(), 'Provider-Registrierung muss vor dem Update aktiv sein.');
+
+        // Update the provider (adds migration 002 -> a real update).
+        $prov2 = $this->buildProviderWithContract($base . '/prov2', '1.1.0', [
+            '001_init.sql' => "CREATE TABLE widget (id uuid NOT NULL DEFAULT core.uuid_generate_v7() PRIMARY KEY, name text);\n-- @DOWN\nDROP TABLE widget;\n",
+            '002_add.sql' => "ALTER TABLE widget ADD COLUMN qty integer;\n-- @DOWN\nALTER TABLE widget DROP COLUMN qty;\n",
+        ]);
+        $result = $this->manager()->updateModule(self::KEY, $prov2);
+        $this->assertSame('1.1.0', $result['version']);
+
+        // The contract kept its STABLE id (no delete-and-recreate)...
+        $after = $conn->execute('SELECT id FROM contracts WHERE name = :n', ['n' => self::PROVIDED_CONTRACT])->fetch('assoc');
+        $this->assertNotFalse($after);
+        $this->assertSame($before['id'], $after['id'], 'Contract-id muss über das Update stabil bleiben.');
+        // ...so the downstream consumer's registration + binding SURVIVE untouched.
+        $this->assertTrue($this->consumerActive(), 'Downstream-Consumer-Registrierung muss das Provider-Update überleben.');
+        $this->assertTrue($registry->isBindingActive(self::CONSUMER_KEY, self::PROVIDED_CONTRACT));
+        // ...and the provider's OWN service registration is re-registered by the
+        // update (reactivateRegistrations must cover services_registered).
+        $this->assertTrue($this->ownProviderActive(), 'Provider-Registrierung muss das Update überleben (services_registered).');
+    }
+
+    /**
+     * Updating a provider to a manifest that DROPS a still-consumed contract must
+     * not hard-delete the downstream consumer (which fk_registrations_contract ON
+     * DELETE CASCADE would do). The prune soft-deactivates the contract instead, so
+     * its stable id — and every registration docked onto it — survives, recoverable.
+     */
+    public function testUpdateDroppingProvidedContractSoftKeepsDownstreamConsumer(): void
+    {
+        $base = dirname($this->v1);
+        $init = "CREATE TABLE widget (id uuid NOT NULL DEFAULT core.uuid_generate_v7() PRIMARY KEY, name text);\n-- @DOWN\nDROP TABLE widget;\n";
+        $prov1 = $this->buildProviderWithContracts(
+            $base . '/pdrop1',
+            '1.0.0',
+            ['ztest_upd.svc.keep', self::PROVIDED_CONTRACT],
+            ['001_init.sql' => $init],
+        );
+        (new ModuleLifecycle())->install($prov1);
+
+        $conn = ConnectionManager::get('default');
+        $conn->execute(
+            'INSERT INTO modules (module_key, name, version, type, core_compatibility, status, manifest) '
+            . "VALUES (:k, 'ZZ Downstream', '1.0.0', 'extension', '>=1.0.0', 'active', '{}'::jsonb)",
+            ['k' => self::CONSUMER_KEY],
+        );
+        (new ContractRegistry())->register(self::CONSUMER_KEY, self::PROVIDED_CONTRACT, ContractRegistration::TYPE_CONSUMER, [
+            'moduleVersion' => '1.0.0',
+        ]);
+        $this->assertTrue($this->consumerActive());
+
+        // Update drops PROVIDED_CONTRACT (keeps only the other one).
+        $prov2 = $this->buildProviderWithContracts(
+            $base . '/pdrop2',
+            '1.1.0',
+            ['ztest_upd.svc.keep'],
+            [
+                '001_init.sql' => $init,
+                '002_add.sql' => "ALTER TABLE widget ADD COLUMN qty integer;\n-- @DOWN\nALTER TABLE widget DROP COLUMN qty;\n",
+            ],
+        );
+        $this->manager()->updateModule(self::KEY, $prov2);
+
+        // The dropped contract is SOFT-deactivated (row + id kept, not hard-deleted).
+        $c = $conn->execute('SELECT active FROM contracts WHERE name = :n', ['n' => self::PROVIDED_CONTRACT])->fetch('assoc');
+        $this->assertNotFalse($c, 'Fallengelassener Contract darf nicht hart geloescht werden.');
+        $this->assertFalse((bool)$c['active'], 'Fallengelassener Contract muss soft-deaktiviert sein.');
+        // The downstream consumer registration ROW survived (no FK CASCADE delete).
+        $row = $conn->execute(
+            'SELECT 1 FROM contract_registrations cr JOIN contracts c ON c.id = cr.contract_id '
+            . 'WHERE c.name = :c AND cr.module_key = :m',
+            ['c' => self::PROVIDED_CONTRACT, 'm' => self::CONSUMER_KEY],
+        )->fetch();
+        $this->assertNotFalse($row, 'Downstream-Consumer-Registrierung darf nicht per FK-CASCADE geloescht werden.');
+    }
+
     // ---- Helpers ------------------------------------------------------------
 
     private function buildModule(string $dir, string $version, array $migrations): string
@@ -216,6 +331,113 @@ class ModuleUpdateTest extends TestCase
         return $dir;
     }
 
+    /**
+     * Like buildModule(), but the manifest also PROVIDES a service contract other
+     * modules can dock onto — the fixture for the downstream-preservation test.
+     *
+     * @param array<string, string> $migrations
+     */
+    private function buildProviderWithContract(string $dir, string $version, array $migrations): string
+    {
+        @mkdir($dir . '/migrations', 0o775, true);
+        file_put_contents($dir . '/manifest.json', json_encode([
+            'id' => self::KEY,
+            'name' => 'Update Test Provider',
+            'version' => $version,
+            'type' => 'main',
+            'edition' => 'free',
+            'description' => 'Testmodul mit bereitgestelltem Service-Contract.',
+            'publisher' => 'Fertura Test',
+            'php_namespace' => 'ZtestUpd',
+            'core_compatibility' => '>=1.0.0 <2.0.0',
+            'requires_license' => false,
+            'dependencies' => [],
+            'permissions' => [
+                ['resource_type' => 'widget', 'name' => self::KEY . '.widget', 'is_scoped' => false],
+            ],
+            'tables' => [
+                ['table' => 'widget', 'scope' => 'global', 'reason' => 'Update-Pfad-Test-Fixture; keine Tenant-Daten.'],
+            ],
+            'contracts_provided' => [
+                ['name' => self::PROVIDED_CONTRACT, 'type' => 'service', 'version' => '1.0.0', 'error_behavior' => 'reject'],
+            ],
+            // The module also PROVIDES the service (its own provider registration is
+            // created via services_registered) — exercises that the update path
+            // re-registers services, not only resolvers/collectors/events/consumers.
+            'services_registered' => [
+                ['contract' => self::PROVIDED_CONTRACT, 'class' => 'ZtestUpd\\Service\\Impl'],
+            ],
+        ]));
+        foreach ($migrations as $name => $sql) {
+            file_put_contents($dir . '/migrations/' . $name, $sql);
+        }
+
+        return $dir;
+    }
+
+    /**
+     * Provider package declaring an arbitrary list of provided service contracts
+     * (fixture for the contract-drop / soft-deactivate test).
+     *
+     * @param list<string>          $contractNames
+     * @param array<string, string> $migrations
+     */
+    private function buildProviderWithContracts(string $dir, string $version, array $contractNames, array $migrations): string
+    {
+        @mkdir($dir . '/migrations', 0o775, true);
+        $provided = array_map(static fn(string $n): array => [
+            'name' => $n, 'type' => 'service', 'version' => '1.0.0', 'error_behavior' => 'reject',
+        ], $contractNames);
+        file_put_contents($dir . '/manifest.json', json_encode([
+            'id' => self::KEY,
+            'name' => 'Update Test Provider',
+            'version' => $version,
+            'type' => 'main',
+            'edition' => 'free',
+            'description' => 'Testmodul mit mehreren Service-Contracts.',
+            'publisher' => 'Fertura Test',
+            'php_namespace' => 'ZtestUpd',
+            'core_compatibility' => '>=1.0.0 <2.0.0',
+            'requires_license' => false,
+            'dependencies' => [],
+            'permissions' => [
+                ['resource_type' => 'widget', 'name' => self::KEY . '.widget', 'is_scoped' => false],
+            ],
+            'tables' => [
+                ['table' => 'widget', 'scope' => 'global', 'reason' => 'Update-Pfad-Test-Fixture; keine Tenant-Daten.'],
+            ],
+            'contracts_provided' => $provided,
+        ]));
+        foreach ($migrations as $name => $sql) {
+            file_put_contents($dir . '/migrations/' . $name, $sql);
+        }
+
+        return $dir;
+    }
+
+    private function consumerActive(): bool
+    {
+        $row = ConnectionManager::get('default')->execute(
+            'SELECT cr.active FROM contract_registrations cr JOIN contracts c ON c.id = cr.contract_id '
+            . 'WHERE c.name = :c AND cr.module_key = :m',
+            ['c' => self::PROVIDED_CONTRACT, 'm' => self::CONSUMER_KEY],
+        )->fetch('assoc');
+
+        return $row !== false && (bool)$row['active'];
+    }
+
+    /** The updated module's OWN active provider registration on its service contract. */
+    private function ownProviderActive(): bool
+    {
+        $row = ConnectionManager::get('default')->execute(
+            'SELECT cr.active FROM contract_registrations cr JOIN contracts c ON c.id = cr.contract_id '
+            . "WHERE c.name = :c AND cr.module_key = :m AND cr.registration_type = 'provider'",
+            ['c' => self::PROVIDED_CONTRACT, 'm' => self::KEY],
+        )->fetch('assoc');
+
+        return $row !== false && (bool)$row['active'];
+    }
+
     /** Ships a minimal de_DE catalog with the package (domain = module key). */
     private function addLocale(string $dir, string $version): void
     {
@@ -245,6 +467,19 @@ class ModuleUpdateTest extends TestCase
         ) {
             try {
                 $conn->execute($sql, str_contains($sql, ':k') ? ['k' => self::KEY] : []);
+            } catch (Throwable) {
+            }
+        }
+        // Downstream-connector fixture of the contract-preservation test.
+        foreach (
+            [
+            'DELETE FROM contract_registrations WHERE module_key = :c',
+            'DELETE FROM capability_bindings WHERE module_key = :c',
+            'DELETE FROM modules WHERE module_key = :c',
+            ] as $sql
+        ) {
+            try {
+                $conn->execute($sql, ['c' => self::CONSUMER_KEY]);
             } catch (Throwable) {
             }
         }
