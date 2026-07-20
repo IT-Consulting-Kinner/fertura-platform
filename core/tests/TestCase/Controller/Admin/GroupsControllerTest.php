@@ -418,6 +418,77 @@ class GroupsControllerTest extends TestCase
         $this->assertResponseNotContains('name="resource_key"');
     }
 
+    /** Creates a PROTECTED system group (is_system=true) in the default tenant. */
+    private function makeSystemGroup(string $suffix = 'sys-'): string
+    {
+        return (string)ConnectionManager::get('default')->execute(
+            'INSERT INTO "groups" (name, description, tenant_id, is_system) VALUES (:n, :d, :t, true) RETURNING id',
+            [
+                'n' => 'zztest-grp-' . $suffix . bin2hex(random_bytes(2)),
+                'd' => 'system fixture',
+                't' => '00000000-0000-0000-0000-000000000001',
+            ],
+        )->fetch('assoc')['id'];
+    }
+
+    public function testSystemGroupCannotBeDeactivated(): void
+    {
+        $gid = $this->makeSystemGroup('nodeact-');
+        $this->login();
+        $this->post('/admin/groups/setActive/' . $gid . '/off');
+
+        $this->assertRedirect(['action' => 'view', $gid]);
+        // The server-side guard rejected it — the group stays active.
+        $this->assertTrue((bool)$this->groupCol($gid, 'active'), 'system group stays active');
+    }
+
+    public function testSystemGroupPermissionsCannotBeEdited(): void
+    {
+        $this->makeResource();
+        $gid = $this->makeSystemGroup('noperm-');
+        $this->login();
+        $this->post('/admin/groups/savePermissions/' . $gid, [
+            'perm' => ['zzgrpui::thing' => ['browse' => '1', 'read' => '1']],
+        ]);
+
+        $this->assertRedirect(['action' => 'view', $gid]);
+        // The guard rejected the edit — no permission row was written.
+        $this->assertSame(0, $this->permCount($gid), 'no rights written for the system group');
+    }
+
+    public function testSystemGroupViewDisablesEditing(): void
+    {
+        $this->makeResource();
+        $gid = $this->makeSystemGroup('sysview-');
+        $this->login();
+        $this->get('/admin/groups/view/' . $gid);
+
+        $this->assertResponseOk();
+        $body = (string)$this->_response->getBody();
+        // The permission editor still renders (resource present) but its checkboxes
+        // are disabled and the Save button is gone (a non-system group has it).
+        $this->assertResponseContains('id="perm-zzgrpui"');
+        $this->assertMatchesRegularExpression('/id="zzgrpui__thing_browse"[^>]*disabled/', $body);
+        // The deactivate postLink is not offered for a system group.
+        $this->assertResponseNotContains('/admin/groups/setActive/' . $gid);
+    }
+
+    public function testOptionsReturnsActiveGroupsAsJson(): void
+    {
+        $gid = $this->makeGroup('opt-');
+        $name = (string)$this->groupCol($gid, 'name');
+        $this->login();
+        $this->get('/admin/groups/options');
+
+        $this->assertResponseOk();
+        $this->assertContentType('application/json');
+        $data = json_decode((string)$this->_response->getBody(), true);
+        $this->assertIsArray($data);
+        $this->assertArrayHasKey('options', $data);
+        $this->assertContains($gid, array_column($data['options'], 'value'), 'group id present');
+        $this->assertContains($name, array_column($data['options'], 'label'), 'group name present');
+    }
+
     private function countGroups(): int
     {
         return (int)ConnectionManager::get('default')

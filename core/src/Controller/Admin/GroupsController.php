@@ -18,7 +18,31 @@ class GroupsController extends AdminController
 
     public function index(): void
     {
-        $this->renderGroupList(false);
+        // ?create opens the inline create accordion directly — the target of the
+        // "new group" reference link on the user form (create without leaving it).
+        $this->renderGroupList($this->request->getQuery('create') !== null);
+    }
+
+    /**
+     * Active groups of the current tenant as JSON `{options:[{value,label}]}` for the
+     * UiKit reference-field refresh on the user form (create a group in another tab,
+     * then refresh here without leaving the form). GET, read-only.
+     */
+    public function options(): Response
+    {
+        /** @var \Cake\Database\Connection $conn */
+        $conn = ConnectionManager::get('default');
+        $rows = $conn->execute(
+            'SELECT id, name FROM "groups" WHERE active AND tenant_id = core.current_tenant() ORDER BY name',
+        )->fetchAll('assoc');
+        $options = array_map(
+            static fn(array $r): array => ['value' => (string)$r['id'], 'label' => (string)$r['name']],
+            $rows,
+        );
+
+        return $this->response
+            ->withType('application/json')
+            ->withStringBody((string)json_encode(['options' => $options]));
     }
 
     /** Renders the group list plus the inline "create" accordion form. */
@@ -148,6 +172,13 @@ class GroupsController extends AdminController
             return $this->notFound();
         }
         $active = $flag === 'on';
+        // The protected administrator group must never be deactivated (locking every
+        // admin out). Server-side guard, not just a hidden button.
+        if (!$active && $this->isSystemGroup($id)) {
+            $this->Flash->error(__('flash.group.system_protected'));
+
+            return $this->redirect(['action' => 'view', $id]);
+        }
         // PostgreSQL boolean: CakePHP's raw execute() binds PHP `false` as ''
         // (→ "invalid input syntax for type boolean"); hence explicit 'true'/'false'.
         ConnectionManager::get('default')->execute(
@@ -218,6 +249,13 @@ class GroupsController extends AdminController
         $this->request->allowMethod('post');
         if (!$this->isUuid($id) || !$this->groupInTenant($id)) {
             return $this->notFound();
+        }
+        // The administrator group's rights are managed by group_init (full access);
+        // editing them in the GUI could strip an admin's own access. Server-side guard.
+        if ($this->isSystemGroup($id)) {
+            $this->Flash->error(__('flash.group.system_protected_perms'));
+
+            return $this->redirect(['action' => 'view', $id]);
         }
         $data = (array)$this->request->getData('perm');
 
@@ -355,6 +393,19 @@ class GroupsController extends AdminController
         $this->Flash->error(__('flash.group.not_found'));
 
         return $this->redirect(['action' => 'index']);
+    }
+
+    /**
+     * Whether the group is the protected administrator (system) group. RLS scopes the
+     * read to the current tenant, so a foreign id yields no row (-> false).
+     */
+    private function isSystemGroup(string $id): bool
+    {
+        /** @var \Cake\Database\Connection $conn */
+        $conn = ConnectionManager::get('default');
+        $row = $conn->execute('SELECT is_system FROM "groups" WHERE id = :id', ['id' => $id])->fetch('assoc');
+
+        return $row !== false && filter_var($row['is_system'], FILTER_VALIDATE_BOOLEAN);
     }
 
     /** Whether $id is a group of the acting admin's OWN tenant (explicit, not via RLS). */

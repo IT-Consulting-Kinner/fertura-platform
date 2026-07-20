@@ -72,6 +72,9 @@ class AdminGroupServiceTest extends TestCase
 
         $this->assertTrue($first['created']);
         $this->assertGreaterThanOrEqual(1, $first['granted']);
+        // The admin group is created as a PROTECTED system group (not deactivatable,
+        // rights not GUI-editable).
+        $this->assertTrue((bool)$this->isSystem($first['id']), 'created admin group is is_system');
 
         $conn = ConnectionManager::get('default');
         $perm = $conn->execute(
@@ -103,6 +106,32 @@ class AdminGroupServiceTest extends TestCase
             ['g' => $first['id']],
         )->fetch();
         $this->assertNotFalse($topped, 'later-registered resource topped up on re-run');
+    }
+
+    public function testEnsureBackfillsSystemFlagOnAPreExistingGroup(): void
+    {
+        // A group created OUTSIDE group_init (e.g. via the GUI, before this flag
+        // existed) must be marked protected when ensure() adopts it by name.
+        $conn = ConnectionManager::get('default');
+        $preId = (string)$conn->execute(
+            'INSERT INTO "groups" (name, tenant_id, is_system) VALUES (:n, :t, false) RETURNING id',
+            ['n' => self::GROUP, 't' => self::TENANT],
+        )->fetch('assoc')['id'];
+        $this->assertFalse((bool)$this->isSystem($preId));
+
+        $res = (new AdminGroupService())->ensure(self::TENANT, self::GROUP);
+
+        $this->assertFalse($res['created'], 'adopted the existing group');
+        $this->assertSame($preId, $res['id']);
+        $this->assertTrue((bool)$this->isSystem($preId), 'ensure() backfilled is_system');
+    }
+
+    /** @return mixed */
+    private function isSystem(string $groupId)
+    {
+        return ConnectionManager::get('default')
+            ->execute('SELECT is_system FROM "groups" WHERE id = :id', ['id' => $groupId])
+            ->fetch('assoc')['is_system'];
     }
 
     public function testEnsureWorksForASecondTenant(): void

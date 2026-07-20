@@ -10,6 +10,9 @@
  */
 $active = filter_var($group['active'], FILTER_VALIDATE_BOOLEAN);
 $truthy = static fn ($v) => filter_var($v ?? false, FILTER_VALIDATE_BOOLEAN);
+// The protected administrator group: not deactivatable, rights not editable here
+// (both also enforced server-side in GroupsController).
+$isSystem = $truthy($group['is_system'] ?? false);
 // Module-domain label with fallback: __d() returns the key untranslated, then
 // the technical name from the registry is shown instead (hand-off: modules ship
 // perm.resource.<type> / perm.action.<name> in their language packs).
@@ -23,9 +26,13 @@ $dLabel = static function (string $domain, string $key, string $fallback): strin
     <h1 class="h3 mb-0"><?= h($group['name']) ?>
         <span class="badge text-bg-<?= $active ? 'success' : 'secondary' ?> align-middle"><?= h($active ? __('admin.groups.active') : __('admin.groups.inactive')) ?></span></h1>
     <div class="d-flex gap-2">
-        <?= $this->Form->postLink($active ? __('admin.groups.deactivate') : __('admin.groups.activate'),
-            ['action' => 'setActive', $group['id'], $active ? 'off' : 'on'],
-            ['class' => 'btn btn-sm ' . ($active ? 'btn-warning' : 'btn-success')]) ?>
+        <?php if ($isSystem): ?>
+            <span class="badge text-bg-info align-self-center" title="<?= h(__('admin.groups.system_badge_title')) ?>"><?= h(__('admin.groups.system_badge')) ?></span>
+        <?php else: ?>
+            <?= $this->Form->postLink($active ? __('admin.groups.deactivate') : __('admin.groups.activate'),
+                ['action' => 'setActive', $group['id'], $active ? 'off' : 'on'],
+                ['class' => 'btn btn-sm ' . ($active ? 'btn-warning' : 'btn-success')]) ?>
+        <?php endif; ?>
     </div>
 </div>
 
@@ -62,6 +69,7 @@ $dLabel = static function (string $domain, string $key, string $fallback): strin
                 <?php else: ?>
                     <p class="text-muted small"><?= h(__('admin.groups.perms_editor_hint')) ?></p>
                     <p class="text-muted small"><?= h(__('admin.groups.perms_scoped_hint')) ?></p>
+                    <?php if ($isSystem): ?><p class="text-info small"><?= h(__('admin.groups.system_perms_note')) ?></p><?php endif; ?>
                     <?= $this->Form->create(null, ['url' => ['action' => 'savePermissions', $group['id']]]) ?>
                     <?php foreach ($resourceGroups as $moduleKey => $module): ?>
                         <?php ob_start(); ?>
@@ -87,19 +95,19 @@ $dLabel = static function (string $domain, string $key, string $fallback): strin
                                 </div>
                                 <?php // BREAD order: Browse, Read, Edit, Add, Delete. ?>
                                 <?php foreach (['browse' => 'B', 'read' => 'R', 'edit' => 'E', 'add' => 'A', 'delete' => 'D'] as $a => $lbl): ?>
-                                    <div class="form-check"><?= $this->Form->checkbox('perm.' . $rid . '.' . $a, ['class' => 'form-check-input', 'id' => $rkey . '_' . $a, 'checked' => $grant !== null && $truthy($grant['can_' . $a]), 'hiddenField' => false]) ?>
+                                    <div class="form-check"><?= $this->Form->checkbox('perm.' . $rid . '.' . $a, ['class' => 'form-check-input', 'id' => $rkey . '_' . $a, 'checked' => $grant !== null && $truthy($grant['can_' . $a]), 'hiddenField' => false, 'disabled' => $isSystem]) ?>
                                         <label class="form-check-label small" for="<?= h($rkey . '_' . $a) ?>" title="<?= h(__('admin.groups.perm_' . $a)) ?>"><?= $lbl ?></label></div>
                                 <?php endforeach; ?>
                                 <?php foreach (array_values($declared) as $ea): $ea = (string)$ea; if ($ea === '') { continue; }
                                     $eaKey = (string)preg_replace('/[^a-zA-Z0-9_-]/', '-', $ea); ?>
-                                    <div class="form-check"><?= $this->Form->checkbox('perm.' . $rid . '.x.' . $ea, ['class' => 'form-check-input', 'id' => $rkey . '_x_' . $eaKey, 'checked' => (bool)($grantExtra[$ea] ?? false), 'hiddenField' => false]) ?>
+                                    <div class="form-check"><?= $this->Form->checkbox('perm.' . $rid . '.x.' . $ea, ['class' => 'form-check-input', 'id' => $rkey . '_x_' . $eaKey, 'checked' => (bool)($grantExtra[$ea] ?? false), 'hiddenField' => false, 'disabled' => $isSystem]) ?>
                                         <label class="form-check-label small" for="<?= h($rkey . '_x_' . $eaKey) ?>"><?= h($dLabel((string)$r['module_key'], 'perm.action.' . $ea, $ea)) ?></label></div>
                                 <?php endforeach; ?>
                             </div>
                         <?php endforeach; ?>
                         <?= $this->UiKit->formAccordion($module['name'], (string)ob_get_clean(), ['open' => true, 'id' => 'perm-' . str_replace('.', '-', (string)$moduleKey)]) ?>
                     <?php endforeach; ?>
-                    <?= $this->Form->button(__('admin.groups.perms_save'), ['class' => 'btn btn-primary']) ?>
+                    <?php if (!$isSystem): ?><?= $this->Form->button(__('admin.groups.perms_save'), ['class' => 'btn btn-primary']) ?><?php endif; ?>
                     <?= $this->Form->end() ?>
                 <?php endif; ?>
             </div>

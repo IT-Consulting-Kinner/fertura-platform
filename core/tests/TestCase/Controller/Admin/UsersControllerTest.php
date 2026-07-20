@@ -110,6 +110,20 @@ class UsersControllerTest extends TestCase
         $this->assertResponseContains('user_group_admin'); // area list rendered
     }
 
+    public function testCreateFormGroupFieldIsAReferenceField(): void
+    {
+        // Finding 2: the group select on the create form carries a "create a new
+        // group" link (new tab) + an options-refresh button, so a missing group can
+        // be created without leaving the form. The link is area-gated to
+        // user_group_admin, which the acting admin holds here.
+        $this->login();
+        $this->get('/admin/users');
+
+        $this->assertResponseOk();
+        $this->assertResponseContains('href="/admin/groups?create=1"');
+        $this->assertResponseContains('data-options-refresh="/admin/groups/options"');
+    }
+
     public function testViewUnknownRedirects(): void
     {
         $this->login();
