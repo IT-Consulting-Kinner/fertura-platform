@@ -7,6 +7,7 @@
  * @var array<string, array<string, mixed>> $grants          Class-level grant per "module::type".
  * @var array<string, array{name: string, resources: array<int, array<string, mixed>>}> $resourceGroups
  * @var array<string, int> $objectCounts                     CLI-managed object rows per "module::type".
+ * @var string|null $currentUserId                           The acting admin (self-removal guard).
  */
 $active = filter_var($group['active'], FILTER_VALIDATE_BOOLEAN);
 $truthy = static fn ($v) => filter_var($v ?? false, FILTER_VALIDATE_BOOLEAN);
@@ -42,9 +43,14 @@ $dLabel = static function (string $domain, string $key, string $fallback): strin
             <div class="card-header"><?= h(__('admin.groups.members')) ?></div>
             <ul class="list-group list-group-flush">
                 <?php foreach ($members as $m): ?>
+                    <?php $selfInSystem = $isSystem && (string)$m['id'] === (string)($currentUserId ?? ''); ?>
                     <li class="list-group-item d-flex justify-content-between align-items-center">
                         <span><?= h($m['username']) ?> <span class="text-muted small"><?= h($m['email']) ?></span></span>
-                        <?= $this->UiKit->confirmPost(__('admin.groups.member_remove'), ['action' => 'removeMember', $group['id'], $m['id']], __('admin.groups.member_remove_confirm'), ['class' => 'btn btn-outline-danger btn-sm']) ?>
+                        <?php if ($selfInSystem): ?>
+                            <span class="badge text-bg-light" title="<?= h(__('admin.groups.self_remove_admin_title')) ?>"><?= h(__('admin.groups.member_you')) ?></span>
+                        <?php else: ?>
+                            <?= $this->UiKit->confirmPost(__('admin.groups.member_remove'), ['action' => 'removeMember', $group['id'], $m['id']], __('admin.groups.member_remove_confirm'), ['class' => 'btn btn-outline-danger btn-sm']) ?>
+                        <?php endif; ?>
                     </li>
                 <?php endforeach; ?>
                 <?php if ($members === []): ?><li class="list-group-item text-muted"><?= h(__('admin.groups.members_empty')) ?></li><?php endif; ?>

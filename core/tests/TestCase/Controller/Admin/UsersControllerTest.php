@@ -110,6 +110,36 @@ class UsersControllerTest extends TestCase
         $this->assertResponseContains('user_group_admin'); // area list rendered
     }
 
+    public function testOtherUserViewOffersSelfManagement(): void
+    {
+        // Viewing ANOTHER user keeps the admin onboarding + lifecycle actions.
+        $this->login();
+        $this->get('/admin/users/view/' . $this->memberId);
+
+        $this->assertResponseOk();
+        // DashedRoute: setStatus -> set-status, setPassword -> set-password.
+        $this->assertResponseContains('/admin/users/set-status/' . $this->memberId); // (de)activate
+        $this->assertResponseContains('/admin/users/anonymize/' . $this->memberId);
+        $this->assertResponseContains('/admin/users/invite/' . $this->memberId);
+        $this->assertResponseContains('/admin/users/set-password/' . $this->memberId);
+    }
+
+    public function testOwnViewHidesSelfManagement(): void
+    {
+        // On one's OWN user page the deactivate / anonymize / invite+password block
+        // is hidden — those belong in "My Profile" (self-deactivate/-anonymize are
+        // refused server-side anyway, tested separately). The edit link stays.
+        $this->login();
+        $this->get('/admin/users/view/' . $this->adminId);
+
+        $this->assertResponseOk();
+        $this->assertResponseNotContains('/admin/users/set-status/' . $this->adminId);
+        $this->assertResponseNotContains('/admin/users/anonymize/' . $this->adminId);
+        $this->assertResponseNotContains('/admin/users/invite/' . $this->adminId);
+        $this->assertResponseNotContains('/admin/users/set-password/' . $this->adminId);
+        $this->assertResponseContains('/admin/users/edit/' . $this->adminId); // edit stays
+    }
+
     public function testCreateFormGroupFieldIsAReferenceField(): void
     {
         // Finding 2: the group select on the create form carries a "create a new

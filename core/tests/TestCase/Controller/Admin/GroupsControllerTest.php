@@ -473,6 +473,53 @@ class GroupsControllerTest extends TestCase
         $this->assertResponseNotContains('/admin/groups/setActive/' . $gid);
     }
 
+    public function testCannotRemoveSelfFromSystemGroup(): void
+    {
+        // Self-lockout guard: an admin must not remove THEMSELVES from the protected
+        // administrator (system) group — that would strip their own admin rights.
+        $gid = $this->makeSystemGroup('selfrm-');
+        ConnectionManager::get('default')->execute(
+            'INSERT INTO groups_users (group_id, user_id) VALUES (:g, :u)',
+            ['g' => $gid, 'u' => $this->userId],
+        );
+        $this->login();
+        $this->post('/admin/groups/removeMember/' . $gid . '/' . $this->userId);
+
+        $this->assertRedirect(['action' => 'view', $gid]);
+        $this->assertSame(1, $this->memberCount($gid), 'self stays in the admin group');
+    }
+
+    public function testCanRemoveAnotherMemberFromSystemGroup(): void
+    {
+        // Only SELF is protected — another admin may still be removed.
+        $gid = $this->makeSystemGroup('otherrm-');
+        $conn = ConnectionManager::get('default');
+        $conn->execute('INSERT INTO groups_users (group_id, user_id) VALUES (:g, :u)', ['g' => $gid, 'u' => $this->userId]);
+        $conn->execute('INSERT INTO groups_users (group_id, user_id) VALUES (:g, :u)', ['g' => $gid, 'u' => $this->memberId]);
+        $this->login();
+        $this->post('/admin/groups/removeMember/' . $gid . '/' . $this->memberId);
+
+        $this->assertRedirect(['action' => 'view', $gid]);
+        $this->assertFalse(
+            (bool)$conn->execute('SELECT 1 FROM groups_users WHERE group_id = :g AND user_id = :u', ['g' => $gid, 'u' => $this->memberId])->fetch(),
+            'another member is removable from the admin group',
+        );
+    }
+
+    public function testCanRemoveSelfFromNonSystemGroup(): void
+    {
+        // The self-guard is limited to the protected admin (system) group.
+        $gid = $this->makeGroup('selfok-');
+        ConnectionManager::get('default')->execute(
+            'INSERT INTO groups_users (group_id, user_id) VALUES (:g, :u)',
+            ['g' => $gid, 'u' => $this->userId],
+        );
+        $this->login();
+        $this->post('/admin/groups/removeMember/' . $gid . '/' . $this->userId);
+
+        $this->assertSame(0, $this->memberCount($gid), 'self-removal from a normal group is allowed');
+    }
+
     public function testOptionsReturnsActiveGroupsAsJson(): void
     {
         $gid = $this->makeGroup('opt-');

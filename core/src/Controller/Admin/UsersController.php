@@ -80,7 +80,11 @@ class UsersController extends AdminController
             'SELECT g.name FROM "groups" g JOIN groups_users gu ON gu.group_id = g.id WHERE gu.user_id = :id ORDER BY g.name',
             ['id' => $id],
         )->fetchAll('assoc');
-        $this->set(compact('user', 'areas', 'groups'));
+        // Self-management (deactivate / anonymize / invite+password) is redundant on
+        // one's OWN user page — those belong in "My Profile" — and self-deactivate/
+        // -anonymize are refused server-side anyway; hide that whole block for self.
+        $isSelf = $this->currentUserId() === $id;
+        $this->set(compact('user', 'areas', 'groups', 'isSelf'));
     }
 
     public function add(): ?Response
