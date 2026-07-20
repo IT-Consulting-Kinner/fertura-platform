@@ -308,7 +308,11 @@ class ModuleUpdateTest extends TestCase
         (new ModuleLifecycle())->install($this->v1); // ztest_upd 1.0.0
         $zip = $this->zipDir($this->v2);             // same key, 1.1.0
 
-        $mod = (new ModuleInstallRunner())->installPackage($zip);
+        // Inject the update manager with the stubbed recovery point — the update
+        // path would otherwise run a real pg_dump (host "db"), which the CI DB host
+        // (127.0.0.1) cannot resolve.
+        $runner = new ModuleInstallRunner(updates: new UpdateManager(recovery: $this->recovery));
+        $mod = $runner->installPackage($zip);
         @unlink($zip);
 
         $this->assertSame('1.1.0', $mod['version'], 'uploading a newer package updates the installed module');
