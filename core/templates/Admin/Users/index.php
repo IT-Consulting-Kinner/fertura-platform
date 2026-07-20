@@ -27,15 +27,24 @@ $open = !empty($openCreate);
                     <div class="col mb-3"><?= $this->Form->control('first_name', ['class' => 'form-control', 'label' => __('admin.users.field_first_name')]) ?></div>
                     <div class="col mb-3"><?= $this->Form->control('last_name', ['class' => 'form-control', 'label' => __('admin.users.field_last_name')]) ?></div>
                 </div>
-                <div class="mb-3"><?= $this->Form->control('group_id', [
-                    // Explicit type: never rely on FormHelper view-var magic for selects.
-                    'type' => 'select',
+                <?= $this->UiKit->fields([[
+                    // Reference field: a "create a new group" link (opens the group
+                    // admin with its create form expanded, new tab) + an options-
+                    // refresh button, so a missing group can be created without
+                    // abandoning this user form. The link is area-gated to
+                    // user_group_admin (which the viewer holds on this page).
+                    'key' => 'group_id',
+                    'input' => 'select',
+                    'label' => __('admin.users.field_group'),
                     'options' => $groupOptions,
                     'empty' => __('admin.users.field_group_choose'),
                     'required' => true,
-                    'class' => 'form-select',
-                    'label' => __('admin.users.field_group'),
-                ]) ?></div>
+                    'reference' => [
+                        'url' => '/admin/groups?create=1',
+                        'area' => 'user_group_admin',
+                        'options_url' => '/admin/groups/options',
+                    ],
+                ]]) ?>
                 <?php if ($groupOptions === []): ?>
                     <p class="text-warning small"><?= h(__('admin.users.no_groups_hint')) ?></p>
                 <?php endif; ?>

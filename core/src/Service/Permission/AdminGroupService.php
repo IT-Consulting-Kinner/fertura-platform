@@ -68,8 +68,10 @@ class AdminGroupService
 
             $created = false;
             if ($row === false) {
+                // is_system: the administrator group is protected (not deactivatable,
+                // rights not GUI-editable — {@see \App\Controller\Admin\GroupsController}).
                 $row = $conn->execute(
-                    'INSERT INTO "groups" (name, description, tenant_id) VALUES (:n, :d, :t) RETURNING id',
+                    'INSERT INTO "groups" (name, description, tenant_id, is_system) VALUES (:n, :d, :t, true) RETURNING id',
                     ['n' => $name, 'd' => 'Vollzugriff auf alle Modul-Ressourcen (group_init).', 't' => $tenantId],
                 )->fetch('assoc');
                 $created = true;
@@ -78,6 +80,12 @@ class AdminGroupService
                 ]);
             }
             $groupId = (string)$row['id'];
+            // Top-up the protection marker on a pre-existing match (e.g. a group
+            // created in the GUI before this flag existed). Idempotent + silent.
+            $conn->execute(
+                'UPDATE "groups" SET is_system = true WHERE id = :id AND NOT is_system',
+                ['id' => $groupId],
+            );
 
             // Top-up grants: every group-capable resource gets full BREAD plus
             // all of its declared extra actions. Rows already carrying the full
