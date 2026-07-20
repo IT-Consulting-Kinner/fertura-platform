@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace App\Service\Module;
 
+use App\Service\Update\UpdateManager;
+use Cake\Datasource\ConnectionManager;
 use Throwable;
 use ZipArchive;
 
@@ -18,6 +20,7 @@ class ModuleInstallRunner
     public function __construct(
         private ModuleInstallJobService $jobs = new ModuleInstallJobService(),
         private ModuleLifecycle $lifecycle = new ModuleLifecycle(),
+        private UpdateManager $updates = new UpdateManager(),
     ) {
     }
 
@@ -59,12 +62,50 @@ class ModuleInstallRunner
             $workDir = $this->extract($packagePath);
             $sourceDir = $this->locateManifestDir($workDir);
 
+            // Install-or-UPDATE: if the package's module is already installed, take
+            // the update path (migrations + rollback-on-failure) instead of a fresh
+            // install — so an operator can UPDATE a module by uploading its new
+            // package, the same upload UX as install (ch. 24.13). Both paths verify
+            // the package signature; updateModule rejects a same/older version. The
+            // source-path + preview flow on the Update-Manager page stays for the
+            // deliberate, previewed update. An unknown module key -> fresh install.
+            $key = $this->manifestKey($sourceDir);
+            if ($key !== '' && $this->moduleExists($key)) {
+                return $this->updates->updateModule($key, $sourceDir);
+            }
+
             return $this->lifecycle->install($sourceDir);
         } finally {
             if ($workDir !== null && is_dir($workDir)) {
                 $this->rrmdir($workDir);
             }
         }
+    }
+
+    /** The package manifest's module key, or '' when unreadable/invalid. */
+    private function manifestKey(string $sourceDir): string
+    {
+        $json = @file_get_contents($sourceDir . '/manifest.json');
+        if ($json === false) {
+            return '';
+        }
+        try {
+            return ModuleManifest::fromJson($json)->key();
+        } catch (Throwable) {
+            return '';
+        }
+    }
+
+    /** Whether a module with this key is already installed. */
+    private function moduleExists(string $key): bool
+    {
+        /** @var \Cake\Database\Connection $conn */
+        $conn = ConnectionManager::get('default');
+
+        return $conn->execute(
+            'SELECT 1 FROM modules WHERE module_key = :k',
+            ['k' => $key],
+        )->fetch() !== false;
     }
 
     /** Extracts the .zip into a fresh working directory (zip-slip guarded). */
