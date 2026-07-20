@@ -30,6 +30,16 @@ class AdminNavBuilder
         'system_maintenance',
     ];
 
+    /**
+     * Core areas that are TENANT-scoped (a tenant admin may reach them — they are NOT
+     * operator-gated, see {@see AdminController::TENANT_AREAS}) but are nonetheless
+     * DISPLAYED under the operator (Administration) realm rather than the tenant
+     * (Module) realm. Because they stay tenant-scoped they are NOT narrowed away for a
+     * customer-tenant viewer (unlike the operator areas), so a tenant admin keeps
+     * managing their own users/groups here. Currently: user/group management.
+     */
+    public const ADMIN_REALM_TENANT_AREAS = ['user_group_admin'];
+
     /** Always-available system pages (no admin-area gate; any admin may open). */
     public const SYSTEM = [
         'label' => 'admin.nav.system',
@@ -48,12 +58,13 @@ class AdminNavBuilder
     }
 
     /**
-     * Splits the held navigation into the two top-menu REALMS (Betreiber/Mandant,
-     * operator-tenant design §6), grouped by area SCOPE:
-     *   - operator realm: the operator-scoped Core areas (tenants, lifecycle, updates,
-     *     system config/backup/trust, maintenance, …) + the system pages;
-     *   - tenant realm: the tenant-scoped Core area (user/group mgmt) + the
-     *     module-contributed setting areas (Ticketing, KB, …).
+     * Splits the held navigation into the two top-menu REALMS (Administration/Module,
+     * operator-tenant design §6):
+     *   - operator (Administration) realm: the operator-scoped Core areas (tenants,
+     *     lifecycle, updates, system config/backup/trust, maintenance, …), the system
+     *     pages, AND user/group management (tenant-scoped but displayed here, see
+     *     {@see self::ADMIN_REALM_TENANT_AREAS});
+     *   - tenant (Module) realm: the module-contributed setting areas (Ticketing, KB, …).
      *
      * The return KEYS stay `module`/`administration` so routes, highlighting and
      * breadcrumbs keep working unchanged; only the grouping and the visible LABELS
@@ -63,9 +74,10 @@ class AdminNavBuilder
      *
      * Which realms a viewer SEES is then narrowed by their tenant (operator-tenant
      * design §6/§5a, Option B): a CUSTOMER-tenant viewer (`$isOperatorTenant = false`)
-     * never sees the operator (Betreiber) Core areas — they are unreachable anyway
-     * (operator gate -> 403), so only the always-available system pages remain in that
-     * realm. Single-org / operator viewers pass the default and keep BOTH realms — in
+     * never sees the operator-SCOPED Core areas — they are unreachable anyway
+     * (operator gate -> 403), so in the Administration realm only user/group management
+     * (still tenant-reachable) and the always-available system pages remain. Single-org
+     * / operator viewers pass the default and keep BOTH realms — in
      * single-org the default tenant is BOTH operator and (only) module user. An operator
      * tenant in a multi-tenant install shows no module functions here regardless: its
      * module-contributed areas are already dropped in {@see build()} by the per-tenant
@@ -94,7 +106,7 @@ class AdminNavBuilder
             if ($key === 'module_lifecycle') {
                 $def['label'] = 'admin.nav.module_management';
             }
-            if ($this->isOperatorArea($key)) {
+            if ($this->showsInAdminRealm($key)) {
                 $operator[$key] = $def;
             } else {
                 $tenant[$key] = $def;
@@ -107,24 +119,41 @@ class AdminNavBuilder
         }
         $operator['system'] = self::SYSTEM;
 
-        // Narrow the visible realms to the viewer's tenant (see the docblock): a
-        // customer-tenant viewer keeps only the always-available system pages in the
-        // operator realm.
+        // Narrow the operator (Administration) realm for a customer-tenant viewer: the
+        // operator-SCOPED areas 403 anyway, so drop them — but KEEP the tenant-scoped
+        // areas merely displayed here (user/group mgmt) plus the always-available system
+        // pages, so a tenant admin still manages their own users/groups under it.
         if (!$isOperatorTenant) {
-            $operator = ['system' => self::SYSTEM];
+            $operator = array_filter(
+                $operator,
+                fn(string $key): bool => $key === 'system' || in_array($key, self::ADMIN_REALM_TENANT_AREAS, true),
+                ARRAY_FILTER_USE_KEY,
+            );
         }
 
         return ['module' => $tenant, 'administration' => $operator];
     }
 
-    /** Which top-menu realm an area belongs to (for highlighting / back links). */
+    /** Which top-menu realm an area is DISPLAYED in (for highlighting / back links). */
     public function areaTop(string $area): string
     {
-        if ($area === 'system' || $this->isOperatorArea($area)) {
-            return 'administration'; // operator realm (Betreiber)
+        if ($area === 'system' || $this->showsInAdminRealm($area)) {
+            return 'administration'; // operator realm (Administration)
         }
 
-        return 'module'; // tenant realm (Mandant)
+        return 'module'; // tenant realm (Module)
+    }
+
+    /**
+     * Whether an area is DISPLAYED in the operator (Administration) realm: the
+     * operator-scoped Core areas, plus the tenant-scoped areas explicitly surfaced
+     * there ({@see self::ADMIN_REALM_TENANT_AREAS}). This is the DISPLAY realm, kept
+     * distinct from the ACCESS scope ({@see isOperatorArea()} / the operator gate):
+     * user/group mgmt shows under Administration yet stays tenant-reachable.
+     */
+    private function showsInAdminRealm(string $area): bool
+    {
+        return $this->isOperatorArea($area) || in_array($area, self::ADMIN_REALM_TENANT_AREAS, true);
     }
 
     /**

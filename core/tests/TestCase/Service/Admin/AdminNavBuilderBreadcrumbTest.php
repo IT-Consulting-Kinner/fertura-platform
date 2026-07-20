@@ -43,8 +43,10 @@ class AdminNavBuilderBreadcrumbTest extends TestCase
     {
         $trail = $this->builder()->breadcrumb(['user_group_admin'], 'user_group_admin', '/admin/users');
 
+        // user/group mgmt is displayed under the Administration realm (tenant-scoped
+        // for access, operator realm for display).
         $this->assertSame([
-            ['admin.nav.modules', '/admin/module'],
+            ['admin.nav.administration', '/admin/administration'],
             ['admin.nav.users_groups', '/admin/section/user_group_admin'],
             ['admin.nav.users', null],
         ], $trail);
