@@ -6,6 +6,7 @@ namespace App\Test\TestCase\Service\Update;
 use App\Model\Entity\ContractRegistration;
 use App\Service\I18n\LanguagePackStore;
 use App\Service\Module\LifecycleException;
+use App\Service\Module\ModuleInstallRunner;
 use App\Service\Module\ModuleLifecycle;
 use App\Service\Registry\ContractRegistry;
 use App\Service\Settings\SettingsManager;
@@ -298,7 +299,66 @@ class ModuleUpdateTest extends TestCase
         $this->assertNotFalse($row, 'Downstream-Consumer-Registrierung darf nicht per FK-CASCADE geloescht werden.');
     }
 
+    public function testUploadInstallPackageUpdatesAnAlreadyInstalledModule(): void
+    {
+        // The GUI install-upload path (worker: ModuleInstallRunner->installPackage)
+        // must UPDATE a module when its key is already installed, not fail with a
+        // fresh-install conflict — so an operator updates a module by uploading its
+        // new package, the same UX as install. A brand-new key still installs.
+        (new ModuleLifecycle())->install($this->v1); // ztest_upd 1.0.0
+        $zip = $this->zipDir($this->v2);             // same key, 1.1.0
+
+        // Inject the update manager with the stubbed recovery point — the update
+        // path would otherwise run a real pg_dump (host "db"), which the CI DB host
+        // (127.0.0.1) cannot resolve.
+        $runner = new ModuleInstallRunner(updates: new UpdateManager(recovery: $this->recovery));
+        $mod = $runner->installPackage($zip);
+        @unlink($zip);
+
+        $this->assertSame('1.1.0', $mod['version'], 'uploading a newer package updates the installed module');
+        $row = ConnectionManager::get('default')->execute(
+            "SELECT version FROM modules WHERE module_key='ztest_upd'",
+        )->fetch('assoc');
+        $this->assertSame('1.1.0', $row['version'] ?? null);
+    }
+
+    public function testUploadInstallPackageInstallsAnUnknownModule(): void
+    {
+        // Routing control: an unknown module key still takes the fresh-install path.
+        $zip = $this->zipDir($this->v1);
+        $mod = (new ModuleInstallRunner())->installPackage($zip);
+        @unlink($zip);
+
+        $this->assertSame('ztest_upd', $mod['module_key']);
+        $this->assertSame('1.0.0', $mod['version']);
+    }
+
     // ---- Helpers ------------------------------------------------------------
+
+    /** Zips a package directory's CONTENTS (manifest.json at the archive root). */
+    private function zipDir(string $dir): string
+    {
+        $zipPath = rtrim($dir, '/') . '.zip';
+        $base = rtrim($dir, '/');
+        $zip = new \ZipArchive();
+        $zip->open($zipPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE);
+        /** @var \SplFileInfo $file */
+        foreach (
+            new \RecursiveIteratorIterator(
+                new \RecursiveDirectoryIterator($base, \FilesystemIterator::SKIP_DOTS),
+            ) as $file
+        ) {
+            if (!$file->isFile()) {
+                continue;
+            }
+            $abs = (string)$file;
+            $local = ltrim(str_replace('\\', '/', substr($abs, strlen($base))), '/');
+            $zip->addFile($abs, $local);
+        }
+        $zip->close();
+
+        return $zipPath;
+    }
 
     private function buildModule(string $dir, string $version, array $migrations): string
     {
