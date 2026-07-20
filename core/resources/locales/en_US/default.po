@@ -95,7 +95,7 @@ msgid "admin.nav.operator_consumption"
 msgstr "Consumption & billing"
 
 msgid "admin.nav.modules"
-msgstr "Tenant"
+msgstr "Modules"
 
 msgid "admin.nav.marketplace"
 msgstr "Marketplace & license"
@@ -1992,7 +1992,7 @@ msgid "flash.trust.publisher_cli_only"
 msgstr "Publisher anchors require a verified certificate chain; add them via the CLI: bin/cake trust add-anchor --cert <cert.json>."
 
 msgid "admin.nav.administration"
-msgstr "Operator"
+msgstr "Administration"
 
 msgid "admin.nav.system"
 msgstr "System"

@@ -8,11 +8,12 @@ use Cake\TestSuite\TestCase;
 
 /**
  * Realm grouping (operator-tenant design §6, Increment 3): the admin top menu splits
- * the held areas into the OPERATOR realm (Betreiber — operator-scoped Core areas +
- * system pages) and the TENANT realm (Mandant — the tenant-scoped Core area + the
- * module-contributed areas). The internal keys stay `administration` (= Betreiber) /
- * `module` (= Mandant) for route/highlight stability; grouping is by area SCOPE so a
- * single-org viewer (operator tenant that also uses modules) can hold both realms.
+ * the held areas into the OPERATOR realm (Administration — operator-scoped Core areas
+ * + system pages + user/group mgmt) and the TENANT realm (Module — the module-
+ * contributed setting areas). The internal keys stay `administration` / `module` for
+ * route/highlight stability. User/group management is TENANT-scoped for ACCESS (a
+ * tenant admin reaches it) but DISPLAYED under Administration, so it is never narrowed
+ * away for a customer-tenant viewer.
  */
 class AdminNavBuilderRealmTest extends TestCase
 {
@@ -20,32 +21,34 @@ class AdminNavBuilderRealmTest extends TestCase
     {
         $menu = (new AdminNavBuilder())->menu(['user_group_admin', 'system_maintenance', 'core_config']);
 
-        // Operator realm (Betreiber): operator-scoped Core areas + the system group.
+        // Operator (Administration) realm: operator-scoped Core areas + the system
+        // group + user/group mgmt (tenant-scoped but displayed here).
         $this->assertArrayHasKey('system_maintenance', $menu['administration']);
         $this->assertArrayHasKey('core_config', $menu['administration']);
         $this->assertArrayHasKey('system', $menu['administration']);
-        $this->assertArrayNotHasKey('user_group_admin', $menu['administration']);
+        $this->assertArrayHasKey('user_group_admin', $menu['administration']);
 
-        // Tenant realm (Mandant): the tenant-scoped Core area.
-        $this->assertArrayHasKey('user_group_admin', $menu['module']);
+        // Tenant (Module) realm: no Core areas land here (only module-contributed).
+        $this->assertArrayNotHasKey('user_group_admin', $menu['module']);
         $this->assertArrayNotHasKey('system_maintenance', $menu['module']);
     }
 
-    public function testSingleOrgViewerKeepsBothRealms(): void
+    public function testDefaultViewerKeepsFullOperatorRealm(): void
     {
         // Defaults (single-org / the default tenant that is BOTH operator and module
-        // user): both realms are populated, unchanged from the historic behaviour.
+        // user): the operator realm is fully populated, incl. user/group mgmt.
         $menu = (new AdminNavBuilder())->menu(['user_group_admin', 'system_maintenance', 'core_config']);
-        $this->assertArrayHasKey('core_config', $menu['administration']); // operator realm
+        $this->assertArrayHasKey('core_config', $menu['administration']);
         $this->assertArrayHasKey('system_maintenance', $menu['administration']);
-        $this->assertArrayHasKey('user_group_admin', $menu['module']); // tenant realm
+        $this->assertArrayHasKey('user_group_admin', $menu['administration']);
     }
 
-    public function testCustomerTenantViewerHidesOperatorRealm(): void
+    public function testCustomerTenantKeepsUserGroupsButHidesOperatorAreas(): void
     {
-        // A customer-tenant viewer ($isOperatorTenant = false): the operator (Betreiber)
-        // Core areas are never surfaced (they 403 anyway); only the always-available
-        // system group remains in that realm. The tenant realm stays intact.
+        // A customer-tenant viewer ($isOperatorTenant = false): the operator-SCOPED
+        // Core areas are dropped (they 403 anyway), but user/group mgmt (tenant-scoped,
+        // displayed under Administration) MUST remain — a tenant admin still manages
+        // their own users/groups — plus the always-available system group.
         $menu = (new AdminNavBuilder())->menu(
             ['user_group_admin', 'system_maintenance', 'core_config'],
             false,
@@ -53,15 +56,18 @@ class AdminNavBuilderRealmTest extends TestCase
         $this->assertArrayNotHasKey('system_maintenance', $menu['administration']);
         $this->assertArrayNotHasKey('core_config', $menu['administration']);
         $this->assertArrayHasKey('system', $menu['administration']);
-        $this->assertArrayHasKey('user_group_admin', $menu['module']);
+        // The authz-preservation guarantee: user/group mgmt stays for the tenant admin.
+        $this->assertArrayHasKey('user_group_admin', $menu['administration']);
+        $this->assertArrayNotHasKey('user_group_admin', $menu['module']);
     }
 
-    public function testAreaTopReflectsScopeNotCoreMembership(): void
+    public function testAreaTopReflectsDisplayRealm(): void
     {
         $builder = new AdminNavBuilder();
-        $this->assertSame('administration', $builder->areaTop('core_config')); // operator -> Betreiber
+        $this->assertSame('administration', $builder->areaTop('core_config')); // operator
         $this->assertSame('administration', $builder->areaTop('system'));
-        $this->assertSame('module', $builder->areaTop('user_group_admin')); // tenant -> Mandant
-        $this->assertSame('module', $builder->areaTop('zztest_module_area')); // module-contributed -> Mandant
+        // Tenant-scoped for access, but DISPLAYED under Administration.
+        $this->assertSame('administration', $builder->areaTop('user_group_admin'));
+        $this->assertSame('module', $builder->areaTop('zztest_module_area')); // module-contributed
     }
 }

@@ -191,10 +191,11 @@ class AdminController extends AppController
             return 'administration';
         }
 
-        // Realm by scope: operator areas highlight the operator realm (Betreiber,
-        // internal key 'administration'), tenant + module areas the tenant realm
-        // (Mandant, internal key 'module').
-        return $this->isOperatorArea($this->requiredArea) ? 'administration' : 'module';
+        // Which realm the area is DISPLAYED in — delegated to the nav builder so the
+        // top-menu highlight, breadcrumb root and menu grouping agree on ONE mapping
+        // (display realm != access scope: user/group mgmt shows under Administration
+        // yet stays tenant-reachable; the operator gate above uses isOperatorArea()).
+        return (new AdminNavBuilder())->areaTop($this->requiredArea);
     }
 
     /**
