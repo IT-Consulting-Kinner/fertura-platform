@@ -4,6 +4,7 @@
  * @var array<string, mixed> $user
  * @var array<int, array<string, mixed>> $areas
  * @var array<int, array<string, mixed>> $groups
+ * @var bool $isSelf   Viewing one's own account -> self-management belongs in "My Profile".
  */
 $badge = ['active' => 'success', 'invited' => 'info', 'disabled' => 'secondary', 'anonymized' => 'dark'];
 $anon = $user['status'] === 'anonymized';
@@ -27,7 +28,10 @@ $anon = $user['status'] === 'anonymized';
                     <dt class="col-sm-4"><?= h(__('admin.users.name')) ?></dt><dd class="col-sm-8"><?= h(trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? ''))) ?: '–' ?></dd>
                     <dt class="col-sm-4"><?= h(__('admin.users.status')) ?></dt><dd class="col-sm-8"><span class="badge text-bg-<?= $badge[$user['status']] ?? 'secondary' ?>"><?= h($user['status']) ?></span></dd>
                 </dl>
-                <?php if (!$anon): ?>
+                <?php if (!$anon && $isSelf): ?>
+                <hr>
+                <p class="mb-0 small text-muted"><?= h(__('admin.users.self_hint')) ?></p>
+                <?php elseif (!$anon): ?>
                 <hr>
                 <div class="d-flex gap-2">
                     <?php if ($user['status'] !== 'active'): ?>

@@ -142,7 +142,8 @@ class GroupsController extends AdminController
             $resourceGroups[$mk] ??= ['name' => (string)($r['module_name'] ?? '') ?: $mk, 'resources' => []];
             $resourceGroups[$mk]['resources'][] = $r;
         }
-        $this->set(compact('group', 'members', 'candidates', 'grants', 'resourceGroups', 'objectCounts'));
+        $currentUserId = $this->currentUserId();
+        $this->set(compact('group', 'members', 'candidates', 'grants', 'resourceGroups', 'objectCounts', 'currentUserId'));
 
         return null;
     }
@@ -224,6 +225,15 @@ class GroupsController extends AdminController
         $this->request->allowMethod('post');
         if (!$this->isUuid($id, $userId)) {
             return $this->notFound();
+        }
+        // Self-lockout protection: an admin must not remove THEMSELVES from the
+        // protected administrator (system) group — that would strip their own admin
+        // rights (mirrors the user-area last-admin guards). Another admin can still
+        // remove them; non-system groups are unaffected.
+        if ($userId === $this->currentUserId() && $this->isSystemGroup($id)) {
+            $this->Flash->error(__('flash.group.self_remove_admin'));
+
+            return $this->redirect(['action' => 'view', $id]);
         }
         ConnectionManager::get('default')->execute(
             'DELETE FROM groups_users WHERE group_id = :g AND user_id = :u',
@@ -393,6 +403,14 @@ class GroupsController extends AdminController
         $this->Flash->error(__('flash.group.not_found'));
 
         return $this->redirect(['action' => 'index']);
+    }
+
+    /** The acting admin's own user id, or null when unauthenticated (fail-closed). */
+    private function currentUserId(): ?string
+    {
+        $id = $this->identity()?->getIdentifier();
+
+        return is_scalar($id) ? (string)$id : null;
     }
 
     /**
