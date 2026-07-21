@@ -2035,6 +2035,18 @@ msgstr "disabled"
 msgid "admin.metric.user_anonymized"
 msgstr "anonymized"
 
+msgid "admin.metric.active"
+msgstr "active"
+
+msgid "admin.metric.inactive"
+msgstr "inactive"
+
+msgid "admin.metric.pending"
+msgstr "pending"
+
+msgid "admin.metric.total"
+msgstr "total"
+
 # Generic admin-UI building blocks (confirm modal, placeholder)
 msgid "admin.common.confirm_title"
 msgstr "Confirmation"

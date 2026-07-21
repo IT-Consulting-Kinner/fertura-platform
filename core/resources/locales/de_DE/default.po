@@ -2031,6 +2031,18 @@ msgstr "gesperrt"
 msgid "admin.metric.user_anonymized"
 msgstr "anonymisiert"
 
+msgid "admin.metric.active"
+msgstr "aktiv"
+
+msgid "admin.metric.inactive"
+msgstr "inaktiv"
+
+msgid "admin.metric.pending"
+msgstr "ausstehend"
+
+msgid "admin.metric.total"
+msgstr "insgesamt"
+
 # Allgemeine Admin-UI-Bausteine (Confirm-Modal, Platzhalter)
 msgid "admin.common.confirm_title"
 msgstr "Bestätigung"

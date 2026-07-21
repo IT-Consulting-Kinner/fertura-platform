@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Controller\Admin;
 
 use App\Service\Admin\AdminNavBuilder;
+use App\Service\Admin\TileMetrics;
 use Cake\Datasource\ConnectionManager;
 use Cake\Http\Exception\ForbiddenException;
 
@@ -90,32 +91,38 @@ class NavController extends AdminController
         $conn = ConnectionManager::get('default');
         $count = static fn(string $sql): int => (int)($conn->execute($sql)->fetch('assoc')['c'] ?? 0);
 
-        // Users by status: the headline is the active count, the detail spells out
-        // the full breakdown (active · invited · disabled · anonymized). Scoped to
-        // the current tenant — users has no RLS, so without this predicate the tile
-        // would aggregate every tenant's users for a tenant admin.
-        $byUserStatus = [];
-        foreach ($conn->execute(
-            'SELECT status, count(*) c FROM users WHERE tenant_id = core.current_tenant() GROUP BY status',
-        )->fetchAll('assoc') as $r) {
-            $byUserStatus[(string)$r['status']] = (int)$r['c'];
-        }
-        $userDetail = [];
-        foreach (['active', 'invited', 'disabled', 'anonymized'] as $s) {
-            if (($byUserStatus[$s] ?? 0) > 0) {
-                $userDetail[] = $byUserStatus[$s] . ' ' . __('admin.metric.user_' . $s);
-            }
-        }
+        // Every COLLECTION tile shares one shape: badge = active count, detail =
+        // "x aktiv / y inaktiv" ({@see \App\Service\Admin\TileMetrics}). Scoped where
+        // the table has no RLS.
+        $ai = static function (string $activeSql, string $totalSql) use ($count): array {
+            $active = $count($activeSql);
 
-        $simple = static fn(string $sql): array => ['badge' => (string)$count($sql), 'detail' => ''];
+            return TileMetrics::activeInactive($active, $count($totalSql) - $active);
+        };
 
         $metrics = [
-            '/admin/users' => [
-                'badge' => (string)($byUserStatus['active'] ?? 0),
-                'detail' => implode(' · ', $userDetail),
-            ],
+            // users has no RLS -> scope explicitly to the current tenant.
+            '/admin/users' => $ai(
+                "SELECT count(*) c FROM users WHERE status = 'active' AND tenant_id = core.current_tenant()",
+                'SELECT count(*) c FROM users WHERE tenant_id = core.current_tenant()',
+            ),
             // groups is RLS-scoped to the current tenant already.
-            '/admin/groups' => $simple('SELECT count(*) c FROM "groups" WHERE active'),
+            '/admin/groups' => $ai(
+                'SELECT count(*) c FROM "groups" WHERE active',
+                'SELECT count(*) c FROM "groups"',
+            ),
+            // tenant_modules / tenant_backup_plans are RLS-scoped to the current
+            // tenant already; a tenant admin sees these under the Module realm, so
+            // compute them unconditionally (RLS keeps them cheap and tenant-correct).
+            // "active" maps to the module-enablement flag for tenant_modules.
+            '/admin/tenant-modules' => $ai(
+                'SELECT count(*) c FROM tenant_modules WHERE enabled',
+                'SELECT count(*) c FROM tenant_modules',
+            ),
+            '/admin/tenant-backup' => $ai(
+                'SELECT count(*) c FROM tenant_backup_plans WHERE active',
+                'SELECT count(*) c FROM tenant_backup_plans',
+            ),
         ];
 
         // Operator-domain tiles count platform-wide, non-tenant-scoped tables. Tenant
@@ -123,10 +130,35 @@ class NavController extends AdminController
         // compute them for operators, so the counts are neither leaked nor wasted.
         if ($this->isOperatorTenant()) {
             $metrics += [
-                '/admin/modules' => $simple("SELECT count(*) c FROM modules WHERE status = 'active'"),
-                '/admin/registry' => $simple('SELECT count(*) c FROM contracts WHERE active'),
-                '/admin/marketplace/licenses' => $simple('SELECT count(*) c FROM licenses'),
-                '/admin/outbox' => $simple("SELECT count(*) c FROM event_outbox WHERE status = 'pending'"),
+                '/admin/modules' => $ai(
+                    "SELECT count(*) c FROM modules WHERE status = 'active'",
+                    'SELECT count(*) c FROM modules',
+                ),
+                '/admin/registry' => $ai(
+                    'SELECT count(*) c FROM contracts WHERE active',
+                    'SELECT count(*) c FROM contracts',
+                ),
+                // Operator-global collections (no tenant_id / no RLS): the tenant
+                // registry and the trust anchors. Operator-only, so counting the
+                // whole platform is correct here, not a cross-tenant leak.
+                '/admin/tenants' => $ai(
+                    'SELECT count(*) c FROM tenants WHERE active',
+                    'SELECT count(*) c FROM tenants',
+                ),
+                '/admin/trust' => $ai(
+                    'SELECT count(*) c FROM trust_anchors WHERE active',
+                    'SELECT count(*) c FROM trust_anchors',
+                ),
+                // NOT active/inactive collections: a queue (pending events) and a
+                // service-owned license-validity concept keep their own single detail.
+                '/admin/outbox' => TileMetrics::single(
+                    $count("SELECT count(*) c FROM event_outbox WHERE status = 'pending'"),
+                    'admin.metric.pending',
+                ),
+                '/admin/marketplace/licenses' => TileMetrics::single(
+                    $count('SELECT count(*) c FROM licenses'),
+                    'admin.metric.total',
+                ),
             ];
         }
 
