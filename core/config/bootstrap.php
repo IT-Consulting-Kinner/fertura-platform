@@ -39,6 +39,7 @@ use Cake\Datasource\ConnectionManager;
 use Cake\Error\ErrorTrap;
 use Cake\Error\ExceptionTrap;
 use Cake\Http\ServerRequest;
+use Cake\I18n\I18n;
 use Cake\Log\Log;
 use Cake\Mailer\Mailer;
 use Cake\Mailer\TransportFactory;
@@ -189,6 +190,27 @@ TransportFactory::setConfig(Configure::consume('EmailTransport'));
 Mailer::setConfig(Configure::consume('Email'));
 Log::setConfig(Configure::consume('Log'));
 Security::setSalt(Configure::consume('Security.salt'));
+
+/*
+ * i18n message formatter: pin the global default to `sprintf`.
+ *
+ * The Core message catalogs (resources/locales) use sprintf placeholders
+ * (`%s` / `%d`). CakePHP's default formatter is ICU (`default`), which leaves
+ * `%s`/`%d` untouched — so `__('key', $arg)` rendered the RAW placeholder
+ * whenever the `default` domain was materialized through the framework's
+ * built-in fallback loader: always in the test environment (tests/bootstrap.php
+ * loads this file but never Application::bootstrap(), so EnglishFallbackLoader's
+ * sprintf package is never registered), and in the web/CLI whenever the
+ * translation cache was primed before that registration ran. Pinning the global
+ * default to `sprintf` makes argument substitution behave identically across the
+ * web request, the CLI and the test suite. The `cake` domain (framework /
+ * validation messages, which are authored in ICU) is unaffected: the fallback
+ * loader hard-codes the `default` (ICU) formatter for it regardless of this
+ * setting. Must run after Cache::setConfig() above, because reading the default
+ * formatter lazily builds the translator registry and wires the
+ * `_cake_translations_` cache pool.
+ */
+I18n::setDefaultFormatter('sprintf');
 
 /*
  * Setup detectors for mobile and tablet.
