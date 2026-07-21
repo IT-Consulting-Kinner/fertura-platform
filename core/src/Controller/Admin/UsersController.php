@@ -5,6 +5,7 @@ namespace App\Controller\Admin;
 
 use App\Audit\AuditLogger;
 use App\Model\Entity\User;
+use App\Service\Admin\AreaLabel;
 use App\Service\Identity\PasswordResetService;
 use App\Service\Mail\MailService;
 use Cake\Datasource\ConnectionManager;
@@ -76,6 +77,13 @@ class UsersController extends AdminController
             . 'LEFT JOIN user_admin_areas ua ON ua.admin_area_key = a.area_key AND ua.user_id = :id ORDER BY a.sort_order',
             ['id' => $id],
         )->fetchAll('assoc');
+        // Localize module-contributed area labels stored as an i18n key (e.g.
+        // ticketing.nav.group), so this raw "areas" card matches the nav/dashboard
+        // (which resolve the same nav_group via __d). Plaintext labels pass through.
+        foreach ($areas as &$a) {
+            $a['label'] = AreaLabel::localize((string)$a['label']);
+        }
+        unset($a);
         $groups = $conn->execute(
             'SELECT g.name FROM "groups" g JOIN groups_users gu ON gu.group_id = g.id WHERE gu.user_id = :id ORDER BY g.name',
             ['id' => $id],
