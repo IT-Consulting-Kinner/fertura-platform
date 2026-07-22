@@ -82,6 +82,12 @@ class TenantsController extends AdminController
             (new TenantService())->assignUser((string)$user['id'], $tenantId);
             $this->Flash->success(__('flash.tenants.assigned'));
         } catch (Throwable $e) {
+            // Route a unique violation to UniqueViolationMiddleware: a clean localized
+            // warning + a proper request-tx rollback, instead of echoing the raw driver
+            // message (which also leaks the constraint/value and rides a poisoned tx).
+            if (UniqueViolation::isUniqueViolation($e)) {
+                throw $e;
+            }
             $this->Flash->error($e->getMessage());
         }
 
@@ -203,6 +209,12 @@ class TenantsController extends AdminController
             ]);
             $this->Flash->success(__('flash.tenants.admin_created', $url));
         } catch (Throwable $e) {
+            // Route a unique violation to UniqueViolationMiddleware: a clean localized
+            // warning + a proper request-tx rollback, instead of echoing the raw driver
+            // message (which also leaks the constraint/value and rides a poisoned tx).
+            if (UniqueViolation::isUniqueViolation($e)) {
+                throw $e;
+            }
             $this->Flash->error($e->getMessage());
         }
 
@@ -226,7 +238,13 @@ class TenantsController extends AdminController
                     $svc->setActive((string)$id, $op === 'activate');
                 }
                 $n++;
-            } catch (Throwable) {
+            } catch (Throwable $e) {
+                // A unique violation would poison the request tx (the rest of the batch
+                // + the commit would then 500) — route it to the net for a clean warning
+                // + rollback. Today's tenant ops can't raise one; this is defensive.
+                if (UniqueViolation::isUniqueViolation($e)) {
+                    throw $e;
+                }
                 $errors++;
             }
         }
