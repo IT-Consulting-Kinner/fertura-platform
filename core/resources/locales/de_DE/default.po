@@ -1283,6 +1283,10 @@ msgstr "Mandant anlegen"
 
 msgid "flash.tenants.created"
 msgstr "Mandant angelegt."
+msgid "flash.tenant.key_exists"
+msgstr "Dieser Mandanten-Schlüssel ist bereits vergeben."
+msgid "flash.unique_violation"
+msgstr "Dieser Wert existiert bereits. Bitte einen anderen wählen."
 
 msgid "admin.search.title"
 msgstr "Suche"
