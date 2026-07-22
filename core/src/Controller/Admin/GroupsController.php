@@ -73,7 +73,20 @@ class GroupsController extends AdminController
 
             return null;
         }
-        $row = ConnectionManager::get('default')->execute(
+        /** @var \Cake\Database\Connection $conn */
+        $conn = ConnectionManager::get('default');
+        // A group name is unique per tenant, case-insensitively (DB index
+        // uq_groups_tenant_name_lower). Check up front and warn — a raw INSERT of a
+        // duplicate would raise a QueryException (500) AND abort the whole request
+        // transaction ({@see \App\Middleware\TransactionRlsMiddleware}). RLS scopes
+        // the read to the acting admin's tenant, matching the index's tenant bucket.
+        if ($conn->execute('SELECT 1 FROM "groups" WHERE lower(name) = lower(:n)', ['n' => $name])->fetch() !== false) {
+            $this->Flash->error(__('flash.group.name_exists'));
+            $this->renderGroupList(true);
+
+            return null;
+        }
+        $row = $conn->execute(
             'INSERT INTO "groups" (name, description) VALUES (:n, :d) RETURNING id',
             ['n' => $name, 'd' => $desc],
         )->fetch('assoc');
