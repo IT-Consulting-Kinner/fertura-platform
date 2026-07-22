@@ -127,6 +127,21 @@ class GroupsControllerTest extends TestCase
         $this->assertSame($before, $this->countGroups());
     }
 
+    public function testAddRejectsDuplicateNameWithoutError(): void
+    {
+        // A duplicate name (case-insensitive) must warn + re-render, NOT surface the
+        // DB unique index (uq_groups_tenant_name_lower) as a 500 / aborted request tx.
+        $gid = $this->makeGroup('dup-');
+        $name = (string)$this->groupCol($gid, 'name');
+        $this->login();
+        $before = $this->countGroups();
+        // Different case still collides on the case-insensitive index.
+        $this->post('/admin/groups/add', ['name' => strtoupper($name), 'description' => 'x']);
+
+        $this->assertResponseOk(); // no 500, no redirect: form re-rendered with the warning
+        $this->assertSame($before, $this->countGroups(), 'no duplicate group created');
+    }
+
     public function testViewUnknownRedirects(): void
     {
         $this->login();
