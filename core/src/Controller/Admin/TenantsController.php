@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Controller\Admin;
 
 use App\Audit\AuditLogger;
+use App\Error\UniqueViolation;
 use App\Model\Entity\User;
 use App\Service\Identity\PasswordResetService;
 use App\Service\Mail\MailService;
@@ -90,9 +91,19 @@ class TenantsController extends AdminController
     public function add(): ?Response
     {
         $this->request->allowMethod('post');
+        $key = trim((string)$this->request->getData('key'));
+        // tenants.key is globally unique (uq_tenants_key). Pre-check to warn + keep
+        // the form, instead of letting the raw INSERT raise a 23505 — which poisons
+        // the request tx before renderList's own SELECT could run (→ 500).
+        if ($key !== '' && $this->keyTaken($key)) {
+            $this->Flash->warning(__('flash.tenant.key_exists'));
+            $this->renderList(true);
+
+            return null;
+        }
         try {
             (new TenantService())->create(
-                (string)$this->request->getData('key'),
+                $key,
                 (string)$this->request->getData('name'),
                 $this->request->getData('brand_name') !== null ? (string)$this->request->getData('brand_name') : null,
                 $this->request->getData('logo_url') !== null ? (string)$this->request->getData('logo_url') : null,
@@ -101,12 +112,32 @@ class TenantsController extends AdminController
 
             return $this->redirect(['action' => 'index']);
         } catch (Throwable $e) {
-            // Re-render the list with the create accordion open and the input kept.
+            // A concurrent duplicate (lost the pre-check race) has already poisoned
+            // the request tx — let it bubble to UniqueViolationMiddleware, which
+            // rolls back and warns. Other errors are safe to show + re-render here
+            // (no failed statement, so the tx is still usable).
+            if (UniqueViolation::isUniqueViolation($e)) {
+                throw $e;
+            }
             $this->Flash->error($e->getMessage());
             $this->renderList(true);
 
             return null;
         }
+    }
+
+    /**
+     * Whether a tenant with this key already exists (uq_tenants_key; operator-global).
+     * Case-insensitive: TenantService::create() lowercases the key before insert, so a
+     * case-variant ("Acme" vs stored "acme") must be caught here too, not slip past to
+     * a 23505.
+     */
+    private function keyTaken(string $key): bool
+    {
+        /** @var \Cake\Database\Connection $conn */
+        $conn = ConnectionManager::get('default');
+
+        return $conn->execute('SELECT 1 FROM tenants WHERE lower(key) = lower(:k)', ['k' => $key])->fetch() !== false;
     }
 
     /**

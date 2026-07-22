@@ -1287,6 +1287,10 @@ msgstr "Create tenant"
 
 msgid "flash.tenants.created"
 msgstr "Tenant created."
+msgid "flash.tenant.key_exists"
+msgstr "This tenant key is already taken."
+msgid "flash.unique_violation"
+msgstr "This value already exists. Please choose another."
 
 msgid "admin.search.title"
 msgstr "Search"

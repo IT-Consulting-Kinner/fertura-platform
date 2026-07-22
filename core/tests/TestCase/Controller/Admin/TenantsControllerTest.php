@@ -114,6 +114,50 @@ class TenantsControllerTest extends TestCase
         $this->assertSame('Controller Tenant', $row['name']);
     }
 
+    public function testAddRejectsDuplicateKeyWithoutError(): void
+    {
+        // A duplicate tenant key must warn + re-render (200), NOT surface the DB
+        // unique index (uq_tenants_key) as a 500 / aborted request tx.
+        $conn = ConnectionManager::get('default');
+        $key = 'zztest-dupkey-' . bin2hex(random_bytes(2));
+        $conn->execute("INSERT INTO tenants (key, name) VALUES (:k, 'Existing')", ['k' => $key]);
+        $before = (int)$conn->execute('SELECT count(*) c FROM tenants WHERE key = :k', ['k' => $key])->fetch('assoc')['c'];
+        $this->login();
+        $this->enableCsrfToken();
+        $this->enableSecurityToken();
+
+        $this->post('/admin/tenants/add', ['key' => $key, 'name' => 'Dup Attempt']);
+
+        $this->assertResponseOk(); // no 500, no redirect: list re-rendered with the warning
+        $this->assertSame(
+            $before,
+            (int)$conn->execute('SELECT count(*) c FROM tenants WHERE key = :k', ['k' => $key])->fetch('assoc')['c'],
+            'no second tenant with the same key',
+        );
+    }
+
+    public function testAddRejectsCaseVariantDuplicateKey(): void
+    {
+        // TenantService lowercases the key before insert, so a case-variant of an
+        // existing key must still be caught in-place (200 + warning), not slip past
+        // the pre-check into a 23505.
+        $conn = ConnectionManager::get('default');
+        $key = 'zztest-case-' . bin2hex(random_bytes(2));
+        $conn->execute('INSERT INTO tenants (key, name) VALUES (:k, :n)', ['k' => $key, 'n' => 'Lower']);
+        $this->login();
+        $this->enableCsrfToken();
+        $this->enableSecurityToken();
+
+        $this->post('/admin/tenants/add', ['key' => strtoupper($key), 'name' => 'Upper Attempt']);
+
+        $this->assertResponseOk(); // caught in-place, no 303 to an empty form, no 500
+        $this->assertSame(
+            1,
+            (int)$conn->execute('SELECT count(*) c FROM tenants WHERE lower(key) = lower(:k)', ['k' => $key])->fetch('assoc')['c'],
+            'no case-variant duplicate created',
+        );
+    }
+
     public function testAssignUserToTenant(): void
     {
         $conn = ConnectionManager::get('default');

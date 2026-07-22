@@ -31,6 +31,7 @@ use App\Middleware\SecurityHeadersMiddleware;
 use App\Middleware\SelectiveMaintenanceMiddleware;
 use App\Middleware\SessionGuardMiddleware;
 use App\Middleware\TransactionRlsMiddleware;
+use App\Middleware\UniqueViolationMiddleware;
 use App\Service\Auth\AuthProviderResolver;
 use App\Service\Module\ModuleAutoloader;
 use App\Service\Security\CookieSecurity;
@@ -224,6 +225,12 @@ class Application extends BaseApplication implements AuthenticationServiceProvid
             // Footprint: carries the identity into the ActorContext for
             // created_by/updated_by (must run AFTER the AuthenticationMiddleware).
             ->add(new FootprintMiddleware())
+
+            // Global safety net: a unique-constraint violation (23505) from any
+            // create/rename becomes a Flash warning + redirect (or 409 for JSON)
+            // instead of a 500. Sits directly OUTSIDE the tx layer so the request
+            // transaction is already rolled back when we emit the response.
+            ->add(new UniqueViolationMiddleware())
 
             // RLS: wrap the request in a transaction + set the access context via
             // SET LOCAL (Step 9, Decision 175). After the AuthenticationMiddleware.

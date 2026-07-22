@@ -81,7 +81,7 @@ class GroupsController extends AdminController
         // transaction ({@see \App\Middleware\TransactionRlsMiddleware}). RLS scopes
         // the read to the acting admin's tenant, matching the index's tenant bucket.
         if ($conn->execute('SELECT 1 FROM "groups" WHERE lower(name) = lower(:n)', ['n' => $name])->fetch() !== false) {
-            $this->Flash->error(__('flash.group.name_exists'));
+            $this->Flash->warning(__('flash.group.name_exists'));
             $this->renderGroupList(true);
 
             return null;
