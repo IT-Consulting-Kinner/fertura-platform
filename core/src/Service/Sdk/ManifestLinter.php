@@ -407,4 +407,55 @@ class ManifestLinter
 
         return ['errors' => [], 'warnings' => $warnings];
     }
+
+    /**
+     * Author-time scan of a module's `locales/` PO catalogs for ICU placeholders
+     * (`{0}`, `{1}`, …) in translations.
+     *
+     * The module i18n CONTRACT is sprintf (`%s`/`%d`), NOT ICU `{n}`: every module
+     * translation domain is loaded with the sprintf formatter — {@see \App\I18n\StoreLocaleLoader}
+     * builds each domain's `Package` as `new Package('sprintf', …)`, and a package's
+     * own formatter always wins over the global default. An ICU numeric placeholder is
+     * therefore never substituted: it renders RAW and the argument is dropped (e.g.
+     * `{0} ist erforderlich.` instead of `Titel ist erforderlich.`). Such a bug is
+     * invisible to a module test that happens to register the domain with the (ICU)
+     * default formatter, so this static nudge catches it at author/CI time.
+     *
+     * WARNINGS not errors: a `{0}` could, rarely, be literal msgstr text rather than a
+     * placeholder — flag it for review, don't hard-fail the lint.
+     *
+     * @return array{errors:list<string>, warnings:list<string>}
+     */
+    public function lintLocales(string $moduleDir): array
+    {
+        $dir = rtrim($moduleDir, '/\\') . DIRECTORY_SEPARATOR . 'locales';
+        if (!is_dir($dir)) {
+            return ['errors' => [], 'warnings' => []];
+        }
+        $warnings = [];
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS),
+        );
+        foreach ($iterator as $file) {
+            if (!$file->isFile() || strtolower((string)$file->getExtension()) !== 'po') {
+                continue;
+            }
+            // Count only translation lines (msgstr) that carry an ICU numeric arg ref.
+            $count = 0;
+            foreach (file($file->getPathname()) ?: [] as $line) {
+                if (str_starts_with($line, 'msgstr') && preg_match('/\{[0-9]+\}/', $line) === 1) {
+                    $count++;
+                }
+            }
+            if ($count > 0) {
+                $rel = ltrim(str_replace($dir, '', $file->getPathname()), '/\\');
+                $warnings[] = "locales/$rel: $count msgstr mit ICU-Platzhalter ({0}/{1}/…) — Modul-Domänen "
+                    . 'werden mit dem sprintf-Formatter geladen (StoreLocaleLoader), nutze %s/%d statt ICU {n}, '
+                    . 'sonst bleibt der Platzhalter im Render roh stehen (Argument geht verloren).';
+            }
+        }
+        sort($warnings);
+
+        return ['errors' => [], 'warnings' => $warnings];
+    }
 }

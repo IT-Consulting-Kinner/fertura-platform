@@ -41,6 +41,13 @@ class StoreLocaleLoader
                 // Major mismatch (resolveVersion null) → no overlay → English.
             }
 
+            // MODULE i18n CONTRACT: module/extension translations use sprintf
+            // placeholders (`%s`/`%d`), NOT ICU (`{0}`/`{1}`). Every module domain is
+            // pinned to the sprintf formatter here, and a Package's own formatter always
+            // wins over the global default — so an ICU `{n}` in a module .po is never
+            // substituted and renders raw (the argument is dropped). `module_lint`
+            // ({@see \App\Service\Sdk\ManifestLinter::lintLocales()}) flags such catalogs
+            // at author time.
             return new Package('sprintf', null, $messages);
         });
     }

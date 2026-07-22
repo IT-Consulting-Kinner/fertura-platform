@@ -41,9 +41,22 @@ class ModuleLintCommand extends Command
         $manifestData = is_file($manifest) ? (json_decode((string)file_get_contents($manifest), true) ?: []) : [];
         $globalTables = (new ModuleManifest((array)$manifestData))->globalTables();
         $migrationResult = $linter->lintMigrations($dir, $globalTables);
+        // Advisory scan of locales/ for the module i18n contract (sprintf %s, not ICU {n}):
+        // module domains load with the sprintf formatter, so an ICU placeholder renders raw.
+        $localeResult = $linter->lintLocales($dir);
 
-        $warnings = array_merge($manifestResult['warnings'], $sourceResult['warnings'], $migrationResult['warnings']);
-        $errors = array_merge($manifestResult['errors'], $sourceResult['errors'], $migrationResult['errors']);
+        $warnings = array_merge(
+            $manifestResult['warnings'],
+            $sourceResult['warnings'],
+            $migrationResult['warnings'],
+            $localeResult['warnings'],
+        );
+        $errors = array_merge(
+            $manifestResult['errors'],
+            $sourceResult['errors'],
+            $migrationResult['errors'],
+            $localeResult['errors'],
+        );
 
         foreach ($warnings as $w) {
             $io->warning('WARN: ' . $w);
