@@ -72,6 +72,14 @@
             "auth": "user",
             "area": "zztest_web_admin",
             "title": "Web Test Spec Admin"
+        },
+        {
+            "path": "/admin/dup",
+            "class": "ZztestWeb\\Web\\DupPage",
+            "template": "admin_index",
+            "auth": "user",
+            "area": "zztest_web_admin",
+            "title": "Web Test Dup"
         }
     ],
     "api_routes": [

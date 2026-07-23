@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Error\UniqueViolation;
 use App\Service\Admin\AdminNavBuilder;
 use App\Service\Module\ContributionRuntime;
 use App\Service\Module\PageSpecCoercer;
@@ -122,7 +123,14 @@ class ModuleWebController extends AppController
                 [$request],
             );
         } catch (Throwable $e) {
-            // Do not leak internal details (paths/SQL/classes) to the client.
+            // A unique-constraint violation is a user-facing "already exists", not an
+            // internal error: let it propagate to UniqueViolationMiddleware, which turns
+            // it into a warning + redirect (so a module that does NOT pre-check its own
+            // duplicates still gets the Core net instead of a 500). Everything else stays
+            // masked as a generic 500 so no paths/SQL/classes leak to the client.
+            if (UniqueViolation::isUniqueViolation($e)) {
+                throw $e;
+            }
             Log::error('Modul-Web-Fehler: ' . $e->getMessage(), ['module' => $moduleKey, 'path' => '/' . $path]);
             throw new InternalErrorException();
         }
