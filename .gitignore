@@ -9,6 +9,9 @@ config/app_local.php
 config/.env
 .env
 
+# Datenbank-Dumps / lokale DB-Backups (können sensible Daten enthalten — nie committen)
+*.dump
+
 # Build / Cache
 /webroot/cache_*
 *.cache
