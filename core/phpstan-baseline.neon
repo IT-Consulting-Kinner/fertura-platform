@@ -267,7 +267,7 @@ parameters:
 		-
 			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
 			identifier: method.notFound
-			count: 11
+			count: 14
 			path: src/Controller/Admin/UsersController.php
 
 		-

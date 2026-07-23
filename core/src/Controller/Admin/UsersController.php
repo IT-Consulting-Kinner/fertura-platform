@@ -116,22 +116,19 @@ class UsersController extends AdminController
             return $this->redirect(['action' => 'index']);
         }
         $user->set('tenant_id', $tid);
-        // Mandatory group (no group-less users): without a group membership no
-        // BREAD permission ever applies to the account. The chosen group must be
-        // an ACTIVE group of the acting admin's OWN tenant — a POSTed foreign
-        // group id would otherwise pull the new user into another tenant's group.
-        $groupId = (string)$this->request->getData('group_id');
+        // Mandatory group(s) (no group-less users): without a group membership no
+        // BREAD permission ever applies to the account. Each chosen group must be an
+        // ACTIVE group of the acting admin's OWN tenant — a POSTed foreign group id
+        // would otherwise pull the new user into another tenant's group. Multiple
+        // groups may be assigned at once.
+        $groupIds = $this->validTenantGroups((array)$this->request->getData('group_ids'));
         // Keep the selection on a failed-create re-render: patchEntity drops
-        // group_id (mass-assignment guard, not a users column), so the select
+        // group_ids (mass-assignment guard, not a users column), so the multiselect
         // would silently reset while every text field is preserved.
-        $user->set('group_id', $groupId);
+        $user->set('group_ids', $groupIds);
         /** @var \Cake\Database\Connection $conn */
         $conn = ConnectionManager::get('default');
-        $groupOk = $this->isUuid($groupId) && $conn->execute(
-            'SELECT 1 FROM "groups" WHERE id = :g AND active AND tenant_id = core.current_tenant()',
-            ['g' => $groupId],
-        )->fetch() !== false;
-        if (!$groupOk) {
+        if ($groupIds === []) {
             $this->Flash->error(__('flash.user.group_required'));
             $this->renderUserList($user, true);
 
@@ -142,12 +139,14 @@ class UsersController extends AdminController
         // a failing application rule (unique email/username) a clean `false` instead
         // of a nested-transaction rollback that would poison the request transaction.
         if ($users->save($user, ['atomic' => false])) {
-            $conn->execute(
-                'INSERT INTO groups_users (group_id, user_id) VALUES (:g, :u) ON CONFLICT DO NOTHING',
-                ['g' => $groupId, 'u' => (string)$user->get('id')],
-            );
+            foreach ($groupIds as $gid) {
+                $conn->execute(
+                    'INSERT INTO groups_users (group_id, user_id) VALUES (:g, :u) ON CONFLICT DO NOTHING',
+                    ['g' => $gid, 'u' => (string)$user->get('id')],
+                );
+            }
             $this->audit()->log('user.create', 'user', (string)$user->id, [
-                'newValue' => ['status' => $user->status, 'group' => $groupId],
+                'newValue' => ['status' => $user->status, 'groups' => $groupIds],
             ]);
             $this->Flash->success(__('flash.user.created'));
 
@@ -233,6 +232,15 @@ class UsersController extends AdminController
         if (($deny = $this->denyCrossTenant($id)) !== null) {
             return $deny;
         }
+        // Self-management belongs in "My Profile": an admin must NOT edit their OWN
+        // account here — neither the fields nor the group memberships — which would
+        // otherwise let them strip their own groups (incl. the admin group) and lock
+        // themselves out. addGroup()/removeGroup() enforce the same guard server-side.
+        if ($id === $this->currentUserId()) {
+            $this->Flash->error(__('flash.user.self_edit'));
+
+            return $this->redirect(['action' => 'view', $id]);
+        }
         $users = $this->fetchTable('Users');
         $user = $users->find()->where(['id' => $id])->first();
         if ($user === null || $user->get('status') === User::STATUS_ANONYMIZED) {
@@ -254,9 +262,75 @@ class UsersController extends AdminController
             }
             $this->Flash->error(__('flash.user.update_failed'));
         }
-        $this->set(compact('user'));
+        // The user's current groups (each removable) + the tenant's OTHER active
+        // groups (addable) for the inline membership editor.
+        [$groups, $availableGroups] = $this->userGroups($id);
+        $this->set(compact('user', 'groups', 'availableGroups'));
 
         return null;
+    }
+
+    /** Adds the POSTed group to the user (membership editor on the edit page). */
+    public function addGroup(string $id): ?Response
+    {
+        $this->request->allowMethod('post');
+        if (($deny = $this->denyCrossTenant($id)) !== null) {
+            return $deny;
+        }
+        if ($id === $this->currentUserId()) {
+            $this->Flash->error(__('flash.user.self_edit'));
+
+            return $this->redirect(['action' => 'view', $id]);
+        }
+        $valid = $this->validTenantGroups([$this->request->getData('group_id')]);
+        if ($valid === []) {
+            $this->Flash->error(__('flash.user.group_invalid'));
+
+            return $this->redirect(['action' => 'edit', $id]);
+        }
+        ConnectionManager::get('default')->execute(
+            'INSERT INTO groups_users (group_id, user_id) VALUES (:g, :u) ON CONFLICT DO NOTHING',
+            ['g' => $valid[0], 'u' => $id],
+        );
+        $this->audit()->log('user.group_add', 'user', $id, ['newValue' => ['group' => $valid[0]]]);
+        $this->Flash->success(__('flash.user.group_added'));
+
+        return $this->redirect(['action' => 'edit', $id]);
+    }
+
+    /** Removes a group from the user; refuses to remove the last one (group is mandatory). */
+    public function removeGroup(string $id, string $groupId): ?Response
+    {
+        $this->request->allowMethod('post');
+        if (($deny = $this->denyCrossTenant($id)) !== null) {
+            return $deny;
+        }
+        if ($id === $this->currentUserId()) {
+            $this->Flash->error(__('flash.user.self_edit'));
+
+            return $this->redirect(['action' => 'view', $id]);
+        }
+        if (!$this->isUuid($groupId)) {
+            return $this->notFound();
+        }
+        $conn = ConnectionManager::get('default');
+        // No group-less users (mirrors the mandatory group at creation): refuse to
+        // remove the user's LAST tenant group.
+        $count = (int)$conn->execute(
+            'SELECT count(*) FROM groups_users gu JOIN "groups" g ON g.id = gu.group_id '
+            . 'WHERE gu.user_id = :u AND g.tenant_id = core.current_tenant()',
+            ['u' => $id],
+        )->fetch()[0];
+        if ($count <= 1) {
+            $this->Flash->error(__('flash.user.group_remove_last'));
+
+            return $this->redirect(['action' => 'edit', $id]);
+        }
+        $conn->execute('DELETE FROM groups_users WHERE user_id = :u AND group_id = :g', ['u' => $id, 'g' => $groupId]);
+        $this->audit()->log('user.group_remove', 'user', $id, ['oldValue' => ['group' => $groupId]]);
+        $this->Flash->success(__('flash.user.group_removed'));
+
+        return $this->redirect(['action' => 'edit', $id]);
     }
 
     /**
@@ -379,6 +453,65 @@ class UsersController extends AdminController
             'SELECT 1 FROM users WHERE id = :id AND tenant_id = core.current_tenant()',
             ['id' => $id],
         )->fetch() !== false;
+    }
+
+    /**
+     * The user's current group memberships (id+name, each removable) and the tenant's
+     * OTHER active groups still available to add — both scoped to the acting admin's
+     * tenant (a removed group reappears in the available list, and vice versa).
+     *
+     * @return array{0: array<int, array<string, mixed>>, 1: array<string, string>}
+     */
+    private function userGroups(string $id): array
+    {
+        /** @var \Cake\Database\Connection $conn */
+        $conn = ConnectionManager::get('default');
+        $current = $conn->execute(
+            'SELECT g.id, g.name FROM "groups" g JOIN groups_users gu ON gu.group_id = g.id '
+            . 'WHERE gu.user_id = :id AND g.tenant_id = core.current_tenant() ORDER BY g.name',
+            ['id' => $id],
+        )->fetchAll('assoc');
+        $held = array_column($current, 'id');
+        $available = [];
+        $active = $conn->execute(
+            'SELECT id, name FROM "groups" WHERE active AND tenant_id = core.current_tenant() ORDER BY name',
+        )->fetchAll('assoc');
+        foreach ($active as $g) {
+            if (!in_array($g['id'], $held, true)) {
+                $available[(string)$g['id']] = (string)$g['name'];
+            }
+        }
+
+        return [$current, $available];
+    }
+
+    /**
+     * The subset of $ids that are ACTIVE groups of the acting admin's OWN tenant
+     * (deduplicated) — a POSTed foreign/inactive group id is silently dropped so it
+     * can never pull a user into another tenant's group.
+     *
+     * @param array<mixed> $ids
+     * @return list<string>
+     */
+    private function validTenantGroups(array $ids): array
+    {
+        /** @var \Cake\Database\Connection $conn */
+        $conn = ConnectionManager::get('default');
+        $out = [];
+        foreach ($ids as $gid) {
+            $gid = is_string($gid) ? $gid : '';
+            if (
+                $gid !== '' && !in_array($gid, $out, true) && $this->isUuid($gid)
+                && $conn->execute(
+                    'SELECT 1 FROM "groups" WHERE id = :g AND active AND tenant_id = core.current_tenant()',
+                    ['g' => $gid],
+                )->fetch() !== false
+            ) {
+                $out[] = $gid;
+            }
+        }
+
+        return $out;
     }
 
     /**

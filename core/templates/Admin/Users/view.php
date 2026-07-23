@@ -12,7 +12,8 @@ $anon = $user['status'] === 'anonymized';
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h1 class="h3 mb-0"><?= h($user['username']) ?></h1>
     <div class="d-flex gap-2">
-        <?php if ($user['status'] !== 'anonymized'): ?>
+        <?php // Self-edit is refused server-side (belongs in "My Profile") -> no Edit button for self. ?>
+        <?php if ($user['status'] !== 'anonymized' && !$isSelf): ?>
             <?= $this->Html->link(__('admin.users.edit'), ['action' => 'edit', $user['id']], ['class' => 'btn btn-outline-primary btn-sm']) ?>
         <?php endif; ?>
     </div>

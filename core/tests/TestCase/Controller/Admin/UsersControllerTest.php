@@ -128,7 +128,9 @@ class UsersControllerTest extends TestCase
     {
         // On one's OWN user page the deactivate / anonymize / invite+password block
         // is hidden — those belong in "My Profile" (self-deactivate/-anonymize are
-        // refused server-side anyway, tested separately). The edit link stays.
+        // refused server-side anyway, tested separately). The edit link is hidden
+        // too: editing one's own account (incl. its groups) belongs in "My Profile"
+        // and is refused server-side (tested in testSelfEditBlocked).
         $this->login();
         $this->get('/admin/users/view/' . $this->adminId);
 
@@ -137,21 +139,41 @@ class UsersControllerTest extends TestCase
         $this->assertResponseNotContains('/admin/users/anonymize/' . $this->adminId);
         $this->assertResponseNotContains('/admin/users/invite/' . $this->adminId);
         $this->assertResponseNotContains('/admin/users/set-password/' . $this->adminId);
-        $this->assertResponseContains('/admin/users/edit/' . $this->adminId); // edit stays
+        $this->assertResponseNotContains('/admin/users/edit/' . $this->adminId); // self-edit hidden
     }
 
-    public function testCreateFormGroupFieldIsAReferenceField(): void
+    public function testCreateFormHasGroupMultiselect(): void
     {
-        // Finding 2: the group select on the create form carries a "create a new
-        // group" link (new tab) + an options-refresh button, so a missing group can
-        // be created without leaving the form. The link is area-gated to
-        // user_group_admin, which the acting admin holds here.
+        // The create form assigns groups via a MULTI-select (checkboxes, name
+        // group_ids[]) — a user may start in several groups at once — plus a
+        // "create a new group" link (new tab) so a missing group can be added
+        // without leaving the form.
         $this->login();
+        $this->makeGroup(); // at least one active group -> checkboxes render
         $this->get('/admin/users');
 
         $this->assertResponseOk();
+        $this->assertResponseContains('name="group_ids[]"');
         $this->assertResponseContains('href="/admin/groups?create=1"');
-        $this->assertResponseContains('data-options-refresh="/admin/groups/options"');
+        // Single-line inputs (not the <textarea> a `text` column defaults to).
+        $this->assertResponseNotContains('<textarea name="username"');
+        $this->assertResponseNotContains('<textarea name="first_name"');
+        $this->assertResponseNotContains('<textarea name="last_name"');
+        $this->assertResponseContains('type="text" name="username"');
+    }
+
+    public function testEditFormFieldsAreSingleLine(): void
+    {
+        // username / first_name / last_name must be single-line <input>s on the edit
+        // form too — a `text`-typed column would otherwise render a <textarea>.
+        $this->login();
+        $this->get('/admin/users/edit/' . $this->memberId);
+
+        $this->assertResponseOk();
+        $this->assertResponseNotContains('<textarea name="username"');
+        $this->assertResponseNotContains('<textarea name="first_name"');
+        $this->assertResponseNotContains('<textarea name="last_name"');
+        $this->assertResponseContains('type="text" name="username"');
     }
 
     public function testViewUnknownRedirects(): void
@@ -193,6 +215,34 @@ class UsersControllerTest extends TestCase
         )->fetch('assoc')['id'];
     }
 
+    /** Makes $userId a member of $groupId (membership editor fixtures). */
+    private function addMembership(string $userId, string $groupId): void
+    {
+        ConnectionManager::get('default')->execute(
+            'INSERT INTO groups_users (group_id, user_id) VALUES (:g, :u) ON CONFLICT DO NOTHING',
+            ['g' => $groupId, 'u' => $userId],
+        );
+    }
+
+    /**
+     * The user's raw group ids. No tenant filter: a bare ConnectionManager query
+     * runs OUTSIDE the request, so the RLS GUC (core.current_tenant()) is unset —
+     * filtering on it here would always return empty. All test data lives in the
+     * default tenant and the controller blocks cross-tenant rows, so a raw read is
+     * both correct and stronger (it would surface a stray foreign membership).
+     *
+     * @return list<string>
+     */
+    private function membershipIds(string $userId): array
+    {
+        $rows = ConnectionManager::get('default')->execute(
+            'SELECT group_id FROM groups_users WHERE user_id = :u',
+            ['u' => $userId],
+        )->fetchAll('assoc');
+
+        return array_map(static fn(array $r): string => (string)$r['group_id'], $rows);
+    }
+
     public function testAddCreatesInvitedUserWithGroupMembership(): void
     {
         $this->login();
@@ -201,7 +251,7 @@ class UsersControllerTest extends TestCase
         $this->post('/admin/users/add', [
             'username' => 'zztest_new_' . bin2hex(random_bytes(3)),
             'email' => $email,
-            'group_id' => $groupId,
+            'group_ids' => [$groupId],
         ]);
 
         $this->assertRedirect(['action' => 'index']);
@@ -255,14 +305,14 @@ class UsersControllerTest extends TestCase
         $this->post('/admin/users/add', [
             'username' => 'zztest_dupemail_' . bin2hex(random_bytes(3)),
             'email' => strtoupper($email), // same email, different case
-            'group_id' => $groupId,
+            'group_ids' => [$groupId],
         ]);
 
         $this->assertResponseOk(); // re-render with inline error, NOT a redirect (success) or 500
-        // Review finding: the re-rendered form must KEEP the chosen group —
-        // patchEntity drops group_id (mass-assignment guard), the controller
-        // re-sets it on the entity so the select stays preselected.
-        $this->assertResponseContains('value="' . $groupId . '" selected');
+        // Review finding: the re-rendered form must KEEP the chosen group(s) —
+        // patchEntity drops group_ids (mass-assignment guard), the controller
+        // re-sets it on the entity so the checkbox stays ticked.
+        $this->assertResponseRegExp('/value="' . preg_quote($groupId, '/') . '"[^>]*checked/');
         $this->assertSame(
             1,
             (int)ConnectionManager::get('default')->execute(
@@ -465,5 +515,202 @@ class UsersControllerTest extends TestCase
         $this->post('/admin/users/anonymize/' . $this->memberId);
         $this->assertRedirect(['action' => 'index']);
         $this->assertSame('anonymized', $this->userCol($this->memberId, 'status'));
+    }
+
+    public function testCreateWithMultipleGroups(): void
+    {
+        // A user may be created in SEVERAL groups at once (multiselect).
+        $this->login();
+        $g1 = $this->makeGroup();
+        $g2 = $this->makeGroup();
+        $email = 'multi_' . bin2hex(random_bytes(3)) . '@zzusers.local';
+        $this->post('/admin/users/add', [
+            'username' => 'zztest_multi_' . bin2hex(random_bytes(3)),
+            'email' => $email,
+            'group_ids' => [$g1, $g2],
+        ]);
+
+        $this->assertRedirect(['action' => 'index']);
+        $newId = (string)ConnectionManager::get('default')
+            ->execute('SELECT id FROM users WHERE email = :e', ['e' => $email])
+            ->fetch('assoc')['id'];
+        $ids = $this->membershipIds($newId);
+        sort($ids);
+        $expected = [$g1, $g2];
+        sort($expected);
+        $this->assertSame($expected, $ids, 'new user is a member of BOTH chosen groups');
+    }
+
+    public function testCreateIgnoresForeignGroupId(): void
+    {
+        // A POSTed group id from ANOTHER tenant must be silently dropped — it must
+        // never pull the new user into a foreign tenant's group. Here it is the ONLY
+        // id posted, so the create is rejected (mandatory group) and nothing is made.
+        $conn = ConnectionManager::get('default');
+        $otherTenant = (string)$conn->execute(
+            "INSERT INTO tenants (key, name) VALUES ('zzt_other_' || substr(md5(random()::text), 1, 8), 'Other') RETURNING id",
+        )->fetch('assoc')['id'];
+        $foreignGroup = (string)$conn->execute(
+            'INSERT INTO "groups" (name, tenant_id) VALUES (:n, :t) RETURNING id',
+            ['n' => 'zzusers_grp_foreign_' . bin2hex(random_bytes(3)), 't' => $otherTenant],
+        )->fetch('assoc')['id'];
+
+        $this->login();
+        $email = 'foreigngrp_' . bin2hex(random_bytes(3)) . '@zzusers.local';
+        $this->post('/admin/users/add', [
+            'username' => 'zztest_foreigngrp_' . bin2hex(random_bytes(3)),
+            'email' => $email,
+            'group_ids' => [$foreignGroup],
+        ]);
+
+        $this->assertResponseOk(); // rejected re-render (no valid group), not a redirect
+        $this->assertFalse(
+            $conn->execute('SELECT 1 FROM users WHERE email = :e', ['e' => $email])->fetch(),
+            'no user created from a foreign-only group selection',
+        );
+    }
+
+    public function testSelfEditBlocked(): void
+    {
+        // Editing one's OWN account here is refused (belongs in "My Profile") — both
+        // the GET form and a POSTed change. This is what stops an admin from stripping
+        // their own groups (incl. the admin group) and locking themselves out.
+        $this->login();
+
+        $this->get('/admin/users/edit/' . $this->adminId);
+        $this->assertRedirect(['action' => 'view', $this->adminId]);
+
+        $before = $this->userCol($this->adminId, 'username');
+        $this->post('/admin/users/edit/' . $this->adminId, [
+            'username' => 'zztest_selfhijack_' . bin2hex(random_bytes(3)),
+            'email' => 'selfhijack_' . bin2hex(random_bytes(3)) . '@zzusers.local',
+        ]);
+        $this->assertRedirect(['action' => 'view', $this->adminId]);
+        $this->assertSame($before, $this->userCol($this->adminId, 'username'), 'own account unchanged');
+    }
+
+    public function testEditShowsGroupManagement(): void
+    {
+        // The edit page lists the user's current groups (with a remove control) and
+        // offers the tenant's OTHER active groups to add. Two held groups so a remove
+        // control renders — the LAST/only group is intentionally non-removable
+        // (mandatory group), which testRemoveLastGroupBlocked covers.
+        $this->login();
+        $held1 = $this->makeGroup();
+        $held2 = $this->makeGroup();
+        $addable = $this->makeGroup();
+        $this->addMembership($this->memberId, $held1);
+        $this->addMembership($this->memberId, $held2);
+
+        $this->get('/admin/users/edit/' . $this->memberId);
+        $this->assertResponseOk();
+        // remove control for a held group; add control offers the still-available one.
+        $this->assertResponseContains('/admin/users/remove-group/' . $this->memberId . '/' . $held1);
+        $this->assertResponseContains('/admin/users/add-group/' . $this->memberId);
+        $this->assertResponseContains('value="' . $addable . '"');
+    }
+
+    public function testAddGroupAddsMembership(): void
+    {
+        $this->login();
+        $g1 = $this->makeGroup();
+        $g2 = $this->makeGroup();
+        $this->addMembership($this->memberId, $g1);
+
+        $this->post('/admin/users/addGroup/' . $this->memberId, ['group_id' => $g2]);
+        $this->assertRedirect(['action' => 'edit', $this->memberId]);
+        $ids = $this->membershipIds($this->memberId);
+        $this->assertContains($g2, $ids);
+        $this->assertContains($g1, $ids); // existing membership preserved
+    }
+
+    public function testAddGroupRejectsForeignGroup(): void
+    {
+        // A foreign-tenant group id must not be addable.
+        $conn = ConnectionManager::get('default');
+        $g1 = $this->makeGroup();
+        $this->addMembership($this->memberId, $g1);
+        $otherTenant = (string)$conn->execute(
+            "INSERT INTO tenants (key, name) VALUES ('zzt_other_' || substr(md5(random()::text), 1, 8), 'Other') RETURNING id",
+        )->fetch('assoc')['id'];
+        $foreignGroup = (string)$conn->execute(
+            'INSERT INTO "groups" (name, tenant_id) VALUES (:n, :t) RETURNING id',
+            ['n' => 'zzusers_grp_foreign_' . bin2hex(random_bytes(3)), 't' => $otherTenant],
+        )->fetch('assoc')['id'];
+
+        $this->login();
+        $this->post('/admin/users/addGroup/' . $this->memberId, ['group_id' => $foreignGroup]);
+        $this->assertFalse(
+            $conn->execute(
+                'SELECT 1 FROM groups_users WHERE user_id = :u AND group_id = :g',
+                ['u' => $this->memberId, 'g' => $foreignGroup],
+            )->fetch(),
+            'a foreign-tenant group must not become a membership',
+        );
+    }
+
+    public function testRemoveGroupRemovesMembership(): void
+    {
+        $this->login();
+        $g1 = $this->makeGroup();
+        $g2 = $this->makeGroup();
+        $this->addMembership($this->memberId, $g1);
+        $this->addMembership($this->memberId, $g2);
+
+        $this->post('/admin/users/removeGroup/' . $this->memberId . '/' . $g2);
+        $this->assertRedirect(['action' => 'edit', $this->memberId]);
+        $ids = $this->membershipIds($this->memberId);
+        $this->assertNotContains($g2, $ids);
+        $this->assertContains($g1, $ids); // the other stays -> re-addable
+    }
+
+    public function testRemoveLastGroupBlocked(): void
+    {
+        // No group-less users: the last group cannot be removed.
+        $this->login();
+        $only = $this->makeGroup();
+        $this->addMembership($this->memberId, $only);
+
+        $this->post('/admin/users/removeGroup/' . $this->memberId . '/' . $only);
+        $this->assertContains($only, $this->membershipIds($this->memberId), 'last group is protected');
+    }
+
+    public function testGroupMutationOnSelfBlocked(): void
+    {
+        // Group edits on one's OWN account are refused (mirrors the self-edit block):
+        // an admin must not add/remove their own groups here.
+        $this->login();
+        $g1 = $this->makeGroup();
+        $g2 = $this->makeGroup();
+        $this->addMembership($this->adminId, $g1);
+        $this->addMembership($this->adminId, $g2);
+
+        $this->post('/admin/users/addGroup/' . $this->adminId, ['group_id' => $this->makeGroup()]);
+        $this->post('/admin/users/removeGroup/' . $this->adminId . '/' . $g2);
+        $ids = $this->membershipIds($this->adminId);
+        $this->assertContains($g1, $ids);
+        $this->assertContains($g2, $ids); // neither add nor remove took effect
+    }
+
+    public function testGroupMutationCrossTenantBlocked(): void
+    {
+        // A foreign user is unreachable by the membership editor (users has no RLS).
+        $conn = ConnectionManager::get('default');
+        $otherTenant = (string)$conn->execute(
+            "INSERT INTO tenants (key, name) VALUES ('zzt_other_' || substr(md5(random()::text), 1, 8), 'Other') RETURNING id",
+        )->fetch('assoc')['id'];
+        $foreign = (string)$conn->execute(
+            "INSERT INTO users (username, email, status, tenant_id) VALUES (:u, :e, 'active', :t) RETURNING id",
+            ['u' => 'zztest_foreign_' . bin2hex(random_bytes(3)), 'e' => 'foreign_' . bin2hex(random_bytes(3)) . '@zzusers.local', 't' => $otherTenant],
+        )->fetch('assoc')['id'];
+        $ownGroup = $this->makeGroup(); // a group in the ACTING admin's tenant
+
+        $this->login();
+        $this->post('/admin/users/addGroup/' . $foreign, ['group_id' => $ownGroup]);
+        $this->assertRedirect(['action' => 'index']); // treated as unknown user
+        $this->assertFalse(
+            $conn->execute('SELECT 1 FROM groups_users WHERE user_id = :u', ['u' => $foreign])->fetch(),
+            'no membership created on a cross-tenant user',
+        );
     }
 }
