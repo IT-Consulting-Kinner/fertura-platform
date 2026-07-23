@@ -309,6 +309,30 @@ class ModuleWebTest extends TestCase
         $this->assertResponseCode(403);
     }
 
+    public function testModuleUniqueViolationBecomesWarningViaNet(): void
+    {
+        // A module page (DupPage) inserts a uniquely-constrained row WITHOUT its own
+        // pre-check / catch / ON CONFLICT. The FIRST create succeeds; the DUPLICATE
+        // raises a raw 23505 that the module dispatcher now routes to
+        // UniqueViolationMiddleware (a warning + 303 redirect) instead of masking it
+        // as a generic 500 — proving the net covers MODULE writes, not just Core ones.
+        ConnectionManager::get('default')->execute(
+            'INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a)',
+            ['u' => $this->userId, 'a' => 'zztest_web_admin'],
+        );
+        $this->session(['Auth' => ['id' => $this->userId, 'username' => 'zztest_web', 'email' => 'w@zztest.local']]);
+        $this->enableCsrfToken();
+        $this->enableSecurityToken();
+
+        $this->post('/m/zztest_web/admin/dup', ['action' => 'create', 'name' => 'zzunique']);
+        $this->assertResponseSuccess(); // first create -> handler redirect, no error
+
+        // The duplicate must NOT be a 500: the net turns the module 23505 into a warning.
+        $this->post('/m/zztest_web/admin/dup', ['action' => 'create', 'name' => 'zzunique']);
+        $this->assertResponseCode(303);
+        $this->assertFlashElement('flash/warning');
+    }
+
     public function testPublicApiEndpointAllowsNoToken(): void
     {
         // No Bearer token, no session: a `public` module API endpoint is reached
