@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Test\TestCase\Controller\Admin;
 
 use App\Service\Search\SearchService;
+use App\Test\TestCase\AdminAreaSeedTrait;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
@@ -15,6 +16,7 @@ use Cake\TestSuite\TestCase;
 class SearchControllerTest extends TestCase
 {
     use IntegrationTestTrait;
+    use AdminAreaSeedTrait;
 
     private string $userId;
 
@@ -31,10 +33,7 @@ class SearchControllerTest extends TestCase
             "INSERT INTO users (username, email, status) VALUES (:u, :e, 'active') RETURNING id",
             ['u' => 'zztest_sadmin_' . bin2hex(random_bytes(3)), 'e' => 'sadmin_' . bin2hex(random_bytes(3)) . '@zzsearch.local'],
         )->fetch('assoc')['id'];
-        $conn->execute(
-            'INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a)',
-            ['u' => $this->userId, 'a' => 'core_config'],
-        );
+        $this->grantAdminAreas($this->userId, 'core_config');
         // Public (owner=null) document with a unique term.
         (new SearchService())->index('zzsearch', 'doc', 's1', 'Quartalszauberwort Bericht', 'Inhalt', null);
     }
@@ -49,6 +48,7 @@ class SearchControllerTest extends TestCase
     {
         $conn = ConnectionManager::get('default');
         $conn->execute("DELETE FROM users WHERE email LIKE '%@zzsearch.local'");
+        $conn->execute("DELETE FROM \"groups\" WHERE name LIKE 'zzseedarea_%'");
         $conn->execute("DELETE FROM search_index WHERE source = 'zzsearch'");
     }
 
@@ -90,7 +90,7 @@ class SearchControllerTest extends TestCase
             "INSERT INTO users (username, email, status) VALUES (:u, :e, 'active') RETURNING id",
             ['u' => 'zztest_plain_' . bin2hex(random_bytes(3)), 'e' => 'plain_' . bin2hex(random_bytes(3)) . '@zzsearch.local'],
         )->fetch('assoc')['id'];
-        $conn->execute('INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a)', ['u' => $plain, 'a' => 'user_group_admin']);
+        $this->grantAdminAreas($plain, 'user_group_admin');
 
         $this->session(['Auth' => ['id' => $plain, 'username' => 'zztest_plain', 'email' => 'p@zzsearch.local']]);
         $this->enableCsrfToken();

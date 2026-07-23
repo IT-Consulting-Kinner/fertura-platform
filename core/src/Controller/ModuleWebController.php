@@ -9,6 +9,7 @@ use App\Service\Module\ContributionRuntime;
 use App\Service\Module\PageSpecCoercer;
 use App\Service\Module\TenantModuleService;
 use App\Service\Module\WebRouteRegistry;
+use App\Service\Permission\AdminAreaResolver;
 use App\Service\Storage\StorageManager;
 use App\Service\Tenant\TenantService;
 use App\Utility\AppUrl;
@@ -264,20 +265,14 @@ class ModuleWebController extends AppController
     }
 
     /**
-     * The admin areas the user holds (ch. 27.3.1).
+     * The admin areas the user effectively holds (ch. 27.3.1), resolved from GROUP
+     * membership ({@see AdminAreaResolver}) — same source as the Core admin gate.
      *
      * @return list<string>
      */
     private function loadUserAreas(string $userId): array
     {
-        /** @var \Cake\Database\Connection $conn */
-        $conn = ConnectionManager::get('default');
-        $rows = $conn->execute(
-            'SELECT admin_area_key FROM user_admin_areas WHERE user_id = :u',
-            ['u' => $userId],
-        )->fetchAll('assoc');
-
-        return array_values(array_map(static fn($r) => (string)$r['admin_area_key'], $rows));
+        return (new AdminAreaResolver())->areasFor($userId);
     }
 
     /**

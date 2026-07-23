@@ -5,6 +5,7 @@ namespace App\Test\TestCase\Controller;
 
 use App\Audit\AuditLogger;
 use App\Service\Api\TokenService;
+use App\Test\TestCase\AdminAreaSeedTrait;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
@@ -16,6 +17,7 @@ use Cake\TestSuite\TestCase;
 class AuditExportEndpointTest extends TestCase
 {
     use IntegrationTestTrait;
+    use AdminAreaSeedTrait;
 
     private string $adminId;
 
@@ -32,10 +34,7 @@ class AuditExportEndpointTest extends TestCase
             "INSERT INTO users (username, email, status) VALUES (:u, :e, 'active') RETURNING id",
             ['u' => 'zztest_audex_' . bin2hex(random_bytes(3)), 'e' => 'audex_' . bin2hex(random_bytes(3)) . '@zzaudit.local'],
         )->fetch('assoc')['id'];
-        $conn->execute(
-            'INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a)',
-            ['u' => $this->adminId, 'a' => 'core_config'],
-        );
+        $this->grantAdminAreas($this->adminId, 'core_config');
         (new AuditLogger())->log('zztest.export', 'zztest_e', '019eb000-0000-7000-8000-000000000009', [
             'newValue' => ['secret' => 'value-snapshot'],
         ]);

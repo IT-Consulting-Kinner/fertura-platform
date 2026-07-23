@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Test\TestCase\Controller\Admin;
 
 use App\Service\Module\TenantModuleService;
+use App\Test\TestCase\AdminAreaSeedTrait;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
@@ -17,6 +18,7 @@ use Cake\TestSuite\TestCase;
 class TenantModulesControllerTest extends TestCase
 {
     use IntegrationTestTrait;
+    use AdminAreaSeedTrait;
 
     private const MOD = 'zztmctrl_mod';
 
@@ -27,7 +29,7 @@ class TenantModulesControllerTest extends TestCase
         parent::setUp();
         $this->cleanup();
         $conn = ConnectionManager::get('default');
-        // Seed the tenant_modules admin area (FK target of user_admin_areas; in prod
+        // Seed the tenant_modules admin area (FK target of group_admin_areas; in prod
         // the area set is seeded by migration).
         $conn->execute(
             "INSERT INTO admin_areas (area_key, label, sort_order) VALUES ('tenant_modules', 'Modules', 25) "
@@ -49,10 +51,7 @@ class TenantModulesControllerTest extends TestCase
             "INSERT INTO users (username, email, status) VALUES (:u, :e, 'active') RETURNING id",
             ['u' => 'zztmctrl_' . bin2hex(random_bytes(3)), 'e' => 'tmctrl_' . bin2hex(random_bytes(3)) . '@zztmctrl.local'],
         )->fetch('assoc')['id'];
-        $conn->execute(
-            'INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a)',
-            ['u' => $this->userId, 'a' => 'tenant_modules'],
-        );
+        $this->grantAdminAreas($this->userId, 'tenant_modules');
     }
 
     protected function tearDown(): void
@@ -64,10 +63,6 @@ class TenantModulesControllerTest extends TestCase
     private function cleanup(): void
     {
         $conn = ConnectionManager::get('default');
-        $conn->execute(
-            'DELETE FROM user_admin_areas WHERE user_id IN '
-            . "(SELECT id FROM users WHERE email LIKE '%@zztmctrl.local')",
-        );
         $conn->execute("DELETE FROM users WHERE email LIKE '%@zztmctrl.local'");
         // Deleting the module cascades its tenant_modules grants.
         $conn->execute('DELETE FROM modules WHERE module_key = :k', ['k' => self::MOD]);
@@ -176,10 +171,7 @@ class TenantModulesControllerTest extends TestCase
             "INSERT INTO users (username, email, status, tenant_id) VALUES (:u, :e, 'active', :t) RETURNING id",
             ['u' => 'zztmctrl_t_' . bin2hex(random_bytes(3)), 'e' => 'tt_' . bin2hex(random_bytes(3)) . '@zztmctrl.local', 't' => $tid],
         )->fetch('assoc')['id'];
-        $conn->execute(
-            'INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a)',
-            ['u' => $uid, 'a' => 'tenant_modules'],
-        );
+        $this->grantAdminAreas($uid, 'tenant_modules');
 
         $this->session(['Auth' => ['id' => $uid, 'username' => 'zztmctrl_t', 'email' => 'tt@zztmctrl.local']]);
         $this->get('/admin/tenant-modules');

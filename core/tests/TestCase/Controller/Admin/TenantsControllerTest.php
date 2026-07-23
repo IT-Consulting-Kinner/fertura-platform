@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Test\TestCase\Controller\Admin;
 
 use App\Service\Tenant\TenantService;
+use App\Test\TestCase\AdminAreaSeedTrait;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
@@ -15,6 +16,7 @@ use Cake\TestSuite\TestCase;
 class TenantsControllerTest extends TestCase
 {
     use IntegrationTestTrait;
+    use AdminAreaSeedTrait;
 
     private string $userId;
 
@@ -24,9 +26,8 @@ class TenantsControllerTest extends TestCase
         $this->cleanup();
         $conn = ConnectionManager::get('default');
         foreach ([['core_config', 'Core', 60], ['user_group_admin', 'Users', 10], ['tenant_modules', 'Modules', 25]] as [$key, $label, $sort]) {
-            // user_group_admin + tenant_modules are the areas createAdmin grants the
-            // new tenant admin (FK target of user_admin_areas); in prod the area set
-            // is seeded.
+            // Areas the onboarded tenant admin ends up with via the Administrators
+            // group (FK target of group_admin_areas); in prod the area set is seeded.
             $conn->execute(
                 'INSERT INTO admin_areas (area_key, label, sort_order) VALUES (:k, :l, :s) ON CONFLICT (area_key) DO NOTHING',
                 ['k' => $key, 'l' => $label, 's' => $sort],
@@ -36,10 +37,7 @@ class TenantsControllerTest extends TestCase
             "INSERT INTO users (username, email, status) VALUES (:u, :e, 'active') RETURNING id",
             ['u' => 'zztest_tadmin_' . bin2hex(random_bytes(3)), 'e' => 'tadmin_' . bin2hex(random_bytes(3)) . '@zztenant.local'],
         )->fetch('assoc')['id'];
-        $conn->execute(
-            'INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a)',
-            ['u' => $this->userId, 'a' => 'core_config'],
-        );
+        $this->grantAdminAreas($this->userId, 'core_config');
     }
 
     protected function tearDown(): void
@@ -56,9 +54,12 @@ class TenantsControllerTest extends TestCase
             'DELETE FROM password_reset_tokens WHERE user_id IN '
             . "(SELECT id FROM users WHERE email LIKE '%@zztenant.local')",
         );
+        // Groups seeded for the acting admin (zzseedarea_*) + the Administrators group
+        // createAdmin builds in a test tenant — removed BEFORE their tenants (groups.
+        // tenant_id FK). group_admin_areas / resource grants / memberships cascade.
         $conn->execute(
-            'DELETE FROM user_admin_areas WHERE user_id IN '
-            . "(SELECT id FROM users WHERE email LIKE '%@zztenant.local')",
+            'DELETE FROM "groups" WHERE name LIKE \'zzseedarea_%\' '
+            . "OR tenant_id IN (SELECT id FROM tenants WHERE key LIKE 'zztest-%')",
         );
         $conn->execute("DELETE FROM users WHERE email LIKE '%@zztenant.local'");
         $conn->execute("DELETE FROM tenants WHERE key LIKE 'zztest-%'");
@@ -216,8 +217,8 @@ class TenantsControllerTest extends TestCase
         ]);
         $this->assertRedirect(['action' => 'index']);
 
-        // The new user lives in the TARGET tenant, is invited, and holds the tenant
-        // user/group-admin area; an invitation token was created.
+        // The new user lives in the TARGET tenant, is invited, and is a member of that
+        // tenant's Administrators group; an invitation token was created.
         $row = $conn->execute(
             'SELECT id, tenant_id, status FROM users WHERE lower(email) = lower(:e)',
             ['e' => $email],
@@ -225,14 +226,15 @@ class TenantsControllerTest extends TestCase
         $this->assertNotFalse($row);
         $this->assertSame($tid, $row['tenant_id']);
         $this->assertSame('invited', $row['status']);
-        // Holds BOTH tenant-admin areas (user/group admin + per-tenant module enablement).
-        $this->assertSame(
-            2,
-            (int)$conn->execute(
-                'SELECT count(*) AS c FROM user_admin_areas WHERE user_id = :u '
-                . "AND admin_area_key IN ('user_group_admin', 'tenant_modules')",
-                ['u' => $row['id']],
-            )->fetch('assoc')['c'],
+        // Admin access comes from membership in the TARGET tenant's Administrators
+        // (is_system) group, which holds every admin area by the wildcard rule.
+        $this->assertNotFalse(
+            $conn->execute(
+                'SELECT 1 FROM groups_users gu JOIN "groups" g ON g.id = gu.group_id '
+                . 'WHERE gu.user_id = :u AND g.is_system AND g.active AND g.tenant_id = :t',
+                ['u' => $row['id'], 't' => $tid],
+            )->fetch(),
+            'new tenant admin is a member of the target tenant Administrators group',
         );
         $this->assertSame(
             1,

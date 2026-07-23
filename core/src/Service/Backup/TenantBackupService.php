@@ -46,6 +46,7 @@ class TenantBackupService
         ['groups', true],
         ['groups_users', true],
         ['group_resource_permissions', true],
+        ['group_admin_areas', true],
         ['tenant_modules', true],
         ['settings', true],
         ['automation_rules', true],
@@ -859,6 +860,14 @@ class TenantBackupService
                 continue;
             }
             $row['tenant_id'] = $tenantId;
+            // PG boolean columns (e.g. groups.is_system/active): a raw execute() binds
+            // PHP `false` as '' -> "invalid input syntax for type boolean". Normalize
+            // JSON booleans to the 'true'/'false' strings PostgreSQL accepts.
+            foreach ($row as $k => $v) {
+                if (is_bool($v)) {
+                    $row[$k] = $v ? 'true' : 'false';
+                }
+            }
             $cols = array_map('strval', array_keys($row));
             foreach ($cols as $c) {
                 if (preg_match('/^[a-z_][a-z0-9_]*$/', $c) !== 1) {

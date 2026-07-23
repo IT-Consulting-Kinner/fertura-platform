@@ -5,6 +5,7 @@ namespace App\Test\TestCase\Controller\Admin;
 
 use App\Service\Consumption\TenantConsumptionService;
 use App\Service\Storage\StorageManager;
+use App\Test\TestCase\AdminAreaSeedTrait;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
@@ -20,6 +21,7 @@ use Throwable;
 class ConsumptionControllerTest extends TestCase
 {
     use IntegrationTestTrait;
+    use AdminAreaSeedTrait;
 
     private string $userId = '';
     private string $tenantId = '';
@@ -57,10 +59,7 @@ class ConsumptionControllerTest extends TestCase
                 't' => $this->tenantId,
             ],
         )->fetch('assoc')['id'];
-        $conn->execute(
-            'INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a)',
-            ['u' => $this->userId, 'a' => 'consumption'],
-        );
+        $this->grantAdminAreas($this->userId, 'consumption');
     }
 
     protected function tearDown(): void
@@ -80,10 +79,6 @@ class ConsumptionControllerTest extends TestCase
                 // No file subtree for this tenant.
             }
         }
-        $conn->execute(
-            'DELETE FROM user_admin_areas WHERE user_id IN '
-            . "(SELECT id FROM users WHERE email LIKE '%@zzcons.local')",
-        );
         $conn->execute("DELETE FROM users WHERE email LIKE '%@zzcons.local'");
         $conn->execute("DELETE FROM automation_rules WHERE name LIKE 'zzcons%'");
         // tenant_modules cascades with the tenant; the global demo module is shared, so
@@ -148,10 +143,7 @@ class ConsumptionControllerTest extends TestCase
                 't' => $this->tenantId,
             ],
         )->fetch('assoc')['id'];
-        $conn->execute(
-            'INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a)',
-            ['u' => $other, 'a' => 'tenant_modules'],
-        );
+        $this->grantAdminAreas($other, 'tenant_modules');
 
         $this->login($other);
         $this->get('/admin/consumption');

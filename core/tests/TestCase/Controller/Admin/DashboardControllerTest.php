@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Test\TestCase\Controller\Admin;
 
+use App\Test\TestCase\AdminAreaSeedTrait;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
@@ -14,6 +15,7 @@ use Cake\TestSuite\TestCase;
 class DashboardControllerTest extends TestCase
 {
     use IntegrationTestTrait;
+    use AdminAreaSeedTrait;
 
     private string $adminId = '';
 
@@ -30,10 +32,7 @@ class DashboardControllerTest extends TestCase
             "INSERT INTO users (username, email, status) VALUES (:u, :e, 'active') RETURNING id",
             ['u' => 'zzdash_' . bin2hex(random_bytes(3)), 'e' => bin2hex(random_bytes(3)) . '@zzdash.local'],
         )->fetch('assoc')['id'];
-        $conn->execute(
-            'INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a)',
-            ['u' => $this->adminId, 'a' => 'user_group_admin'],
-        );
+        $this->grantAdminAreas($this->adminId, 'user_group_admin');
     }
 
     protected function tearDown(): void
@@ -45,11 +44,8 @@ class DashboardControllerTest extends TestCase
     private function cleanup(): void
     {
         $conn = ConnectionManager::get('default');
-        $conn->execute(
-            'DELETE FROM user_admin_areas WHERE user_id IN '
-            . "(SELECT id FROM users WHERE email LIKE '%@zzdash.local')",
-        );
         $conn->execute("DELETE FROM users WHERE email LIKE '%@zzdash.local'");
+        $conn->execute("DELETE FROM \"groups\" WHERE name LIKE 'zzseedarea_%'");
         $conn->execute("DELETE FROM tenants WHERE key LIKE 'zzdash_t_%'");
     }
 
@@ -83,10 +79,7 @@ class DashboardControllerTest extends TestCase
             "INSERT INTO users (username, email, status, tenant_id) VALUES (:u, :e, 'active', :t) RETURNING id",
             ['u' => 'zzdash_ta_' . bin2hex(random_bytes(3)), 'e' => bin2hex(random_bytes(3)) . '@zzdash.local', 't' => $tenantId],
         )->fetch('assoc')['id'];
-        $conn->execute(
-            'INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a)',
-            ['u' => $tenantAdmin, 'a' => 'user_group_admin'],
-        );
+        $this->grantAdminAreas($tenantAdmin, 'user_group_admin');
 
         $this->session(['Auth' => ['id' => $tenantAdmin, 'username' => 'zzdash_ta', 'email' => 't@zzdash.local']]);
         $this->get('/admin');

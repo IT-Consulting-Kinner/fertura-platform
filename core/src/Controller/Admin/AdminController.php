@@ -7,6 +7,7 @@ use App\Controller\AppController;
 use App\Infrastructure\Uuid;
 use App\Service\Admin\AdminNavBuilder;
 use App\Service\Admin\ListPrefsService;
+use App\Service\Permission\AdminAreaResolver;
 use App\Service\Tenant\TenantService;
 use Cake\Datasource\ConnectionManager;
 use Cake\Event\EventInterface;
@@ -215,15 +216,16 @@ class AdminController extends AppController
         return true;
     }
 
-    /** @return list<string> */
+    /**
+     * The admin areas the user effectively holds — resolved from GROUP membership
+     * ({@see AdminAreaResolver}: union of the user's active groups' granted areas,
+     * or ALL areas for a member of the Administrators/is_system group).
+     *
+     * @return list<string>
+     */
     protected function loadUserAreas(string $userId): array
     {
-        $rows = ConnectionManager::get('default')->execute(
-            'SELECT admin_area_key FROM user_admin_areas WHERE user_id = :u',
-            ['u' => $userId],
-        )->fetchAll('assoc');
-
-        return array_map(static fn($r) => (string)$r['admin_area_key'], $rows);
+        return (new AdminAreaResolver())->areasFor($userId);
     }
 
     /** The acting admin's user id, or '' when unauthenticated (fail-closed). */

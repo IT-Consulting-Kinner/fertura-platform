@@ -5,6 +5,7 @@ namespace App\Test\TestCase\Controller\Admin;
 
 use App\Service\Backup\TenantBackupPlanService;
 use App\Service\Storage\StorageManager;
+use App\Test\TestCase\AdminAreaSeedTrait;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
@@ -21,6 +22,7 @@ use ZipArchive;
 class TenantBackupControllerTest extends TestCase
 {
     use IntegrationTestTrait;
+    use AdminAreaSeedTrait;
 
     private string $userId = '';
     private string $tenantId = '';
@@ -45,10 +47,7 @@ class TenantBackupControllerTest extends TestCase
                 't' => $this->tenantId,
             ],
         )->fetch('assoc')['id'];
-        $conn->execute(
-            'INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a)',
-            ['u' => $this->userId, 'a' => 'tenant_backup'],
-        );
+        $this->grantAdminAreas($this->userId, 'tenant_backup');
     }
 
     protected function tearDown(): void
@@ -71,10 +70,6 @@ class TenantBackupControllerTest extends TestCase
                 // No file subtree for this tenant.
             }
         }
-        $conn->execute(
-            'DELETE FROM user_admin_areas WHERE user_id IN '
-            . "(SELECT id FROM users WHERE email LIKE '%@zztbk.local')",
-        );
         $conn->execute("DELETE FROM users WHERE email LIKE '%@zztbk.local'");
         // Tenant-scoped child rows referencing the test tenants (no ON DELETE CASCADE).
         $conn->execute("DELETE FROM automation_rules WHERE name LIKE 'zzrest%'");
@@ -160,7 +155,7 @@ class TenantBackupControllerTest extends TestCase
             "INSERT INTO users (username, email, status, tenant_id) VALUES (:u, :e, 'active', :t) RETURNING id",
             ['u' => 'zztbk_b_' . bin2hex(random_bytes(3)), 'e' => 'tbkb_' . bin2hex(random_bytes(3)) . '@zztbk.local', 't' => $tidB],
         )->fetch('assoc')['id'];
-        $conn->execute('INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a)', ['u' => $uidB, 'a' => 'tenant_backup']);
+        $this->grantAdminAreas($uidB, 'tenant_backup');
 
         $this->login($uidB);
         $this->get('/admin/tenant-backup');
@@ -437,7 +432,7 @@ class TenantBackupControllerTest extends TestCase
             "INSERT INTO users (username, email, status, tenant_id) VALUES (:u, :e, 'active', :t) RETURNING id",
             ['u' => 'zztbk_b_' . bin2hex(random_bytes(3)), 'e' => 'tbkb_' . bin2hex(random_bytes(3)) . '@zztbk.local', 't' => $tidB],
         )->fetch('assoc')['id'];
-        $conn->execute('INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a)', ['u' => $uidB, 'a' => 'tenant_backup']);
+        $this->grantAdminAreas($uidB, 'tenant_backup');
         $this->makeRule('zzrest_b_keep', $tidB);
 
         $dirB = ROOT . '/backups/tenant/' . $tidB;

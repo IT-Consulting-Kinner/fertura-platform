@@ -16,6 +16,7 @@ declare(strict_types=1);
  */
 namespace App\Controller;
 
+use App\Service\Permission\AdminAreaResolver;
 use App\Service\Security\MfaService;
 use App\Service\Tenant\TenantService;
 use Cake\Controller\Controller;
@@ -111,11 +112,13 @@ class AppController extends Controller
         /** @var \Cake\Database\Connection $conn */
         $conn = ConnectionManager::get('default');
         $row = $conn->execute(
-            'SELECT (core.current_tenant() = :op) '
-            . 'AND EXISTS (SELECT 1 FROM user_admin_areas WHERE user_id = :u) AS ok',
-            ['op' => TenantService::DEFAULT_TENANT_ID, 'u' => $userId],
+            'SELECT (core.current_tenant() = :op) AS ok',
+            ['op' => TenantService::DEFAULT_TENANT_ID],
         )->fetch('assoc');
+        $inOperatorTenant = $row !== false && ($row['ok'] === true || $row['ok'] === 't');
 
-        return $row !== false && ($row['ok'] === true || $row['ok'] === 't');
+        // "Holds at least one admin area" now means: a member of a group that grants
+        // any area (or the Administrators/is_system group) — resolved per group.
+        return $inOperatorTenant && (new AdminAreaResolver())->hasAny($userId);
     }
 }

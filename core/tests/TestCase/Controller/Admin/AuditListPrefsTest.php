@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Test\TestCase\Controller\Admin;
 
+use App\Test\TestCase\AdminAreaSeedTrait;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
@@ -15,6 +16,7 @@ use Cake\TestSuite\TestCase;
 class AuditListPrefsTest extends TestCase
 {
     use IntegrationTestTrait;
+    use AdminAreaSeedTrait;
 
     private string $adminId = '';
 
@@ -32,10 +34,7 @@ class AuditListPrefsTest extends TestCase
             ['u' => 'zzauditlp_' . bin2hex(random_bytes(3)), 'e' => bin2hex(random_bytes(3)) . '@zzauditlp.local'],
         )->fetch('assoc')['id'];
         // The audit page is for any ADMINISTRATOR (holds some area); grant one.
-        $conn->execute(
-            'INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a)',
-            ['u' => $this->adminId, 'a' => 'user_group_admin'],
-        );
+        $this->grantAdminAreas($this->adminId, 'user_group_admin');
     }
 
     protected function tearDown(): void
@@ -49,7 +48,6 @@ class AuditListPrefsTest extends TestCase
         $conn = ConnectionManager::get('default');
         if ($this->adminId !== '') {
             $conn->execute('DELETE FROM user_list_prefs WHERE user_id = :u', ['u' => $this->adminId]);
-            $conn->execute('DELETE FROM user_admin_areas WHERE user_id = :u', ['u' => $this->adminId]);
         }
         $conn->execute("DELETE FROM users WHERE email LIKE '%@zzauditlp.local'");
     }

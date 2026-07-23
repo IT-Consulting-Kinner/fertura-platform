@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Test\TestCase\Controller;
 
 use App\Audit\AuditLogger;
+use App\Test\TestCase\AdminAreaSeedTrait;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
@@ -17,6 +18,7 @@ use Cake\TestSuite\TestCase;
 class AuditFilterResetTest extends TestCase
 {
     use IntegrationTestTrait;
+    use AdminAreaSeedTrait;
 
     private string $adminId;
 
@@ -33,10 +35,7 @@ class AuditFilterResetTest extends TestCase
             "INSERT INTO users (username, email, status) VALUES (:u, :e, 'active') RETURNING id",
             ['u' => 'zztest_audflt_' . bin2hex(random_bytes(3)), 'e' => 'audflt_' . bin2hex(random_bytes(3)) . '@zzaudit.local'],
         )->fetch('assoc')['id'];
-        $conn->execute(
-            'INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a)',
-            ['u' => $this->adminId, 'a' => 'core_config'],
-        );
+        $this->grantAdminAreas($this->adminId, 'core_config');
         // Two distinct actions so a filter on one hides the other in the table.
         (new AuditLogger())->log('zztest.alpha', 'zztest_e', '019eb000-0000-7000-8000-00000000000a');
         (new AuditLogger())->log('zztest.beta', 'zztest_e', '019eb000-0000-7000-8000-00000000000b');

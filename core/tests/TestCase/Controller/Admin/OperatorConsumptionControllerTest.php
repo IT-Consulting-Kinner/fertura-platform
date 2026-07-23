@@ -5,6 +5,7 @@ namespace App\Test\TestCase\Controller\Admin;
 
 use App\Service\Consumption\OperatorConsumptionService;
 use App\Service\Tenant\TenantService;
+use App\Test\TestCase\AdminAreaSeedTrait;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
@@ -19,6 +20,7 @@ use Cake\TestSuite\TestCase;
 class OperatorConsumptionControllerTest extends TestCase
 {
     use IntegrationTestTrait;
+    use AdminAreaSeedTrait;
 
     private string $operatorId = '';
     private string $tenantA = '';
@@ -45,10 +47,7 @@ class OperatorConsumptionControllerTest extends TestCase
             "INSERT INTO users (username, email, status) VALUES (:u, :e, 'active') RETURNING id",
             ['u' => 'zzopc_op_' . bin2hex(random_bytes(3)), 'e' => 'op_' . bin2hex(random_bytes(3)) . '@zzopc.local'],
         )->fetch('assoc')['id'];
-        $conn->execute(
-            'INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a)',
-            ['u' => $this->operatorId, 'a' => 'core_config'],
-        );
+        $this->grantAdminAreas($this->operatorId, 'core_config');
 
         // Two active tenants: A consumes a module + a rule, B is empty.
         $this->tenantA = $this->makeTenant('ZZ OpC A');
@@ -82,10 +81,6 @@ class OperatorConsumptionControllerTest extends TestCase
     private function cleanup(): void
     {
         $conn = ConnectionManager::get('default');
-        $conn->execute(
-            'DELETE FROM user_admin_areas WHERE user_id IN '
-            . "(SELECT id FROM users WHERE email LIKE '%@zzopc.local')",
-        );
         $conn->execute("DELETE FROM users WHERE email LIKE '%@zzopc.local'");
         $conn->execute("DELETE FROM automation_rules WHERE name LIKE 'zzopc%'");
         $conn->execute("DELETE FROM tenant_modules WHERE module_key = 'zzopcons'");
@@ -122,10 +117,7 @@ class OperatorConsumptionControllerTest extends TestCase
                 't' => $this->tenantA,
             ],
         )->fetch('assoc')['id'];
-        $conn->execute(
-            'INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a)',
-            ['u' => $tenantUser, 'a' => 'core_config'],
-        );
+        $this->grantAdminAreas($tenantUser, 'core_config');
 
         $this->login($tenantUser);
         $this->get('/admin/operator-consumption');

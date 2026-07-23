@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Test\TestCase\Controller\Admin;
 
+use App\Test\TestCase\AdminAreaSeedTrait;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
@@ -16,6 +17,7 @@ use Cake\TestSuite\TestCase;
 class ModulesControllerTest extends TestCase
 {
     use IntegrationTestTrait;
+    use AdminAreaSeedTrait;
 
     private string $userId;
     private string $modA = '';
@@ -34,10 +36,7 @@ class ModulesControllerTest extends TestCase
             "INSERT INTO users (username, email, status) VALUES (:u, :e, 'active') RETURNING id",
             ['u' => 'zztest_madmin_' . bin2hex(random_bytes(3)), 'e' => 'madmin_' . bin2hex(random_bytes(3)) . '@zzmod.local'],
         )->fetch('assoc')['id'];
-        $conn->execute(
-            'INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a)',
-            ['u' => $this->userId, 'a' => 'module_lifecycle'],
-        );
+        $this->grantAdminAreas($this->userId, 'module_lifecycle');
 
         // Two modules with a dependency B -> A (for list + graph layers).
         $this->modA = $this->makeModule('zztestmod_a');

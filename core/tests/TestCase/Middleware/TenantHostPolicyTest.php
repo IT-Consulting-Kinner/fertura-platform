@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Test\TestCase\Middleware;
 
+use App\Test\TestCase\AdminAreaSeedTrait;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
@@ -14,6 +15,7 @@ use Cake\TestSuite\TestCase;
 class TenantHostPolicyTest extends TestCase
 {
     use IntegrationTestTrait;
+    use AdminAreaSeedTrait;
 
     private string $userId;
 
@@ -31,10 +33,7 @@ class TenantHostPolicyTest extends TestCase
             "INSERT INTO users (username, email, status) VALUES (:u, :e, 'active') RETURNING id",
             ['u' => 'zztest_host_' . bin2hex(random_bytes(3)), 'e' => 'host_' . bin2hex(random_bytes(3)) . '@zzhost.local'],
         )->fetch('assoc')['id'];
-        $conn->execute(
-            'INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a)',
-            ['u' => $this->userId, 'a' => 'core_config'],
-        );
+        $this->grantAdminAreas($this->userId, 'core_config');
         // FOREIGN tenant with its own domain.
         $conn->execute("INSERT INTO tenants (key, name, domain) VALUES ('zztest-foreign', 'Foreign', 'foreign.zztest')");
     }

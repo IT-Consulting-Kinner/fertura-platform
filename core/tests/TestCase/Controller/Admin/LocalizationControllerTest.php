@@ -5,6 +5,7 @@ namespace App\Test\TestCase\Controller\Admin;
 
 use App\Service\I18n\LanguagePackAdmin;
 use App\Service\I18n\LanguagePackStore;
+use App\Test\TestCase\AdminAreaSeedTrait;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
@@ -17,6 +18,7 @@ use Cake\TestSuite\TestCase;
 class LocalizationControllerTest extends TestCase
 {
     use IntegrationTestTrait;
+    use AdminAreaSeedTrait;
 
     private string $userId;
     private LanguagePackStore $store;
@@ -38,10 +40,7 @@ class LocalizationControllerTest extends TestCase
             "INSERT INTO users (username, email, status) VALUES (:u, :e, 'active') RETURNING id",
             ['u' => 'zztest_ladmin_' . bin2hex(random_bytes(3)), 'e' => 'ladmin_' . bin2hex(random_bytes(3)) . '@zzlang.local'],
         )->fetch('assoc')['id'];
-        $conn->execute(
-            'INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a)',
-            ['u' => $this->userId, 'a' => 'localization'],
-        );
+        $this->grantAdminAreas($this->userId, 'localization');
     }
 
     protected function tearDown(): void

@@ -8,6 +8,7 @@ use App\Model\Entity\User;
 use App\Service\Admin\AreaLabel;
 use App\Service\Identity\PasswordResetService;
 use App\Service\Mail\MailService;
+use App\Service\Permission\AdminAreaResolver;
 use Cake\Datasource\ConnectionManager;
 use Cake\Datasource\EntityInterface;
 use Cake\Http\Response;
@@ -72,15 +73,16 @@ class UsersController extends AdminController
 
             return;
         }
-        $areas = $conn->execute(
-            'SELECT a.area_key, a.label, (ua.user_id IS NOT NULL) AS held FROM admin_areas a '
-            . 'LEFT JOIN user_admin_areas ua ON ua.admin_area_key = a.area_key AND ua.user_id = :id ORDER BY a.sort_order',
-            ['id' => $id],
-        )->fetchAll('assoc');
+        // Admin areas are granted via GROUPS now (no per-user toggle). Show the
+        // user's EFFECTIVE areas read-only: the union resolved from their group
+        // memberships (all areas for an Administrators-group member).
+        $held = (new AdminAreaResolver())->areasFor($id);
+        $areas = $conn->execute('SELECT area_key, label FROM admin_areas ORDER BY sort_order')->fetchAll('assoc');
         // Localize module-contributed area labels stored as an i18n key (e.g.
         // ticketing.nav.group), so this raw "areas" card matches the nav/dashboard
         // (which resolve the same nav_group via __d). Plaintext labels pass through.
         foreach ($areas as &$a) {
+            $a['held'] = in_array((string)$a['area_key'], $held, true);
             $a['label'] = AreaLabel::localize((string)$a['label']);
         }
         unset($a);
@@ -197,32 +199,6 @@ class UsersController extends AdminController
         );
         $this->audit()->log($status === 'active' ? 'user.activate' : 'user.deactivate', 'user', $id, ['newValue' => ['status' => $status]]);
         $this->Flash->success(__('flash.user.status_updated'));
-
-        return $this->redirect(['action' => 'view', $id]);
-    }
-
-    public function toggleArea(string $id, string $area): ?Response
-    {
-        $this->request->allowMethod('post');
-        if (($deny = $this->denyCrossTenant($id)) !== null) {
-            return $deny;
-        }
-        $conn = ConnectionManager::get('default');
-        $exists = $conn->execute('SELECT 1 FROM user_admin_areas WHERE user_id = :u AND admin_area_key = :a', ['u' => $id, 'a' => $area])->fetch();
-        if ($exists) {
-            // Self-lockout protection: do not revoke the last user_group_admin area.
-            if ($area === 'user_group_admin' && $this->isLastUserGroupAdmin($id)) {
-                $this->Flash->error(__('flash.user.last_admin_revoke'));
-
-                return $this->redirect(['action' => 'view', $id]);
-            }
-            $conn->execute('DELETE FROM user_admin_areas WHERE user_id = :u AND admin_area_key = :a', ['u' => $id, 'a' => $area]);
-            $this->audit()->log('admin_access.revoke', 'user', $id, ['newValue' => ['area' => $area]]);
-        } else {
-            $conn->execute('INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a) ON CONFLICT DO NOTHING', ['u' => $id, 'a' => $area]);
-            $this->audit()->log('admin_access.grant', 'user', $id, ['newValue' => ['area' => $area]]);
-        }
-        $this->Flash->success(__('flash.user.area_updated'));
 
         return $this->redirect(['action' => 'view', $id]);
     }
@@ -554,24 +530,15 @@ class UsersController extends AdminController
      */
     private function isLastUserGroupAdmin(string $id): bool
     {
-        $conn = ConnectionManager::get('default');
-        $holds = $conn->execute(
-            "SELECT 1 FROM user_admin_areas WHERE user_id = :id AND admin_area_key = 'user_group_admin'",
-            ['id' => $id],
-        )->fetch();
-        if ($holds === false) {
+        $resolver = new AdminAreaResolver();
+        // Only an effective holder of user_group_admin can be its LAST holder. Areas
+        // now come from GROUP membership (incl. the Administrators-group wildcard).
+        if (!in_array('user_group_admin', $resolver->areasFor($id), true)) {
             return false;
         }
-        // Count holders WITHIN the acting admin's tenant only: with per-tenant user
-        // administration, "last admin" is a per-tenant property — a global count would
-        // let a tenant remove its own last admin merely because ANOTHER tenant has one.
-        $others = (int)$conn->execute(
-            'SELECT count(DISTINCT ua.user_id) FROM user_admin_areas ua JOIN users u ON u.id = ua.user_id '
-            . "WHERE ua.admin_area_key = 'user_group_admin' AND u.status = 'active' "
-            . 'AND u.tenant_id = core.current_tenant() AND ua.user_id <> :id',
-            ['id' => $id],
-        )->fetch()[0];
-
-        return $others === 0;
+        // "Last admin" is a per-tenant property: no OTHER active user of THIS tenant
+        // still effectively holds user_group_admin (a global count would let a tenant
+        // strip its own last admin merely because another tenant has one).
+        return $resolver->activeHoldersOf('user_group_admin', $id) === 0;
     }
 }
