@@ -100,6 +100,18 @@ class GroupsControllerTest extends TestCase
         $this->assertResponseContains('scope="col"'); // A11y of the hand-built table
     }
 
+    public function testListSearchFilter(): void
+    {
+        $this->login();
+        $hit = $this->makeGroup('findme-');
+        $miss = $this->makeGroup('other-');
+        $this->get('/admin/groups?_lp=1&q=findme');
+
+        $this->assertResponseOk();
+        $this->assertResponseContains((string)$this->groupCol($hit, 'name')); // name matches
+        $this->assertResponseNotContains((string)$this->groupCol($miss, 'name')); // filtered out
+    }
+
     public function testAddCreatesGroupAndRedirects(): void
     {
         $this->login();
@@ -510,6 +522,12 @@ class GroupsControllerTest extends TestCase
 
     public function testSaveAdminAreasGrantsAndRevokes(): void
     {
+        // The test bootstrap truncates admin_areas (only user_group_admin is re-seeded
+        // in setUp); seed a second catalog area this test toggles.
+        ConnectionManager::get('default')->execute(
+            "INSERT INTO admin_areas (area_key, label, sort_order) VALUES ('core_config', 'Config', 60) "
+            . 'ON CONFLICT (area_key) DO NOTHING',
+        );
         $gid = $this->makeGroup('savearea-');
         $this->login();
         $this->enableCsrfToken();

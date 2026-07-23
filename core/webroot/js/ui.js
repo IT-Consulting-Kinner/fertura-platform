@@ -50,7 +50,11 @@
       .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error(String(r.status))); })
       .then(function (data) {
         var list = data && Array.isArray(data.options) ? data.options : [];
-        var current = sel.value;
+        // Preserve the selection across the rebuild: ALL selected values for a
+        // multiple select, the single value otherwise.
+        var current = sel.multiple
+          ? Array.prototype.map.call(sel.selectedOptions, function (o) { return o.value; })
+          : sel.value;
         // Preserve a leading empty "choose" option if the select had one.
         var keepEmpty = sel.options.length && sel.options[0].value === '' ? sel.options[0] : null;
         // Remove ALL children (options AND optgroup wrappers) so a select first
@@ -67,12 +71,18 @@
           opt.textContent = String(o.label);
           sel.add(opt);
         });
-        sel.value = current;
-        // If the previously selected value is gone, fall back to the first option
-        // (the empty "choose" entry when present) instead of an index of -1, which
-        // renders blank AND omits the field from the form submission entirely.
-        if (sel.value !== current) {
-          sel.selectedIndex = sel.options.length ? 0 : -1;
+        if (sel.multiple) {
+          Array.prototype.forEach.call(sel.options, function (o) {
+            o.selected = current.indexOf(o.value) !== -1;
+          });
+        } else {
+          sel.value = current;
+          // If the previously selected value is gone, fall back to the first option
+          // (the empty "choose" entry when present) instead of an index of -1, which
+          // renders blank AND omits the field from the form submission entirely.
+          if (sel.value !== current) {
+            sel.selectedIndex = sel.options.length ? 0 : -1;
+          }
         }
       })
       .catch(function () {

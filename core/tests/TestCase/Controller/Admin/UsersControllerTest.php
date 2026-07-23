@@ -114,8 +114,10 @@ class UsersControllerTest extends TestCase
         // DashedRoute: setStatus -> set-status, setPassword -> set-password.
         $this->assertResponseContains('/admin/users/set-status/' . $this->memberId); // (de)activate
         $this->assertResponseContains('/admin/users/anonymize/' . $this->memberId);
-        $this->assertResponseContains('/admin/users/invite/' . $this->memberId);
         $this->assertResponseContains('/admin/users/set-password/' . $this->memberId);
+        // The invitation link is offered only while a user is still "invited";
+        // memberId is active, so it is NOT shown (see testViewOffersInviteOnlyWhenInvited).
+        $this->assertResponseNotContains('/admin/users/invite/' . $this->memberId);
     }
 
     public function testOwnViewHidesSelfManagement(): void
@@ -138,16 +140,18 @@ class UsersControllerTest extends TestCase
 
     public function testCreateFormHasGroupMultiselect(): void
     {
-        // The create form assigns groups via a MULTI-select (checkboxes, name
-        // group_ids[]) — a user may start in several groups at once — plus a
-        // "create a new group" link (new tab) so a missing group can be added
-        // without leaving the form.
+        // The create form assigns groups via a MULTI-select (<select multiple>, name
+        // group_ids[]) — a user may start in several groups at once — plus a reload
+        // button (UiKit options-refresh) and a "create a new group" link so a missing
+        // group can be created and picked up without leaving the form.
         $this->login();
-        $this->makeGroup(); // at least one active group -> checkboxes render
+        $this->makeGroup(); // at least one active group -> options render
         $this->get('/admin/users');
 
         $this->assertResponseOk();
         $this->assertResponseContains('name="group_ids[]"');
+        $this->assertResponseContains('multiple'); // real multi-select, not checkboxes
+        $this->assertResponseContains('data-options-refresh="/admin/groups/options"'); // reload button
         $this->assertResponseContains('href="/admin/groups?create=1"');
         // Single-line inputs (not the <textarea> a `text` column defaults to).
         $this->assertResponseNotContains('<textarea name="username"');
@@ -302,8 +306,8 @@ class UsersControllerTest extends TestCase
         $this->assertResponseOk(); // re-render with inline error, NOT a redirect (success) or 500
         // Review finding: the re-rendered form must KEEP the chosen group(s) —
         // patchEntity drops group_ids (mass-assignment guard), the controller
-        // re-sets it on the entity so the checkbox stays ticked.
-        $this->assertResponseRegExp('/value="' . preg_quote($groupId, '/') . '"[^>]*checked/');
+        // re-sets it on the entity so the <select multiple> option stays selected.
+        $this->assertResponseRegExp('/value="' . preg_quote($groupId, '/') . '"[^>]*selected/');
         $this->assertSame(
             1,
             (int)ConnectionManager::get('default')->execute(
@@ -369,6 +373,54 @@ class UsersControllerTest extends TestCase
             ['u' => $invited],
         )->fetch('assoc')['c'];
         $this->assertSame(1, $tokens);
+    }
+
+    public function testInviteRejectedForActiveUser(): void
+    {
+        // An invitation link sets an INITIAL password -> only for a still-"invited"
+        // account. Inviting an already-onboarded (active) user is refused server-side
+        // and creates no token (belt to the hidden UI button).
+        $active = $this->makeUser('uactive', 'active');
+        $this->login();
+        $this->post('/admin/users/invite/' . $active);
+
+        $this->assertRedirect(['action' => 'view', $active]);
+        $this->assertSame(0, (int)ConnectionManager::get('default')->execute(
+            "SELECT count(*) AS c FROM password_reset_tokens WHERE user_id = :u AND purpose = 'invite'",
+            ['u' => $active],
+        )->fetch('assoc')['c'], 'no invite token for an active user');
+    }
+
+    public function testViewOffersInviteOnlyWhenInvited(): void
+    {
+        $this->login();
+        $invited = $this->makeUser('uinv', 'invited');
+        $active = $this->makeUser('uact', 'active');
+
+        $this->get('/admin/users/view/' . $invited);
+        $this->assertResponseContains('/admin/users/invite/' . $invited); // offered while invited
+
+        $this->get('/admin/users/view/' . $active);
+        $this->assertResponseNotContains('/admin/users/invite/' . $active); // gone once onboarded
+    }
+
+    public function testListSearchAndStatusFilter(): void
+    {
+        $this->login();
+        $disabled = $this->makeUser('ufindme', 'disabled');
+
+        // Search narrows by a username/email fragment (ILIKE contains).
+        $this->get('/admin/users?_lp=1&q=ufindme&per_page=25');
+        $this->assertResponseOk();
+        $this->assertResponseContains('zztest_ufindme_'); // matched
+        $this->assertResponseNotContains('zztest_umember_'); // filtered out
+
+        // Status filter narrows by status (and clears the previous q).
+        $this->get('/admin/users?_lp=1&status=disabled');
+        $this->assertResponseOk();
+        $this->assertResponseContains('zztest_ufindme_'); // disabled matches
+        $this->assertResponseNotContains('zztest_uadmin_'); // the active admin is excluded
+        unset($disabled);
     }
 
     public function testSetPasswordActivatesInvitedAndRejectsShort(): void

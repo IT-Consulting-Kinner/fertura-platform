@@ -44,9 +44,15 @@ $anon = $user['status'] === 'anonymized';
                 </div>
                 <hr>
                 <p class="mb-1 small text-muted"><?= h(__('admin.users.invite_password')) ?></p>
+                <?php // The invitation link sets an INITIAL password — only meaningful
+                      // while the user is still "invited" (not yet onboarded). Once
+                      // active/disabled the account has a password; the admin sets a new
+                      // one directly below instead. Also enforced server-side. ?>
+                <?php if ($user['status'] === 'invited'): ?>
                 <div class="d-flex gap-2 mb-2">
                     <?= $this->Form->postLink(__('admin.users.invite_create'), ['action' => 'invite', $user['id']], ['class' => 'btn btn-outline-primary btn-sm']) ?>
                 </div>
+                <?php endif; ?>
                 <?= $this->Form->create(null, ['url' => ['action' => 'setPassword', $user['id']], 'class' => 'input-group input-group-sm']) ?>
                     <?= $this->Form->control('password', ['type' => 'password', 'label' => false, 'class' => 'form-control', 'placeholder' => __('admin.users.password_placeholder'), 'required' => true]) ?>
                     <?= $this->Form->button(__('admin.users.password_set'), ['class' => 'btn btn-outline-secondary']) ?>
