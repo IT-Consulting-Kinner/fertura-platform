@@ -8,6 +8,8 @@
  * @var array<string, array{name: string, resources: array<int, array<string, mixed>>}> $resourceGroups
  * @var array<string, int> $objectCounts                     CLI-managed object rows per "module::type".
  * @var string|null $currentUserId                           The acting admin (self-removal guard).
+ * @var array<int, array<string, mixed>> $adminAreas         Admin-area catalog (area_key + localized label).
+ * @var array<int, string> $heldAreas                        Area keys this group grants (non-system).
  */
 $active = filter_var($group['active'], FILTER_VALIDATE_BOOLEAN);
 $truthy = static fn ($v) => filter_var($v ?? false, FILTER_VALIDATE_BOOLEAN);
@@ -116,6 +118,34 @@ $dLabel = static function (string $domain, string $key, string $fallback): strin
                     <?php if (!$isSystem): ?><?= $this->Form->button(__('admin.groups.perms_save'), ['class' => 'btn btn-primary']) ?><?php endif; ?>
                     <?= $this->Form->end() ?>
                 <?php endif; ?>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mt-1">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header"><?= h(__('admin.groups.areas_title')) ?></div>
+            <div class="card-body">
+                <p class="text-muted small mb-2"><?= h(__('admin.groups.areas_hint')) ?></p>
+                <?php if ($isSystem): ?><p class="text-info small"><?= h(__('admin.groups.system_areas_note')) ?></p><?php endif; ?>
+                <?= $this->Form->create(null, ['url' => ['action' => 'saveAdminAreas', $group['id']]]) ?>
+                <div class="d-flex flex-wrap gap-3">
+                    <?php foreach ($adminAreas as $a):
+                        // A DOM-id-safe key (area_key has no charset gate; belt to that).
+                        $akey = (string)preg_replace('/[^a-zA-Z0-9_-]/', '_', (string)$a['area_key']);
+                        // is_system holds every area by the wildcard rule -> all checked.
+                        $checked = $isSystem || in_array((string)$a['area_key'], $heldAreas, true);
+                    ?>
+                        <div class="form-check">
+                            <?= $this->Form->checkbox('area[]', ['value' => $a['area_key'], 'id' => 'area_' . $akey, 'class' => 'form-check-input', 'checked' => $checked, 'hiddenField' => false, 'disabled' => $isSystem]) ?>
+                            <label class="form-check-label small" for="area_<?= h($akey) ?>"><?= h($a['label']) ?> <code class="small text-muted"><?= h($a['area_key']) ?></code></label>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+                <?php if (!$isSystem): ?><div class="mt-3"><?= $this->Form->button(__('admin.groups.areas_save'), ['class' => 'btn btn-primary']) ?></div><?php endif; ?>
+                <?= $this->Form->end() ?>
             </div>
         </div>
     </div>

@@ -713,7 +713,8 @@ class ModuleLifecycle
                     ]);
                 }
                 // Register the module's admin areas (web-mount) so they are
-                // grantable (FK target of user_admin_areas), ch. 23.16.3.
+                // grantable (FK target of group_admin_areas), ch. 23.16.3. The
+                // Administrators group covers them automatically (wildcard).
                 $this->registerAdminAreas($manifest);
             } catch (RegistryException $e) {
                 $this->setStatus($key, 'error_activate');
@@ -748,7 +749,7 @@ class ModuleLifecycle
 
     /**
      * Registers the module's web-mount admin areas in `core.admin_areas` so they
-     * become grantable (the FK target of `user_admin_areas`). Idempotent; module
+     * become grantable (the FK target of `group_admin_areas`). Idempotent; module
      * areas sort after the Core areas (ch. 23.16.3).
      */
     private function registerAdminAreas(ModuleManifest $manifest): void
@@ -806,11 +807,11 @@ class ModuleLifecycle
             $conn = $this->conn();
             // Remove the registrations made by this module.
             $conn->execute('DELETE FROM contract_registrations WHERE module_key = :k', ['k' => $key]);
-            // Remove the module's web-mount admin areas + any grants to them
-            // (grants first: user_admin_areas FK is ON DELETE RESTRICT).
+            // Remove the module's web-mount admin areas + any group grants to them
+            // (grants first: group_admin_areas FK is ON DELETE RESTRICT).
             $delManifest = new ModuleManifest(json_decode((string)$mod['manifest'], true) ?: []);
             foreach (array_keys($delManifest->adminAreas()) as $areaKey) {
-                $conn->execute('DELETE FROM user_admin_areas WHERE admin_area_key = :a', ['a' => $areaKey]);
+                $conn->execute('DELETE FROM group_admin_areas WHERE admin_area_key = :a', ['a' => $areaKey]);
                 $conn->execute('DELETE FROM admin_areas WHERE area_key = :a', ['a' => $areaKey]);
             }
             // Remove the contracts defined by this module (CASCADE -> registrations/bindings).

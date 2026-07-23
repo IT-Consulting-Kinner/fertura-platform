@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Controller\Admin;
 
 use App\Audit\AuditLogger;
+use App\Service\Admin\AreaLabel;
 use App\Service\Permission\PermissionService;
 use Cake\Datasource\ConnectionManager;
 use Cake\Http\Response;
@@ -155,10 +156,86 @@ class GroupsController extends AdminController
             $resourceGroups[$mk] ??= ['name' => (string)($r['module_name'] ?? '') ?: $mk, 'resources' => []];
             $resourceGroups[$mk]['resources'][] = $r;
         }
+        // Administration areas this group grants (Core-level, separate from module
+        // BREAD). Admin-area access is per-GROUP now; the is_system group holds ALL
+        // areas by the wildcard rule, so its stored rows are irrelevant (the template
+        // shows every box checked + disabled for it).
+        $adminAreas = $conn->execute('SELECT area_key, label FROM admin_areas ORDER BY sort_order')->fetchAll('assoc');
+        foreach ($adminAreas as &$aa) {
+            $aa['label'] = AreaLabel::localize((string)$aa['label']);
+        }
+        unset($aa);
+        $heldAreas = array_column(
+            $conn->execute('SELECT admin_area_key FROM group_admin_areas WHERE group_id = :id', ['id' => $id])->fetchAll('assoc'),
+            'admin_area_key',
+        );
         $currentUserId = $this->currentUserId();
-        $this->set(compact('group', 'members', 'candidates', 'grants', 'resourceGroups', 'objectCounts', 'currentUserId'));
+        $this->set(compact(
+            'group', 'members', 'candidates', 'grants', 'resourceGroups', 'objectCounts', 'currentUserId',
+            'adminAreas', 'heldAreas',
+        ));
 
         return null;
+    }
+
+    /**
+     * Saves the group's ADMINISTRATION-AREA grants (the whole checkbox set at once,
+     * fail-closed over the catalog like {@see self::savePermissions}): a checked area
+     * becomes a `group_admin_areas` row, an unchecked one is revoked. Iterating the
+     * `admin_areas` catalog (not the posted keys) means a forged key can neither
+     * grant an unregistered area nor bypass the is_system guard. The Administrators
+     * (is_system) group is refused — it holds every area by the wildcard rule, so
+     * editing rows for it would be meaningless and could imply a false restriction.
+     */
+    public function saveAdminAreas(string $id): ?Response
+    {
+        $this->request->allowMethod('post');
+        if (!$this->isUuid($id) || !$this->groupInTenant($id)) {
+            return $this->notFound();
+        }
+        if ($this->isSystemGroup($id)) {
+            $this->Flash->error(__('flash.group.system_protected_areas'));
+
+            return $this->redirect(['action' => 'view', $id]);
+        }
+        /** @var \Cake\Database\Connection $conn */
+        $conn = ConnectionManager::get('default');
+        // Checked area keys arrive as a flat value list (name="area[]"), which is
+        // charset-safe for module-contributed keys (no dot-nesting in field names).
+        $posted = array_map('strval', (array)$this->request->getData('area'));
+        $held = array_column(
+            $conn->execute('SELECT admin_area_key FROM group_admin_areas WHERE group_id = :g', ['g' => $id])->fetchAll('assoc'),
+            'admin_area_key',
+        );
+        $added = [];
+        $removed = [];
+        // Diff-aware over the CATALOG so the append-only audit records only changes.
+        foreach ($conn->execute('SELECT area_key FROM admin_areas')->fetchAll('assoc') as $row) {
+            $areaKey = (string)$row['area_key'];
+            $want = in_array($areaKey, $posted, true);
+            $has = in_array($areaKey, $held, true);
+            if ($want && !$has) {
+                $conn->execute(
+                    'INSERT INTO group_admin_areas (group_id, admin_area_key) VALUES (:g, :a) ON CONFLICT DO NOTHING',
+                    ['g' => $id, 'a' => $areaKey],
+                );
+                $added[] = $areaKey;
+            } elseif (!$want && $has) {
+                $conn->execute(
+                    'DELETE FROM group_admin_areas WHERE group_id = :g AND admin_area_key = :a',
+                    ['g' => $id, 'a' => $areaKey],
+                );
+                $removed[] = $areaKey;
+            }
+        }
+        if ($added !== [] || $removed !== []) {
+            (new AuditLogger())->log('group_admin_areas.update', 'group', $id, [
+                'newValue' => ['added' => $added, 'removed' => $removed],
+            ]);
+        }
+        $this->Flash->success(__('flash.group.areas_saved'));
+
+        return $this->redirect(['action' => 'view', $id]);
     }
 
     /**

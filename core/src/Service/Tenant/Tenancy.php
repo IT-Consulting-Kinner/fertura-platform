@@ -13,7 +13,7 @@ use Cake\Datasource\ConnectionManager;
  *
  * - {@see central()} — **central, cross-tenant** tables ALWAYS live on the shared
  *   DB: `users`, `tenants`, `sessions`, `settings`, `audit_log`,
- *   `groups`/`groups_users`, `user_admin_areas`, `sso_providers`, `auth_failures`,
+ *   `groups`/`groups_users`, `group_admin_areas`, `sso_providers`, `auth_failures`,
  *   `event_outbox`, license/trust/module tables. Reason (chicken-and-egg):
  *   session/auth/user→tenant must be resolved BEFORE a tenant can be routed.
  * - {@see data()} — **tenant business data** runs on the tenant's own DB when

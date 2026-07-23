@@ -8,6 +8,7 @@ use App\Error\UniqueViolation;
 use App\Model\Entity\User;
 use App\Service\Identity\PasswordResetService;
 use App\Service\Mail\MailService;
+use App\Service\Permission\AdminGroupService;
 use App\Service\Tenant\TenantService;
 use Cake\Datasource\ConnectionManager;
 use Cake\Http\Response;
@@ -149,10 +150,11 @@ class TenantsController extends AdminController
     /**
      * Onboarding step (operator-tenant design §7, decided: a SEPARATE step after
      * provisioning): creates the first/another ADMIN for a tenant — a user IN the
-     * target tenant, granted the tenant user/group-admin area, plus an invitation
-     * link. Operator-only (core_config, gate-enforced). Cross-tenant by design: the
-     * operator creates a user whose tenant differs from the operator's own RLS context
-     * (`users`/`user_admin_areas` carry no RLS, so the writes are not blocked). The
+     * target tenant, made a member of that tenant's Administrators group (all admin
+     * areas + full BREAD), plus an invitation link. Operator-only (core_config,
+     * gate-enforced). Cross-tenant by design: the operator creates a user whose tenant
+     * differs from the operator's own RLS context (`users` has no RLS; the group rows
+     * are written under a scoped switch to the target tenant's RLS context). The
      * operator tenant itself is refused here — its admins are operator-admins, managed
      * separately, not onboarded as tenant admins.
      */
@@ -186,18 +188,23 @@ class TenantsController extends AdminController
                 throw new RuntimeException(__('flash.user.create_failed'));
             }
             $userId = (string)$user->id;
-            // Grant the tenant-admin areas (held within the new tenant): user/group
-            // administration AND per-tenant module enablement (Increment 5.3). Both
-            // are tenant-scoped, so the grant never crosses the operator boundary. A
-            // single multi-row INSERT keeps the two grants atomic — they are applied
-            // together or (e.g. on an unseeded area FK) not at all, never half.
+            // Admin access is granted by MEMBERSHIP in the target tenant's
+            // Administrators (is_system) group — which holds ALL admin areas (wildcard)
+            // plus full BREAD on every module resource (AdminGroupService::ensure). The
+            // operator gate keeps the operator-only areas inert for this tenant admin,
+            // so "all areas" never crosses the operator boundary. The group lives in the
+            // TARGET tenant, so its rows (RLS-scoped) require that tenant's context:
+            // switch the RLS tenant for these writes only, then restore the operator's.
             /** @var \Cake\Database\Connection $conn */
             $conn = ConnectionManager::get('default');
-            $conn->execute(
-                'INSERT INTO user_admin_areas (user_id, admin_area_key) '
-                . 'VALUES (:u, :a1), (:u, :a2) ON CONFLICT DO NOTHING',
-                ['u' => $userId, 'a1' => 'user_group_admin', 'a2' => 'tenant_modules'],
-            );
+            $conn->execute("SELECT set_config('app.current_tenant_id', :t, true)", ['t' => $tenantId]);
+            try {
+                $groupService = new AdminGroupService();
+                $group = $groupService->ensure($tenantId);
+                $groupService->addUser($group['id'], $userId, 'tenant.create_admin');
+            } finally {
+                $conn->execute("SELECT set_config('app.current_tenant_id', :t, true)", ['t' => self::OPERATOR_TENANT_ID]);
+            }
             // Invitation / password-set link (like UsersController::invite).
             $actor = $this->identity()?->getIdentifier();
             $token = (new PasswordResetService())->create($userId, 'invite', 72, is_scalar($actor) ? (string)$actor : null);

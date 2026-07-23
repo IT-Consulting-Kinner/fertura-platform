@@ -8,6 +8,7 @@ use App\Service\Module\ModuleLifecycle;
 use App\Service\Module\TenantModuleService;
 use App\Service\Settings\SettingsManager;
 use App\Service\Storage\StorageManager;
+use App\Test\TestCase\AdminAreaSeedTrait;
 use Cake\Core\Configure;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\IntegrationTestTrait;
@@ -28,6 +29,7 @@ use Throwable;
 class ModuleWebTest extends TestCase
 {
     use IntegrationTestTrait;
+    use AdminAreaSeedTrait;
 
     private const KEY = 'zztest_web';
 
@@ -76,7 +78,6 @@ class ModuleWebTest extends TestCase
         $this->cleanupModule();
         if ($this->userId !== '') {
             $conn = ConnectionManager::get('default');
-            $conn->execute('DELETE FROM user_admin_areas WHERE user_id = :id', ['id' => $this->userId]);
             $conn->execute('DELETE FROM users WHERE id = :id', ['id' => $this->userId]);
         }
         (new SettingsManager())->set('core', 'require_module_signature', $this->prevRequireSig);
@@ -231,10 +232,7 @@ class ModuleWebTest extends TestCase
         // A page-spec route MAY declare an `area`: the spec then renders inside
         // the admin shell with the same default breadcrumb a template page gets
         // (shared AdminNavBuilder trail + page title as the active crumb).
-        ConnectionManager::get('default')->execute(
-            'INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a)',
-            ['u' => $this->userId, 'a' => 'zztest_web_admin'],
-        );
+        $this->grantAdminAreas($this->userId, 'zztest_web_admin');
         $this->session(['Auth' => ['id' => $this->userId, 'username' => 'zztest_web', 'email' => 'w@zztest.local']]);
         $this->get('/m/zztest_web/admin/spec');
 
@@ -282,10 +280,7 @@ class ModuleWebTest extends TestCase
     public function testAdminPageRendersInAdminShellWithNavEntry(): void
     {
         // Grant the user the module-defined admin area.
-        ConnectionManager::get('default')->execute(
-            'INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a)',
-            ['u' => $this->userId, 'a' => 'zztest_web_admin'],
-        );
+        $this->grantAdminAreas($this->userId, 'zztest_web_admin');
         $this->session(['Auth' => ['id' => $this->userId, 'username' => 'zztest_web', 'email' => 'w@zztest.local']]);
         $this->get('/m/zztest_web/admin');
 
@@ -316,10 +311,7 @@ class ModuleWebTest extends TestCase
         // raises a raw 23505 that the module dispatcher now routes to
         // UniqueViolationMiddleware (a warning + 303 redirect) instead of masking it
         // as a generic 500 — proving the net covers MODULE writes, not just Core ones.
-        ConnectionManager::get('default')->execute(
-            'INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a)',
-            ['u' => $this->userId, 'a' => 'zztest_web_admin'],
-        );
+        $this->grantAdminAreas($this->userId, 'zztest_web_admin');
         $this->session(['Auth' => ['id' => $this->userId, 'username' => 'zztest_web', 'email' => 'w@zztest.local']]);
         $this->enableCsrfToken();
         $this->enableSecurityToken();

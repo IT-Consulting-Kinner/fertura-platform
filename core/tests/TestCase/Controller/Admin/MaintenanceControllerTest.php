@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Test\TestCase\Controller\Admin;
 
 use App\Service\System\AllowTokenCookie;
+use App\Test\TestCase\AdminAreaSeedTrait;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
@@ -17,6 +18,7 @@ use Cake\TestSuite\TestCase;
 class MaintenanceControllerTest extends TestCase
 {
     use IntegrationTestTrait;
+    use AdminAreaSeedTrait;
 
     private string $userId;
 
@@ -33,10 +35,7 @@ class MaintenanceControllerTest extends TestCase
             "INSERT INTO users (username, email, status) VALUES (:u, :e, 'active') RETURNING id",
             ['u' => 'zztest_maint_' . bin2hex(random_bytes(3)), 'e' => 'maint_' . bin2hex(random_bytes(3)) . '@zzmaint.local'],
         )->fetch('assoc')['id'];
-        $conn->execute(
-            'INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a)',
-            ['u' => $this->userId, 'a' => 'system_maintenance'],
-        );
+        $this->grantAdminAreas($this->userId, 'system_maintenance');
     }
 
     protected function tearDown(): void
@@ -78,10 +77,7 @@ class MaintenanceControllerTest extends TestCase
             "INSERT INTO users (username, email, status) VALUES (:u, :e, 'active') RETURNING id",
             ['u' => 'zztest_maint_other_' . bin2hex(random_bytes(3)), 'e' => 'other_' . bin2hex(random_bytes(3)) . '@zzmaint.local'],
         )->fetch('assoc')['id'];
-        $conn->execute(
-            "INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, 'core_config')",
-            ['u' => $otherId],
-        );
+        $this->grantAdminAreas($otherId, 'core_config');
 
         $this->login($otherId);
         $this->get('/admin/maintenance');

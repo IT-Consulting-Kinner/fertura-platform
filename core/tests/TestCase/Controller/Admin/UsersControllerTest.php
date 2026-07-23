@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Test\TestCase\Controller\Admin;
 
+use App\Test\TestCase\AdminAreaSeedTrait;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
@@ -17,6 +18,7 @@ use Cake\TestSuite\TestCase;
 class UsersControllerTest extends TestCase
 {
     use IntegrationTestTrait;
+    use AdminAreaSeedTrait;
 
     private string $adminId;
     private string $memberId;
@@ -33,10 +35,7 @@ class UsersControllerTest extends TestCase
         // Logged-in admin: active, holds user_group_admin (and is its only
         // active holder -> last-admin protection applies to themselves).
         $this->adminId = $this->makeUser('uadmin', 'active');
-        $conn->execute(
-            'INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a)',
-            ['u' => $this->adminId, 'a' => 'user_group_admin'],
-        );
+        $this->grantAdminAreas($this->adminId, 'user_group_admin');
         // Second user without an admin area (target of most actions).
         $this->memberId = $this->makeUser('umember', 'active');
     }
@@ -54,18 +53,13 @@ class UsersControllerTest extends TestCase
             'DELETE FROM password_reset_tokens WHERE user_id IN '
             . "(SELECT id FROM users WHERE email LIKE '%@zzusers.local')",
         );
-        // The last-active-admin trigger and similar do not apply to hard deletes;
-        // test users are uniquely identifiable via the email domain.
-        $conn->execute(
-            'DELETE FROM user_admin_areas WHERE user_id IN '
-            . "(SELECT id FROM users WHERE email LIKE '%@zzusers.local')",
-        );
-        // Test groups (mandatory-group flow) incl. their membership rows.
+        // Test groups (mandatory-group flow + the AdminAreaSeedTrait's zzseedarea_
+        // groups) incl. their membership rows; group_admin_areas cascade on delete.
         $conn->execute(
             'DELETE FROM groups_users WHERE group_id IN '
-            . "(SELECT id FROM \"groups\" WHERE name LIKE 'zzusers_grp_%')",
+            . "(SELECT id FROM \"groups\" WHERE name LIKE 'zzusers_grp_%' OR name LIKE 'zzseedarea_%')",
         );
-        $conn->execute("DELETE FROM \"groups\" WHERE name LIKE 'zzusers_grp_%'");
+        $conn->execute("DELETE FROM \"groups\" WHERE name LIKE 'zzusers_grp_%' OR name LIKE 'zzseedarea_%'");
         $conn->execute("DELETE FROM users WHERE email LIKE '%@zzusers.local'");
         // Foreign tenants seeded by the cross-tenant isolation test (after their users).
         $conn->execute("DELETE FROM tenants WHERE key LIKE 'zzt_other_%'");
@@ -193,9 +187,6 @@ class UsersControllerTest extends TestCase
         $this->assertRedirect(['action' => 'index']);
 
         $this->post('/admin/users/setStatus/garbage/disabled');
-        $this->assertRedirect(['action' => 'index']);
-
-        $this->post('/admin/users/toggleArea/garbage/user_group_admin');
         $this->assertRedirect(['action' => 'index']);
 
         $this->post('/admin/users/invite/garbage');
@@ -352,33 +343,6 @@ class UsersControllerTest extends TestCase
         $this->assertSame('active', $this->userCol($this->memberId, 'status'));
     }
 
-    public function testToggleAreaGrantAndRevoke(): void
-    {
-        $this->login();
-        $count = fn(): int => (int)ConnectionManager::get('default')->execute(
-            "SELECT count(*) AS c FROM user_admin_areas WHERE user_id = :u AND admin_area_key = 'user_group_admin'",
-            ['u' => $this->memberId],
-        )->fetch('assoc')['c'];
-
-        $this->post('/admin/users/toggleArea/' . $this->memberId . '/user_group_admin');
-        $this->assertSame(1, $count());
-
-        $this->post('/admin/users/toggleArea/' . $this->memberId . '/user_group_admin');
-        $this->assertSame(0, $count()); // revoke ok: admin remains as a holder
-    }
-
-    public function testRevokeLastUserGroupAdminBlocked(): void
-    {
-        $this->login();
-        // The logged-in admin is the only active holder -> revoke rejected.
-        $this->post('/admin/users/toggleArea/' . $this->adminId . '/user_group_admin');
-        $held = ConnectionManager::get('default')->execute(
-            "SELECT 1 FROM user_admin_areas WHERE user_id = :u AND admin_area_key = 'user_group_admin'",
-            ['u' => $this->adminId],
-        )->fetch();
-        $this->assertNotFalse($held); // still a holder
-    }
-
     public function testEditUpdatesFields(): void
     {
         $this->login();
@@ -462,47 +426,9 @@ class UsersControllerTest extends TestCase
         $this->post('/admin/users/anonymize/' . $foreign);
         $this->assertSame('active', $this->userCol($foreign, 'status'));
 
-        // toggleArea -> NO admin-area grant created on the foreign user.
-        $this->post('/admin/users/toggleArea/' . $foreign . '/user_group_admin');
-        $this->assertFalse(
-            $conn->execute('SELECT 1 FROM user_admin_areas WHERE user_id = :u', ['u' => $foreign])->fetch(),
-        );
-
         // edit -> NO effect.
         $this->post('/admin/users/edit/' . $foreign, ['username' => 'zztest_hijacked', 'email' => 'x_' . bin2hex(random_bytes(3)) . '@zzusers.local']);
         $this->assertNotSame('zztest_hijacked', $this->userCol($foreign, 'username'));
-    }
-
-    public function testLastAdminProtectionIsPerTenant(): void
-    {
-        $conn = ConnectionManager::get('default');
-        // Another tenant's OWN active user_group_admin must NOT count toward THIS
-        // tenant's last-admin protection — otherwise a tenant could strip its own last
-        // admin merely because a different tenant still has one.
-        $otherTenant = (string)$conn->execute(
-            "INSERT INTO tenants (key, name) VALUES ('zzt_other_' || substr(md5(random()::text), 1, 8), 'Other') RETURNING id",
-        )->fetch('assoc')['id'];
-        $otherAdmin = (string)$conn->execute(
-            "INSERT INTO users (username, email, status, tenant_id) VALUES (:u, :e, 'active', :t) RETURNING id",
-            ['u' => 'zztest_oadmin_' . bin2hex(random_bytes(3)), 'e' => 'oadmin_' . bin2hex(random_bytes(3)) . '@zzusers.local', 't' => $otherTenant],
-        )->fetch('assoc')['id'];
-        $conn->execute(
-            'INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a)',
-            ['u' => $otherAdmin, 'a' => 'user_group_admin'],
-        );
-
-        $this->login(); // adminId is the sole user_group_admin of the DEFAULT tenant
-        // Revoking THIS tenant's only admin stays blocked (the other tenant's does not count).
-        $this->post('/admin/users/toggleArea/' . $this->adminId . '/user_group_admin');
-        $held = $conn->execute(
-            "SELECT 1 FROM user_admin_areas WHERE user_id = :u AND admin_area_key = 'user_group_admin'",
-            ['u' => $this->adminId],
-        )->fetch();
-        $this->assertNotFalse($held); // still protected per-tenant
-
-        $conn->execute('DELETE FROM user_admin_areas WHERE user_id = :u', ['u' => $otherAdmin]);
-        $conn->execute('DELETE FROM users WHERE id = :u', ['u' => $otherAdmin]);
-        $conn->execute('DELETE FROM tenants WHERE id = :t', ['t' => $otherTenant]);
     }
 
     public function testAnonymizeSelfBlockedAndMemberWorks(): void

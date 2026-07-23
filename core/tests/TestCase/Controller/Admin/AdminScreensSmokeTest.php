@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Test\TestCase\Controller\Admin;
 
+use App\Test\TestCase\AdminAreaSeedTrait;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
@@ -16,6 +17,7 @@ use Cake\TestSuite\TestCase;
 class AdminScreensSmokeTest extends TestCase
 {
     use IntegrationTestTrait;
+    use AdminAreaSeedTrait;
 
     private string $userId;
 
@@ -37,12 +39,7 @@ class AdminScreensSmokeTest extends TestCase
             "INSERT INTO users (username, email, status) VALUES (:u, :e, 'active') RETURNING id",
             ['u' => 'zztest_sadmin_' . bin2hex(random_bytes(3)), 'e' => 'sadmin_' . bin2hex(random_bytes(3)) . '@zzsmoke.local'],
         )->fetch('assoc')['id'];
-        foreach (self::AREAS as $area) {
-            $conn->execute(
-                'INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a)',
-                ['u' => $this->userId, 'a' => $area],
-            );
-        }
+        $this->grantAdminAreas($this->userId, ...self::AREAS);
     }
 
     protected function tearDown(): void

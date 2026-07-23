@@ -67,19 +67,15 @@ $anon = $user['status'] === 'anonymized';
     <div class="col-md-6">
         <div class="card">
             <div class="card-header"><?= h(__('admin.users.areas')) ?></div>
+            <div class="card-body pb-2">
+                <?php // Admin areas are granted via GROUPS now — this list is read-only. ?>
+                <p class="text-muted small mb-0"><?= h(__('admin.users.areas_via_groups')) ?></p>
+            </div>
             <ul class="list-group list-group-flush">
-                <?php foreach ($areas as $a): ?>
-                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                <?php foreach ($areas as $a): $held = filter_var($a['held'], FILTER_VALIDATE_BOOLEAN); ?>
+                    <li class="list-group-item d-flex justify-content-between align-items-center<?= $held ? '' : ' text-muted' ?>">
                         <span><?= h($a['label']) ?> <code class="small text-muted"><?= h($a['area_key']) ?></code></span>
-                        <?php if (!$anon): ?>
-                            <?php if (filter_var($a['held'], FILTER_VALIDATE_BOOLEAN)): ?>
-                                <?= $this->Form->postLink(__('admin.users.area_revoke'), ['action' => 'toggleArea', $user['id'], $a['area_key']], ['class' => 'btn btn-outline-danger btn-sm']) ?>
-                            <?php else: ?>
-                                <?= $this->Form->postLink(__('admin.users.area_grant'), ['action' => 'toggleArea', $user['id'], $a['area_key']], ['class' => 'btn btn-outline-success btn-sm']) ?>
-                            <?php endif; ?>
-                        <?php elseif (filter_var($a['held'], FILTER_VALIDATE_BOOLEAN)): ?>
-                            <span class="badge text-bg-success"><?= h(__('admin.users.area_active')) ?></span>
-                        <?php endif; ?>
+                        <?php if ($held): ?><span class="badge text-bg-success"><?= h(__('admin.users.area_active')) ?></span><?php endif; ?>
                     </li>
                 <?php endforeach; ?>
             </ul>

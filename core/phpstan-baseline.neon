@@ -39,7 +39,7 @@ parameters:
 		-
 			message: '#^Access to an undefined property Cake\\Datasource\\EntityInterface\:\:\$id\.$#'
 			identifier: property.notFound
-			count: 5
+			count: 2
 			path: src/Command/CreateAdminCommand.php
 
 		-
@@ -163,20 +163,8 @@ parameters:
 			path: src/Command/TrustCommand.php
 
 		-
-			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
-			identifier: method.notFound
-			count: 1
-			path: src/Controller/Admin/AdminController.php
-
-		-
 			message: '#^Cannot cast array\|int\|string\|null to string\.$#'
 			identifier: cast.string
-			count: 1
-			path: src/Controller/Admin/AdminController.php
-
-		-
-			message: '#^Method App\\Controller\\Admin\\AdminController\:\:loadUserAreas\(\) should return list\<string\> but returns array\<string\>\.$#'
-			identifier: return.type
 			count: 1
 			path: src/Controller/Admin/AdminController.php
 
@@ -195,7 +183,7 @@ parameters:
 		-
 			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
 			identifier: method.notFound
-			count: 9
+			count: 11
 			path: src/Controller/Admin/GroupsController.php
 
 		-
@@ -267,7 +255,7 @@ parameters:
 		-
 			message: '#^Call to an undefined method Cake\\Datasource\\ConnectionInterface\:\:execute\(\)\.$#'
 			identifier: method.notFound
-			count: 14
+			count: 9
 			path: src/Controller/Admin/UsersController.php
 
 		-

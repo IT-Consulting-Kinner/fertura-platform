@@ -84,16 +84,11 @@ class CreateAdminCommand extends Command
         $audit = new AuditLogger();
         $correlationId = Uuid::v7()->toRfc4122();
 
-        // Save, assign areas and write audit entries in ONE transaction
-        // (transactional audit linkage, ch. 1.8).
-        $count = $connection->transactional(function () use (
-            $users,
-            $user,
-            $connection,
-            $audit,
-            $correlationId,
-            $isNew,
-        ) {
+        // Save the user + audit in ONE transaction (transactional audit linkage,
+        // ch. 1.8). Admin AREAS are no longer granted per-user: full-admin access
+        // comes from membership in the tenant's Administrators (is_system) group,
+        // which holds ALL areas by the wildcard rule (see below).
+        $ok = $connection->transactional(function () use ($users, $user, $audit, $correlationId, $isNew): bool {
             // atomic=false: already inside this command's transactional(); avoids a
             // nested transaction whose rollback (e.g. a duplicate email caught by the
             // unique rule) would otherwise poison the outer one. A failing rule now
@@ -101,19 +96,6 @@ class CreateAdminCommand extends Command
             if (!$users->save($user, ['atomic' => false, 'checkRules' => true])) {
                 return false;
             }
-
-            $connection->execute(
-                'INSERT INTO user_admin_areas (user_id, admin_area_key) ' .
-                'SELECT :uid, area_key FROM admin_areas ' .
-                'ON CONFLICT (user_id, admin_area_key) DO NOTHING',
-                ['uid' => $user->id],
-            );
-
-            $areaKeys = $connection
-                ->execute('SELECT admin_area_key FROM user_admin_areas WHERE user_id = :uid ORDER BY admin_area_key', ['uid' => $user->id])
-                ->fetchAll('assoc');
-            $areaKeys = array_column($areaKeys, 'admin_area_key');
-
             // Audit (E16: no plaintext PII; the user is referenced by UUID).
             $audit->log(
                 $isNew ? 'user.create' : 'user.update',
@@ -121,20 +103,17 @@ class CreateAdminCommand extends Command
                 $user->id,
                 ['newValue' => ['status' => $user->status], 'correlationId' => $correlationId],
             );
-            $audit->log('admin_access.grant', 'user', $user->id, [
-                'newValue' => ['admin_areas' => $areaKeys],
-                'correlationId' => $correlationId,
-            ]);
 
-            return count($areaKeys);
+            return true;
         });
 
-        if ($count === false) {
+        if ($ok === false) {
             $io->error('Speichern fehlgeschlagen:');
             $io->error(print_r($user->getErrors(), true));
 
             return static::CODE_ERROR;
         }
+        $areaCount = (int)$connection->execute('SELECT count(*) AS c FROM admin_areas')->fetch('assoc')['c'];
 
         // Membership in the tenant's ADMINISTRATOR group (ch. 25): admin areas
         // gate the admin GUI, but module resources are gated by BREAD group
@@ -162,13 +141,13 @@ class CreateAdminCommand extends Command
         }
 
         $io->success(sprintf(
-            'Volladministrator "%s" (ID %s) im Mandanten "%s" gespeichert, %d Administrationsbereiche '
-            . 'zugewiesen, Mitglied der Gruppe "%s" (%d Ressourcen-Grants).',
+            'Volladministrator "%s" (ID %s) im Mandanten "%s" gespeichert, Mitglied der Gruppe "%s" '
+            . '— alle %d Administrationsbereiche (über die Gruppe) + %d Ressourcen-Grants.',
             $user->username,
             $user->id,
             $tenantLabel,
-            $count,
             AdminGroupService::DEFAULT_NAME,
+            $areaCount,
             $group['granted'],
         ));
 

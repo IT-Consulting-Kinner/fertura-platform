@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Test\TestCase\Controller\Admin;
 
+use App\Test\TestCase\AdminAreaSeedTrait;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
@@ -17,6 +18,7 @@ use Cake\TestSuite\TestCase;
 class ConfigControllerTest extends TestCase
 {
     use IntegrationTestTrait;
+    use AdminAreaSeedTrait;
 
     private string $userId = '';
 
@@ -34,10 +36,7 @@ class ConfigControllerTest extends TestCase
             "INSERT INTO users (username, email, status) VALUES (:u, :e, 'active') RETURNING id",
             ['u' => 'zzcfg_' . bin2hex(random_bytes(3)), 'e' => 'cfg_' . bin2hex(random_bytes(3)) . '@zzcfg.local'],
         )->fetch('assoc')['id'];
-        $conn->execute(
-            'INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a)',
-            ['u' => $this->userId, 'a' => 'core_config'],
-        );
+        $this->grantAdminAreas($this->userId, 'core_config');
     }
 
     protected function tearDown(): void
@@ -49,10 +48,6 @@ class ConfigControllerTest extends TestCase
     private function cleanup(): void
     {
         $conn = ConnectionManager::get('default');
-        $conn->execute(
-            'DELETE FROM user_admin_areas WHERE user_id IN '
-            . "(SELECT id FROM users WHERE email LIKE '%@zzcfg.local')",
-        );
         $conn->execute("DELETE FROM users WHERE email LIKE '%@zzcfg.local'");
         $conn->execute("DELETE FROM settings WHERE namespace = 'core' AND config_key = 'tenancy.mode'");
     }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Test\TestCase\Controller\Admin;
 
 use App\Controller\Admin\AdminController;
+use App\Test\TestCase\AdminAreaSeedTrait;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
@@ -19,6 +20,7 @@ use Cake\TestSuite\TestCase;
 class OperatorTenantGateTest extends TestCase
 {
     use IntegrationTestTrait;
+    use AdminAreaSeedTrait;
 
     private string $tenantAdminId;
     private string $operatorAdminId;
@@ -60,8 +62,8 @@ class OperatorTenantGateTest extends TestCase
     {
         $conn = ConnectionManager::get('default');
         $conn->execute('DELETE FROM core.maintenance_session');
-        $conn->execute("DELETE FROM user_admin_areas WHERE user_id IN (SELECT id FROM users WHERE email LIKE '%@zzgate.local')");
         $conn->execute("DELETE FROM users WHERE email LIKE '%@zzgate.local'");
+        $conn->execute("DELETE FROM \"groups\" WHERE name LIKE 'zzseedarea_%'");
         $conn->execute("DELETE FROM tenants WHERE key LIKE 'zzt_gate_%'");
     }
 
@@ -79,10 +81,7 @@ class OperatorTenantGateTest extends TestCase
 
     private function grant(string $userId, string $area): void
     {
-        ConnectionManager::get('default')->execute(
-            'INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a) ON CONFLICT DO NOTHING',
-            ['u' => $userId, 'a' => $area],
-        );
+        $this->grantAdminAreas($userId, $area);
     }
 
     private function login(string $userId): void

@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Test\TestCase\Controller\Admin;
 
+use App\Test\TestCase\AdminAreaSeedTrait;
 use Cake\Datasource\ConnectionManager;
 use Cake\TestSuite\IntegrationTestTrait;
 use Cake\TestSuite\TestCase;
@@ -15,6 +16,7 @@ use Cake\TestSuite\TestCase;
 class GroupsControllerTest extends TestCase
 {
     use IntegrationTestTrait;
+    use AdminAreaSeedTrait;
 
     private string $userId;
     private string $memberId;
@@ -32,10 +34,7 @@ class GroupsControllerTest extends TestCase
             "INSERT INTO users (username, email, status) VALUES (:u, :e, 'active') RETURNING id",
             ['u' => 'zztest_gadmin_' . bin2hex(random_bytes(3)), 'e' => 'gadmin_' . bin2hex(random_bytes(3)) . '@zzgroup.local'],
         )->fetch('assoc')['id'];
-        $conn->execute(
-            'INSERT INTO user_admin_areas (user_id, admin_area_key) VALUES (:u, :a)',
-            ['u' => $this->userId, 'a' => 'user_group_admin'],
-        );
+        $this->grantAdminAreas($this->userId, 'user_group_admin');
         $this->memberId = (string)$conn->execute(
             "INSERT INTO users (username, email, status) VALUES (:u, :e, 'active') RETURNING id",
             ['u' => 'zztest_member_' . bin2hex(random_bytes(3)), 'e' => 'member_' . bin2hex(random_bytes(3)) . '@zzgroup.local'],
@@ -58,9 +57,9 @@ class GroupsControllerTest extends TestCase
         );
         $conn->execute(
             'DELETE FROM groups_users WHERE group_id IN '
-            . "(SELECT id FROM \"groups\" WHERE name LIKE 'zztest-grp-%')",
+            . "(SELECT id FROM \"groups\" WHERE name LIKE 'zztest-grp-%' OR name LIKE 'zzseedarea_%')",
         );
-        $conn->execute("DELETE FROM \"groups\" WHERE name LIKE 'zztest-grp-%'");
+        $conn->execute("DELETE FROM \"groups\" WHERE name LIKE 'zztest-grp-%' OR name LIKE 'zzseedarea_%'");
         $conn->execute("DELETE FROM resources WHERE module_key = 'zzgrpui'");
         $conn->execute("DELETE FROM users WHERE email LIKE '%@zzgroup.local'");
         // Foreign tenants from the cross-tenant isolation test (after their groups/users).
@@ -486,6 +485,75 @@ class GroupsControllerTest extends TestCase
         $this->assertMatchesRegularExpression('/id="zzgrpui__thing_browse"[^>]*disabled/', $body);
         // The deactivate postLink is not offered for a system group.
         $this->assertResponseNotContains('/admin/groups/setActive/' . $gid);
+    }
+
+    /** @return list<string> the admin-area keys granted to $gid */
+    private function areaKeys(string $gid): array
+    {
+        return array_map(static fn(array $r): string => (string)$r['admin_area_key'], ConnectionManager::get('default')->execute(
+            'SELECT admin_area_key FROM group_admin_areas WHERE group_id = :g ORDER BY admin_area_key',
+            ['g' => $gid],
+        )->fetchAll('assoc'));
+    }
+
+    public function testAdminAreasCardRendersCheckboxes(): void
+    {
+        $gid = $this->makeGroup('areacard-');
+        $this->login();
+        $this->get('/admin/groups/view/' . $gid);
+
+        $this->assertResponseOk();
+        $this->assertResponseContains('name="area[]"');
+        // A catalog area is offered as a checkbox value.
+        $this->assertResponseContains('value="user_group_admin"');
+    }
+
+    public function testSaveAdminAreasGrantsAndRevokes(): void
+    {
+        $gid = $this->makeGroup('savearea-');
+        $this->login();
+        $this->enableCsrfToken();
+        $this->enableSecurityToken();
+
+        // Grant two areas.
+        $this->post('/admin/groups/saveAdminAreas/' . $gid, ['area' => ['user_group_admin', 'core_config']]);
+        $this->assertRedirect(['action' => 'view', $gid]);
+        $this->assertSame(['core_config', 'user_group_admin'], $this->areaKeys($gid));
+
+        // Re-post a subset -> the dropped one is revoked (diff-aware save).
+        $this->post('/admin/groups/saveAdminAreas/' . $gid, ['area' => ['core_config']]);
+        $this->assertSame(['core_config'], $this->areaKeys($gid));
+
+        // Empty -> all revoked.
+        $this->post('/admin/groups/saveAdminAreas/' . $gid, ['area' => []]);
+        $this->assertSame([], $this->areaKeys($gid));
+    }
+
+    public function testSystemGroupAdminAreasCannotBeEdited(): void
+    {
+        // The Administrators (is_system) group holds every area by the wildcard rule;
+        // its area rows are not editable (server-side guard, mirrors savePermissions).
+        $gid = $this->makeSystemGroup('sysarea-');
+        $this->login();
+        $this->enableCsrfToken();
+        $this->enableSecurityToken();
+        $this->post('/admin/groups/saveAdminAreas/' . $gid, ['area' => ['core_config']]);
+
+        $this->assertRedirect(['action' => 'view', $gid]);
+        $this->assertSame([], $this->areaKeys($gid), 'no area rows written for the wildcard system group');
+    }
+
+    public function testSystemGroupViewShowsAllAreasCheckedDisabled(): void
+    {
+        $gid = $this->makeSystemGroup('sysareaview-');
+        $this->login();
+        $this->get('/admin/groups/view/' . $gid);
+
+        $this->assertResponseOk();
+        $body = (string)$this->_response->getBody();
+        // Every area checkbox is checked + disabled for the wildcard admin group.
+        $this->assertMatchesRegularExpression('/id="area_user_group_admin"[^>]*checked/', $body);
+        $this->assertMatchesRegularExpression('/id="area_user_group_admin"[^>]*disabled/', $body);
     }
 
     public function testCannotRemoveSelfFromSystemGroup(): void
