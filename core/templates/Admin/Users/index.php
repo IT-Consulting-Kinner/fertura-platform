@@ -21,30 +21,25 @@ $open = !empty($openCreate);
         <div id="createUser" class="accordion-collapse collapse<?= $open ? ' show' : '' ?>">
             <div class="accordion-body" style="max-width:560px">
                 <?= $this->Form->create($user, ['url' => ['action' => 'add']]) ?>
-                <div class="mb-3"><?= $this->Form->control('username', ['class' => 'form-control', 'label' => __('admin.users.field_username')]) ?></div>
-                <div class="mb-3"><?= $this->Form->control('email', ['class' => 'form-control', 'label' => __('admin.users.field_email')]) ?></div>
+                <div class="mb-3"><?= $this->Form->control('username', ['type' => 'text', 'class' => 'form-control', 'label' => __('admin.users.field_username')]) ?></div>
+                <div class="mb-3"><?= $this->Form->control('email', ['type' => 'email', 'class' => 'form-control', 'label' => __('admin.users.field_email')]) ?></div>
                 <div class="row">
-                    <div class="col mb-3"><?= $this->Form->control('first_name', ['class' => 'form-control', 'label' => __('admin.users.field_first_name')]) ?></div>
-                    <div class="col mb-3"><?= $this->Form->control('last_name', ['class' => 'form-control', 'label' => __('admin.users.field_last_name')]) ?></div>
+                    <div class="col mb-3"><?= $this->Form->control('first_name', ['type' => 'text', 'class' => 'form-control', 'label' => __('admin.users.field_first_name')]) ?></div>
+                    <div class="col mb-3"><?= $this->Form->control('last_name', ['type' => 'text', 'class' => 'form-control', 'label' => __('admin.users.field_last_name')]) ?></div>
                 </div>
-                <?= $this->UiKit->fields([[
-                    // Reference field: a "create a new group" link (opens the group
-                    // admin with its create form expanded, new tab) + an options-
-                    // refresh button, so a missing group can be created without
-                    // abandoning this user form. The link is area-gated to
-                    // user_group_admin (which the viewer holds on this page).
-                    'key' => 'group_id',
-                    'input' => 'select',
-                    'label' => __('admin.users.field_group'),
-                    'options' => $groupOptions,
-                    'empty' => __('admin.users.field_group_choose'),
-                    'required' => true,
-                    'reference' => [
-                        'url' => '/admin/groups?create=1',
-                        'area' => 'user_group_admin',
-                        'options_url' => '/admin/groups/options',
-                    ],
-                ]]) ?>
+                <?php // A user may be created in SEVERAL groups at once (multi-select checkboxes). ?>
+                <div class="mb-3">
+                    <label class="form-label d-block"><?= h(__('admin.users.field_groups')) ?></label>
+                    <?= $this->Form->control('group_ids', [
+                        'type' => 'select',
+                        'multiple' => 'checkbox',
+                        'options' => $groupOptions,
+                        'label' => false,
+                    ]) ?>
+                    <div class="form-text">
+                        <?= $this->Html->link(__('admin.users.group_create_new'), '/admin/groups?create=1', ['target' => '_blank', 'rel' => 'noopener']) ?>
+                    </div>
+                </div>
                 <?php if ($groupOptions === []): ?>
                     <p class="text-warning small"><?= h(__('admin.users.no_groups_hint')) ?></p>
                 <?php endif; ?>
