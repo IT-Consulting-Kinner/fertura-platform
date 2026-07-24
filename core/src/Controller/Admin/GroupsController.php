@@ -46,15 +46,39 @@ class GroupsController extends AdminController
             ->withStringBody((string)json_encode(['options' => $options]));
     }
 
-    /** Renders the group list plus the inline "create" accordion form. */
+    /** Renders the group list (filtered + paginated) plus the inline "create" accordion form. */
     private function renderGroupList(bool $openCreate): void
     {
-        $groups = ConnectionManager::get('default')->execute(
+        // Per-user list preferences (Paket 2): name search + active filter + page size.
+        $state = $this->resolveListState('groups', ['q', 'active']);
+        $q = trim($state['filters']['q']);
+        $active = trim($state['filters']['active']); // '' = all, '1' = active, '0' = inactive
+        /** @var \Cake\Database\Connection $conn */
+        $conn = ConnectionManager::get('default');
+        // Explicit tenant predicate IN ADDITION to RLS (dual-role) so the count/list are
+        // the acting admin's own tenant even on an RLS-bypassing role.
+        $where = ['g.tenant_id = core.current_tenant()'];
+        $params = [];
+        if ($q !== '') {
+            $where[] = "(g.name ILIKE :q OR coalesce(g.description, '') ILIKE :q)";
+            $params['q'] = '%' . $q . '%';
+        }
+        if ($active === '1' || $active === '0') {
+            $where[] = 'g.active = ' . ($active === '1' ? 'true' : 'false');
+        }
+        $whereSql = ' WHERE ' . implode(' AND ', $where);
+        $perPage = $state['per_page'];
+        $page = $state['page'];
+        $total = (int)($conn->execute('SELECT count(*) c FROM "groups" g' . $whereSql, $params)->fetch('assoc')['c'] ?? 0);
+        $offset = ($page - 1) * $perPage;
+        $groups = $conn->execute(
             'SELECT g.id, g.name, g.description, g.active, '
             . '(SELECT count(*) FROM groups_users gu WHERE gu.group_id = g.id) AS member_count '
-            . 'FROM "groups" g ORDER BY g.name',
+            . 'FROM "groups" g' . $whereSql . ' ORDER BY g.name LIMIT ' . $perPage . ' OFFSET ' . $offset,
+            $params,
         )->fetchAll('assoc');
-        $this->set(compact('groups', 'openCreate'));
+        $this->set(compact('groups', 'openCreate', 'q', 'active', 'perPage', 'page', 'total'));
+        $this->set('query', $state['query']);
         $this->viewBuilder()->setTemplate('index');
     }
 
@@ -171,8 +195,15 @@ class GroupsController extends AdminController
         );
         $currentUserId = $this->currentUserId();
         $this->set(compact(
-            'group', 'members', 'candidates', 'grants', 'resourceGroups', 'objectCounts', 'currentUserId',
-            'adminAreas', 'heldAreas',
+            'group',
+            'members',
+            'candidates',
+            'grants',
+            'resourceGroups',
+            'objectCounts',
+            'currentUserId',
+            'adminAreas',
+            'heldAreas',
         ));
 
         return null;

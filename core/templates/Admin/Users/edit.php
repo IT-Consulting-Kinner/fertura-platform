@@ -27,6 +27,18 @@
     <div class="col-md-6">
         <div class="card">
             <div class="card-header"><?= h(__('admin.users.groups')) ?></div>
+            <?php // The add control sits FIRST (highlighted row) so it stays visible even
+                  // when a user is in many groups — the list below can scroll instead. ?>
+            <div class="card-body bg-body-secondary border-bottom py-2">
+                <?php if ($availableGroups !== []): ?>
+                    <?= $this->Form->create(null, ['url' => ['action' => 'addGroup', $user->id], 'class' => 'input-group input-group-sm']) ?>
+                        <?= $this->Form->control('group_id', ['type' => 'select', 'options' => $availableGroups, 'empty' => __('admin.users.group_add_choose'), 'label' => false, 'class' => 'form-select', 'required' => true]) ?>
+                        <?= $this->Form->button(__('admin.users.group_add'), ['class' => 'btn btn-outline-primary']) ?>
+                    <?= $this->Form->end() ?>
+                <?php else: ?>
+                    <p class="mb-0 small text-muted"><?= h(__('admin.users.groups_all_assigned')) ?></p>
+                <?php endif; ?>
+            </div>
             <ul class="list-group list-group-flush">
                 <?php foreach ($groups as $g): ?>
                     <li class="list-group-item d-flex justify-content-between align-items-center">
@@ -41,16 +53,6 @@
                     <li class="list-group-item text-muted"><?= h(__('admin.users.groups_empty')) ?></li>
                 <?php endif; ?>
             </ul>
-            <div class="card-body">
-                <?php if ($availableGroups !== []): ?>
-                    <?= $this->Form->create(null, ['url' => ['action' => 'addGroup', $user->id], 'class' => 'input-group input-group-sm']) ?>
-                        <?= $this->Form->control('group_id', ['type' => 'select', 'options' => $availableGroups, 'empty' => __('admin.users.group_add_choose'), 'label' => false, 'class' => 'form-select', 'required' => true]) ?>
-                        <?= $this->Form->button(__('admin.users.group_add'), ['class' => 'btn btn-outline-primary']) ?>
-                    <?= $this->Form->end() ?>
-                <?php else: ?>
-                    <p class="mb-0 small text-muted"><?= h(__('admin.users.groups_all_assigned')) ?></p>
-                <?php endif; ?>
-            </div>
         </div>
     </div>
 </div>

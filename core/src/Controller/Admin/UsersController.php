@@ -30,11 +30,37 @@ class UsersController extends AdminController
         $this->renderUserList($this->fetchTable('Users')->newEmptyEntity(), false);
     }
 
-    /** Renders the user list plus the inline "create" accordion form. */
+    /** Renders the user list (filtered + paginated) plus the inline "create" accordion form. */
     private function renderUserList(EntityInterface $user, bool $openCreate): void
     {
+        // Per-user list preferences (Paket 2): the search + status filter and page size
+        // are stored and reapplied. On a failed-create re-render (POST /add, no `_lp`)
+        // the stored state is simply reapplied.
+        $state = $this->resolveListState('users', ['q', 'status']);
+        $q = trim($state['filters']['q']);
+        $status = trim($state['filters']['status']);
         /** @var \Cake\Database\Connection $conn */
         $conn = ConnectionManager::get('default');
+        // Tenant predicate (users has no RLS) + optional filters. ILIKE = a
+        // case-insensitive "contains" over username / email / name.
+        $where = ['u.tenant_id = core.current_tenant()'];
+        $params = [];
+        if ($q !== '') {
+            $where[] = '(u.username ILIKE :q OR u.email ILIKE :q '
+                . "OR coalesce(u.first_name, '') ILIKE :q OR coalesce(u.last_name, '') ILIKE :q)";
+            $params['q'] = '%' . $q . '%';
+        }
+        $statuses = [User::STATUS_ACTIVE, User::STATUS_INVITED, User::STATUS_DISABLED, User::STATUS_ANONYMIZED];
+        if ($status !== '' && in_array($status, $statuses, true)) {
+            $where[] = 'u.status = :status';
+            $params['status'] = $status;
+        }
+        $whereSql = ' WHERE ' . implode(' AND ', $where);
+        $perPage = $state['per_page'];
+        $page = $state['page'];
+        $total = (int)($conn->execute('SELECT count(*) c FROM users u' . $whereSql, $params)->fetch('assoc')['c'] ?? 0);
+        // $perPage/$offset are clamped ints (resolveListState) -> inline is injection-safe.
+        $offset = ($page - 1) * $perPage;
         // Explicit tenant predicate on groups IN ADDITION to RLS (dual-role
         // convention): under an RLS-bypassing role a stray cross-tenant
         // membership row must not leak a foreign tenant's group name.
@@ -43,14 +69,16 @@ class UsersController extends AdminController
             . '(SELECT string_agg(g.name, \', \' ORDER BY g.name) FROM "groups" g '
             . ' JOIN groups_users gu ON gu.group_id = g.id WHERE gu.user_id = u.id '
             . ' AND g.tenant_id = core.current_tenant()) AS group_names '
-            . 'FROM users u WHERE u.tenant_id = core.current_tenant() ORDER BY u.username',
+            . 'FROM users u' . $whereSql . ' ORDER BY u.username LIMIT ' . $perPage . ' OFFSET ' . $offset,
+            $params,
         )->fetchAll('assoc');
         // Group choices for the create form: creating a user REQUIRES a group
         // (no group-less users — without one, no BREAD permission ever applies).
         $groupOptions = array_column($conn->execute(
             'SELECT id, name FROM "groups" WHERE active AND tenant_id = core.current_tenant() ORDER BY name',
         )->fetchAll('assoc'), 'name', 'id');
-        $this->set(compact('users', 'user', 'openCreate', 'groupOptions'));
+        $this->set(compact('users', 'user', 'openCreate', 'groupOptions', 'q', 'status', 'perPage', 'page', 'total'));
+        $this->set('query', $state['query']);
         $this->viewBuilder()->setTemplate('index');
     }
 
@@ -326,6 +354,14 @@ class UsersController extends AdminController
             $this->Flash->error(__('flash.user.not_available'));
 
             return $this->redirect(['action' => 'index']);
+        }
+        // An invitation link sets an INITIAL password — it only makes sense while the
+        // account is still "invited". An onboarded (active/disabled) user already has a
+        // password; the admin uses setPassword instead. Belt to the hidden UI button.
+        if ($row['status'] !== User::STATUS_INVITED) {
+            $this->Flash->error(__('flash.user.invite_only_invited'));
+
+            return $this->redirect(['action' => 'view', $id]);
         }
         $actor = $this->identity()?->getIdentifier();
         $token = (new PasswordResetService())->create($id, 'invite', 72, $actor !== null ? (string)$actor : null);
