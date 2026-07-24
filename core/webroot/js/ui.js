@@ -20,6 +20,27 @@
     new bootstrap.Tooltip(el);
   });
 
+  // 1b. Tom Select: enhance every <select> into a searchable (and, for multi-
+  //     selects, tag-style) control, system-wide. Opt out per field with
+  //     [data-no-enhance]. Progressive enhancement: if the library is absent or a
+  //     given select throws, the native <select> keeps working and still submits.
+  if (typeof TomSelect !== 'undefined') {
+    document.querySelectorAll('select:not([data-no-enhance])').forEach(function (sel) {
+      if (sel.tomselect) {
+        return; // already enhanced
+      }
+      try {
+        new TomSelect(sel, {
+          allowEmptyOption: true, // keep an empty "choose"/"all" option selectable
+          maxOptions: null,       // never truncate our (bounded) option lists
+          plugins: sel.multiple ? ['remove_button'] : []
+        });
+      } catch (e) {
+        // One bad select must never break the rest of the page's enhancement.
+      }
+    });
+  }
+
   // 2. Reference-field options refresh. Endpoint contract (MODULE_UI.md): an
   //    app-relative module web route answering {options: [{value, label}]}.
   //    Options are rebuilt via createElement/textContent (never innerHTML), a
@@ -83,6 +104,11 @@
           if (sel.value !== current) {
             sel.selectedIndex = sel.options.length ? 0 : -1;
           }
+        }
+        // If the select is Tom-Select-enhanced, re-read the rebuilt native options
+        // and selection into the widget.
+        if (sel.tomselect) {
+          sel.tomselect.sync();
         }
       })
       .catch(function () {

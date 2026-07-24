@@ -24,6 +24,7 @@ $moduleTitle = $moduleTitle ?? '';
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= $this->fetch('title') ?: h($moduleTitle !== '' ? $moduleTitle : 'Fertura') ?></title>
     <?= $this->Html->css('bootstrap.min') ?>
+    <?= $this->Html->css('tom-select.bootstrap5.min') ?>
     <style>
         body { background:#f6f7f9; }
         a:focus-visible, button:focus-visible, .form-control:focus-visible, .form-select:focus-visible { outline: 3px solid #0d6efd; outline-offset: 2px; }
@@ -61,6 +62,8 @@ $moduleTitle = $moduleTitle ?? '';
 ?>
 <?= $this->element('confirm_modal') ?>
 <?= $this->Html->script('bootstrap.bundle.min') ?>
+<?php // Tom Select before ui.js: ui.js reads the global `TomSelect` to enhance selects. ?>
+<?= $this->Html->script('tom-select.complete.min') ?>
 <?= $this->Html->script('ui') ?>
 </body>
 </html>

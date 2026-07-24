@@ -153,6 +153,9 @@ class UsersControllerTest extends TestCase
         $this->assertResponseContains('multiple'); // real multi-select, not checkboxes
         $this->assertResponseContains('data-options-refresh="/admin/groups/options"'); // reload button
         $this->assertResponseContains('href="/admin/groups?create=1"');
+        // The admin shell loads Tom Select (self-hosted) so ui.js enhances the selects.
+        $this->assertResponseContains('tom-select.complete.min');
+        $this->assertResponseContains('tom-select.bootstrap5');
         // Single-line inputs (not the <textarea> a `text` column defaults to).
         $this->assertResponseNotContains('<textarea name="username"');
         $this->assertResponseNotContains('<textarea name="first_name"');
