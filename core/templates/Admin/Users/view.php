@@ -27,7 +27,7 @@ $anon = $user['status'] === 'anonymized';
                 <dl class="row mb-0">
                     <dt class="col-sm-4"><?= h(__('admin.users.email')) ?></dt><dd class="col-sm-8"><?= h($user['email']) ?></dd>
                     <dt class="col-sm-4"><?= h(__('admin.users.name')) ?></dt><dd class="col-sm-8"><?= h(trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? ''))) ?: '–' ?></dd>
-                    <dt class="col-sm-4"><?= h(__('admin.users.status')) ?></dt><dd class="col-sm-8"><span class="badge text-bg-<?= $badge[$user['status']] ?? 'secondary' ?>"><?= h($user['status']) ?></span></dd>
+                    <dt class="col-sm-4"><?= h(__('admin.users.status')) ?></dt><dd class="col-sm-8"><span class="badge text-bg-<?= $badge[$user['status']] ?? 'secondary' ?>"><?= h(__('admin.users.status_' . $user['status'])) ?></span></dd>
                 </dl>
                 <?php if (!$anon && $isSelf): ?>
                 <hr>

@@ -72,8 +72,12 @@ $open = !empty($openCreate);
     </div>
     <div class="col-auto">
         <label class="form-label small mb-0" for="users-status"><?= h(__('admin.users.col_status')) ?></label>
-        <?= $this->Form->select('status', ['active' => 'active', 'invited' => 'invited', 'disabled' => 'disabled', 'anonymized' => 'anonymized'],
-            ['id' => 'users-status', 'value' => $status, 'empty' => __('admin.users.filter_status_all'), 'class' => 'form-select form-select-sm']) ?>
+        <?= $this->Form->select('status', [
+            'active' => __('admin.users.status_active'),
+            'invited' => __('admin.users.status_invited'),
+            'disabled' => __('admin.users.status_disabled'),
+            'anonymized' => __('admin.users.status_anonymized'),
+        ], ['id' => 'users-status', 'value' => $status, 'empty' => __('admin.users.filter_status_all'), 'class' => 'form-select form-select-sm']) ?>
     </div>
     <?= $this->UiKit->perPageSelect($perPage) ?>
     <div class="col-auto">
@@ -93,7 +97,7 @@ $open = !empty($openCreate);
             <td class="small"><?= $u['group_names'] !== null && $u['group_names'] !== ''
                 ? h((string)$u['group_names'])
                 : '<span class="text-warning">' . h(__('admin.users.no_group')) . '</span>' ?></td>
-            <td><span class="badge text-bg-<?= $badge[$u['status']] ?? 'secondary' ?>"><?= h($u['status']) ?></span></td>
+            <td><span class="badge text-bg-<?= $badge[$u['status']] ?? 'secondary' ?>"><?= h(__('admin.users.status_' . $u['status'])) ?></span></td>
             <td class="text-end"><?= $this->Html->link(__('admin.users.details'), ['action' => 'view', $u['id']], ['class' => 'btn btn-outline-secondary btn-sm']) ?></td>
         </tr>
     <?php endforeach; ?>
